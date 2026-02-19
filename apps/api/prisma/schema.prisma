@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite-compatible schema (no enums, Json→String, arrays→String)
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  avatarUrl    String?
+  passwordHash String
+  role         String   @default("member")  // owner | admin | member
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  conversations  Conversation[]
+  connectedTools ConnectedTool[]
+  approvals      Approval[]
+  memories       Memory[]
+  refreshTokens  RefreshToken[]
+  settings       UserSettings?
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+  cronJobs       CronJob[]
+  llmApiKeys     LlmApiKey[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id            String    @id @default(cuid())
+  userId        String
+  title         String?
+  sessionLabel  String?
+  thinkingLevel String?
+  verboseLevel  String?
+  reasoningLevel String?
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  approvals Approval[]
+  agentRuns AgentRun[]
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // user | agent | tool | system
+  content        String
+  status         String   @default("done")  // pending | streaming | done | error
+  toolCallJson   String?  // JSON string
+  toolResultJson String?  // JSON string
+  metadata       String?  // JSON string
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  approval     Approval?
+}
+
+model AgentRun {
+  id             String    @id @default(cuid())
+  conversationId String
+  status         String    @default("idle")  // idle | thinking | running_tool | waiting_approval | done | error
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  error          String?
+  metadata       String?   // JSON string
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model Tool {
+  id               String  @id @default(cuid())
+  name             String  @unique
+  displayName      String
+  description      String
+  category         String  // email | calendar | web | notes | custom
+  requiresApproval Boolean @default(true)
+  inputSchema      String  // JSON string
+
+  connectedTools ConnectedTool[]
+}
+
+model ConnectedTool {
+  id              String   @id @default(cuid())
+  userId          String
+  toolId          String
+  status          String   @default("connected")  // available | connected | error
+  encryptedTokens String?
+  connectedAt     DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tool Tool @relation(fields: [toolId], references: [id])
+
+  @@unique([userId, toolId])
+}
+
+model Approval {
+  id             String    @id @default(cuid())
+  conversationId String
+  messageId      String    @unique
+  userId         String
+  toolName       String
+  toolInput      String    // JSON string
+  status         String    @default("pending")  // pending | approved | denied
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+}
+
+model Memory {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // fact | preference | summary
+  content   String
+  tags      String   @default("[]")  // JSON array string
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSettings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  preferredProvider  String   @default("anthropic")
+  preferredModel     String   @default("claude-sonnet-4-6")
+  customSystemPrompt String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String
+  action       String
+  resourceType String
+  resourceId   String
+  metadata     String?  // JSON string
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("info")  // info | warning | success | error
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CronJob {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  description    String?
+  enabled        Boolean  @default(true)
+  scheduleKind   String   @default("every") // every | at | cron
+  scheduleValue  String
+  sessionTarget  String   @default("main") // main | isolated
+  payloadKind    String   @default("systemEvent") // systemEvent | agentTurn
+  payloadText    String
+  deliveryMode   String   @default("none") // none | announce | webhook
+  deliveryTarget String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs CronRun[]
+}
+
+model CronRun {
+  id        String   @id @default(cuid())
+  cronJobId String
+  status    String   @default("ok") // ok | error | skipped
+  summary   String?
+  error     String?
+  durationMs Int?
+  createdAt DateTime @default(now())
+
+  job CronJob @relation(fields: [cronJobId], references: [id], onDelete: Cascade)
+}
+
+model LlmApiKey {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String   // 'anthropic' | 'openai' | 'ollama'
+  apiKey    String?  // null for Ollama
+  baseUrl   String?  // for Ollama: 'http://localhost:11434'
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}

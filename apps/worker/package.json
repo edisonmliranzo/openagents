@@ -1,0 +1,25 @@
+{
+  "name": "@openagents/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "bull": "^4.0.0",
+    "ioredis": "^5.0.0",
+    "@prisma/client": "^5.0.0",
+    "@openagents/shared": "workspace:*",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.0.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "@types/bull": "^4.0.0"
+  }
+}

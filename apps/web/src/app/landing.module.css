@@ -1,0 +1,223 @@
+.page {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(244, 63, 94, 0.24), transparent 36%),
+    radial-gradient(circle at 90% 16%, rgba(34, 211, 238, 0.18), transparent 40%),
+    radial-gradient(circle at 52% 86%, rgba(45, 212, 191, 0.14), transparent 34%),
+    linear-gradient(165deg, #020617 0%, #040a1a 48%, #030712 100%);
+}
+
+.starfield {
+  pointer-events: none;
+  position: absolute;
+  inset: -240px;
+  background-image:
+    radial-gradient(rgba(148, 163, 184, 0.52) 1px, transparent 1px),
+    radial-gradient(rgba(148, 163, 184, 0.22) 1px, transparent 1px);
+  background-size: 3px 3px, 11px 11px;
+  background-position: 0 0, 20px 12px;
+  opacity: 0.22;
+  animation: starsDrift 32s linear infinite;
+}
+
+.starfield::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.75) 1px, transparent 1px);
+  background-size: 19px 19px;
+  opacity: 0.06;
+  animation: starsTwinkle 7s ease-in-out infinite;
+}
+
+.glowLeft,
+.glowRight {
+  pointer-events: none;
+  position: absolute;
+  width: 540px;
+  height: 540px;
+  border-radius: 999px;
+  filter: blur(55px);
+  opacity: 0.32;
+}
+
+.glowLeft {
+  left: -180px;
+  top: 40px;
+  background: radial-gradient(circle, rgba(251, 113, 133, 0.95) 0%, rgba(251, 113, 133, 0) 72%);
+}
+
+.glowRight {
+  right: -210px;
+  top: 130px;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.82) 0%, rgba(34, 211, 238, 0) 72%);
+}
+
+.scene {
+  position: relative;
+  min-height: 360px;
+  perspective: 1400px;
+}
+
+.orbitRing {
+  position: absolute;
+  inset: 12% 10%;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  box-shadow: inset 0 0 25px rgba(56, 189, 248, 0.18);
+  transform: rotateX(71deg) rotateZ(11deg);
+  animation: ringTurn 18s linear infinite;
+}
+
+.sphere {
+  position: absolute;
+  right: 16%;
+  top: 13%;
+  width: 144px;
+  height: 144px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0) 35%),
+    radial-gradient(circle at 66% 72%, rgba(14, 116, 144, 0.5), rgba(14, 116, 144, 0) 56%),
+    linear-gradient(140deg, rgba(251, 113, 133, 0.58), rgba(14, 165, 233, 0.42));
+  box-shadow:
+    inset 0 -22px 40px rgba(2, 6, 23, 0.38),
+    0 20px 48px rgba(14, 165, 233, 0.28);
+  animation: sphereFloat 7.2s ease-in-out infinite;
+}
+
+.objectCardPrimary,
+.objectCardSecondary,
+.objectCardTertiary {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.74), rgba(2, 6, 23, 0.9));
+  box-shadow: 0 22px 45px rgba(2, 6, 23, 0.48);
+  backdrop-filter: blur(12px);
+  transform-style: preserve-3d;
+}
+
+.objectCardPrimary {
+  left: 5%;
+  top: 17%;
+  width: min(420px, 92%);
+  padding: 1.1rem 1.15rem;
+  border-radius: 1rem;
+  transform: rotateX(16deg) rotateY(-13deg) translateZ(18px);
+  animation: cardDriftPrimary 8.2s ease-in-out infinite;
+}
+
+.objectCardSecondary {
+  right: 7%;
+  top: 49%;
+  width: min(270px, 60%);
+  padding: 1rem;
+  border-radius: 0.9rem;
+  transform: rotateX(17deg) rotateY(11deg) translateZ(14px);
+  animation: cardDriftSecondary 7.5s ease-in-out infinite;
+}
+
+.objectCardTertiary {
+  left: 25%;
+  bottom: 8%;
+  width: min(300px, 70%);
+  padding: 0.8rem 0.95rem;
+  border-radius: 0.85rem;
+  transform: rotateX(12deg) rotateY(-7deg) translateZ(12px);
+  animation: cardDriftTertiary 9s ease-in-out infinite;
+}
+
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.1rem;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.65), rgba(2, 6, 23, 0.8));
+  box-shadow: 0 22px 48px rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(10px);
+  padding: 1.35rem;
+}
+
+.commandShell {
+  margin-top: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+  background: rgba(2, 6, 23, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0.95rem;
+}
+
+@media (max-width: 1024px) {
+  .scene {
+    min-height: 280px;
+  }
+
+  .objectCardPrimary {
+    transform: rotateX(10deg) rotateY(-9deg) translateZ(10px);
+  }
+
+  .objectCardSecondary {
+    transform: rotateX(11deg) rotateY(8deg) translateZ(10px);
+  }
+}
+
+@media (max-width: 720px) {
+  .scene {
+    min-height: 250px;
+  }
+
+  .sphere {
+    width: 108px;
+    height: 108px;
+  }
+
+  .objectCardPrimary,
+  .objectCardSecondary,
+  .objectCardTertiary {
+    position: static;
+    margin-bottom: 0.7rem;
+    width: 100%;
+    transform: none;
+    animation: none;
+  }
+
+  .orbitRing {
+    display: none;
+  }
+}
+
+@keyframes starsDrift {
+  from { transform: translateY(0); }
+  to { transform: translateY(48px); }
+}
+
+@keyframes starsTwinkle {
+  0%, 100% { opacity: 0.04; }
+  50% { opacity: 0.11; }
+}
+
+@keyframes ringTurn {
+  from { transform: rotateX(71deg) rotateZ(0deg); }
+  to { transform: rotateX(71deg) rotateZ(360deg); }
+}
+
+@keyframes sphereFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-12px) scale(1.02); }
+}
+
+@keyframes cardDriftPrimary {
+  0%, 100% { transform: rotateX(16deg) rotateY(-13deg) translate3d(0, 0, 18px); }
+  50% { transform: rotateX(13deg) rotateY(-8deg) translate3d(4px, -7px, 21px); }
+}
+
+@keyframes cardDriftSecondary {
+  0%, 100% { transform: rotateX(17deg) rotateY(11deg) translate3d(0, 0, 14px); }
+  50% { transform: rotateX(12deg) rotateY(7deg) translate3d(-3px, -8px, 16px); }
+}
+
+@keyframes cardDriftTertiary {
+  0%, 100% { transform: rotateX(12deg) rotateY(-7deg) translate3d(0, 0, 12px); }
+  50% { transform: rotateX(9deg) rotateY(-3deg) translate3d(1px, -5px, 13px); }
+}
