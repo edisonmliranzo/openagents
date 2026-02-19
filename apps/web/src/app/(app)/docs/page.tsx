@@ -1,5 +1,7 @@
 'use client'
 
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+
 const DOC_LINKS = [
   {
     title: 'OpenClaw Core Repo',
@@ -15,6 +17,16 @@ const DOC_LINKS = [
     title: 'OpenClaw Dashboard Docs',
     href: 'https://docs.openclaw.ai/web/dashboard',
     description: 'Control-panel navigation and auth behavior reference.',
+  },
+  {
+    title: 'Soul.md',
+    href: 'https://soul.md/',
+    description: 'Partner ecosystem site for agent memory and knowledge workflows.',
+  },
+  {
+    title: 'Nanobot API Health',
+    href: `${API_ORIGIN}/api/v1/nanobot/health`,
+    description: 'Authenticated health endpoint for runtime config and session state.',
   },
 ]
 

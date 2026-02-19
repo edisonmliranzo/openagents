@@ -22,6 +22,9 @@ export class NanobotProviderRouterService {
   async complete(input: CompletionInput): Promise<NanobotProviderCompletion> {
     const settings = await this.users.getSettings(input.userId)
     const provider = (input.providerOverride ?? settings.preferredProvider) as LLMProvider
+    const preferredModel = provider === settings.preferredProvider
+      ? (settings.preferredModel?.trim() || undefined)
+      : undefined
     const userKey = await this.users.getRawLlmKey(input.userId, provider)
     const apiKey = userKey?.isActive ? (userKey.apiKey ?? undefined) : undefined
     const baseUrl = userKey?.isActive ? (userKey.baseUrl ?? undefined) : undefined
@@ -36,7 +39,7 @@ export class NanobotProviderRouterService {
       provider,
       apiKey,
       baseUrl,
+      preferredModel,
     )
   }
 }
-

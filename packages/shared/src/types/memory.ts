@@ -9,3 +9,14 @@ export interface MemoryEntry {
   createdAt: string
   updatedAt: string
 }
+
+export interface MemoryFileSummary {
+  name: string
+  size: number
+  updatedAt: string
+  readonly: boolean
+}
+
+export interface MemoryFileDocument extends MemoryFileSummary {
+  content: string
+}

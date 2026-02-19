@@ -9,6 +9,8 @@ import {
 import Bull, { type Queue } from 'bull'
 import { APPROVAL_JOB_NAMES, QUEUE_NAMES, type ApprovalJobData } from '@openagents/shared'
 import { PrismaService } from '../prisma/prisma.service'
+import { ToolsService } from '../tools/tools.service'
+import { NotificationsService } from '../notifications/notifications.service'
 
 export interface CreateApprovalDto {
   conversationId: string
@@ -22,18 +24,28 @@ export interface CreateApprovalDto {
 export class ApprovalsService implements OnModuleDestroy {
   private readonly logger = new Logger(ApprovalsService.name)
   private readonly approvalQueue?: Queue<ApprovalJobData>
+  private readonly continuationMode: 'inline' | 'queue'
 
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    private tools: ToolsService,
+    private notifications: NotificationsService,
+  ) {
+    const configuredMode = (process.env.APPROVAL_CONTINUATION_MODE ?? 'inline').toLowerCase()
+    this.continuationMode = configuredMode === 'queue' ? 'queue' : 'inline'
+
     const redisUrl = process.env.REDIS_URL
-    if (!redisUrl) {
-      this.logger.warn('REDIS_URL is missing, approval continuation queue is disabled.')
+    if (this.continuationMode === 'queue' && !redisUrl) {
+      this.logger.warn('APPROVAL_CONTINUATION_MODE=queue but REDIS_URL is missing. Falling back to inline continuation.')
       return
     }
 
-    this.approvalQueue = new Bull<ApprovalJobData>(QUEUE_NAMES.approvals, redisUrl)
-    this.approvalQueue.on('error', (error) => {
-      this.logger.error('Approval queue error', error?.stack ?? String(error))
-    })
+    if (this.continuationMode === 'queue' && redisUrl) {
+      this.approvalQueue = new Bull<ApprovalJobData>(QUEUE_NAMES.approvals, redisUrl)
+      this.approvalQueue.on('error', (error) => {
+        this.logger.error('Approval queue error', error?.stack ?? String(error))
+      })
+    }
   }
 
   async onModuleDestroy() {
@@ -76,14 +88,44 @@ export class ApprovalsService implements OnModuleDestroy {
     })
 
     if (approved) {
-      await this.enqueueApprovalResolution({
-        approvalId: updated.id,
-        approved: true,
-        conversationId: approval.conversationId,
-        userId: approval.userId,
-        toolName: approval.toolName,
-        toolInput: this.parseToolInput(approval.toolInput, approval.id),
+      const toolInput = this.parseToolInput(approval.toolInput, approval.id)
+      if (this.approvalQueue) {
+        await this.enqueueApprovalResolution({
+          approvalId: updated.id,
+          approved: true,
+          conversationId: approval.conversationId,
+          userId: approval.userId,
+          toolName: approval.toolName,
+          toolInput,
+        })
+      } else {
+        await this.continueApprovedResolution({
+          approvalId: updated.id,
+          conversationId: approval.conversationId,
+          messageId: approval.messageId,
+          userId: approval.userId,
+          toolName: approval.toolName,
+          toolInput,
+        })
+      }
+    } else {
+      await this.prisma.agentRun.updateMany({
+        where: { conversationId: approval.conversationId, status: 'waiting_approval' },
+        data: {
+          status: 'error',
+          finishedAt: new Date(),
+          error: `Approval denied for tool: ${approval.toolName}`,
+        },
       })
+
+      await this.notifications
+        .create(
+          approval.userId,
+          'Action denied',
+          `Denied tool action: ${approval.toolName}`,
+          'warning',
+        )
+        .catch((error) => this.logger.error('Failed to create deny notification', error?.stack ?? String(error)))
     }
 
     return updated
@@ -117,5 +159,92 @@ export class ApprovalsService implements OnModuleDestroy {
       removeOnComplete: true,
       removeOnFail: 100,
     })
+  }
+
+  private async continueApprovedResolution(input: {
+    approvalId: string
+    conversationId: string
+    messageId: string
+    userId: string
+    toolName: string
+    toolInput: Record<string, unknown>
+  }) {
+    const { approvalId, conversationId, messageId, userId, toolName, toolInput } = input
+    const result = await this.tools.execute(toolName, toolInput, userId)
+
+    await this.prisma.message.update({
+      where: { id: messageId },
+      data: {
+        content: result.success
+          ? this.renderToolOutput(result.output)
+          : (result.error ?? 'Tool execution failed'),
+        status: result.success ? 'done' : 'error',
+        toolResultJson: JSON.stringify(result),
+      },
+    })
+
+    await this.prisma.message.create({
+      data: {
+        conversationId,
+        role: 'agent',
+        status: result.success ? 'done' : 'error',
+        content: this.buildFollowupMessage(toolName, result),
+      },
+    })
+
+    await this.prisma.agentRun.updateMany({
+      where: { conversationId, status: 'waiting_approval' },
+      data: {
+        status: result.success ? 'done' : 'error',
+        finishedAt: new Date(),
+        ...(result.success ? { error: null } : { error: result.error ?? `Tool failed: ${toolName}` }),
+      },
+    })
+
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageAt: new Date() },
+    })
+
+    await this.notifications
+      .create(
+        userId,
+        result.success ? 'Action completed' : 'Action failed',
+        result.success
+          ? `${toolName} completed successfully.`
+          : `${toolName} failed: ${result.error ?? 'unknown error'}`,
+        result.success ? 'success' : 'error',
+      )
+      .catch((error) => this.logger.error('Failed to create continuation notification', error?.stack ?? String(error)))
+
+    this.logger.log(
+      `Approval ${approvalId} continued inline. Tool ${toolName} ${result.success ? 'succeeded' : 'failed'}.`,
+    )
+  }
+
+  private buildFollowupMessage(
+    toolName: string,
+    result: { success: boolean; output: unknown; error?: string | null },
+  ) {
+    if (!result.success) {
+      return `I ran \`${toolName}\`, but it failed: ${result.error ?? 'unknown error'}.`
+    }
+    const rendered = this.renderToolOutput(result.output)
+    if (!rendered) {
+      return `I ran \`${toolName}\` successfully.`
+    }
+    return `I ran \`${toolName}\` successfully.\n\nResult:\n${rendered}`
+  }
+
+  private renderToolOutput(output: unknown) {
+    if (output == null) return ''
+    if (typeof output === 'string') return output.slice(0, 4000)
+    try {
+      const json = JSON.stringify(output, null, 2)
+      if (!json) return ''
+      return json.length > 4000 ? `${json.slice(0, 4000)}...` : json
+    } catch {
+      return String(output).slice(0, 4000)
+    }
   }
 }

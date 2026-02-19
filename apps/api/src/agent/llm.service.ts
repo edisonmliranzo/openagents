@@ -52,23 +52,42 @@ export class LLMService {
     provider?: LLMProvider,
     userApiKey?: string,
     userBaseUrl?: string,
+    model?: string,
   ): Promise<LLMResponse> {
     const p = provider ?? this.defaultProvider
 
     if (p === 'anthropic') {
       const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', userApiKey) })
-      return this.completeAnthropic(messages, tools, systemPrompt, client)
+      return this.completeAnthropic(messages, tools, systemPrompt, client, model)
     }
 
     if (p === 'ollama') {
-      const baseURL = (userBaseUrl ?? 'http://localhost:11434') + '/v1'
-      const ollamaClient = new OpenAI({ baseURL, apiKey: 'ollama' })
-      return this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient)
+      const ollamaClient = this.createOllamaClient(userBaseUrl)
+      return this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient, model)
     }
 
     // openai
     const client = new OpenAI({ apiKey: this.resolveApiKey('openai', userApiKey) })
-    return this.completeOpenAI(messages, tools, systemPrompt, client)
+    return this.completeOpenAI(messages, tools, systemPrompt, client, model)
+  }
+
+  async listOllamaModels(baseUrl?: string): Promise<string[]> {
+    const client = this.createOllamaClient(baseUrl)
+    return this.listModelIds(client)
+  }
+
+  async runOllamaPrompt(baseUrl: string | undefined, model: string, prompt: string, maxTokens = 200) {
+    const client = this.createOllamaClient(baseUrl)
+    const response = await client.chat.completions.create({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    })
+
+    return {
+      model: response.model,
+      content: response.choices[0]?.message?.content ?? '',
+    }
   }
 
   async testConnection(
@@ -89,8 +108,7 @@ export class LLMService {
       }
 
       if (provider === 'ollama') {
-        const baseURL = (baseUrl ?? 'http://localhost:11434') + '/v1'
-        const client = new OpenAI({ baseURL, apiKey: 'ollama' })
+        const client = this.createOllamaClient(baseUrl)
         const targetModel = model ?? LLM_MODELS.ollama.default
 
         try {
@@ -156,8 +174,9 @@ export class LLMService {
     tools: LLMTool[],
     systemPrompt: string,
     client: OpenAI,
+    modelOverride?: string,
   ): Promise<LLMResponse> {
-    const defaultModel = LLM_MODELS.ollama.default
+    const defaultModel = modelOverride ?? LLM_MODELS.ollama.default
 
     try {
       return await this.completeOpenAI(messages, tools, systemPrompt, client, defaultModel)
@@ -173,9 +192,8 @@ export class LLMService {
   }
 
   private async resolveFirstOllamaModel(client: OpenAI) {
-    const models = await client.models.list()
-    const first = models.data.find((entry) => typeof entry.id === 'string' && entry.id.trim().length > 0)
-    return first?.id ?? null
+    const models = await this.listModelIds(client)
+    return models[0] ?? null
   }
 
   private isOllamaModelMissingError(error: unknown) {
@@ -195,9 +213,10 @@ export class LLMService {
     tools: LLMTool[],
     systemPrompt: string,
     client: Anthropic,
+    modelOverride?: string,
   ): Promise<LLMResponse> {
     const response = await client.messages.create({
-      model: LLM_MODELS.anthropic.default,
+      model: modelOverride ?? LLM_MODELS.anthropic.default,
       max_tokens: 4096,
       system: systemPrompt,
       messages,
@@ -252,5 +271,32 @@ export class LLMService {
       toolCalls,
       stopReason: msg.tool_calls?.length ? 'tool_use' : 'end_turn',
     }
+  }
+
+  private createOllamaClient(baseUrl?: string) {
+    return new OpenAI({
+      baseURL: this.resolveOllamaBaseUrl(baseUrl),
+      apiKey: 'ollama',
+    })
+  }
+
+  private resolveOllamaBaseUrl(baseUrl?: string) {
+    const raw = (baseUrl ?? 'http://localhost:11434').trim().replace(/\/+$/, '')
+    return raw.endsWith('/v1') ? raw : `${raw}/v1`
+  }
+
+  private async listModelIds(client: OpenAI) {
+    const models = await client.models.list()
+    const ids: string[] = []
+    const seen = new Set<string>()
+
+    for (const entry of models.data) {
+      const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      ids.push(id)
+    }
+
+    return ids
   }
 }
