@@ -13,6 +13,7 @@ import { NotificationsModule } from './notifications/notifications.module'
 import { CronModule } from './cron/cron.module'
 import { PrismaModule } from './prisma/prisma.module'
 import { NanobotModule } from './nanobot/nanobot.module'
+import { SystemModule } from './system/system.module'
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { NanobotModule } from './nanobot/nanobot.module'
     NotificationsModule,
     CronModule,
     NanobotModule,
+    SystemModule,
   ],
 })
 export class AppModule {}

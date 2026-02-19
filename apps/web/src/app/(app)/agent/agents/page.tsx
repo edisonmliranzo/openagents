@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { sdk } from '@/stores/auth'
 import type { SessionRow } from '@openagents/shared'
 
@@ -91,6 +92,15 @@ export default function AgentsPage() {
         <p className="mt-1 text-sm text-slate-500">Current app ships a unified default agent with tool specializations.</p>
 
         <div className="mt-4 space-y-2">
+          <Link
+            href="/agent/nanobot"
+            className="block rounded-lg border border-indigo-200 bg-indigo-50 p-3 transition hover:bg-indigo-100"
+          >
+            <p className="text-sm font-semibold text-indigo-900">Nanobot Runtime Control</p>
+            <p className="mt-1 text-xs text-indigo-700">
+              Configure shadow mode, loop limits, skills, and event telemetry.
+            </p>
+          </Link>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="text-sm font-semibold text-slate-800">Default Agent</p>
             <p className="mt-1 text-xs text-slate-500">

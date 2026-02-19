@@ -39,3 +39,6 @@ coverage/
 # Prisma
 prisma/migrations/dev.db
 apps/api/prisma/dev.db
+
+# Runtime generated data
+apps/api/data/

@@ -14,6 +14,7 @@ import {
   Bug,
   ChevronDown,
   Clock,
+  Cpu,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -62,6 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Instances', href: '/control/instances', icon: Server },
       { label: 'Sessions', href: '/sessions', icon: Terminal },
       { label: 'Usage', href: '/control/usage', icon: BarChart2 },
+      { label: 'Benchmark', href: '/control/benchmark', icon: Cpu },
       { label: 'Cron Jobs', href: '/control/cron-jobs', icon: Clock },
     ],
   },
@@ -69,6 +71,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Agent',
     items: [
       { label: 'Agents', href: '/agent/agents', icon: Bot },
+      { label: 'Nanobot', href: '/agent/nanobot', icon: Cpu },
       { label: 'Skills', href: '/agent/skills', icon: Zap },
       { label: 'Nodes', href: '/agent/nodes', icon: Network },
     ],

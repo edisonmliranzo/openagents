@@ -7,6 +7,8 @@ type BusHandler = (event: NanobotBusEvent) => void
 @Injectable()
 export class NanobotBusService {
   private emitter = new EventEmitter()
+  private history: NanobotBusEvent[] = []
+  private readonly maxHistory = 250
 
   publish(name: NanobotBusEventName, payload: Record<string, unknown> = {}) {
     const event: NanobotBusEvent = {
@@ -14,6 +16,12 @@ export class NanobotBusService {
       payload,
       createdAt: new Date().toISOString(),
     }
+
+    this.history.push(event)
+    if (this.history.length > this.maxHistory) {
+      this.history.splice(0, this.history.length - this.maxHistory)
+    }
+
     this.emitter.emit(name, event)
     this.emitter.emit('*', event)
   }
@@ -22,5 +30,9 @@ export class NanobotBusService {
     this.emitter.on(name, handler)
     return () => this.emitter.off(name, handler)
   }
-}
 
+  listRecent(limit = 60) {
+    const boundedLimit = Math.max(1, Math.min(limit, this.maxHistory))
+    return [...this.history].slice(-boundedLimit).reverse()
+  }
+}

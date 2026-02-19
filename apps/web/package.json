@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node -e \"const fs=require('node:fs');fs.rmSync('.next',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true});\" && next dev -p 3000",
+    "dev": "next dev -p 3000",
+    "dev:clean": "node -e \"const fs=require('node:fs');fs.rmSync('.next',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true});\" && next dev -p 3000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

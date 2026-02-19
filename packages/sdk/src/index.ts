@@ -11,6 +11,8 @@ export { createToolsApi } from './api/tools'
 export { createMemoryApi } from './api/memory'
 export { createCronApi } from './api/cron'
 export { createAgentApi } from './api/agent'
+export { createNanobotApi } from './api/nanobot'
+export { createSystemApi } from './api/system'
 
 import { OpenAgentsClient } from './client'
 import { createAuthApi } from './api/auth'
@@ -24,6 +26,8 @@ import { createToolsApi } from './api/tools'
 import { createMemoryApi } from './api/memory'
 import { createCronApi } from './api/cron'
 import { createAgentApi } from './api/agent'
+import { createNanobotApi } from './api/nanobot'
+import { createSystemApi } from './api/system'
 import type { SDKConfig } from './client'
 
 /** Convenience factory: creates a fully-wired SDK instance */
@@ -42,5 +46,7 @@ export function createSDK(config: SDKConfig) {
     memory: createMemoryApi(client),
     cron: createCronApi(client),
     agent: createAgentApi(client),
+    nanobot: createNanobotApi(client),
+    system: createSystemApi(client),
   }
 }

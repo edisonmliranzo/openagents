@@ -5,6 +5,20 @@ export interface NanobotRunParams {
   emit: (event: string, data: unknown) => void
 }
 
+export interface NanobotRuntimeConfig {
+  enabled: boolean
+  maxLoopSteps: number
+  shadowMode: boolean
+  runtimeLabel: string
+}
+
+export interface NanobotConfigPatch {
+  enabled?: boolean
+  maxLoopSteps?: number
+  shadowMode?: boolean
+  runtimeLabel?: string
+}
+
 export interface NanobotChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
@@ -47,6 +61,39 @@ export interface NanobotSkillManifest {
   promptAppendix?: string
 }
 
+export interface NanobotSkillState extends NanobotSkillManifest {
+  enabled: boolean
+}
+
+export type NanobotThoughtMode = 'explore' | 'plan' | 'act' | 'reflect'
+
+export interface NanobotPersonalityState {
+  style: string
+  mood: string
+  energy: number
+  decisiveness: number
+  updatedAt: string
+}
+
+export interface NanobotRoleDecision {
+  plannerGoal: string
+  plannerPlan: string[]
+  executorIntent: string
+  criticConcerns: string[]
+  confidence: number
+  thoughtMode: NanobotThoughtMode
+}
+
+export interface NanobotAliveState {
+  activeGoal: string | null
+  thoughtMode: NanobotThoughtMode
+  confidence: number
+  intentionQueue: string[]
+  waitingReason: string | null
+  lastRoleDecision: NanobotRoleDecision | null
+  updatedAt: string
+}
+
 export interface NanobotSessionState {
   conversationId: string
   userId: string
@@ -72,4 +119,3 @@ export interface NanobotBusEvent {
   payload: Record<string, unknown>
   createdAt: string
 }
-

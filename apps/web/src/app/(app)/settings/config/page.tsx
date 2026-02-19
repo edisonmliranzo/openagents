@@ -34,6 +34,7 @@ const DEFAULTS: Record<Provider, ProviderCardState> = {
   openai:    { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   ollama:    { apiKey: '', baseUrl: 'http://localhost:11434', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
 }
+const OLLAMA_FALLBACK_MODELS: string[] = LLM_MODEL_OPTIONS.ollama as unknown as string[]
 
 const PROVIDER_META: Record<Provider, {
   label: string
@@ -83,8 +84,27 @@ export default function ConfigPage() {
   const [isSavingActive, setIsSavingActive] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
+  const [ollamaModels, setOllamaModels] = useState<string[]>([])
+  const [ollamaModelsStatus, setOllamaModelsStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
+  const [ollamaModelsError, setOllamaModelsError] = useState('')
 
-  const modelOptions: string[] = LLM_MODEL_OPTIONS[activeProvider] as unknown as string[] ?? []
+  const modelOptions: string[] = activeProvider === 'ollama'
+    ? (ollamaModels.length > 0 ? ollamaModels : OLLAMA_FALLBACK_MODELS)
+    : ((LLM_MODEL_OPTIONS[activeProvider] as unknown as string[]) ?? [])
+
+  const loadOllamaModels = useCallback(async (baseUrl?: string) => {
+    setOllamaModelsStatus('loading')
+    setOllamaModelsError('')
+    try {
+      const result = await sdk.agent.listOllamaModels(baseUrl || undefined)
+      setOllamaModels(result.models ?? [])
+      setOllamaModelsStatus('loaded')
+    } catch (err: any) {
+      setOllamaModels([])
+      setOllamaModelsStatus('error')
+      setOllamaModelsError(err?.message ?? 'Failed to load Ollama models')
+    }
+  }, [])
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -96,36 +116,46 @@ export default function ConfigPage() {
         sdk.users.getSettings(),
         sdk.users.getLlmKeys(),
       ])
+      const preferredProvider = (settings.preferredProvider as Provider) ?? 'anthropic'
       setProfileEmail(profile.email ?? '')
-      setActiveProvider((settings.preferredProvider as Provider) ?? 'anthropic')
+      setActiveProvider(preferredProvider)
       setActiveModel(settings.preferredModel ?? '')
       setCustomSystemPrompt(settings.customSystemPrompt ?? '')
       setExistingKeys(keys)
 
       // Pre-fill baseUrl for ollama if stored
       const ollamaKey = keys.find((k) => k.provider === 'ollama')
-      if (ollamaKey?.baseUrl) {
-        setCards((prev) => ({
-          ...prev,
-          ollama: { ...prev.ollama, baseUrl: ollamaKey.baseUrl! },
-        }))
+      const ollamaBaseUrl = ollamaKey?.baseUrl ?? DEFAULTS.ollama.baseUrl
+      setCards((prev) => ({
+        ...prev,
+        ollama: { ...prev.ollama, baseUrl: ollamaBaseUrl },
+      }))
+
+      if (preferredProvider === 'ollama') {
+        await loadOllamaModels(ollamaBaseUrl)
       }
     } catch (err: any) {
       setError(err?.message ?? 'Failed to load config')
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [loadOllamaModels])
 
   useEffect(() => { void load() }, [load])
 
-  // When active provider changes, sync model to first available option if current doesn't match
+  // Keep selected model aligned with the available options for the current provider.
   useEffect(() => {
-    const options = LLM_MODEL_OPTIONS[activeProvider] as unknown as string[]
-    if (options && !options.includes(activeModel)) {
-      setActiveModel(options[0] ?? '')
+    if (modelOptions.length > 0 && !modelOptions.includes(activeModel)) {
+      setActiveModel(modelOptions[0] ?? '')
     }
-  }, [activeProvider])
+  }, [activeModel, modelOptions])
+
+  // On first switch to Ollama, fetch locally available models.
+  useEffect(() => {
+    if (activeProvider !== 'ollama') return
+    if (ollamaModelsStatus !== 'idle') return
+    void loadOllamaModels(cards.ollama.baseUrl || undefined)
+  }, [activeProvider, cards.ollama.baseUrl, loadOllamaModels, ollamaModelsStatus])
 
   async function handleSaveActive() {
     setIsSavingActive(true)
@@ -176,6 +206,7 @@ export default function ConfigPage() {
     try {
       if (provider === 'ollama') {
         await sdk.users.upsertLlmKey(provider, { baseUrl: card.baseUrl, isActive: true })
+        await loadOllamaModels(card.baseUrl || undefined)
       } else {
         if (!card.apiKey) return
         await sdk.users.upsertLlmKey(provider, { apiKey: card.apiKey, isActive: true })
@@ -197,7 +228,12 @@ export default function ConfigPage() {
     try {
       await sdk.users.deleteLlmKey(provider)
       updateCard(provider, { apiKey: '', testStatus: 'idle', testModel: '', testError: '' })
-      if (provider === 'ollama') updateCard(provider, { baseUrl: DEFAULTS.ollama.baseUrl })
+      if (provider === 'ollama') {
+        updateCard(provider, { baseUrl: DEFAULTS.ollama.baseUrl })
+        setOllamaModels([])
+        setOllamaModelsStatus('idle')
+        setOllamaModelsError('')
+      }
       setStatus(`${PROVIDER_META[provider].label} key removed.`)
       const keys = await sdk.users.getLlmKeys()
       setExistingKeys(keys)
@@ -251,17 +287,39 @@ export default function ConfigPage() {
             </label>
 
             {/* Model select */}
-            <label className="flex flex-col gap-1">
+            <label className="flex min-w-[280px] flex-col gap-1">
               <span className="text-xs font-medium text-slate-500">Model</span>
-              <select
-                value={activeModel}
-                onChange={(e) => setActiveModel(e.target.value)}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
-              >
-                {modelOptions.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={activeModel}
+                  onChange={(e) => setActiveModel(e.target.value)}
+                  className="h-10 min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                >
+                  {modelOptions.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+
+                {activeProvider === 'ollama' && (
+                  <button
+                    type="button"
+                    onClick={() => void loadOllamaModels(cards.ollama.baseUrl || undefined)}
+                    disabled={ollamaModelsStatus === 'loading'}
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {ollamaModelsStatus === 'loading' ? 'Loading...' : 'Refresh models'}
+                  </button>
+                )}
+              </div>
+
+              {activeProvider === 'ollama' && (
+                <span className={`text-[11px] ${ollamaModelsStatus === 'error' ? 'text-red-500' : 'text-slate-500'}`}>
+                  {ollamaModelsStatus === 'loaded' && ollamaModels.length > 0 && `Found ${ollamaModels.length} local model${ollamaModels.length === 1 ? '' : 's'}.`}
+                  {ollamaModelsStatus === 'loaded' && ollamaModels.length === 0 && 'No local models found. Run "ollama pull <model>".'}
+                  {ollamaModelsStatus === 'error' && `Could not load local models: ${ollamaModelsError}`}
+                  {ollamaModelsStatus === 'idle' && 'Load models from your local Ollama server.'}
+                </span>
+              )}
             </label>
 
             <button

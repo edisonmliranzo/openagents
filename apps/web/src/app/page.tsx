@@ -82,6 +82,50 @@ const FEATURE_CARDS = [
   },
 ]
 
+const DEPLOY_MODES = [
+  {
+    title: 'Local Runtime',
+    detail: 'Fast iteration on your laptop with SQLite and optional Ollama fallback.',
+    action: 'Best for solo development',
+  },
+  {
+    title: 'Self-Hosted Team',
+    detail: 'Deploy API + web behind your own network controls with custom secrets.',
+    action: 'Best for internal operations',
+  },
+  {
+    title: 'OpenAgents Cloud Pro',
+    detail: 'Use managed uptime, shared workspaces, and guided rollout controls.',
+    action: 'Best for fast team onboarding',
+  },
+]
+
+const INTEGRATIONS = [
+  'WhatsApp',
+  'Telegram',
+  'Discord',
+  'Slack',
+  'Gmail',
+  'Calendar',
+  'Web Fetch',
+  'Notes',
+  'Custom APIs',
+  'Soul.md',
+]
+
+const NANOBOT_STACK = [
+  'nanobot/agent',
+  'nanobot/skills',
+  'nanobot/channels',
+  'nanobot/bus',
+  'nanobot/cron',
+  'nanobot/heartbeat',
+  'nanobot/providers',
+  'nanobot/session',
+  'nanobot/config',
+  'nanobot/cli',
+]
+
 export default function RootPage() {
   const [platform, setPlatform] = useState<Platform>('windows')
   const activeQuickStart = useMemo(() => QUICK_START[platform], [platform])
@@ -105,6 +149,14 @@ export default function RootPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <a
+              href="https://soul.md/"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex h-10 items-center rounded-xl border border-cyan-300/35 bg-cyan-400/10 px-4 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/20"
+            >
+              Soul.md
+            </a>
             <Link
               href="/login"
               className="inline-flex h-10 items-center rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:border-white/30 hover:bg-white/10"
@@ -267,6 +319,74 @@ export default function RootPage() {
               <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.detail}</p>
             </article>
           ))}
+        </section>
+
+        <section className="mt-8 grid gap-4 lg:grid-cols-3">
+          {DEPLOY_MODES.map((mode) => (
+            <article
+              key={mode.title}
+              className="rounded-2xl border border-white/10 bg-slate-950/55 p-5 backdrop-blur-sm transition hover:border-cyan-300/35 hover:bg-slate-950/70"
+            >
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-200">{mode.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{mode.detail}</p>
+              <p className="mt-3 text-xs font-semibold text-cyan-300">{mode.action}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="mt-8 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <article className={styles.panel}>
+            <h3 className="text-xl font-semibold text-white">Works with your existing stack</h3>
+            <p className="mt-1 text-sm text-slate-300">
+              Connect channels, data sources, and tools without re-building your workflow graph.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {INTEGRATIONS.map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-white/12 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          </article>
+
+          <article className={styles.panel}>
+            <h3 className="text-xl font-semibold text-white">Nanobot Starter Stack</h3>
+            <p className="mt-1 text-sm text-slate-300">
+              The runtime architecture is already scaffolded and ready for extensions.
+            </p>
+            <ul className="mt-3 space-y-1">
+              {NANOBOT_STACK.map((entry) => (
+                <li key={entry} className="font-mono text-xs text-cyan-200">
+                  {entry}
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/agent/nanobot"
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+            >
+              Open Nanobot Control
+              <ArrowRight size={14} />
+            </Link>
+          </article>
+        </section>
+
+        <section className="mt-7 rounded-2xl border border-cyan-300/20 bg-cyan-400/5 px-5 py-4 backdrop-blur-sm">
+          <p className="text-sm text-cyan-50">
+            Explore our ecosystem partner:
+            {' '}
+            <a
+              href="https://soul.md/"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="font-semibold text-cyan-300 underline decoration-cyan-500/60 underline-offset-2 hover:text-cyan-200"
+            >
+              soul.md
+            </a>
+          </p>
         </section>
       </div>
     </main>

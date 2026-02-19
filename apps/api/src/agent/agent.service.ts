@@ -15,6 +15,7 @@ export interface AgentRunParams {
   userId: string
   userMessage: string
   emit: (event: string, data: unknown) => void
+  systemPromptAppendix?: string
 }
 
 const DEFAULT_SYSTEM_PROMPT = `You are a helpful AI agent with access to tools.
@@ -22,6 +23,26 @@ You can use tools to help the user accomplish tasks.
 When you use a tool that requires approval, clearly explain what you're about to do and why.
 After getting tool results, summarize them clearly and suggest next steps.
 Keep your responses concise and action-oriented.`
+const DEFAULT_MAX_TOOL_ROUNDS = 6
+
+interface AgentRunToolMetric {
+  name: string
+  requiresApproval: boolean
+  status: 'executed' | 'failed' | 'pending_approval'
+}
+
+interface AgentRunMetrics {
+  provider: string
+  model: string | null
+  llmCalls: number
+  inputTokens: number
+  outputTokens: number
+  approvalsRequested: number
+  fallbackToOllama: boolean
+  maxToolRounds: number
+  toolRoundsUsed: number
+  toolCalls: AgentRunToolMetric[]
+}
 
 @Injectable()
 export class AgentService {
@@ -38,7 +59,7 @@ export class AgentService {
     private notifications: NotificationsService,
   ) {}
 
-  async run({ conversationId, userId, userMessage, emit }: AgentRunParams) {
+  async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
     // 1. Save user message
     const userMsg = await this.prisma.message.create({
       data: { conversationId, role: 'user', content: userMessage, status: 'done' },
@@ -54,6 +75,7 @@ export class AgentService {
       // 3. Load user settings (provider, custom prompt)
       const settings = await this.users.getSettings(userId)
       const provider = settings.preferredProvider as LLMProvider
+      const preferredModel = settings.preferredModel?.trim() || undefined
 
       // 4. Build context: recent messages + long-term memory
       const recentMessages = await this.prisma.message.findMany({
@@ -62,13 +84,23 @@ export class AgentService {
         take: SHORT_TERM_MEMORY_LIMIT,
       })
 
-      const memories = await this.memory.getForUser(userId)
-      const memoryContext = memories.map((m) => `[${m.type}] ${m.content}`).join('\n')
+      const [memories, filesystemContext] = await Promise.all([
+        this.memory.getForUser(userId),
+        this.memory.buildFilesystemContext(userId),
+      ])
+      const memorySections = [
+        memories.length ? memories.map((m) => `[${m.type}] ${m.content}`).join('\n') : '',
+        filesystemContext ? `Filesystem memory:\n${filesystemContext}` : '',
+      ].filter(Boolean)
+      const memoryContext = memorySections.join('\n\n')
 
       const basePrompt = settings.customSystemPrompt ?? DEFAULT_SYSTEM_PROMPT
       const systemPrompt = memoryContext
         ? `${basePrompt}\n\nUser context from memory:\n${memoryContext}`
         : basePrompt
+      const effectiveSystemPrompt = systemPromptAppendix?.trim()
+        ? `${systemPrompt}\n\n${systemPromptAppendix.trim()}`
+        : systemPrompt
 
       // 5. Get available tools for this user
       const availableTools = await this.tools.getAvailableForUser(userId)
@@ -89,55 +121,114 @@ export class AgentService {
       const userApiKey = userLlmKey?.isActive ? (userLlmKey.apiKey ?? undefined) : undefined
       const userBaseUrl = userLlmKey?.isActive ? (userLlmKey.baseUrl ?? undefined) : undefined
 
+      const maxToolRoundsRaw = Number.parseInt(process.env.AGENT_MAX_TOOL_ROUNDS ?? `${DEFAULT_MAX_TOOL_ROUNDS}`, 10)
+      const maxToolRounds = Number.isFinite(maxToolRoundsRaw) ? Math.max(1, Math.min(maxToolRoundsRaw, 12)) : DEFAULT_MAX_TOOL_ROUNDS
       let activeProvider: LLMProvider = provider
       let activeUserApiKey = userApiKey
       let activeUserBaseUrl = userBaseUrl
-      let response
-      try {
-        response = await this.llm.complete(llmMessages, availableTools, systemPrompt, provider, userApiKey, userBaseUrl)
-      } catch (error: any) {
-        const shouldFallbackToOllama =
-          (provider === 'anthropic' || provider === 'openai')
-          && typeof error?.message === 'string'
-          && error.message.toLowerCase().includes('api key is not configured')
+      let activeModel = preferredModel
+      const runMetrics: AgentRunMetrics = {
+        provider,
+        model: preferredModel ?? null,
+        llmCalls: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        approvalsRequested: 0,
+        fallbackToOllama: false,
+        maxToolRounds,
+        toolRoundsUsed: 0,
+        toolCalls: [],
+      }
+      const completeWithProviderFallback = async (messages: Array<{ role: 'user' | 'assistant'; content: string }>) => {
+        runMetrics.llmCalls += 1
+        runMetrics.inputTokens += this.estimateTokens(effectiveSystemPrompt)
+        runMetrics.inputTokens += messages.reduce((sum, msg) => sum + this.estimateTokens(msg.content), 0)
 
-        if (!shouldFallbackToOllama) throw error
+        try {
+          return await this.llm.complete(
+            messages,
+            availableTools,
+            effectiveSystemPrompt,
+            activeProvider,
+            activeUserApiKey,
+            activeUserBaseUrl,
+            activeModel,
+          )
+        } catch (error: any) {
+          const shouldFallbackToOllama =
+            (activeProvider === 'anthropic' || activeProvider === 'openai')
+            && typeof error?.message === 'string'
+            && error.message.toLowerCase().includes('api key is not configured')
 
-        this.logger.warn(`Provider ${provider} has no configured API key for user ${userId}; falling back to ollama.`)
-        const ollamaKey = await this.users.getRawLlmKey(userId, 'ollama')
-        const ollamaBaseUrl = ollamaKey?.isActive ? (ollamaKey.baseUrl ?? undefined) : undefined
-        activeProvider = 'ollama'
-        activeUserApiKey = undefined
-        activeUserBaseUrl = ollamaBaseUrl
-        emit('status', { status: 'thinking', provider: 'ollama', fallback: true })
-        response = await this.llm.complete(
-          llmMessages,
-          availableTools,
-          systemPrompt,
-          activeProvider,
-          activeUserApiKey,
-          activeUserBaseUrl,
-        )
+          if (!shouldFallbackToOllama) throw error
+
+          this.logger.warn(`Provider ${activeProvider} has no configured API key for user ${userId}; falling back to ollama.`)
+          const ollamaKey = await this.users.getRawLlmKey(userId, 'ollama')
+          const ollamaBaseUrl = ollamaKey?.isActive ? (ollamaKey.baseUrl ?? undefined) : undefined
+          runMetrics.fallbackToOllama = true
+          activeProvider = 'ollama'
+          activeUserApiKey = undefined
+          activeUserBaseUrl = ollamaBaseUrl
+          activeModel = undefined
+          emit('status', { status: 'thinking', provider: 'ollama', fallback: true })
+          return this.llm.complete(
+            messages,
+            availableTools,
+            effectiveSystemPrompt,
+            activeProvider,
+            activeUserApiKey,
+            activeUserBaseUrl,
+            activeModel,
+          )
+        }
       }
 
-      // 8. Handle tool calls
-      if (response.stopReason === 'tool_use' && response.toolCalls?.length) {
+      const llmWorkingMessages = [...llmMessages]
+      let finalResponseContent = ''
+      let toolRound = 0
+
+      while (toolRound < maxToolRounds) {
+        const response = await completeWithProviderFallback(llmWorkingMessages)
+
+        if (response.content?.trim()) {
+          runMetrics.outputTokens += this.estimateTokens(response.content.trim())
+          finalResponseContent = response.content.trim()
+          llmWorkingMessages.push({ role: 'assistant', content: response.content.trim() })
+        }
+
+        if (response.stopReason !== 'tool_use' || !response.toolCalls?.length) {
+          break
+        }
+
+        toolRound += 1
+        let executedAnyTool = false
+
         for (const toolCall of response.toolCalls) {
           const toolDef = availableTools.find((t) => t.name === toolCall.name)
 
           if (!toolDef) {
             this.logger.warn(`Unknown tool requested: ${toolCall.name}`)
+            llmWorkingMessages.push({
+              role: 'assistant',
+              content: `Tool ${toolCall.name} is unavailable in this environment.`,
+            })
             continue
           }
 
           if (toolDef.requiresApproval) {
+            runMetrics.approvalsRequested += 1
+            runMetrics.toolCalls.push({
+              name: toolCall.name,
+              requiresApproval: true,
+              status: 'pending_approval',
+            })
             const toolMsg = await this.prisma.message.create({
               data: {
                 conversationId,
                 role: 'tool',
                 content: `Requesting to use tool: ${toolCall.name}`,
                 status: 'pending',
-                toolCallJson: toolCall as any,
+                toolCallJson: JSON.stringify(toolCall),
               },
             })
 
@@ -151,10 +242,12 @@ export class AgentService {
 
             await this.prisma.agentRun.update({
               where: { id: run.id },
-              data: { status: 'waiting_approval' },
+              data: {
+                status: 'waiting_approval',
+                metadata: this.serializeRunMetrics(runMetrics, activeProvider, activeModel),
+              },
             })
 
-            // Notify user that approval is needed
             this.notifications
               .create(userId, 'Action required', `Agent wants to use: ${toolCall.name}`, 'warning')
               .catch((e) => this.logger.error('Notification create failed', e))
@@ -163,7 +256,6 @@ export class AgentService {
             return
           }
 
-          // Execute tool immediately
           await this.prisma.agentRun.update({
             where: { id: run.id },
             data: { status: 'running_tool' },
@@ -171,46 +263,86 @@ export class AgentService {
           emit('status', { status: 'running_tool', tool: toolCall.name })
 
           const result = await this.tools.execute(toolCall.name, toolCall.input, userId)
+          const resultContent = result.success
+            ? this.renderToolData(result.output)
+            : (result.error ?? 'Error')
+
+          runMetrics.toolCalls.push({
+            name: toolCall.name,
+            requiresApproval: false,
+            status: result.success ? 'executed' : 'failed',
+          })
 
           await this.prisma.message.create({
             data: {
               conversationId,
               role: 'tool',
-              content: result.success ? JSON.stringify(result.output) : (result.error ?? 'Error'),
+              content: resultContent,
               status: result.success ? 'done' : 'error',
-              toolCallJson: toolCall as any,
-              toolResultJson: result as any,
+              toolCallJson: JSON.stringify(toolCall),
+              toolResultJson: JSON.stringify(result),
             },
           })
 
           emit('tool_result', { tool: toolCall.name, result })
+          llmWorkingMessages.push({
+            role: 'assistant',
+            content: `Tool result for ${toolCall.name}:\n${resultContent}`,
+          })
+          executedAnyTool = true
+        }
+
+        if (!executedAnyTool) {
+          break
         }
       }
 
+      if (toolRound >= maxToolRounds) {
+        this.logger.warn(`Reached max tool rounds (${maxToolRounds}) for run ${run.id}`)
+      }
+      runMetrics.toolRoundsUsed = toolRound
+
+      if (!finalResponseContent) {
+        finalResponseContent = toolRound > 0
+          ? 'Completed tool execution.'
+          : 'I could not generate a response.'
+      }
+
       // 9. Save agent response
-      if (response.content) {
+      if (finalResponseContent) {
         const agentMsg = await this.prisma.message.create({
-          data: { conversationId, role: 'agent', content: response.content, status: 'done' },
+          data: { conversationId, role: 'agent', content: finalResponseContent, status: 'done' },
         })
         emit('message', agentMsg)
 
         // 10. Auto-title: set conversation title from first exchange if not yet set
         const conv = await this.prisma.conversation.findUnique({ where: { id: conversationId } })
         if (conv && !conv.title) {
-          this.autoTitle(conversationId, userMessage, activeProvider, activeUserApiKey, activeUserBaseUrl).catch((e) =>
+          this.autoTitle(
+            conversationId,
+            userMessage,
+            activeProvider,
+            activeUserApiKey,
+            activeUserBaseUrl,
+            activeModel,
+          ).catch((e) =>
             this.logger.error('Auto-title failed', e),
           )
         }
 
         // 11. Update memory (async, non-blocking)
-        this.memory.extractAndStore(userId, userMessage, response.content).catch((e) =>
+        this.memory.extractAndStore(userId, userMessage, finalResponseContent).catch((e) =>
           this.logger.error('Memory extraction failed', e),
         )
       }
 
       await this.prisma.agentRun.update({
         where: { id: run.id },
-        data: { status: 'done', finishedAt: new Date() },
+        data: {
+          status: 'done',
+          finishedAt: new Date(),
+          metadata: this.serializeRunMetrics(runMetrics, activeProvider, activeModel),
+        },
       })
 
       await this.prisma.conversation.update({
@@ -228,10 +360,39 @@ export class AgentService {
       this.logger.error('Agent run failed', err)
       await this.prisma.agentRun.update({
         where: { id: run.id },
-        data: { status: 'error', finishedAt: new Date(), error: err.message },
+        data: {
+          status: 'error',
+          finishedAt: new Date(),
+          error: err.message,
+          metadata: JSON.stringify({ error: err.message }),
+        },
       })
       throw err
     }
+  }
+
+  private renderToolData(data: unknown) {
+    if (data == null) return ''
+    if (typeof data === 'string') return data.slice(0, 4000)
+    try {
+      const serialized = JSON.stringify(data, null, 2)
+      return serialized.length > 4000 ? `${serialized.slice(0, 4000)}...` : serialized
+    } catch {
+      return String(data).slice(0, 4000)
+    }
+  }
+
+  private estimateTokens(text: string) {
+    return Math.max(0, Math.ceil((text ?? '').length / 4))
+  }
+
+  private serializeRunMetrics(metrics: AgentRunMetrics, provider: LLMProvider, model?: string) {
+    return JSON.stringify({
+      ...metrics,
+      provider,
+      model: model ?? null,
+      estimatedLlmCostOnly: true,
+    })
   }
 
   private async autoTitle(
@@ -240,6 +401,7 @@ export class AgentService {
     provider: LLMProvider,
     userApiKey?: string,
     userBaseUrl?: string,
+    model?: string,
   ) {
     const prompt = firstMessage.length > 120 ? firstMessage.slice(0, 120) + '...' : firstMessage
     const response = await this.llm.complete(
@@ -249,6 +411,7 @@ export class AgentService {
       provider,
       userApiKey,
       userBaseUrl,
+      model,
     )
     if (response.content) {
       await this.prisma.conversation.update({

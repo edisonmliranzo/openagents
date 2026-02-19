@@ -67,7 +67,11 @@ export class ConversationsController {
     }
 
     try {
-      const run = this.nanobotConfig.enabled ? this.nanobotLoop.run.bind(this.nanobotLoop) : this.agent.run.bind(this.agent)
+      const isSkillCommand = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:)/i.test(dto.content ?? '')
+      const useNanobotLoop = this.nanobotConfig.enabled || isSkillCommand
+      const run = useNanobotLoop
+        ? this.nanobotLoop.run.bind(this.nanobotLoop)
+        : this.agent.run.bind(this.agent)
       await run({
         conversationId,
         userId: req.user.id,

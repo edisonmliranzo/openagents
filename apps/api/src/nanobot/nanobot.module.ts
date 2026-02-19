@@ -16,6 +16,9 @@ import { NanobotCliService } from './cli/nanobot-cli.service'
 import { NanobotMemoryStore } from './agent/nanobot-memory.store'
 import { NanobotContextService } from './agent/nanobot-context.service'
 import { NanobotSkillsRegistry } from './agent/nanobot-skills.registry'
+import { NanobotPersonalityService } from './agent/nanobot-personality.service'
+import { NanobotRoleEngineService } from './agent/nanobot-role-engine.service'
+import { NanobotAliveStateService } from './agent/nanobot-alive-state.service'
 import { NanobotSubagentService } from './agent/nanobot-subagent.service'
 import { NanobotBuiltinToolsService } from './agent/tools/nanobot-builtin-tools.service'
 import { NanobotProviderRouterService } from './providers/nanobot-provider-router.service'
@@ -36,6 +39,9 @@ import { NanobotLoopService } from './agent/nanobot-loop.service'
     NanobotMemoryStore,
     NanobotContextService,
     NanobotSkillsRegistry,
+    NanobotPersonalityService,
+    NanobotRoleEngineService,
+    NanobotAliveStateService,
     NanobotSubagentService,
     NanobotBuiltinToolsService,
     NanobotProviderRouterService,
@@ -44,4 +50,3 @@ import { NanobotLoopService } from './agent/nanobot-loop.service'
   exports: [NanobotConfigService, NanobotLoopService, NanobotBusService, NanobotSessionService],
 })
 export class NanobotModule {}
-
