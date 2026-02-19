@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "OpenAgents",
+    "slug": "openagents",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "openagents",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.openagents.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f0f0f"
+      },
+      "package": "com.openagents.app"
+    },
+    "plugins": ["expo-router", "expo-secure-store"]
+  }
+}
