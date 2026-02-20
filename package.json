@@ -4,13 +4,21 @@
   "private": true,
   "packageManager": "pnpm@9.0.0",
   "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "setup:skip-docker": "node scripts/setup.mjs --skip-docker",
+    "setup:skip-migrate": "node scripts/setup.mjs --skip-migrate",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "test": "turbo run test",
     "db:migrate": "pnpm --filter api run db:migrate",
-    "db:studio": "pnpm --filter api run db:studio"
+    "db:studio": "pnpm --filter api run db:studio",
+    "prod:build": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml build",
+    "prod:up": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml up -d",
+    "prod:down": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml down",
+    "prod:logs": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml logs -f --tail=200",
+    "prod:ps": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml ps"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
