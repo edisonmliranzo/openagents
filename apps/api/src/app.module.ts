@@ -17,6 +17,7 @@ import { SystemModule } from './system/system.module'
 import { LabsModule } from './labs/labs.module'
 import { WhatsAppModule } from './channels/whatsapp/whatsapp.module'
 import { PlatformModule } from './platform/platform.module'
+import { HealthModule } from './health/health.module'
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { PlatformModule } from './platform/platform.module'
     LabsModule,
     WhatsAppModule,
     PlatformModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
