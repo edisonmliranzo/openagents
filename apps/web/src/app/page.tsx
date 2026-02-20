@@ -113,17 +113,17 @@ const INTEGRATIONS = [
   'Soul.md',
 ]
 
-const NANOBOT_STACK = [
-  'nanobot/agent',
-  'nanobot/skills',
-  'nanobot/channels',
-  'nanobot/bus',
-  'nanobot/cron',
-  'nanobot/heartbeat',
-  'nanobot/providers',
-  'nanobot/session',
-  'nanobot/config',
-  'nanobot/cli',
+const OPENAGENT_STACK = [
+  'openagent/agent',
+  'openagent/skills',
+  'openagent/channels',
+  'openagent/bus',
+  'openagent/cron',
+  'openagent/heartbeat',
+  'openagent/providers',
+  'openagent/session',
+  'openagent/config',
+  'openagent/cli',
 ]
 
 export default function RootPage() {
@@ -353,22 +353,22 @@ export default function RootPage() {
           </article>
 
           <article className={styles.panel}>
-            <h3 className="text-xl font-semibold text-white">Nanobot Starter Stack</h3>
+            <h3 className="text-xl font-semibold text-white">OpenAgent Starter Stack</h3>
             <p className="mt-1 text-sm text-slate-300">
               The runtime architecture is already scaffolded and ready for extensions.
             </p>
             <ul className="mt-3 space-y-1">
-              {NANOBOT_STACK.map((entry) => (
+              {OPENAGENT_STACK.map((entry) => (
                 <li key={entry} className="font-mono text-xs text-cyan-200">
                   {entry}
                 </li>
               ))}
             </ul>
             <Link
-              href="/agent/nanobot"
+              href="/agent/openagent"
               className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
             >
-              Open Nanobot Control
+              Open OpenAgent Control
               <ArrowRight size={14} />
             </Link>
           </article>

@@ -2,9 +2,30 @@ import { create } from 'zustand'
 import { createSDK } from '@openagents/sdk'
 import type { Message, Approval, User } from '@openagents/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { NativeModules, Platform } from 'react-native'
 
-// Replace with your dev machine IP when testing on device
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001'
+function inferApiBaseUrl() {
+  const explicit = (process.env.EXPO_PUBLIC_API_URL ?? '').trim()
+  if (explicit) return explicit.replace(/\/$/, '')
+
+  const scriptUrl = NativeModules?.SourceCode?.scriptURL
+  if (typeof scriptUrl === 'string' && scriptUrl.startsWith('http')) {
+    try {
+      const parsed = new URL(scriptUrl)
+      if (parsed.hostname) {
+        return `http://${parsed.hostname}:3001`
+      }
+    } catch {
+      // fall through to platform defaults
+    }
+  }
+
+  if (Platform.OS === 'android') return 'http://10.0.2.2:3001'
+  return 'http://localhost:3001'
+}
+
+const API_URL = inferApiBaseUrl()
+export const MOBILE_API_URL = API_URL
 
 const sdk = createSDK({
   baseUrl: API_URL,

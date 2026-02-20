@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { CronService } from './cron.service'
 import type {
@@ -99,6 +99,20 @@ class UpdateCronJobDto implements UpdateCronJobInput {
   deliveryTarget?: string | null
 }
 
+class SelfHealCronDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(8)
+  maxRetries?: number
+
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(10_080)
+  staleAfterMinutes?: number
+}
+
 @ApiTags('cron')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -136,5 +150,20 @@ export class CronController {
     const parsedLimit = Number.parseInt(limit ?? '25', 10)
     const safeLimit = Number.isFinite(parsedLimit) ? parsedLimit : 25
     return this.cron.listRuns(req.user.id, id, safeLimit)
+  }
+
+  @Get('health/summary')
+  health(@Req() req: any, @Query('staleAfterMinutes') staleAfterMinutes?: string) {
+    const parsed = Number.parseInt(staleAfterMinutes ?? '1440', 10)
+    const safe = Number.isFinite(parsed) ? parsed : 1440
+    return this.cron.health(req.user.id, safe)
+  }
+
+  @Post('self-heal')
+  selfHeal(@Req() req: any, @Body() dto: SelfHealCronDto) {
+    return this.cron.selfHeal(req.user.id, {
+      maxRetries: dto.maxRetries,
+      staleAfterMinutes: dto.staleAfterMinutes,
+    })
   }
 }

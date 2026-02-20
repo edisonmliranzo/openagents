@@ -93,10 +93,10 @@ export default function AgentsPage() {
 
         <div className="mt-4 space-y-2">
           <Link
-            href="/agent/nanobot"
+            href="/agent/openagent"
             className="block rounded-lg border border-indigo-200 bg-indigo-50 p-3 transition hover:bg-indigo-100"
           >
-            <p className="text-sm font-semibold text-indigo-900">Nanobot Runtime Control</p>
+            <p className="text-sm font-semibold text-indigo-900">OpenAgent Runtime Control</p>
             <p className="mt-1 text-xs text-indigo-700">
               Configure shadow mode, loop limits, skills, and event telemetry.
             </p>

@@ -14,6 +14,9 @@ import { CronModule } from './cron/cron.module'
 import { PrismaModule } from './prisma/prisma.module'
 import { NanobotModule } from './nanobot/nanobot.module'
 import { SystemModule } from './system/system.module'
+import { LabsModule } from './labs/labs.module'
+import { WhatsAppModule } from './channels/whatsapp/whatsapp.module'
+import { PlatformModule } from './platform/platform.module'
 
 @Module({
   imports: [
@@ -34,6 +37,9 @@ import { SystemModule } from './system/system.module'
     CronModule,
     NanobotModule,
     SystemModule,
+    LabsModule,
+    WhatsAppModule,
+    PlatformModule,
   ],
 })
 export class AppModule {}

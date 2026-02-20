@@ -3,11 +3,13 @@ import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native'
+import { useRouter } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useMobileChatStore } from '@/stores/mobileChat'
 import type { Message } from '@openagents/shared'
 
 export default function ChatScreen() {
+  const router = useRouter()
   const { messages, sendMessage, isStreaming, initConversation } = useMobileChatStore()
   const [input, setInput] = useState('')
   const listRef = useRef<FlatList>(null)
@@ -50,6 +52,15 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={80}
       >
+        <View style={styles.topBar}>
+          <TouchableOpacity style={styles.topButton} onPress={() => router.push('/channels')}>
+            <Text style={styles.topButtonText}>Channels</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.topButton} onPress={() => router.push('/settings')}>
+            <Text style={styles.topButtonText}>Settings</Text>
+          </TouchableOpacity>
+        </View>
+
         <FlatList
           ref={listRef}
           data={messages}
@@ -117,6 +128,25 @@ function ApprovalsSection() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f0f0f' },
   flex: { flex: 1 },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  topButton: {
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#111827',
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topButtonText: { color: '#cbd5e1', fontSize: 12, fontWeight: '600' },
   messageList: { padding: 16, gap: 12, paddingBottom: 24 },
   bubble: { maxWidth: '80%', padding: 12, borderRadius: 16 },
   userBubble: { alignSelf: 'flex-end', backgroundColor: '#0ea5e9', borderBottomRightRadius: 4 },

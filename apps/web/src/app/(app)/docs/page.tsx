@@ -24,7 +24,7 @@ const DOC_LINKS = [
     description: 'Partner ecosystem site for agent memory and knowledge workflows.',
   },
   {
-    title: 'Nanobot API Health',
+    title: 'OpenAgent API Health',
     href: `${API_ORIGIN}/api/v1/nanobot/health`,
     description: 'Authenticated health endpoint for runtime config and session state.',
   },

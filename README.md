@@ -78,9 +78,18 @@ infra/
 - `gmail_draft_reply` — draft reply (requires approval)
 - `calendar_get_availability` — read free slots (no approval)
 - `calendar_create_event` — create event (requires approval)
+- `web_search` — web search via Brave or SearXNG (no approval)
 - `web_fetch` — fetch HTTPS page text (no approval)
 - `notes_create` / `notes_list` — internal notes (no approval)
 
 ### LLM providers
 Set `DEFAULT_LLM_PROVIDER=anthropic` or `openai` in `apps/api/.env`.
 Both providers are wired; model defaults are in `packages/shared/src/constants/index.ts`.
+
+### Web search providers
+Set `WEB_SEARCH_PROVIDER=brave` with `BRAVE_SEARCH_API_KEY` for Brave Search.
+
+For a free/self-hosted setup, use:
+- `WEB_SEARCH_PROVIDER=searxng`
+- `SEARXNG_BASE_URL=http://localhost:8080` (or your hosted SearXNG URL)
+- `SEARXNG_API_KEY=` (optional; only if your SearXNG instance requires one)

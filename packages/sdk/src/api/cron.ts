@@ -1,5 +1,13 @@
 import type { OpenAgentsClient } from '../client'
-import type { CreateCronJobInput, CronJob, CronRun, UpdateCronJobInput } from '@openagents/shared'
+import type {
+  CreateCronJobInput,
+  CronHealthSummary,
+  CronJob,
+  CronRun,
+  CronSelfHealInput,
+  CronSelfHealReport,
+  UpdateCronJobInput,
+} from '@openagents/shared'
 
 export interface CronJobWithLastRun extends CronJob {
   runs?: CronRun[]
@@ -20,5 +28,13 @@ export function createCronApi(client: OpenAgentsClient) {
 
     listRuns: (id: string, limit = 25) =>
       client.get<CronRun[]>(`/api/v1/cron/jobs/${id}/runs?limit=${limit}`),
+
+    health: (staleAfterMinutes?: number) =>
+      client.get<CronHealthSummary>(
+        `/api/v1/cron/jobs/health/summary${staleAfterMinutes ? `?staleAfterMinutes=${staleAfterMinutes}` : ''}`,
+      ),
+
+    selfHeal: (input: CronSelfHealInput = {}) =>
+      client.post<CronSelfHealReport>('/api/v1/cron/jobs/self-heal', input),
   }
 }

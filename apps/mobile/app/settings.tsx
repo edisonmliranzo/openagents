@@ -30,6 +30,10 @@ export default function SettingsScreen() {
         )}
       </View>
 
+      <TouchableOpacity style={styles.channelsButton} onPress={() => router.push('/channels')}>
+        <Text style={styles.channelsText}>WhatsApp Channels</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.logoutButton} onPress={() => void handleLogout()}>
         <Text style={styles.logoutText}>Sign out</Text>
       </TouchableOpacity>
@@ -73,6 +77,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1e293b',
     fontWeight: '500',
+  },
+  channelsButton: {
+    height: 44,
+    backgroundColor: '#ecfeff',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#a5f3fc',
+  },
+  channelsText: {
+    color: '#0e7490',
+    fontWeight: '600',
+    fontSize: 15,
   },
   logoutButton: {
     height: 44,
