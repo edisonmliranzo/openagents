@@ -1,95 +1,189 @@
-# OpenAgents MVP
+# OpenAgents
 
-AI agent platform: chat → tools/actions → approvals → history/memory.
+OpenAgents is a local-first AI agent platform with a modern web control plane, tool-calling runtime, approvals, memory files, and multi-channel operations.
 
-## Stack
+## Highlights
+
+- OpenAgent control runtime (`/agent/openagent`) for skills, sessions, persona, and runtime actions.
+- Live chat workspace with approvals, code-aware responses, and copy-code UX.
+- File-based memory model (`SOUL.md`, `USER.md`, `MEMORY.md`, `HEARTBEAT.md`, `cron.json`).
+- Tool execution loop with ReAct-style calls and approval gates.
+- Platform control features:
+  - templates marketplace
+  - fleet health snapshot
+  - eval suites (Ollama benchmarking)
+  - billing/cost dashboard
+  - subscription plans and quotas
+  - omnichannel inbox
+- WhatsApp channel support with pairing/link flow and webhook ingestion.
+- LLM provider switching (Anthropic/OpenAI) and web search provider switching (Brave/SearXNG).
+
+## Tech stack
 
 | Layer | Tech |
-|-------|------|
-| Web app | Next.js 14 (App Router) |
-| Mobile app | Expo (React Native) |
-| API | NestJS + Prisma |
+|---|---|
+| Web | Next.js 14, Tailwind, Zustand |
+| API | NestJS, Prisma |
+| Mobile | Expo (React Native) |
 | Worker | Bull + Redis |
-| DB | PostgreSQL |
-| Cache/Queue | Redis |
-| LLM | Anthropic Claude + OpenAI (switchable) |
+| Database | PostgreSQL |
+| Queue/Cache | Redis |
 | Monorepo | pnpm workspaces + Turborepo |
 
-## Quick start
+## Quick start (local)
 
-### 1. Install dependencies
+### 1. Prerequisites
+
+- Node.js 20+
+- pnpm 9+
+- Docker Desktop (recommended for Postgres/Redis)
+
+### 2. Install dependencies
+
 ```bash
 pnpm install
 ```
 
-### 2. Start infra (Postgres + Redis)
+### 3. Start infrastructure
+
 ```bash
 docker compose -f infra/docker/docker-compose.yml up -d
 ```
 
-### 3. Set up API env
+### 4. Configure environment files
+
+PowerShell:
+
+```powershell
+Copy-Item apps/api/.env.example apps/api/.env
+Copy-Item apps/web/.env.example apps/web/.env.local
+```
+
+macOS/Linux:
+
 ```bash
 cp apps/api/.env.example apps/api/.env
-# Fill in ANTHROPIC_API_KEY, OPENAI_API_KEY, JWT_SECRET, etc.
+cp apps/web/.env.example apps/web/.env.local
 ```
 
-### 4. Run DB migrations
+### 5. Run Prisma migrations
+
 ```bash
-pnpm db:migrate
+pnpm --filter @openagents/api run db:generate
+pnpm --filter @openagents/api run db:migrate
 ```
 
-### 5. Start all apps
+### 6. Start apps
+
 ```bash
 pnpm dev
 ```
 
-Apps start at:
-- Web: http://localhost:3000
-- API: http://localhost:3001
-- API docs: http://localhost:3001/docs
+Local URLs:
 
-## Monorepo structure
+- Web: `http://localhost:3000`
+- API: `http://localhost:3001`
+- API docs: `http://localhost:3001/docs`
 
-```
-apps/
-  api/          NestJS backend (auth, chat, agent, tools, approvals, memory)
-  web/          Next.js dashboard + chat UI
-  mobile/       Expo chat app
-  worker/       Background job processor (approvals, tool runs)
-packages/
-  shared/       Shared TypeScript types + constants
-  sdk/          API client (used by web + mobile)
-infra/
-  docker/       docker-compose for local dev
-```
+## Core runtime capabilities
 
-## Core modules
+### Agent flow
 
-### Agent pipeline
 1. User sends message
-2. Agent builds context (recent messages + long-term memory)
+2. Agent builds context from recent chat + memory files
 3. LLM plans tool calls
-4. If tool needs approval → creates `Approval` record, streams event to client
-5. User approves/denies in UI
-6. Tool executes → result saved → agent replies with summary
+4. Approval-gated tools create approval records
+5. User approves/denies
+6. Tool result is persisted and the agent continues/responds
 
-### Tools (MVP)
-- `gmail_search` — search inbox (no approval)
-- `gmail_draft_reply` — draft reply (requires approval)
-- `calendar_get_availability` — read free slots (no approval)
-- `calendar_create_event` — create event (requires approval)
-- `web_search` — web search via Brave or SearXNG (no approval)
-- `web_fetch` — fetch HTTPS page text (no approval)
-- `notes_create` / `notes_list` — internal notes (no approval)
+### Built-in tools
+
+- `gmail_search`
+- `gmail_draft_reply`
+- `calendar_get_availability`
+- `calendar_create_event`
+- `web_fetch`
+- `web_search`
+- `get_current_time`
+- `cron_add`
+- `cron_list`
+- `cron_remove`
+- `notes_create`
+- `notes_list`
+
+### Memory files
+
+Per-user memory is persisted as editable files under `data/memory/...`, including:
+
+- `SOUL.md`
+- `USER.md`
+- `MEMORY.md`
+- `HEARTBEAT.md`
+- `cron.json`
+- dated daily logs and chat history files
+
+## Configuration notes
 
 ### LLM providers
-Set `DEFAULT_LLM_PROVIDER=anthropic` or `openai` in `apps/api/.env`.
-Both providers are wired; model defaults are in `packages/shared/src/constants/index.ts`.
+
+Set in `apps/api/.env`:
+
+- `DEFAULT_LLM_PROVIDER=anthropic` or `openai`
+- `ANTHROPIC_API_KEY=...`
+- `OPENAI_API_KEY=...`
 
 ### Web search providers
-Set `WEB_SEARCH_PROVIDER=brave` with `BRAVE_SEARCH_API_KEY` for Brave Search.
 
-For a free/self-hosted setup, use:
+Brave:
+
+- `WEB_SEARCH_PROVIDER=brave`
+- `BRAVE_SEARCH_API_KEY=...`
+
+Free/self-hosted SearXNG:
+
 - `WEB_SEARCH_PROVIDER=searxng`
-- `SEARXNG_BASE_URL=http://localhost:8080` (or your hosted SearXNG URL)
-- `SEARXNG_API_KEY=` (optional; only if your SearXNG instance requires one)
+- `SEARXNG_BASE_URL=http://localhost:8080`
+- `SEARXNG_API_KEY=` (optional)
+
+### WhatsApp channel (Twilio)
+
+Key env vars in `apps/api/.env`:
+
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_WHATSAPP_FROM`
+- `WHATSAPP_DEFAULT_USER_ID`
+- `WHATSAPP_PAIR_COMMAND`
+- `WHATSAPP_WEBHOOK_TOKEN` (optional)
+
+## Monorepo layout
+
+```text
+apps/
+  api/      NestJS API (auth, chat, tools, approvals, memory, channels, platform, openagent runtime)
+  web/      Next.js dashboard + chat UI
+  mobile/   Expo mobile client
+  worker/   Background processor
+packages/
+  shared/   Shared types/constants
+  sdk/      API SDK used by web/mobile
+infra/
+  docker/   Local postgres + redis compose
+```
+
+## Useful commands
+
+```bash
+pnpm type-check
+pnpm --filter @openagents/api run build
+pnpm --filter @openagents/web run build
+```
+
+## Troubleshooting
+
+- If UI renders unstyled/plain text:
+  - run `pnpm --filter @openagents/web run dev:clean`
+  - hard refresh browser (`Ctrl+Shift+R`)
+- If login says "Failed to reach API":
+  - confirm API is running on `http://localhost:3001`
+  - verify `NEXT_PUBLIC_API_URL` in `apps/web/.env.local`
