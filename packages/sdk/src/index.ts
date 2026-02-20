@@ -13,6 +13,9 @@ export { createCronApi } from './api/cron'
 export { createAgentApi } from './api/agent'
 export { createNanobotApi } from './api/nanobot'
 export { createSystemApi } from './api/system'
+export { createLabsApi } from './api/labs'
+export { createChannelsApi } from './api/channels'
+export { createPlatformApi } from './api/platform'
 
 import { OpenAgentsClient } from './client'
 import { createAuthApi } from './api/auth'
@@ -28,6 +31,9 @@ import { createCronApi } from './api/cron'
 import { createAgentApi } from './api/agent'
 import { createNanobotApi } from './api/nanobot'
 import { createSystemApi } from './api/system'
+import { createLabsApi } from './api/labs'
+import { createChannelsApi } from './api/channels'
+import { createPlatformApi } from './api/platform'
 import type { SDKConfig } from './client'
 
 /** Convenience factory: creates a fully-wired SDK instance */
@@ -48,5 +54,8 @@ export function createSDK(config: SDKConfig) {
     agent: createAgentApi(client),
     nanobot: createNanobotApi(client),
     system: createSystemApi(client),
+    labs: createLabsApi(client),
+    channels: createChannelsApi(client),
+    platform: createPlatformApi(client),
   }
 }

@@ -16,15 +16,19 @@ import {
   Clock,
   Cpu,
   FileText,
+  Gauge,
   LayoutDashboard,
   LogOut,
   MessageSquare,
   Network,
+  Moon,
   Plug,
   ScrollText,
   Server,
   Settings2,
   ShieldCheck,
+  ShoppingBag,
+  Sun,
   Terminal,
   Zap,
 } from 'lucide-react'
@@ -60,19 +64,25 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Overview', href: '/control/overview', icon: LayoutDashboard },
       { label: 'Channels', href: '/control/channels', icon: Plug },
-      { label: 'Instances', href: '/control/instances', icon: Server },
+      { label: 'Inbox', href: '/control/inbox', icon: MessageSquare },
+      { label: 'Fleet', href: '/control/instances', icon: Server },
+      { label: 'Templates', href: '/control/templates', icon: Bot },
       { label: 'Sessions', href: '/sessions', icon: Terminal },
-      { label: 'Usage', href: '/control/usage', icon: BarChart2 },
+      { label: 'Billing', href: '/control/usage', icon: BarChart2 },
       { label: 'Benchmark', href: '/control/benchmark', icon: Cpu },
       { label: 'Cron Jobs', href: '/control/cron-jobs', icon: Clock },
+      { label: 'Subscription', href: '/control/subscription', icon: Gauge },
     ],
   },
   {
     title: 'Agent',
     items: [
       { label: 'Agents', href: '/agent/agents', icon: Bot },
-      { label: 'Nanobot', href: '/agent/nanobot', icon: Cpu },
+      { label: 'OpenAgent', href: '/agent/openagent', icon: Cpu },
+      { label: 'Labs', href: '/agent/labs', icon: Activity },
       { label: 'Skills', href: '/agent/skills', icon: Zap },
+      { label: 'Marketplace', href: '/agent/marketplace', icon: ShoppingBag },
+      { label: 'Trust', href: '/agent/trust', icon: Gauge },
       { label: 'Nodes', href: '/agent/nodes', icon: Network },
     ],
   },
@@ -90,6 +100,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [{ label: 'Docs', href: '/docs', icon: BookOpen }],
   },
 ]
+
+const THEME_STORAGE_KEY = 'openagents.dashboard.theme'
 
 function isActivePath(current: string, href: string) {
   if (href === '/') return current === href
@@ -134,8 +146,32 @@ export function AppShell({ children }: AppShellProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isNotificationsLoading, setIsNotificationsLoading] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const notifRef = useRef<HTMLDivElement | null>(null)
   const profileSyncedRef = useRef(false)
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+      if (stored === 'dark') {
+        setTheme('dark')
+      }
+    } catch {
+      // Ignore storage failures and keep light mode.
+    }
+  }, [])
+
+  useEffect(() => {
+    const root = document.documentElement
+    const isDark = theme === 'dark'
+    root.classList.toggle('theme-dark', isDark)
+    root.classList.toggle('dark', isDark)
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [theme])
 
   useEffect(() => {
     if (!hydrated) return
@@ -247,12 +283,12 @@ export function AppShell({ children }: AppShellProps) {
   if (!accessToken) return null
 
   return (
-    <div className="flex min-h-screen">
+    <div className="dashboard-theme flex min-h-screen">
       <aside
         className="sidebar-scroll fixed left-0 top-0 z-30 flex h-screen w-[220px] shrink-0 flex-col overflow-y-auto"
         style={{
-          background: 'linear-gradient(180deg, #0d1117 0%, #0b0f1e 100%)',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
+          background: 'linear-gradient(180deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%)',
+          borderRight: '1px solid var(--sidebar-border)',
         }}
       >
         <div className="flex h-14 shrink-0 items-center gap-3 px-5">
@@ -336,6 +372,17 @@ export function AppShell({ children }: AppShellProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+              className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-800"
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+              <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+            </button>
+
             <span className="hidden items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700 sm:flex">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
               Live

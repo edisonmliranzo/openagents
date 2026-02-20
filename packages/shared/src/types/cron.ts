@@ -56,3 +56,47 @@ export interface UpdateCronJobInput {
   deliveryMode?: CronDeliveryMode
   deliveryTarget?: string | null
 }
+
+export interface CronJobHealth {
+  jobId: string
+  name: string
+  enabled: boolean
+  lastRunAt: string | null
+  lastStatus: CronRunStatus | null
+  consecutiveFailures: number
+  stale: boolean
+  retryDueAt: string | null
+}
+
+export interface CronHealthSummary {
+  generatedAt: string
+  totals: {
+    jobs: number
+    enabledJobs: number
+    staleJobs: number
+    failingJobs: number
+  }
+  staleJobs: CronJobHealth[]
+  failingJobs: CronJobHealth[]
+}
+
+export interface CronSelfHealInput {
+  maxRetries?: number
+  staleAfterMinutes?: number
+}
+
+export interface CronSelfHealAction {
+  jobId: string
+  name: string
+  action: 'retry-run' | 'stale-run' | 'skipped'
+  reason: string
+  runId?: string
+  backoffMs?: number
+}
+
+export interface CronSelfHealReport {
+  generatedAt: string
+  healedCount: number
+  skippedCount: number
+  actions: CronSelfHealAction[]
+}

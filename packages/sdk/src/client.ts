@@ -27,6 +27,19 @@ export class OpenAgentsClient {
     this.refreshToken = null
   }
 
+  private buildNetworkError(url: string, error: unknown) {
+    const detail = error instanceof Error && error.message ? error.message : 'Network request failed.'
+    return `Failed to reach API at ${url}. ${detail} Check API server and base URL configuration.`
+  }
+
+  private async fetchWithNetworkGuard(url: string, options: RequestInit) {
+    try {
+      return await fetch(url, options)
+    } catch (error) {
+      throw new APIError(0, this.buildNetworkError(url, error))
+    }
+  }
+
   private async request<T>(
     path: string,
     options: RequestInit = {},
@@ -41,14 +54,15 @@ export class OpenAgentsClient {
       headers.Authorization = `Bearer ${this.accessToken}`
     }
 
-    const res = await fetch(url, { ...options, headers })
+    const res = await this.fetchWithNetworkGuard(url, { ...options, headers })
 
     if (res.status === 401 && this.refreshToken) {
       const refreshed = await this.tryRefresh()
       if (refreshed) {
         headers.Authorization = `Bearer ${this.accessToken}`
-        const retried = await fetch(url, { ...options, headers })
+        const retried = await this.fetchWithNetworkGuard(url, { ...options, headers })
         if (!retried.ok) throw new APIError(retried.status, await retried.text())
+        if (retried.status === 204) return undefined as T
         return retried.json() as Promise<T>
       }
 
@@ -63,7 +77,8 @@ export class OpenAgentsClient {
 
   private async tryRefresh(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
+      const refreshUrl = `${this.baseUrl}/api/v1/auth/refresh`
+      const res = await this.fetchWithNetworkGuard(refreshUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: this.refreshToken }),
@@ -112,13 +127,14 @@ export class OpenAgentsClient {
     return new Promise(async (resolve, reject) => {
       try {
         const startStreamRequest = () => {
+          const url = `${this.baseUrl}${path}`
           const headers: Record<string, string> = {
             'Content-Type': 'application/json',
             Accept: 'text/event-stream',
           }
           if (this.accessToken) headers.Authorization = `Bearer ${this.accessToken}`
 
-          return fetch(`${this.baseUrl}${path}`, {
+          return this.fetchWithNetworkGuard(url, {
             method: 'POST',
             headers,
             body: JSON.stringify(body),

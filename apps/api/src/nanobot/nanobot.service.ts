@@ -8,7 +8,13 @@ import { NanobotSkillsRegistry } from './agent/nanobot-skills.registry'
 import { NanobotPersonalityService } from './agent/nanobot-personality.service'
 import { NanobotAliveStateService } from './agent/nanobot-alive-state.service'
 import { NanobotCronService } from './cron/nanobot-cron.service'
-import type { NanobotConfigPatch } from './types'
+import { NanobotSubagentService } from './agent/nanobot-subagent.service'
+import { NanobotPresenceService } from './agent/nanobot-presence.service'
+import { NanobotMarketplaceService } from './marketplace/nanobot-marketplace.service'
+import { NanobotTrustService } from './trust/nanobot-trust.service'
+import { CronService } from '../cron/cron.service'
+import type { NanobotConfigPatch, NanobotMarketplaceExportInput } from './types'
+import type { CronSelfHealInput } from '@openagents/shared'
 
 @Injectable()
 export class NanobotService {
@@ -21,7 +27,12 @@ export class NanobotService {
     private skills: NanobotSkillsRegistry,
     private personality: NanobotPersonalityService,
     private alive: NanobotAliveStateService,
+    private subagents: NanobotSubagentService,
     private cron: NanobotCronService,
+    private presence: NanobotPresenceService,
+    private marketplace: NanobotMarketplaceService,
+    private trust: NanobotTrustService,
+    private cronService: CronService,
   ) {}
 
   async health(userId: string) {
@@ -36,8 +47,10 @@ export class NanobotService {
       channels: this.channels.listSupportedChannels(),
       cliHints: this.cli.commandHints(),
       activeSkills,
+      personaProfiles: this.personality.listProfiles(),
       personality,
       alive: this.alive.getForUser(userId),
+      subagents: this.subagents.listForUser(userId),
     }
   }
 
@@ -71,5 +84,45 @@ export class NanobotService {
 
   triggerCron(userId: string, jobName: string) {
     return this.cron.triggerNow(jobName, userId)
+  }
+
+  listPersonaProfiles() {
+    return this.personality.listProfiles()
+  }
+
+  setPersonaProfile(userId: string, profileId: string) {
+    return this.personality.setProfile(userId, profileId)
+  }
+
+  setPersonaBoundaries(userId: string, boundaries: string[]) {
+    return this.personality.setBoundaries(userId, boundaries)
+  }
+
+  tickPresence(userId: string) {
+    return this.presence.tick(userId, 'manual')
+  }
+
+  listMarketplacePacks(userId: string) {
+    return this.marketplace.listPacks(userId)
+  }
+
+  installMarketplacePack(userId: string, packId: string) {
+    return this.marketplace.installPack(userId, packId)
+  }
+
+  exportMarketplacePack(userId: string, input: NanobotMarketplaceExportInput) {
+    return this.marketplace.exportPack(userId, input)
+  }
+
+  trustSnapshot(userId: string) {
+    return this.trust.snapshot(userId)
+  }
+
+  cronHealth(userId: string, staleAfterMinutes?: number) {
+    return this.cronService.health(userId, staleAfterMinutes)
+  }
+
+  cronSelfHeal(userId: string, input: CronSelfHealInput = {}) {
+    return this.cronService.selfHeal(userId, input)
   }
 }

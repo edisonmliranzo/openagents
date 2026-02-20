@@ -10,6 +10,7 @@ import {
   Cpu,
   GitBranch,
   HeartPulse,
+  ShieldCheck,
   RefreshCw,
   Rocket,
   Settings2,
@@ -33,7 +34,7 @@ function eventBadgeColor(name: NanobotBusEvent['name']) {
   return 'bg-slate-100 text-slate-700'
 }
 
-export default function NanobotPage() {
+export default function OpenAgentPage() {
   const addToast = useUIStore((s) => s.addToast)
 
   const [health, setHealth] = useState<NanobotHealth | null>(null)
@@ -42,9 +43,10 @@ export default function NanobotPage() {
     enabled: false,
     maxLoopSteps: 8,
     shadowMode: false,
-    runtimeLabel: 'nanobot',
+    runtimeLabel: 'openagent',
   })
   const [cronJobName, setCronJobName] = useState('daily-health-check')
+  const [selectedProfileId, setSelectedProfileId] = useState('operator')
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingConfig, setIsSavingConfig] = useState(false)
   const [isRunningAction, setIsRunningAction] = useState(false)
@@ -66,8 +68,9 @@ export default function NanobotPage() {
         shadowMode: nextHealth.config.shadowMode,
         runtimeLabel: nextHealth.config.runtimeLabel,
       })
+      setSelectedProfileId(nextHealth.personality.profileId)
     } catch (err: any) {
-      const message = err?.message ?? 'Failed to load nanobot dashboard'
+      const message = err?.message ?? 'Failed to load OpenAgent dashboard'
       setError(message)
       addToast('error', message)
     } finally {
@@ -92,7 +95,7 @@ export default function NanobotPage() {
         enabled: !!configDraft.enabled,
         maxLoopSteps: Math.max(1, Number(configDraft.maxLoopSteps ?? 1)),
         shadowMode: !!configDraft.shadowMode,
-        runtimeLabel: (configDraft.runtimeLabel ?? 'nanobot').trim() || 'nanobot',
+        runtimeLabel: (configDraft.runtimeLabel ?? 'openagent').trim() || 'openagent',
       })
 
       setHealth((prev) =>
@@ -106,9 +109,9 @@ export default function NanobotPage() {
 
       const nextEvents = await sdk.nanobot.listEvents(80)
       setEvents(nextEvents)
-      addToast('success', 'Nanobot runtime config saved')
+      addToast('success', 'OpenAgent runtime config saved')
     } catch (err: any) {
-      const message = err?.message ?? 'Failed to save nanobot config'
+      const message = err?.message ?? 'Failed to save OpenAgent config'
       setError(message)
       addToast('error', message)
     } finally {
@@ -162,6 +165,27 @@ export default function NanobotPage() {
     }
   }
 
+  async function handlePresenceTick() {
+    setIsRunningAction(true)
+    setError('')
+    try {
+      const result = await sdk.nanobot.tickPresence()
+      const [nextHealth, nextEvents] = await Promise.all([
+        sdk.nanobot.health(),
+        sdk.nanobot.listEvents(80),
+      ])
+      setHealth(nextHealth)
+      setEvents(nextEvents)
+      addToast('info', `Presence tick complete (${result.activeSessions} active sessions)`)
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to trigger presence tick'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsRunningAction(false)
+    }
+  }
+
   async function handleTriggerCron() {
     const jobName = cronJobName.trim()
     if (!jobName) {
@@ -186,13 +210,57 @@ export default function NanobotPage() {
     }
   }
 
+  async function handleSelfHealCron() {
+    setIsRunningAction(true)
+    setError('')
+    try {
+      const report = await sdk.nanobot.cronSelfHeal()
+      const nextEvents = await sdk.nanobot.listEvents(80)
+      setEvents(nextEvents)
+      addToast('success', `Self-heal complete: ${report.healedCount} healed, ${report.skippedCount} skipped`)
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to run cron self-heal'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsRunningAction(false)
+    }
+  }
+
+  async function handleSetPersonaProfile() {
+    const profileId = selectedProfileId.trim()
+    if (!profileId) return
+    setIsRunningAction(true)
+    setError('')
+    try {
+      const personality = await sdk.nanobot.setPersonaProfile(profileId)
+      setHealth((prev) =>
+        prev
+          ? {
+              ...prev,
+              personality,
+            }
+          : prev,
+      )
+      const nextEvents = await sdk.nanobot.listEvents(80)
+      setEvents(nextEvents)
+      addToast('success', `Persona profile applied: ${personality.profileId}`)
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to set persona profile'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsRunningAction(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Nanobot</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">OpenAgent</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Runtime controls, skills, sessions, and event telemetry for the experimental nanobot loop.
+            Runtime controls, skills, sessions, and event telemetry for the experimental OpenAgent loop.
           </p>
         </div>
         <button
@@ -213,7 +281,7 @@ export default function NanobotPage() {
             <Cpu size={15} className="text-slate-400" />
           </div>
           <p className="mt-2 text-lg font-semibold text-slate-900">
-            {health?.config.runtimeLabel ?? 'nanobot'}
+            {health?.config.runtimeLabel ?? 'openagent'}
           </p>
           <p className="mt-1 text-xs text-slate-500">
             {health?.config.enabled ? 'Enabled' : 'Disabled'} - {health?.config.shadowMode ? 'Shadow mode' : 'Live mode'}
@@ -246,7 +314,7 @@ export default function NanobotPage() {
             <Activity size={15} className="text-slate-400" />
           </div>
           <p className="mt-2 text-3xl font-semibold text-slate-900">{health?.activeSessions.length ?? 0}</p>
-          <p className="mt-1 text-xs text-slate-500">Conversations touched by nanobot loop</p>
+          <p className="mt-1 text-xs text-slate-500">Conversations touched by OpenAgent loop</p>
         </article>
       </section>
 
@@ -258,8 +326,41 @@ export default function NanobotPage() {
           <div className="mt-3 space-y-3">
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Style</p>
+              <p className="mt-1 text-xs text-slate-500">Profile: {health?.personality.profileId ?? 'operator'}</p>
               <p className="mt-1 text-sm font-semibold text-slate-800">{health?.personality.style ?? 'pragmatic-operator'}</p>
               <p className="mt-1 text-xs text-slate-500">Mood: {health?.personality.mood ?? 'focused'}</p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Persona Profile</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <select
+                  value={selectedProfileId}
+                  onChange={(e) => setSelectedProfileId(e.target.value)}
+                  className="h-9 min-w-[180px] rounded border border-slate-200 px-2 text-xs text-slate-700"
+                >
+                  {(health?.personaProfiles ?? []).map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void handleSetPersonaProfile()}
+                  disabled={isRunningAction}
+                  className="rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Apply profile
+                </button>
+              </div>
+              <ul className="mt-2 space-y-1">
+                {(health?.personality.boundaries ?? []).map((boundary, index) => (
+                  <li key={`${boundary}-${index}`} className="text-[11px] text-slate-600">
+                    {index + 1}. {boundary}
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -349,7 +450,7 @@ export default function NanobotPage() {
                 onChange={(e) => setConfigDraft((prev) => ({ ...prev, enabled: e.target.checked }))}
                 className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-200"
               />
-              Enable nanobot runtime
+              Enable OpenAgent runtime
             </label>
 
             <label className="inline-flex items-center gap-2 text-sm text-slate-700">
@@ -415,6 +516,16 @@ export default function NanobotPage() {
             Send Heartbeat Tick
           </button>
 
+          <button
+            type="button"
+            onClick={() => void handlePresenceTick()}
+            disabled={isRunningAction}
+            className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
+          >
+            <Activity size={14} />
+            Presence Tick
+          </button>
+
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <label className="block text-xs font-medium text-slate-500">Cron job name</label>
             <input
@@ -430,6 +541,15 @@ export default function NanobotPage() {
             >
               <Rocket size={14} />
               Trigger Cron
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSelfHealCron()}
+              disabled={isRunningAction}
+              className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+            >
+              <ShieldCheck size={14} />
+              Self-heal Cron Jobs
             </button>
           </div>
 
@@ -522,11 +642,11 @@ export default function NanobotPage() {
       <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Session Monitor</h2>
-          <p className="mt-1 text-sm text-slate-500">Conversation sessions currently tracked by nanobot.</p>
+          <p className="mt-1 text-sm text-slate-500">Conversation sessions currently tracked by OpenAgent.</p>
 
           <div className="mt-3 space-y-2">
             {(health?.activeSessions ?? []).length === 0 && (
-              <p className="text-sm text-slate-500">No nanobot sessions recorded yet.</p>
+              <p className="text-sm text-slate-500">No OpenAgent sessions recorded yet.</p>
             )}
             {(health?.activeSessions ?? []).map((session) => (
               <div key={session.conversationId} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -544,10 +664,32 @@ export default function NanobotPage() {
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Role Crew</h2>
+          <p className="mt-1 text-sm text-slate-500">Planner, executor, and critic subagents spawned by recent runs.</p>
+          <div className="mt-3 space-y-2">
+            {(health?.subagents ?? []).slice(0, 8).map((task) => (
+              <div key={task.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{task.role}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${eventBadgeColor(task.status === 'done' ? 'run.completed' : 'run.event')}`}>
+                    {task.status}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-700">{task.label}</p>
+                <p className="mt-1 text-[11px] text-slate-500">Updated {timeAgo(task.updatedAt)}</p>
+              </div>
+            ))}
+            {(health?.subagents.length ?? 0) === 0 && (
+              <p className="text-sm text-slate-500">No subagent tasks yet.</p>
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Event Feed</h2>
-              <p className="mt-1 text-sm text-slate-500">Recent runtime events from the nanobot bus.</p>
+              <p className="mt-1 text-sm text-slate-500">Recent runtime events from the OpenAgent bus.</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-500">
               last {events.length}

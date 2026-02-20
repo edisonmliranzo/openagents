@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
 import { useRouter } from 'expo-router'
-import { useMobileChatStore } from '../src/stores/mobileChat'
+import { MOBILE_API_URL, useMobileChatStore } from '../src/stores/mobileChat'
 
 export default function LoginScreen() {
   const router = useRouter()
@@ -18,7 +18,12 @@ export default function LoginScreen() {
       await login(email, password)
       router.replace('/chat')
     } catch (err: any) {
-      setError(err?.message ?? 'Login failed')
+      const message = typeof err?.message === 'string' ? err.message : 'Login failed'
+      if (message.includes('Failed to reach API')) {
+        setError(`${message} Current mobile API URL: ${MOBILE_API_URL}`)
+      } else {
+        setError(message)
+      }
     } finally {
       setLoading(false)
     }
@@ -31,6 +36,7 @@ export default function LoginScreen() {
         <Text style={styles.subtitle}>Sign in to continue</Text>
 
         {!!error && <Text style={styles.error}>{error}</Text>}
+        {!error && <Text style={styles.hint}>API: {MOBILE_API_URL}</Text>}
 
         <TextInput
           style={styles.input}
@@ -99,6 +105,10 @@ const styles = StyleSheet.create({
   error: {
     fontSize: 13,
     color: '#dc2626',
+  },
+  hint: {
+    fontSize: 12,
+    color: '#64748b',
   },
   input: {
     height: 44,

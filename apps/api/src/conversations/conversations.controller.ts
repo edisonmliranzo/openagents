@@ -67,7 +67,8 @@ export class ConversationsController {
     }
 
     try {
-      const isSkillCommand = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:)/i.test(dto.content ?? '')
+      const isSkillCommand = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
+        .test(dto.content ?? '')
       const useNanobotLoop = this.nanobotConfig.enabled || isSkillCommand
       const run = useNanobotLoop
         ? this.nanobotLoop.run.bind(this.nanobotLoop)

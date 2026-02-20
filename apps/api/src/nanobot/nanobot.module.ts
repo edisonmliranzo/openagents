@@ -4,6 +4,8 @@ import { MemoryModule } from '../memory/memory.module'
 import { ToolsModule } from '../tools/tools.module'
 import { UsersModule } from '../users/users.module'
 import { AuthModule } from '../auth/auth.module'
+import { CronModule } from '../cron/cron.module'
+import { SystemModule } from '../system/system.module'
 import { NanobotController } from './nanobot.controller'
 import { NanobotService } from './nanobot.service'
 import { NanobotConfigService } from './config/nanobot-config.service'
@@ -23,9 +25,12 @@ import { NanobotSubagentService } from './agent/nanobot-subagent.service'
 import { NanobotBuiltinToolsService } from './agent/tools/nanobot-builtin-tools.service'
 import { NanobotProviderRouterService } from './providers/nanobot-provider-router.service'
 import { NanobotLoopService } from './agent/nanobot-loop.service'
+import { NanobotPresenceService } from './agent/nanobot-presence.service'
+import { NanobotMarketplaceService } from './marketplace/nanobot-marketplace.service'
+import { NanobotTrustService } from './trust/nanobot-trust.service'
 
 @Module({
-  imports: [AgentModule, MemoryModule, ToolsModule, UsersModule, AuthModule],
+  imports: [AgentModule, MemoryModule, ToolsModule, UsersModule, AuthModule, CronModule, SystemModule],
   controllers: [NanobotController],
   providers: [
     NanobotService,
@@ -46,7 +51,16 @@ import { NanobotLoopService } from './agent/nanobot-loop.service'
     NanobotBuiltinToolsService,
     NanobotProviderRouterService,
     NanobotLoopService,
+    NanobotPresenceService,
+    NanobotMarketplaceService,
+    NanobotTrustService,
   ],
-  exports: [NanobotConfigService, NanobotLoopService, NanobotBusService, NanobotSessionService],
+  exports: [
+    NanobotConfigService,
+    NanobotLoopService,
+    NanobotBusService,
+    NanobotSessionService,
+    NanobotMarketplaceService,
+  ],
 })
 export class NanobotModule {}

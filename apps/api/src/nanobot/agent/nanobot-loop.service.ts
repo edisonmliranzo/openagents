@@ -118,7 +118,8 @@ export class NanobotLoopService {
         thoughtMode: roleDecision.thoughtMode,
       })
 
-      this.subagents.spawn(params.userId, 'nanobot-telemetry')
+      this.subagents.spawnRoleCrew(params.userId, runId, roleDecision)
+      this.subagents.spawn(params.userId, 'nanobot-telemetry', 'telemetry', runId)
 
       if (this.config.shadowMode) {
         const shadowState = this.alive.patchForUser(params.userId, {
@@ -399,6 +400,11 @@ export class NanobotLoopService {
     const trimmed = userMessage.trim()
     if (!trimmed) return { matched: false }
 
+    const topicMatch = trimmed.match(/^learn\s+skills?\s+(?:of|about|for)\s+([\s\S]+)$/i)
+    if (topicMatch?.[1]) {
+      return this.buildTopicSkillCommand(topicMatch[1])
+    }
+
     const prefixPatterns = [
       /^\/skill\s+([\s\S]+)$/i,
       /^learn\s+skill\s*:\s*([\s\S]+)$/i,
@@ -503,5 +509,42 @@ export class NanobotLoopService {
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean)
+  }
+
+  private buildTopicSkillCommand(topicRaw: string): ParsedSkillCommand {
+    const topic = topicRaw.trim().replace(/[.!?]+$/, '')
+    if (!topic) {
+      return { matched: true, error: 'Skill topic is required.' }
+    }
+
+    const normalized = topic.toLowerCase()
+    const tools = new Set<string>(['notes'])
+
+    if (/(binance|crypto|bitcoin|eth|trading|market)/i.test(normalized)) {
+      tools.add('web_search')
+      tools.add('web_fetch')
+    } else if (/(code|programming|typescript|javascript|python|debug|fix|build)/i.test(normalized)) {
+      tools.add('web_fetch')
+    } else if (/(research|news|latest|analysis)/i.test(normalized)) {
+      tools.add('web_search')
+      tools.add('web_fetch')
+    }
+
+    const title = `${topic.slice(0, 56)} Skill`
+    const description = `Topic skill for ${topic}. Use curated tools and produce actionable output.`
+    const promptAppendix = [
+      `When the request is about ${topic}, prefer this skill workflow:`,
+      '1. Clarify objective and constraints.',
+      '2. Gather relevant facts using allowed tools.',
+      '3. Return a concise plan or answer with concrete next actions.',
+    ].join('\n')
+
+    return {
+      matched: true,
+      title,
+      description,
+      promptAppendix,
+      tools: [...tools],
+    }
   }
 }
