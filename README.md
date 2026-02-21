@@ -6,8 +6,11 @@ OpenAgents is a local-first AI agent platform with a modern web control plane, t
 
 - OpenAgent control runtime (`/agent/openagent`) for skills, sessions, persona, and runtime actions.
 - Live chat workspace with approvals, code-aware responses, and copy-code UX.
+- Voice chat controls (browser speech-to-text + spoken replies).
 - File-based memory model (`SOUL.md`, `USER.md`, `MEMORY.md`, `HEARTBEAT.md`, `cron.json`).
+- Browser capture ingest endpoint + extension scaffold for selected web content.
 - Tool execution loop with ReAct-style calls and approval gates.
+- Signed marketplace packs, orchestration run state, and scheduled autonomy windows.
 - Platform control features:
   - templates marketplace
   - fleet health snapshot
@@ -16,7 +19,7 @@ OpenAgents is a local-first AI agent platform with a modern web control plane, t
   - subscription plans and quotas
   - omnichannel inbox
 - WhatsApp channel support with pairing/link flow and webhook ingestion.
-- LLM provider switching (Anthropic/OpenAI) and web search provider switching (Brave/SearXNG).
+- LLM provider switching (Anthropic / OpenAI / Google Gemini / MiniMax / Ollama local) with per-user model selection, live model discovery, and graceful tool-fallback for models that don't support function calling.
 
 ## Tech stack
 
@@ -196,19 +199,36 @@ Per-user memory is persisted as editable files under `data/memory/...`, includin
 - `MEMORY.md`
 - `HEARTBEAT.md`
 - `cron.json`
+- `AUTONOMY.json`
 - dated daily logs and chat history files
 
 ## Configuration notes
 
 ### LLM providers
 
-Set in `apps/api/.env`:
+Five providers are supported. Set env vars in `apps/api/.env`:
 
-- `DEFAULT_LLM_PROVIDER=anthropic` or `openai`
-- `ANTHROPIC_API_KEY=...`
-- `OPENAI_API_KEY=...`
+| Provider | Env var | Notes |
+|---|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` | Default. Models: Opus 4.6, Sonnet 4.6, Haiku 4.5 |
+| OpenAI | `OPENAI_API_KEY` | Models: GPT-5.1, GPT-4.1 family |
+| Google Gemini | `GEMINI_API_KEY` | Models: Gemini 3.1/3.0 Pro, 2.5/2.0 Flash family |
+| MiniMax | `MINIMAX_API_KEY` | Models: MiniMax-M2, MiniMax-M2.5 (cloud API) |
+| Ollama | *(keyless)* | Local inference. Set server URL per-user in Settings › Config |
+
+```
+DEFAULT_LLM_PROVIDER=anthropic   # or openai / google / minimax / ollama
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=AIza...
+MINIMAX_API_KEY=...
+```
+
+Per-user provider and model can be overridden in **Settings › Config** without restarting the server. Ollama models are discovered live from your local Ollama instance; models that don't support function calling fall back to plain-text mode automatically.
 
 For Docker production stack, set these in `infra/docker/.env.prod`.
+
+> **After editing `packages/shared/src/`** run `pnpm --filter @openagents/shared build` so Next.js picks up the compiled constants.
 
 ### Web search providers
 
@@ -277,3 +297,4 @@ pnpm prod:up
 ## Additional guides
 
 - Local Ollama setup + model/code push: `docs/ollama-local-and-push.md`
+- MVP feature bundle (signing/orchestration/voice/capture/autonomy): `docs/mvp-feature-pack.md`

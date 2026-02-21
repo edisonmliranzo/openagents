@@ -1,4 +1,4 @@
-export type LLMProvider = 'anthropic' | 'openai' | 'ollama'
+export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax'
 export type AgentStatus = 'idle' | 'thinking' | 'running_tool' | 'waiting_approval' | 'done' | 'error'
 
 export interface AgentConfig {
