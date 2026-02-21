@@ -6,6 +6,7 @@ import {
   KeyRound,
   Cpu,
   Globe2,
+  Sparkles,
   Eye,
   EyeOff,
   CheckCircle2,
@@ -17,7 +18,9 @@ import { LLM_MODEL_OPTIONS } from '@openagents/shared'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Provider = 'anthropic' | 'openai' | 'ollama'
+type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax'
+
+const PROVIDERS: Provider[] = ['anthropic', 'openai', 'google', 'minimax', 'ollama']
 
 interface ProviderCardState {
   apiKey: string
@@ -32,9 +35,11 @@ interface ProviderCardState {
 const DEFAULTS: Record<Provider, ProviderCardState> = {
   anthropic: { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   openai:    { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  google:    { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  minimax:   { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   ollama:    { apiKey: '', baseUrl: 'http://localhost:11434', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
 }
-const OLLAMA_FALLBACK_MODELS: string[] = LLM_MODEL_OPTIONS.ollama as unknown as string[]
+const OLLAMA_FALLBACK_MODELS: string[] = [...(LLM_MODEL_OPTIONS.ollama as unknown as string[])]
 
 const PROVIDER_META: Record<Provider, {
   label: string
@@ -60,6 +65,22 @@ const PROVIDER_META: Record<Provider, {
     inputLabel: 'API Key',
     isKeyless: false,
   },
+  google: {
+    label: 'Google Gemini',
+    icon: <Sparkles className="h-5 w-5" />,
+    gradient: 'from-blue-500 to-indigo-600',
+    ring: 'ring-blue-400',
+    inputLabel: 'API Key',
+    isKeyless: false,
+  },
+  minimax: {
+    label: 'MiniMax',
+    icon: <Sparkles className="h-5 w-5" />,
+    gradient: 'from-fuchsia-500 to-purple-600',
+    ring: 'ring-fuchsia-400',
+    inputLabel: 'API Key',
+    isKeyless: false,
+  },
   ollama: {
     label: 'Ollama',
     icon: <Globe2 className="h-5 w-5" />,
@@ -68,6 +89,40 @@ const PROVIDER_META: Record<Provider, {
     inputLabel: 'Server URL',
     isKeyless: true,
   },
+}
+
+function isProvider(value: string): value is Provider {
+  return PROVIDERS.includes(value as Provider)
+}
+
+function providerModels(provider: Provider): string[] {
+  return (LLM_MODEL_OPTIONS[provider] as unknown as string[]) ?? []
+}
+
+function sanitizeOllamaModels(models: string[]) {
+  const unique = Array.from(new Set(models.map((m) => m.trim()).filter(Boolean)))
+  const localOnly = unique.filter((model) => {
+    const normalized = model.toLowerCase()
+    return !normalized.includes(':cloud') && !normalized.includes('/cloud') && !normalized.endsWith('-cloud')
+  })
+  return localOnly.length > 0 ? localOnly : unique
+}
+
+function resolveOllamaModel(inputModel: string, availableModels: string[]) {
+  const requested = inputModel.trim()
+  if (!requested) return availableModels[0] ?? ''
+
+  const lowerRequested = requested.toLowerCase()
+  const exact = availableModels.find((m) => m.toLowerCase() === lowerRequested)
+  if (exact) return exact
+
+  const prefix = availableModels.find((m) => m.toLowerCase().startsWith(lowerRequested))
+  if (prefix) return prefix
+
+  const includes = availableModels.find((m) => m.toLowerCase().includes(lowerRequested))
+  if (includes) return includes
+
+  return ''
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -82,22 +137,35 @@ export default function ConfigPage() {
 
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingActive, setIsSavingActive] = useState(false)
+  const [savedActiveLabel, setSavedActiveLabel] = useState('')
+  const [isSwitchingLocal, setIsSwitchingLocal] = useState(false)
+  const [isTestingAll, setIsTestingAll] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [ollamaModelsStatus, setOllamaModelsStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
   const [ollamaModelsError, setOllamaModelsError] = useState('')
 
-  const modelOptions: string[] = activeProvider === 'ollama'
-    ? (ollamaModels.length > 0 ? ollamaModels : OLLAMA_FALLBACK_MODELS)
-    : ((LLM_MODEL_OPTIONS[activeProvider] as unknown as string[]) ?? [])
+  const modelOptions: string[] = (() => {
+    if (activeProvider !== 'ollama') return providerModels(activeProvider)
+
+    if (ollamaModels.length > 0) {
+      // Installed models first, then append any fallback entries not already present
+      const merged = [...ollamaModels]
+      for (const m of OLLAMA_FALLBACK_MODELS) {
+        if (!merged.includes(m)) merged.push(m)
+      }
+      return merged
+    }
+    return OLLAMA_FALLBACK_MODELS
+  })()
 
   const loadOllamaModels = useCallback(async (baseUrl?: string) => {
     setOllamaModelsStatus('loading')
     setOllamaModelsError('')
     try {
       const result = await sdk.agent.listOllamaModels(baseUrl || undefined)
-      setOllamaModels(result.models ?? [])
+      setOllamaModels(sanitizeOllamaModels(result.models ?? []))
       setOllamaModelsStatus('loaded')
     } catch (err: any) {
       setOllamaModels([])
@@ -116,7 +184,9 @@ export default function ConfigPage() {
         sdk.users.getSettings(),
         sdk.users.getLlmKeys(),
       ])
-      const preferredProvider = (settings.preferredProvider as Provider) ?? 'anthropic'
+      const preferredProvider = isProvider(settings.preferredProvider)
+        ? settings.preferredProvider
+        : 'anthropic'
       setProfileEmail(profile.email ?? '')
       setActiveProvider(preferredProvider)
       setActiveModel(settings.preferredModel ?? '')
@@ -143,12 +213,18 @@ export default function ConfigPage() {
 
   useEffect(() => { void load() }, [load])
 
-  // Keep selected model aligned with the available options for the current provider.
+  // Keep selected model aligned with the available options for cloud providers.
+  // For Ollama, preserve saved model values even if model discovery is temporarily unavailable.
   useEffect(() => {
-    if (modelOptions.length > 0 && !modelOptions.includes(activeModel)) {
+    if (!activeModel && modelOptions.length > 0) {
+      setActiveModel(modelOptions[0] ?? '')
+      return
+    }
+
+    if (activeProvider !== 'ollama' && modelOptions.length > 0 && !modelOptions.includes(activeModel)) {
       setActiveModel(modelOptions[0] ?? '')
     }
-  }, [activeModel, modelOptions])
+  }, [activeModel, activeProvider, modelOptions])
 
   // On first switch to Ollama, fetch locally available models.
   useEffect(() => {
@@ -157,21 +233,124 @@ export default function ConfigPage() {
     void loadOllamaModels(cards.ollama.baseUrl || undefined)
   }, [activeProvider, cards.ollama.baseUrl, loadOllamaModels, ollamaModelsStatus])
 
+  // If an invalid model id was carried over while Ollama is active, normalize to an available model.
+  useEffect(() => {
+    if (activeProvider !== 'ollama') return
+    if (modelOptions.length === 0) return
+
+    const normalized = resolveOllamaModel(activeModel, modelOptions)
+    if (normalized !== activeModel) {
+      setActiveModel(normalized)
+    }
+  }, [activeModel, activeProvider, modelOptions])
+
   async function handleSaveActive() {
     setIsSavingActive(true)
     setError('')
     setStatus('')
     try {
+      let preferredModelToSave = activeModel
+      if (activeProvider === 'ollama') {
+        const baseUrl = cards.ollama.baseUrl.trim() || DEFAULTS.ollama.baseUrl
+        preferredModelToSave = resolveOllamaModel(activeModel, modelOptions)
+        if (!preferredModelToSave) {
+          setError('Select a local Ollama model first. Run "ollama pull <model>" then Refresh models.')
+          return
+        }
+        if (preferredModelToSave !== activeModel) {
+          setActiveModel(preferredModelToSave)
+        }
+        await sdk.users.upsertLlmKey('ollama', { baseUrl, isActive: true })
+      }
       await sdk.users.updateSettings({
         preferredProvider: activeProvider,
-        preferredModel: activeModel,
+        preferredModel: preferredModelToSave,
         customSystemPrompt: customSystemPrompt.trim() || null,
       })
-      setStatus('Active provider saved.')
+      const label = `${PROVIDER_META[activeProvider].label} · ${preferredModelToSave}`
+      setStatus(`Saved: ${label}`)
+      setSavedActiveLabel(label)
+      setTimeout(() => setSavedActiveLabel(''), 3000)
     } catch (err: any) {
       setError(err?.message ?? 'Failed to save')
     } finally {
       setIsSavingActive(false)
+    }
+  }
+
+  async function switchLocalAndSave(enableLocal: boolean) {
+    setIsSwitchingLocal(true)
+    setError('')
+    setStatus('')
+
+    try {
+      if (enableLocal) {
+        let resolvedModels = ollamaModels
+        let modelLookupFailed = false
+        if (resolvedModels.length === 0) {
+          try {
+            const result = await sdk.agent.listOllamaModels(cards.ollama.baseUrl || undefined)
+            resolvedModels = sanitizeOllamaModels(result.models ?? [])
+            setOllamaModels(resolvedModels)
+            setOllamaModelsStatus('loaded')
+            setOllamaModelsError('')
+          } catch (lookupErr: any) {
+            modelLookupFailed = true
+            setOllamaModels([])
+            setOllamaModelsStatus('error')
+            setOllamaModelsError(lookupErr?.message ?? 'Failed to load Ollama models')
+          }
+        }
+
+        const options = resolvedModels.length > 0 ? resolvedModels : OLLAMA_FALLBACK_MODELS
+        const nextModel = resolveOllamaModel(activeModel, options)
+        if (!nextModel) {
+          setError('No local Ollama models found. Run "ollama pull <model>" then click Refresh models.')
+          return
+        }
+        const baseUrl = cards.ollama.baseUrl.trim() || DEFAULTS.ollama.baseUrl
+
+        await sdk.users.upsertLlmKey('ollama', { baseUrl, isActive: true })
+        setActiveProvider('ollama')
+        setActiveModel(nextModel)
+        await sdk.users.updateSettings({
+          preferredProvider: 'ollama',
+          preferredModel: nextModel,
+          customSystemPrompt: customSystemPrompt.trim() || null,
+        })
+        const keys = await sdk.users.getLlmKeys()
+        setExistingKeys(keys)
+        setStatus(
+          modelLookupFailed
+            ? `Local LLM enabled (${nextModel}). Model auto-discovery failed; click "Refresh models" when Ollama is running.`
+            : `Local LLM enabled (${nextModel}).`,
+        )
+        return
+      }
+
+      const savedCloudProvider = existingKeys.find(
+        (key): key is typeof key & { provider: Provider } =>
+          key.provider !== 'ollama' && key.isActive && isProvider(key.provider),
+      )?.provider
+      if (!savedCloudProvider) {
+        setError('No active cloud provider configured. Save a key for Anthropic, OpenAI, or Google first.')
+        return
+      }
+      const cloudModelOptions = providerModels(savedCloudProvider)
+      const nextModel = cloudModelOptions[0] ?? activeModel
+
+      setActiveProvider(savedCloudProvider)
+      setActiveModel(nextModel)
+      await sdk.users.updateSettings({
+        preferredProvider: savedCloudProvider,
+        preferredModel: nextModel,
+        customSystemPrompt: customSystemPrompt.trim() || null,
+      })
+      setStatus(`Switched to ${PROVIDER_META[savedCloudProvider].label}.`)
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to switch local LLM mode')
+    } finally {
+      setIsSwitchingLocal(false)
     }
   }
 
@@ -183,10 +362,18 @@ export default function ConfigPage() {
     const card = cards[provider]
     updateCard(provider, { testStatus: 'testing', testModel: '', testError: '' })
     try {
+      const ollamaTestModel = provider === 'ollama'
+        ? resolveOllamaModel(activeModel, modelOptions)
+        : undefined
+      if (provider === 'ollama' && !ollamaTestModel) {
+        updateCard(provider, { testStatus: 'error', testError: 'No Ollama model selected. Pick one from the dropdown above.' })
+        return
+      }
       const result = await sdk.agent.testLlmConnection({
         provider,
         apiKey: provider !== 'ollama' ? card.apiKey || undefined : undefined,
         baseUrl: provider === 'ollama' ? card.baseUrl || undefined : undefined,
+        model: ollamaTestModel,
       })
       if (result.ok) {
         updateCard(provider, { testStatus: 'ok', testModel: result.model ?? '' })
@@ -195,6 +382,22 @@ export default function ConfigPage() {
       }
     } catch (err: any) {
       updateCard(provider, { testStatus: 'error', testError: err?.message ?? 'Connection failed' })
+    }
+  }
+
+  async function handleTestAll() {
+    setIsTestingAll(true)
+    setError('')
+    setStatus('')
+    try {
+      for (const provider of PROVIDERS) {
+        await handleTest(provider)
+      }
+      setStatus('Finished testing all providers.')
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to test all providers')
+    } finally {
+      setIsTestingAll(false)
     }
   }
 
@@ -242,7 +445,7 @@ export default function ConfigPage() {
     }
   }
 
-  const providers: Provider[] = ['anthropic', 'openai', 'ollama']
+  const providers: Provider[] = PROVIDERS
 
   return (
     <div className="mx-auto max-w-[1100px] space-y-6">
@@ -271,6 +474,26 @@ export default function ConfigPage() {
           <h2 className="text-base font-semibold text-slate-900">Active LLM</h2>
           <p className="mt-0.5 text-xs text-slate-500">The provider and model used for every agent run.</p>
 
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void switchLocalAndSave(activeProvider !== 'ollama')}
+              disabled={isSwitchingLocal}
+              className={`h-9 rounded-lg px-3 text-xs font-semibold transition disabled:opacity-50 ${
+                activeProvider === 'ollama'
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+              }`}
+            >
+              {isSwitchingLocal
+                ? 'Switching...'
+                : activeProvider === 'ollama'
+                  ? 'Using Local LLM (Switch to Cloud)'
+                  : 'Switch to Local LLM (Save)'}
+            </button>
+            <span className="text-[11px] text-slate-500">Saves provider + model for all next runs.</span>
+          </div>
+
           <div className="mt-4 flex flex-wrap items-end gap-3">
             {/* Provider select */}
             <label className="flex flex-col gap-1">
@@ -290,15 +513,36 @@ export default function ConfigPage() {
             <label className="flex min-w-[280px] flex-col gap-1">
               <span className="text-xs font-medium text-slate-500">Model</span>
               <div className="flex items-center gap-2">
-                <select
-                  value={activeModel}
-                  onChange={(e) => setActiveModel(e.target.value)}
-                  className="h-10 min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
-                >
-                  {modelOptions.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
+                {activeProvider === 'ollama' ? (
+                  modelOptions.length > 0 ? (
+                    <select
+                      value={activeModel}
+                      onChange={(e) => setActiveModel(e.target.value)}
+                      className="h-10 min-w-[240px] rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                    >
+                      {modelOptions.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={activeModel}
+                      onChange={(e) => setActiveModel(e.target.value)}
+                      placeholder="Type model id (e.g. llama3.2)"
+                      className="h-10 min-w-[240px] rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                    />
+                  )
+                ) : (
+                  <select
+                    value={activeModel}
+                    onChange={(e) => setActiveModel(e.target.value)}
+                    className="h-10 min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                  >
+                    {modelOptions.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                )}
 
                 {activeProvider === 'ollama' && (
                   <button
@@ -322,14 +566,21 @@ export default function ConfigPage() {
               )}
             </label>
 
-            <button
-              type="button"
-              onClick={() => void handleSaveActive()}
-              disabled={isSavingActive}
-              className="h-10 rounded-lg bg-rose-500 px-5 text-sm font-semibold text-white shadow-sm hover:bg-rose-600 disabled:opacity-50"
-            >
-              {isSavingActive ? 'Saving…' : 'Save'}
-            </button>
+            <div className="flex flex-col items-start gap-1">
+              <button
+                type="button"
+                onClick={() => void handleSaveActive()}
+                disabled={isSavingActive}
+                className={`h-10 rounded-lg px-5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 transition-colors ${
+                  savedActiveLabel ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600'
+                }`}
+              >
+                {isSavingActive ? 'Saving…' : savedActiveLabel ? 'Saved ✓' : 'Save'}
+              </button>
+              {savedActiveLabel && (
+                <span className="text-[11px] text-emerald-600 font-medium">{savedActiveLabel}</span>
+              )}
+            </div>
           </div>
 
           {/* Custom system prompt */}
@@ -347,6 +598,16 @@ export default function ConfigPage() {
       </section>
 
       {/* ── Provider Cards ── */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => void handleTestAll()}
+          disabled={isTestingAll}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {isTestingAll ? 'Testing all…' : 'Test All Providers'}
+        </button>
+      </div>
       <div className="grid gap-4 sm:grid-cols-3">
         {providers.map((provider) => {
           const meta = PROVIDER_META[provider]

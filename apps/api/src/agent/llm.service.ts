@@ -5,6 +5,28 @@ import OpenAI from 'openai'
 import type { LLMProvider } from '@openagents/shared'
 import { LLM_MODELS } from '@openagents/shared'
 
+const SUPPORTED_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax']
+
+const PROVIDER_LABELS: Record<LLMProvider, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  google: 'Google Gemini',
+  ollama: 'Ollama',
+  minimax: 'MiniMax',
+}
+
+const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
+  anthropic: ['ANTHROPIC_API_KEY'],
+  openai: ['OPENAI_API_KEY'],
+  google: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+  minimax: ['MINIMAX_API_KEY'],
+}
+
+const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LLMProvider, string>> = {
+  google: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  minimax: 'https://api.minimaxi.chat/v1',
+}
+
 export interface LLMMessage {
   role: 'user' | 'assistant'
   content: string
@@ -35,14 +57,21 @@ export interface TestConnectionResult {
 @Injectable()
 export class LLMService {
   private readonly logger = new Logger(LLMService.name)
-  private envAnthropicKey?: string
-  private envOpenaiKey?: string
+  private envApiKeys: Partial<Record<Exclude<LLMProvider, 'ollama'>, string>> = {}
   private defaultProvider: LLMProvider
 
   constructor(private config: ConfigService) {
-    this.envAnthropicKey = config.get<string>('ANTHROPIC_API_KEY') ?? undefined
-    this.envOpenaiKey = config.get<string>('OPENAI_API_KEY') ?? undefined
-    this.defaultProvider = (config.get('DEFAULT_LLM_PROVIDER') ?? 'anthropic') as LLMProvider
+    this.envApiKeys = {
+      anthropic: this.readFirstEnv(PROVIDER_ENV_VARS.anthropic),
+      openai: this.readFirstEnv(PROVIDER_ENV_VARS.openai),
+      google: this.readFirstEnv(PROVIDER_ENV_VARS.google),
+      minimax: this.readFirstEnv(PROVIDER_ENV_VARS.minimax),
+    }
+
+    const configured = (config.get<string>('DEFAULT_LLM_PROVIDER') ?? 'anthropic').trim().toLowerCase()
+    this.defaultProvider = this.isSupportedProvider(configured)
+      ? (configured as LLMProvider)
+      : 'anthropic'
   }
 
   async complete(
@@ -54,7 +83,10 @@ export class LLMService {
     userBaseUrl?: string,
     model?: string,
   ): Promise<LLMResponse> {
-    const p = provider ?? this.defaultProvider
+    const requestedProvider = String(provider ?? this.defaultProvider).trim().toLowerCase()
+    const p = this.isSupportedProvider(requestedProvider)
+      ? requestedProvider
+      : this.defaultProvider
 
     if (p === 'anthropic') {
       const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', userApiKey) })
@@ -63,17 +95,16 @@ export class LLMService {
 
     if (p === 'ollama') {
       const ollamaClient = this.createOllamaClient(userBaseUrl)
-      return this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient, model)
+      return this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient, model, userBaseUrl)
     }
 
-    // openai
-    const client = new OpenAI({ apiKey: this.resolveApiKey('openai', userApiKey) })
-    return this.completeOpenAI(messages, tools, systemPrompt, client, model)
+    // openai-compatible providers (openai, google gemini)
+    const client = this.createOpenAICompatibleClient(p, userApiKey, userBaseUrl)
+    return this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default)
   }
 
   async listOllamaModels(baseUrl?: string): Promise<string[]> {
-    const client = this.createOllamaClient(baseUrl)
-    return this.listModelIds(client)
+    return this.listLocalOllamaModels(baseUrl)
   }
 
   async runOllamaPrompt(baseUrl: string | undefined, model: string, prompt: string, maxTokens = 200) {
@@ -96,8 +127,13 @@ export class LLMService {
     baseUrl?: string,
     model?: string,
   ): Promise<TestConnectionResult> {
+    const requestedProvider = String(provider ?? '').trim().toLowerCase()
+    if (!this.isSupportedProvider(requestedProvider)) {
+      return { ok: false, error: `Unsupported provider "${provider}".` }
+    }
+
     try {
-      if (provider === 'anthropic') {
+      if (requestedProvider === 'anthropic') {
         const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', apiKey) })
         const res = await client.messages.create({
           model: model ?? LLM_MODELS.anthropic.default,
@@ -107,7 +143,7 @@ export class LLMService {
         return { ok: true, model: res.model }
       }
 
-      if (provider === 'ollama') {
+      if (requestedProvider === 'ollama') {
         const client = this.createOllamaClient(baseUrl)
         const targetModel = model ?? LLM_MODELS.ollama.default
 
@@ -121,8 +157,8 @@ export class LLMService {
         } catch (error: any) {
           if (model || !this.isOllamaModelMissingError(error)) throw error
 
-          const fallbackModel = await this.resolveFirstOllamaModel(client)
-          if (!fallbackModel) throw error
+          const fallbackModel = await this.resolveFirstOllamaModel(client, baseUrl)
+          if (!fallbackModel) throw new Error(this.noLocalOllamaModelsMessage(baseUrl))
 
           const res = await client.chat.completions.create({
             model: fallbackModel,
@@ -133,10 +169,10 @@ export class LLMService {
         }
       }
 
-      // openai
-      const client = new OpenAI({ apiKey: this.resolveApiKey('openai', apiKey) })
+      // openai-compatible providers (openai, google gemini)
+      const client = this.createOpenAICompatibleClient(requestedProvider, apiKey, baseUrl)
       const res = await client.chat.completions.create({
-        model: model ?? LLM_MODELS.openai.default,
+        model: model ?? LLM_MODELS[requestedProvider].default,
         max_tokens: 5,
         messages: [{ role: 'user', content: 'hi' }],
       })
@@ -146,14 +182,14 @@ export class LLMService {
     }
   }
 
-  private resolveApiKey(provider: 'anthropic' | 'openai', userApiKey?: string) {
+  private resolveApiKey(provider: Exclude<LLMProvider, 'ollama'>, userApiKey?: string) {
     const fromUser = userApiKey?.trim()
-    const fromEnv = provider === 'anthropic' ? this.envAnthropicKey?.trim() : this.envOpenaiKey?.trim()
+    const fromEnv = this.envApiKeys[provider]?.trim()
     const key = fromUser || fromEnv
 
     if (!key || this.isPlaceholderKey(key)) {
-      const envName = provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'
-      const providerLabel = provider === 'anthropic' ? 'Anthropic' : 'OpenAI'
+      const envName = PROVIDER_ENV_VARS[provider][0]
+      const providerLabel = PROVIDER_LABELS[provider]
       throw new Error(`${providerLabel} API key is not configured. Add a key in Settings > Config or set ${envName} in apps/api/.env.`)
     }
 
@@ -175,25 +211,40 @@ export class LLMService {
     systemPrompt: string,
     client: OpenAI,
     modelOverride?: string,
+    baseUrl?: string,
   ): Promise<LLMResponse> {
     const defaultModel = modelOverride ?? LLM_MODELS.ollama.default
 
     try {
       return await this.completeOpenAI(messages, tools, systemPrompt, client, defaultModel)
     } catch (error: any) {
+      if (this.isOllamaToolsNotSupportedError(error)) {
+        this.logger.warn(`Ollama model "${defaultModel}" does not support tools — retrying without tools`)
+        return this.completeOpenAI(messages, [], systemPrompt, client, defaultModel)
+      }
+
       if (!this.isOllamaModelMissingError(error)) throw error
 
-      const fallbackModel = await this.resolveFirstOllamaModel(client)
-      if (!fallbackModel || fallbackModel === defaultModel) throw error
+      const fallbackModel = await this.resolveFirstOllamaModel(client, baseUrl)
+      if (!fallbackModel) throw new Error(this.noLocalOllamaModelsMessage(baseUrl))
+      if (fallbackModel === defaultModel) throw error
 
       this.logger.warn(`Ollama model "${defaultModel}" unavailable, retrying with "${fallbackModel}"`)
       return this.completeOpenAI(messages, tools, systemPrompt, client, fallbackModel)
     }
   }
 
-  private async resolveFirstOllamaModel(client: OpenAI) {
-    const models = await this.listModelIds(client)
-    return models[0] ?? null
+  private isOllamaToolsNotSupportedError(error: unknown) {
+    const message = (error as any)?.message
+    if (typeof message !== 'string') return false
+    const lower = message.toLowerCase()
+    return lower.includes('does not support tools') || lower.includes('tool') && lower.includes('not supported')
+  }
+
+  private async resolveFirstOllamaModel(client: OpenAI, baseUrl?: string) {
+    const localModels = await this.listLocalOllamaModels(baseUrl)
+    if (localModels.length > 0) return localModels[0] ?? null
+    return null
   }
 
   private isOllamaModelMissingError(error: unknown) {
@@ -247,9 +298,10 @@ export class LLMService {
     systemPrompt: string,
     client: OpenAI,
     modelOverride?: string,
+    defaultModel?: string,
   ): Promise<LLMResponse> {
     const response = await client.chat.completions.create({
-      model: modelOverride ?? LLM_MODELS.openai.default,
+      model: modelOverride ?? defaultModel ?? LLM_MODELS.openai.default,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       ...(tools.length > 0 ? {
         tools: tools.map((t) => ({
@@ -280,9 +332,70 @@ export class LLMService {
     })
   }
 
+  private createOpenAICompatibleClient(
+    provider: Exclude<LLMProvider, 'anthropic' | 'ollama'>,
+    userApiKey?: string,
+    userBaseUrl?: string,
+  ) {
+    const baseURL = this.resolveOpenAICompatibleBaseUrl(provider, userBaseUrl)
+    const apiKey = this.resolveApiKey(provider, userApiKey)
+    return new OpenAI({
+      ...(baseURL ? { baseURL } : {}),
+      apiKey,
+    })
+  }
+
   private resolveOllamaBaseUrl(baseUrl?: string) {
     const raw = (baseUrl ?? 'http://localhost:11434').trim().replace(/\/+$/, '')
     return raw.endsWith('/v1') ? raw : `${raw}/v1`
+  }
+
+  private resolveOllamaHttpBaseUrl(baseUrl?: string) {
+    const raw = (baseUrl ?? 'http://localhost:11434').trim().replace(/\/+$/, '')
+    return raw.endsWith('/v1') ? raw.slice(0, -3) : raw
+  }
+
+  private noLocalOllamaModelsMessage(baseUrl?: string) {
+    const endpoint = this.resolveOllamaHttpBaseUrl(baseUrl)
+    return `No local Ollama models found at ${endpoint}. Run "ollama pull <model>" and refresh models.`
+  }
+
+  private async listLocalOllamaModels(baseUrl?: string) {
+    const endpoint = `${this.resolveOllamaHttpBaseUrl(baseUrl)}/api/tags`
+    try {
+      const response = await fetch(endpoint)
+      if (!response.ok) return []
+      const json = await response.json() as {
+        models?: Array<{ name?: string; model?: string }>
+      }
+
+      const ids: string[] = []
+      const seen = new Set<string>()
+      for (const model of json.models ?? []) {
+        const id = (model.name ?? model.model ?? '').trim()
+        if (!id || seen.has(id)) continue
+        seen.add(id)
+        ids.push(id)
+      }
+
+      // Prefer strictly local models. Keep cloud-tagged entries only if no local models exist.
+      const localOnly = ids.filter((id) => {
+        const normalized = id.toLowerCase()
+        return !normalized.includes(':cloud') && !normalized.includes('/cloud') && !normalized.endsWith('-cloud')
+      })
+      return localOnly.length > 0 ? localOnly : ids
+    } catch {
+      return []
+    }
+  }
+
+  private resolveOpenAICompatibleBaseUrl(
+    provider: Exclude<LLMProvider, 'anthropic' | 'ollama'>,
+    baseUrl?: string,
+  ) {
+    const override = baseUrl?.trim().replace(/\/+$/, '')
+    if (override) return override
+    return OPENAI_COMPATIBLE_BASE_URLS[provider]
   }
 
   private async listModelIds(client: OpenAI) {
@@ -298,5 +411,17 @@ export class LLMService {
     }
 
     return ids
+  }
+
+  private isSupportedProvider(value: string): value is LLMProvider {
+    return SUPPORTED_PROVIDERS.includes(value as LLMProvider)
+  }
+
+  private readFirstEnv(names: string[]) {
+    for (const name of names) {
+      const value = this.config.get<string>(name)?.trim()
+      if (value) return value
+    }
+    return undefined
   }
 }
