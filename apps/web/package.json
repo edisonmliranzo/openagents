@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
-    "dev:clean": "node -e \"const fs=require('node:fs');fs.rmSync('.next',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true});\" && next dev -p 3000",
+    "dev": "node -e \"const fs=require('node:fs');fs.rmSync('.next',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true});\" && pnpm run dev:fast",
+    "dev:fast": "node scripts/run-next.mjs dev",
+    "dev:clean": "node -e \"const fs=require('node:fs');fs.rmSync('.next',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true});\" && pnpm run dev:fast",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/run-next.mjs start",
+    "show:login-url": "node scripts/run-next.mjs dev --print-only",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
   },

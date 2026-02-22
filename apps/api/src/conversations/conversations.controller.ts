@@ -9,6 +9,7 @@ import { ConversationsService } from './conversations.service'
 import { AgentService } from '../agent/agent.service'
 import { NanobotLoopService } from '../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../nanobot/config/nanobot-config.service'
+import { HandoffsService } from '../handoffs/handoffs.service'
 
 class CreateConversationDto {
   @IsString() @IsOptional() title?: string
@@ -28,6 +29,7 @@ export class ConversationsController {
     private agent: AgentService,
     private nanobotLoop: NanobotLoopService,
     private nanobotConfig: NanobotConfigService,
+    private handoffs: HandoffsService,
   ) {}
 
   @Get()
@@ -67,6 +69,13 @@ export class ConversationsController {
     }
 
     try {
+      const activeHandoff = await this.handoffs.getActiveForConversation(req.user.id, conversationId)
+      if (activeHandoff) {
+        throw new Error(
+          `Conversation is in human handoff mode (${activeHandoff.status}). Return handoff to agent before continuing.`,
+        )
+      }
+
       const isSkillCommand = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
         .test(dto.content ?? '')
       const useNanobotLoop = this.nanobotConfig.enabled || isSkillCommand

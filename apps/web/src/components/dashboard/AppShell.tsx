@@ -6,31 +6,19 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
-  BarChart2,
   Bell,
   BookOpen,
-  Bot,
   Brain,
-  Bug,
   ChevronDown,
-  Clock,
-  Cpu,
   FileText,
-  Gauge,
-  LayoutDashboard,
   LogOut,
   MessageSquare,
-  Network,
   Moon,
-  Plug,
   ScrollText,
-  Server,
   Settings2,
   ShieldCheck,
-  ShoppingBag,
   Sun,
   Terminal,
-  Zap,
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
 import type { Notification } from '@openagents/shared'
@@ -57,33 +45,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Chat', href: '/chat', icon: MessageSquare },
       { label: 'Approvals', href: '/approvals', icon: ShieldCheck },
       { label: 'Memory', href: '/memory', icon: Brain },
-    ],
-  },
-  {
-    title: 'Control',
-    items: [
-      { label: 'Overview', href: '/control/overview', icon: LayoutDashboard },
-      { label: 'Channels', href: '/control/channels', icon: Plug },
-      { label: 'Inbox', href: '/control/inbox', icon: MessageSquare },
-      { label: 'Fleet', href: '/control/instances', icon: Server },
-      { label: 'Templates', href: '/control/templates', icon: Bot },
       { label: 'Sessions', href: '/sessions', icon: Terminal },
-      { label: 'Billing', href: '/control/usage', icon: BarChart2 },
-      { label: 'Benchmark', href: '/control/benchmark', icon: Cpu },
-      { label: 'Cron Jobs', href: '/control/cron-jobs', icon: Clock },
-      { label: 'Subscription', href: '/control/subscription', icon: Gauge },
-    ],
-  },
-  {
-    title: 'Agent',
-    items: [
-      { label: 'Agents', href: '/agent/agents', icon: Bot },
-      { label: 'OpenAgent', href: '/agent/openagent', icon: Cpu },
-      { label: 'Labs', href: '/agent/labs', icon: Activity },
-      { label: 'Skills', href: '/agent/skills', icon: Zap },
-      { label: 'Marketplace', href: '/agent/marketplace', icon: ShoppingBag },
-      { label: 'Trust', href: '/agent/trust', icon: Gauge },
-      { label: 'Nodes', href: '/agent/nodes', icon: Network },
     ],
   },
   {
@@ -91,7 +53,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Config', href: '/settings/config', icon: Settings2 },
       { label: 'Audit Log', href: '/audit', icon: FileText },
-      { label: 'Debug', href: '/settings/debug', icon: Bug },
       { label: 'Logs', href: '/settings/logs', icon: ScrollText },
     ],
   },

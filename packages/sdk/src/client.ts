@@ -40,6 +40,37 @@ export class OpenAgentsClient {
     }
   }
 
+  private isJsonResponse(res: Response) {
+    const contentType = res.headers.get('content-type')?.toLowerCase() ?? ''
+    return contentType.includes('application/json') || contentType.includes('+json')
+  }
+
+  private async parseSuccessBody<T>(res: Response): Promise<T> {
+    if (res.status === 204 || res.status === 205) {
+      return undefined as T
+    }
+
+    const contentLength = res.headers.get('content-length')
+    if (contentLength === '0') {
+      return undefined as T
+    }
+
+    const raw = await res.text()
+    if (!raw.trim()) {
+      return undefined as T
+    }
+
+    if (this.isJsonResponse(res)) {
+      try {
+        return JSON.parse(raw) as T
+      } catch {
+        throw new APIError(res.status, `Invalid JSON response from ${res.url}`)
+      }
+    }
+
+    return raw as T
+  }
+
   private async request<T>(
     path: string,
     options: RequestInit = {},
@@ -62,8 +93,7 @@ export class OpenAgentsClient {
         headers.Authorization = `Bearer ${this.accessToken}`
         const retried = await this.fetchWithNetworkGuard(url, { ...options, headers })
         if (!retried.ok) throw new APIError(retried.status, await retried.text())
-        if (retried.status === 204) return undefined as T
-        return retried.json() as Promise<T>
+        return this.parseSuccessBody<T>(retried)
       }
 
       this.config.onUnauthorized?.()
@@ -71,8 +101,7 @@ export class OpenAgentsClient {
     }
 
     if (!res.ok) throw new APIError(res.status, await res.text())
-    if (res.status === 204) return undefined as T
-    return res.json() as Promise<T>
+    return this.parseSuccessBody<T>(res)
   }
 
   private async tryRefresh(): Promise<boolean> {
@@ -84,9 +113,21 @@ export class OpenAgentsClient {
         body: JSON.stringify({ refreshToken: this.refreshToken }),
       })
       if (!res.ok) return false
-      const tokens = await res.json() as AuthTokens
-      this.setTokens(tokens)
-      this.config.onTokenRefresh?.(tokens)
+      const tokens = await this.parseSuccessBody<Partial<AuthTokens>>(res)
+      if (
+        !tokens ||
+        typeof tokens.accessToken !== 'string' ||
+        typeof tokens.refreshToken !== 'string'
+      ) {
+        return false
+      }
+      const normalizedTokens: AuthTokens = {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: typeof tokens.expiresIn === 'number' ? tokens.expiresIn : 0,
+      }
+      this.setTokens(normalizedTokens)
+      this.config.onTokenRefresh?.(normalizedTokens)
       return true
     } catch {
       return false

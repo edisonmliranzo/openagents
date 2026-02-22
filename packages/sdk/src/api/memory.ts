@@ -1,5 +1,12 @@
 import type { OpenAgentsClient } from '../client'
-import type { MemoryEntry, MemoryFileDocument, MemoryFileSummary } from '@openagents/shared'
+import type {
+  BrowserCaptureInput,
+  BrowserCaptureResult,
+  MemoryEntry,
+  MemoryFileDocument,
+  MemoryFileSummary,
+  NanobotMemoryCurationResult,
+} from '@openagents/shared'
 
 export interface UpdateMemoryFileDto {
   content: string
@@ -17,6 +24,12 @@ export function createMemoryApi(client: OpenAgentsClient) {
 
     writeFile: (name: string, dto: UpdateMemoryFileDto) =>
       client.put<MemoryFileDocument>(`/api/v1/memory/files/${encodeURIComponent(name)}`, dto),
+
+    capture: (input: BrowserCaptureInput) =>
+      client.post<BrowserCaptureResult>('/api/v1/memory/capture', input),
+
+    curate: () =>
+      client.post<NanobotMemoryCurationResult>('/api/v1/memory/curate'),
 
     delete: (id: string) => client.delete<{ count: number }>(`/api/v1/memory/${id}`),
   }

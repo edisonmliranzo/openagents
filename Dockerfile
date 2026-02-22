@@ -70,7 +70,7 @@ COPY --from=web-build /app /app
 
 EXPOSE 3000
 
-CMD ["pnpm", "--filter", "@openagents/web", "run", "start", "--", "-p", "3000", "-H", "0.0.0.0"]
+CMD ["pnpm", "--filter", "@openagents/web", "run", "start"]
 
 FROM base AS worker-build
 RUN pnpm --filter @openagents/worker run build

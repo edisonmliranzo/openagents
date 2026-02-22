@@ -4,6 +4,9 @@ import type { NanobotAliveState, NanobotRoleDecision, NanobotThoughtMode } from 
 interface AlivePatch {
   activeGoal?: string | null
   thoughtMode?: NanobotThoughtMode
+  taskType?: NanobotAliveState['taskType']
+  thinkingDepth?: NanobotAliveState['thinkingDepth']
+  urgency?: NanobotAliveState['urgency']
   confidence?: number
   intentionQueue?: string[]
   waitingReason?: string | null
@@ -53,6 +56,9 @@ export class NanobotAliveStateService {
     return {
       activeGoal: null,
       thoughtMode: 'reflect',
+      taskType: 'general',
+      thinkingDepth: 'balanced',
+      urgency: 'normal',
       confidence: 0.5,
       intentionQueue: [],
       waitingReason: null,
@@ -66,4 +72,3 @@ export class NanobotAliveStateService {
     return Math.max(0, Math.min(1, value))
   }
 }
-

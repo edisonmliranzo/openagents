@@ -20,3 +20,18 @@ export interface MemoryFileSummary {
 export interface MemoryFileDocument extends MemoryFileSummary {
   content: string
 }
+
+export interface BrowserCaptureInput {
+  url: string
+  title?: string
+  selection: string
+  note?: string
+  conversationId?: string
+}
+
+export interface BrowserCaptureResult {
+  capturedAt: string
+  memory: MemoryEntry
+  conversationId: string | null
+  conversationMessageId: string | null
+}

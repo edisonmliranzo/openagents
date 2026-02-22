@@ -1,10 +1,11 @@
 'use client'
 
 import { sdk } from '@/stores/auth'
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import type { AuditLog, Notification, SessionRow, User, UserSettings } from '@openagents/shared'
 import {
-  Terminal, ShieldAlert, Zap, Bell, RefreshCw,
+  Terminal, ShieldAlert, Zap, Bell, RefreshCw, Brain, Activity,
   TrendingUp, Clock, CheckCircle2, AlertCircle,
 } from 'lucide-react'
 
@@ -15,6 +16,24 @@ interface OverviewState {
   pendingApprovals: number
   notifications: Notification[]
   auditLogs: AuditLog[]
+  memoryEntries: number
+  memoryFiles: number
+  personaProfile: string | null
+  activeSkills: number
+  autonomyWithinWindow: boolean | null
+  autonomyReason: string | null
+  trustScore: number | null
+  lastHeartbeatAt: string | null
+}
+type FeatureTone = 'slate' | 'emerald' | 'amber' | 'rose' | 'indigo'
+interface FeatureCardModel {
+  title: string
+  description: string
+  href: string
+  metric: string
+  detail: string
+  icon: React.ElementType
+  tone: FeatureTone
 }
 
 function formatNumber(value: number) {
@@ -67,9 +86,64 @@ function StatCard({
   )
 }
 
+function FeatureCard({
+  title,
+  description,
+  href,
+  metric,
+  detail,
+  icon: Icon,
+  tone = 'slate',
+}: {
+  title: string
+  description: string
+  href: string
+  metric: string
+  detail: string
+  icon: React.ElementType
+  tone?: FeatureTone
+}) {
+  const toneClass = {
+    slate: 'border-slate-200 bg-slate-50',
+    emerald: 'border-emerald-200 bg-emerald-50',
+    amber: 'border-amber-200 bg-amber-50',
+    rose: 'border-rose-200 bg-rose-50',
+    indigo: 'border-indigo-200 bg-indigo-50',
+  }[tone]
+
+  return (
+    <Link href={href} className={`block rounded-xl border p-4 transition hover:shadow-sm ${toneClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[12px] font-semibold text-slate-800">{title}</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">{description}</p>
+        </div>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/80 text-slate-700">
+          <Icon size={15} />
+        </div>
+      </div>
+      <p className="mt-3 text-sm font-semibold text-slate-900">{metric}</p>
+      <p className="mt-0.5 text-[11px] text-slate-600">{detail}</p>
+    </Link>
+  )
+}
+
 export default function OverviewPage() {
   const [state, setState] = useState<OverviewState>({
-    profile: null, settings: null, sessions: [], pendingApprovals: 0, notifications: [], auditLogs: [],
+    profile: null,
+    settings: null,
+    sessions: [],
+    pendingApprovals: 0,
+    notifications: [],
+    auditLogs: [],
+    memoryEntries: 0,
+    memoryFiles: 0,
+    personaProfile: null,
+    activeSkills: 0,
+    autonomyWithinWindow: null,
+    autonomyReason: null,
+    trustScore: null,
+    lastHeartbeatAt: null,
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -86,12 +160,38 @@ export default function OverviewPage() {
         sdk.notifications.list(),
         sdk.audit.list(),
       ])
+
+      const extra = await Promise.allSettled([
+        sdk.memory.list(),
+        sdk.memory.listFiles(),
+        sdk.nanobot.health(),
+        sdk.nanobot.getAutonomyStatus(),
+        sdk.nanobot.trust(),
+        sdk.nanobot.listEvents(60),
+      ])
+
+      const memoryEntries = extra[0].status === 'fulfilled' ? extra[0].value.length : 0
+      const memoryFiles = extra[1].status === 'fulfilled' ? extra[1].value.length : 0
+      const nanobotHealth = extra[2].status === 'fulfilled' ? extra[2].value : null
+      const autonomyStatus = extra[3].status === 'fulfilled' ? extra[3].value : null
+      const trustSnapshot = extra[4].status === 'fulfilled' ? extra[4].value : null
+      const nanobotEvents = extra[5].status === 'fulfilled' ? extra[5].value : []
+      const lastHeartbeatAt = nanobotEvents.find((event) => event.name === 'heartbeat.tick')?.createdAt ?? null
+
       setState({
         profile, settings,
         sessions: sessionsResult.sessions.filter((s) => s.kind === 'direct'),
         pendingApprovals: pendingApprovals.length,
         notifications,
         auditLogs,
+        memoryEntries,
+        memoryFiles,
+        personaProfile: nanobotHealth?.personality.profileId ?? null,
+        activeSkills: nanobotHealth?.activeSkills.length ?? 0,
+        autonomyWithinWindow: autonomyStatus?.withinWindow ?? null,
+        autonomyReason: autonomyStatus?.reason ?? null,
+        trustScore: trustSnapshot?.overallScore ?? null,
+        lastHeartbeatAt,
       })
     } catch (err: any) {
       setError(err?.message ?? 'Failed to load overview data')
@@ -119,6 +219,87 @@ export default function OverviewPage() {
     [state.sessions],
   )
   const recentAudit = useMemo(() => state.auditLogs.slice(0, 8), [state.auditLogs])
+  const thinkingSessions = useMemo(
+    () => state.sessions.filter((session) => (session.thinkingLevel ?? '').trim().length > 0).length,
+    [state.sessions],
+  )
+  const featureCards = useMemo<FeatureCardModel[]>(
+    () => {
+      const heartbeatTone: FeatureTone = state.autonomyWithinWindow ? 'emerald' : 'rose'
+      return [
+      {
+        title: 'Memory / Brain',
+        description: 'Persistent context and editable memory documents.',
+        href: '/memory',
+        metric: `${formatNumber(state.memoryEntries)} entries`,
+        detail: `${formatNumber(state.memoryFiles)} memory files`,
+        icon: Brain,
+        tone: 'indigo' as const,
+      },
+      {
+        title: 'Persona',
+        description: 'Profile and boundary controls for runtime behavior.',
+        href: '/agent/nanobot',
+        metric: state.personaProfile ? `Profile: ${state.personaProfile}` : 'Profile: n/a',
+        detail: `${formatNumber(state.activeSkills)} active skills`,
+        icon: Activity,
+        tone: 'emerald' as const,
+      },
+      {
+        title: 'Thinking',
+        description: 'Session-level thinking control and execution tuning.',
+        href: '/sessions',
+        metric: `${formatNumber(thinkingSessions)} sessions with thinking`,
+        detail: `Model: ${state.settings?.preferredModel ?? 'default'}`,
+        icon: Terminal,
+        tone: 'amber' as const,
+      },
+      {
+        title: 'Agentic Heartbeat',
+        description: 'Liveness ticks, autonomy windows, and trust signals.',
+        href: '/agent/nanobot',
+        metric: state.lastHeartbeatAt ? `Last heartbeat ${timeAgo(new Date(state.lastHeartbeatAt).getTime())}` : 'No heartbeat yet',
+        detail: state.autonomyWithinWindow == null
+          ? 'Autonomy status unavailable'
+          : state.autonomyWithinWindow
+            ? 'Inside autonomy window'
+            : `Outside autonomy window (${state.autonomyReason ?? 'manual approvals'})`,
+        icon: Zap,
+        tone: heartbeatTone,
+      },
+      {
+        title: 'Trust Score',
+        description: 'Cross-signal score for autonomy, memory, safety, and cost.',
+        href: '/agent/trust',
+        metric: state.trustScore == null ? 'Score unavailable' : `${state.trustScore}/100`,
+        detail: 'Open trust dashboard',
+        icon: ShieldAlert,
+        tone: 'slate' as const,
+      },
+      {
+        title: 'Workflows / Handoffs / Lineage',
+        description: 'Operational automation, escalation, and traceability.',
+        href: '/control/workflows',
+        metric: 'Control-plane automation',
+        detail: 'Open workflow control center',
+        icon: CheckCircle2,
+        tone: 'slate' as const,
+      },
+      ]
+    },
+    [
+      state.memoryEntries,
+      state.memoryFiles,
+      state.personaProfile,
+      state.activeSkills,
+      state.settings?.preferredModel,
+      state.lastHeartbeatAt,
+      state.autonomyWithinWindow,
+      state.autonomyReason,
+      state.trustScore,
+      thinkingSessions,
+    ],
+  )
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-6">
@@ -173,6 +354,35 @@ export default function OverviewPage() {
             : 'bg-gradient-to-br from-slate-500 to-slate-600'}
           icon={Bell}
         />
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Core Platform Features</h2>
+            <p className="mt-0.5 text-[11px] text-slate-500">Live feature modules for memory, persona, thinking, and agentic heartbeat.</p>
+          </div>
+          <Link
+            href="/agent/nanobot"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
+          >
+            Open Runtime
+          </Link>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {featureCards.map((card) => (
+            <FeatureCard
+              key={card.title}
+              title={card.title}
+              description={card.description}
+              href={card.href}
+              metric={card.metric}
+              detail={card.detail}
+              icon={card.icon}
+              tone={card.tone}
+            />
+          ))}
+        </div>
       </section>
 
       {/* Tables */}

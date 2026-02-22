@@ -10,8 +10,11 @@ import { NanobotPersonalityService } from './nanobot-personality.service'
 import { NanobotRoleEngineService } from './nanobot-role-engine.service'
 import { NanobotAliveStateService } from './nanobot-alive-state.service'
 import { NanobotSubagentService } from './nanobot-subagent.service'
+import { NanobotOrchestrationService } from './nanobot-orchestration.service'
 import { NanobotBuiltinToolsService } from './tools/nanobot-builtin-tools.service'
+import { NanobotRuntimeIntelligenceService } from './nanobot-runtime-intelligence.service'
 import { PrismaService } from '../../prisma/prisma.service'
+import { SkillReputationService } from '../../skill-reputation/skill-reputation.service'
 import type { NanobotRunParams } from '../types'
 
 interface ParsedSkillCommand {
@@ -38,12 +41,16 @@ export class NanobotLoopService {
     private roles: NanobotRoleEngineService,
     private alive: NanobotAliveStateService,
     private subagents: NanobotSubagentService,
+    private orchestration: NanobotOrchestrationService,
     private tools: NanobotBuiltinToolsService,
+    private runtimeIntelligence: NanobotRuntimeIntelligenceService,
     private prisma: PrismaService,
+    private skillReputation: SkillReputationService,
   ) {}
 
   async run(params: NanobotRunParams) {
     const runId = randomUUID()
+    let activeSkillIds: string[] = []
     this.sessions.touch(params.conversationId, params.userId)
     this.bus.publish('run.started', {
       runId,
@@ -72,15 +79,58 @@ export class NanobotLoopService {
     }
 
     try {
-      const personalityState = await this.personality.getForUser(params.userId)
-      const roleDecision = this.roles.evaluate(params.userMessage, personalityState)
+      let latestAgentReply = ''
+      const route = this.runtimeIntelligence.routeThinking(params.userMessage)
+      this.runtimeIntelligence.recordThinkingRoute(params.userId, route)
+
+      const basePersonalityState = await this.personality.getForUser(params.userId)
+      const personaDecision = this.runtimeIntelligence.decidePersonaSwitch({
+        userId: params.userId,
+        route,
+        currentPersonality: basePersonalityState,
+      })
+
+      const personalityState = personaDecision.switched
+        ? await this.personality.setProfile(params.userId, personaDecision.nextProfileId)
+        : basePersonalityState
+
+      this.runtimeIntelligence.recordPersonaDecision(params.userId, {
+        switched: personaDecision.switched,
+        fromProfileId: basePersonalityState.profileId,
+        toProfileId: personalityState.profileId,
+        reason: personaDecision.reason,
+        taskType: personaDecision.taskType,
+      })
+
+      if (personaDecision.switched) {
+        this.bus.publish('run.event', {
+          source: 'nanobot.persona.auto',
+          runId,
+          userId: params.userId,
+          from: basePersonalityState.profileId,
+          to: personalityState.profileId,
+          reason: personaDecision.reason,
+          taskType: personaDecision.taskType,
+        })
+      }
+
+      const roleDecision = this.roles.evaluate(params.userMessage, personalityState, route)
       const aliveState = this.alive.patchForUser(params.userId, {
         activeGoal: roleDecision.plannerGoal,
         thoughtMode: roleDecision.thoughtMode,
+        taskType: roleDecision.taskType,
+        thinkingDepth: roleDecision.thinkingDepth,
+        urgency: roleDecision.urgency,
         confidence: roleDecision.confidence,
         intentionQueue: roleDecision.plannerPlan,
         waitingReason: 'thinking',
         lastRoleDecision: roleDecision,
+      })
+      const orchestration = this.orchestration.startRun({
+        runId,
+        userId: params.userId,
+        conversationId: params.conversationId,
+        decision: roleDecision,
       })
 
       params.emit('status', {
@@ -89,9 +139,11 @@ export class NanobotLoopService {
         runId,
         alive: aliveState,
         personality: personalityState,
+        orchestration,
       })
 
       const activeSkills = await this.skills.getActiveForUser(params.userId)
+      activeSkillIds = activeSkills.map((skill) => skill.id)
       const availableTools = await this.tools.list(params.userId)
       const prompt = await this.context.buildSystemPrompt(params.userId, activeSkills)
       const rolePrompt = this.roles.buildPromptAppendix(roleDecision)
@@ -105,6 +157,9 @@ export class NanobotLoopService {
         promptLength: prompt.length,
         maxLoopSteps: this.config.maxLoopSteps,
         thoughtMode: roleDecision.thoughtMode,
+        thinkingDepth: roleDecision.thinkingDepth,
+        complexity: roleDecision.complexity,
+        urgency: roleDecision.urgency,
         confidence: roleDecision.confidence,
       })
 
@@ -116,10 +171,16 @@ export class NanobotLoopService {
         plannerGoal: roleDecision.plannerGoal,
         confidence: roleDecision.confidence,
         thoughtMode: roleDecision.thoughtMode,
+        thinkingDepth: roleDecision.thinkingDepth,
+        complexity: roleDecision.complexity,
+        urgency: roleDecision.urgency,
+        taskType: roleDecision.taskType,
       })
 
       this.subagents.spawnRoleCrew(params.userId, runId, roleDecision)
       this.subagents.spawn(params.userId, 'nanobot-telemetry', 'telemetry', runId)
+      this.orchestration.markPlanningComplete(runId)
+      this.bus.publish('orchestration.updated', { runId, stage: 'executing' })
 
       if (this.config.shadowMode) {
         const shadowState = this.alive.patchForUser(params.userId, {
@@ -137,6 +198,15 @@ export class NanobotLoopService {
         ...params,
         systemPromptAppendix,
         emit: (event, data: any) => {
+          if (event === 'message' && data?.role === 'agent' && typeof data?.content === 'string') {
+            latestAgentReply = data.content
+          }
+          if (event === 'tool_result') {
+            const toolName = typeof data?.tool === 'string' ? data.tool : 'tool'
+            const success = Boolean(data?.result?.success)
+            this.orchestration.addToolEvent(runId, toolName, success ? 'ok' : 'error')
+            this.bus.publish('orchestration.updated', { runId, stage: 'executing', tool: toolName, success })
+          }
           if (event === 'status') {
             const status = typeof data?.status === 'string' ? data.status : ''
             if (status === 'running_tool') {
@@ -147,13 +217,20 @@ export class NanobotLoopService {
               return
             }
             if (status === 'thinking') {
-              const nextAlive = this.alive.patchForUser(params.userId, { waitingReason: 'thinking' })
+              const nextAlive = this.alive.patchForUser(params.userId, {
+                waitingReason: 'thinking',
+                thoughtMode: roleDecision.thoughtMode,
+                taskType: roleDecision.taskType,
+                thinkingDepth: roleDecision.thinkingDepth,
+                urgency: roleDecision.urgency,
+              })
               this.bus.publish('run.event', { runId, event })
               params.emit(event, { ...data, alive: nextAlive })
               return
             }
             if (status === 'done') {
               const nextAlive = this.alive.markDone(params.userId)
+              this.orchestration.markReviewing(runId)
               this.bus.publish('run.event', { runId, event })
               params.emit(event, { ...data, alive: nextAlive })
               return
@@ -184,6 +261,21 @@ export class NanobotLoopService {
           occurrences: learnedSkill.occurrences,
         })
       }
+      this.orchestration.completeRun(
+        runId,
+        latestAgentReply.trim() ? latestAgentReply.trim().slice(0, 800) : 'Run completed.',
+      )
+      if (activeSkillIds.length > 0) {
+        await this.skillReputation.record({
+          userId: params.userId,
+          skillIds: activeSkillIds,
+          success: true,
+          source: 'nanobot.run',
+          runId,
+          conversationId: params.conversationId,
+        })
+      }
+      this.bus.publish('orchestration.updated', { runId, stage: 'done' })
 
       this.sessions.setStatus(params.conversationId, 'done')
       this.bus.publish('run.completed', {
@@ -199,7 +291,22 @@ export class NanobotLoopService {
       this.alive.patchForUser(params.userId, {
         waitingReason: error?.message ?? 'run failed',
         thoughtMode: 'reflect',
+        taskType: 'general',
+        thinkingDepth: 'balanced',
+        urgency: 'normal',
       })
+      this.orchestration.failRun(runId, error?.message ?? 'Run failed')
+      if (activeSkillIds.length > 0) {
+        await this.skillReputation.record({
+          userId: params.userId,
+          skillIds: activeSkillIds,
+          success: false,
+          source: 'nanobot.run',
+          runId,
+          conversationId: params.conversationId,
+        }).catch(() => {})
+      }
+      this.bus.publish('orchestration.updated', { runId, stage: 'error', error: error?.message ?? 'Run failed' })
       this.sessions.setStatus(params.conversationId, 'failed')
       this.bus.publish('run.failed', {
         runId,
@@ -281,6 +388,9 @@ export class NanobotLoopService {
     this.alive.patchForUser(params.userId, {
       activeGoal: command.title ? `Maintain skill ${command.title}` : 'Process skill command',
       thoughtMode: 'reflect',
+      taskType: 'general',
+      thinkingDepth: 'balanced',
+      urgency: 'normal',
       confidence: command.error ? 0.35 : 0.82,
       intentionQueue: command.error ? ['Fix command format and retry'] : ['Skill persisted and enabled'],
       waitingReason: null,

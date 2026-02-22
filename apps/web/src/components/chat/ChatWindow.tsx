@@ -1,104 +1,20 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/chat'
 import { MessageBubble } from './MessageBubble'
-import { Code2, PlusCircle, SendHorizontal, Sparkles } from 'lucide-react'
+import { PlusCircle, SendHorizontal, Sparkles } from 'lucide-react'
 
 interface ChatWindowProps {
   gatewayConnected: boolean
   onNewSession: () => Promise<void> | void
 }
 
-function looksLikeCodeLine(trimmed: string) {
-  return (
-    trimmed.startsWith('$ ') ||
-    trimmed.startsWith('curl ') ||
-    trimmed.startsWith('export ') ||
-    trimmed.startsWith('pnpm ') ||
-    trimmed.startsWith('npm ') ||
-    trimmed.startsWith('yarn ') ||
-    trimmed.startsWith('git ') ||
-    trimmed.startsWith('docker ') ||
-    trimmed.startsWith('kubectl ') ||
-    trimmed.startsWith('import ') ||
-    trimmed.startsWith('from ') ||
-    trimmed.startsWith('const ') ||
-    trimmed.startsWith('let ') ||
-    trimmed.startsWith('function ') ||
-    trimmed.startsWith('class ') ||
-    trimmed.startsWith('if ') ||
-    trimmed.startsWith('for ') ||
-    trimmed.startsWith('while ') ||
-    trimmed.startsWith('return ') ||
-    trimmed.includes('=>') ||
-    trimmed.includes('--') ||
-    trimmed.includes('{') ||
-    trimmed.includes('}') ||
-    trimmed.includes(';')
-  )
-}
-
-function extractCodeFromText(text: string) {
-  const regex = /```(?:[a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g
-  const blocks: string[] = []
-  let match: RegExpExecArray | null
-
-  while ((match = regex.exec(text)) != null) {
-    const block = (match[1] ?? '').trim()
-    if (block) blocks.push(block)
-  }
-  if (blocks.length > 0) return blocks.join('\n\n')
-
-  const lines = text.split('\n')
-  const codeLines: string[] = []
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) {
-      if (codeLines.length > 0) codeLines.push('')
-      continue
-    }
-    if (looksLikeCodeLine(trimmed)) {
-      codeLines.push(line)
-    }
-  }
-
-  return codeLines.join('\n').trim()
-}
-
-async function copyToClipboard(text: string) {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
-    return
-  }
-  if (typeof document === 'undefined') return
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.focus()
-  textarea.select()
-  document.execCommand('copy')
-  document.body.removeChild(textarea)
-}
-
 export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) {
   const { messages, sendMessage, isStreaming, activeConversationId } = useChatStore()
   const [input, setInput] = useState('')
-  const [copiedCode, setCopiedCode] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  const lastAgentCode = useMemo(() => {
-    for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-      const message = messages[idx]
-      if (message.role !== 'agent') continue
-      const code = extractCodeFromText(message.content ?? '')
-      if (code) return code
-    }
-    return ''
-  }, [messages])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -124,17 +40,6 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
       void handleSend()
     }
   }
-
-  const handleCopyLastCode = useCallback(async () => {
-    if (!lastAgentCode.trim()) return
-    try {
-      await copyToClipboard(lastAgentCode)
-      setCopiedCode(true)
-      window.setTimeout(() => setCopiedCode(false), 1200)
-    } catch {
-      setCopiedCode(false)
-    }
-  }, [lastAgentCode])
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-slate-200/90 bg-white/90 shadow-card backdrop-blur dark:border-slate-800 dark:bg-slate-900/75">
@@ -197,16 +102,6 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
           >
             <PlusCircle size={14} />
             New
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleCopyLastCode()}
-            disabled={!lastAgentCode.trim()}
-            className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-          >
-            <Code2 size={14} />
-            {copiedCode ? 'Copied' : 'Code'}
           </button>
 
           <button

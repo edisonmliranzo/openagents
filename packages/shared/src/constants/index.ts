@@ -51,7 +51,7 @@ export const LLM_MODEL_OPTIONS = {
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
   ],
-  ollama: ['llama3.2', 'mistral', 'codellama', 'neural-chat', 'phi3'],
+  ollama: ['llama3.2', 'mistral', 'codellama', 'neural-chat', 'phi3', 'minimax-m1:cloud', 'minimax-m2:cloud', 'minimax-m2.5:cloud'],
   minimax: ['MiniMax-M2', 'MiniMax-M2.5'],
 } as const
 

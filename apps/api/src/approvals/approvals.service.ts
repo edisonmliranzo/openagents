@@ -7,10 +7,16 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common'
 import Bull, { type Queue } from 'bull'
-import { APPROVAL_JOB_NAMES, QUEUE_NAMES, type ApprovalJobData } from '@openagents/shared'
+import {
+  APPROVAL_JOB_NAMES,
+  QUEUE_NAMES,
+  type ApprovalJobData,
+  type ApprovalRiskLevel,
+} from '@openagents/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { ToolsService } from '../tools/tools.service'
 import { NotificationsService } from '../notifications/notifications.service'
+import { DataLineageService } from '../lineage/lineage.service'
 
 export interface CreateApprovalDto {
   conversationId: string
@@ -20,16 +26,31 @@ export interface CreateApprovalDto {
   toolInput: Record<string, unknown>
 }
 
+export interface ApprovalRiskScore {
+  level: ApprovalRiskLevel
+  score: number
+  reason: string
+}
+
+export interface ApprovalRiskState extends ApprovalRiskScore {
+  autoApproved: boolean
+  autonomyWithinWindow: boolean
+  toolName: string | null
+  updatedAt: string
+}
+
 @Injectable()
 export class ApprovalsService implements OnModuleDestroy {
   private readonly logger = new Logger(ApprovalsService.name)
   private readonly approvalQueue?: Queue<ApprovalJobData>
   private readonly continuationMode: 'inline' | 'queue'
+  private readonly riskStateByUser = new Map<string, ApprovalRiskState>()
 
   constructor(
     private prisma: PrismaService,
     private tools: ToolsService,
     private notifications: NotificationsService,
+    private lineage: DataLineageService,
   ) {
     const configuredMode = (process.env.APPROVAL_CONTINUATION_MODE ?? 'inline').toLowerCase()
     this.continuationMode = configuredMode === 'queue' ? 'queue' : 'inline'
@@ -51,6 +72,98 @@ export class ApprovalsService implements OnModuleDestroy {
   async onModuleDestroy() {
     if (this.approvalQueue) {
       await this.approvalQueue.close()
+    }
+  }
+
+  scoreToolRisk(input: {
+    toolName: string
+    toolInput: Record<string, unknown>
+    requiresApprovalByPolicy: boolean
+    outsideAutonomyWindow: boolean
+  }): ApprovalRiskScore {
+    const { toolName, toolInput, requiresApprovalByPolicy, outsideAutonomyWindow } = input
+    const lowerTool = toolName.toLowerCase()
+    let score = 5
+    const reasons: string[] = []
+
+    if (requiresApprovalByPolicy) {
+      score += 60
+      reasons.push('Tool policy requires explicit approval.')
+    }
+    if (outsideAutonomyWindow) {
+      score += 20
+      reasons.push('Requested outside autonomy window.')
+    }
+    if (/(gmail|calendar_create_event|cron_remove|cron_add|draft|send|delete|remove)/i.test(lowerTool)) {
+      score += 22
+      reasons.push('Tool can mutate external state.')
+    }
+    if (/(web_fetch|web_search)/i.test(lowerTool)) {
+      score += 8
+      reasons.push('Tool reads external network sources.')
+    }
+
+    const serialized = this.safeSerialize(toolInput).toLowerCase()
+    if (/(password|api[_-]?key|token|secret|private[_-]?key|credential)/i.test(serialized)) {
+      score += 28
+      reasons.push('Input contains credential-like material.')
+    }
+    if (/(http:\/\/|https:\/\/)/i.test(serialized)) {
+      score += 10
+      reasons.push('Input includes URL targets.')
+    }
+    if (serialized.length > 1800) {
+      score += 6
+      reasons.push('Large input payload increases review complexity.')
+    }
+
+    const bounded = Math.max(0, Math.min(100, score))
+    const level: ApprovalRiskLevel = bounded >= 70 ? 'high' : bounded >= 35 ? 'medium' : 'low'
+    return {
+      level,
+      score: bounded,
+      reason: reasons.length ? reasons.join(' ') : 'Low-impact read-only action.',
+    }
+  }
+
+  shouldAutoApproveLowRisk(input: {
+    riskLevel: ApprovalRiskLevel
+    withinAutonomyWindow: boolean
+    requiresApprovalByPolicy: boolean
+  }) {
+    return input.riskLevel === 'low'
+      && input.withinAutonomyWindow
+      && !input.requiresApprovalByPolicy
+  }
+
+  recordRiskState(userId: string, input: {
+    toolName: string
+    level: ApprovalRiskLevel
+    score: number
+    reason: string
+    autoApproved: boolean
+    autonomyWithinWindow: boolean
+  }) {
+    this.riskStateByUser.set(userId, {
+      toolName: input.toolName,
+      level: input.level,
+      score: input.score,
+      reason: input.reason,
+      autoApproved: input.autoApproved,
+      autonomyWithinWindow: input.autonomyWithinWindow,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  getLatestRiskState(userId: string): ApprovalRiskState {
+    return this.riskStateByUser.get(userId) ?? {
+      level: 'low',
+      score: 0,
+      reason: 'No tool calls yet.',
+      autoApproved: false,
+      autonomyWithinWindow: false,
+      toolName: null,
+      updatedAt: new Date(0).toISOString(),
     }
   }
 
@@ -183,13 +296,36 @@ export class ApprovalsService implements OnModuleDestroy {
       },
     })
 
-    await this.prisma.message.create({
+    const followupMessage = await this.prisma.message.create({
       data: {
         conversationId,
         role: 'agent',
         status: result.success ? 'done' : 'error',
         content: this.buildFollowupMessage(toolName, result),
       },
+    })
+    await this.lineage.recordMessage({
+      userId,
+      conversationId,
+      messageId: followupMessage.id,
+      source: 'approval',
+      tools: [{
+        toolName,
+        status: result.success ? 'executed' : 'failed',
+        requiresApproval: true,
+        approvalId,
+        ...(this.compactRecord(toolInput) ? { input: this.compactRecord(toolInput)! } : {}),
+        outputPreview: this.renderToolOutput(result.output),
+        error: result.success ? null : (result.error ?? 'Tool failed'),
+      }],
+      approvals: [approvalId],
+      externalSources: [
+        ...this.lineage.extractExternalSources(toolInput),
+        ...this.lineage.extractExternalSources(result.output),
+      ],
+      notes: ['approval_continuation'],
+    }).catch((error) => {
+      this.logger.warn(`Failed to record approval lineage (${approvalId}): ${this.safeError(error)}`)
     })
 
     await this.prisma.agentRun.updateMany({
@@ -245,6 +381,36 @@ export class ApprovalsService implements OnModuleDestroy {
       return json.length > 4000 ? `${json.slice(0, 4000)}...` : json
     } catch {
       return String(output).slice(0, 4000)
+    }
+  }
+
+  private compactRecord(value: unknown): Record<string, unknown> | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const out: Record<string, unknown> = {}
+    for (const [key, raw] of Object.entries(value as Record<string, unknown>).slice(0, 20)) {
+      if (typeof raw === 'string') out[key.slice(0, 80)] = raw.slice(0, 400)
+      else if (typeof raw === 'number' || typeof raw === 'boolean' || raw == null) out[key.slice(0, 80)] = raw
+      else {
+        try {
+          out[key.slice(0, 80)] = JSON.parse(JSON.stringify(raw))
+        } catch {
+          out[key.slice(0, 80)] = String(raw).slice(0, 400)
+        }
+      }
+    }
+    return out
+  }
+
+  private safeError(error: unknown) {
+    if (error instanceof Error) return error.message
+    return typeof error === 'string' ? error : 'Unknown error'
+  }
+
+  private safeSerialize(value: unknown) {
+    try {
+      return JSON.stringify(value) ?? ''
+    } catch {
+      return String(value)
     }
   }
 }

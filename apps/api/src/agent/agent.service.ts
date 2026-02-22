@@ -7,8 +7,9 @@ import { ApprovalsService } from '../approvals/approvals.service'
 import { UsersService } from '../users/users.service'
 import { AuditService } from '../audit/audit.service'
 import { NotificationsService } from '../notifications/notifications.service'
+import { DataLineageService } from '../lineage/lineage.service'
 import { SHORT_TERM_MEMORY_LIMIT } from '@openagents/shared'
-import type { LLMProvider } from '@openagents/shared'
+import type { LLMProvider, LineageToolInfluence } from '@openagents/shared'
 
 export interface AgentRunParams {
   conversationId: string
@@ -41,6 +42,15 @@ interface AgentRunMetrics {
   fallbackToOllama: boolean
   maxToolRounds: number
   toolRoundsUsed: number
+  autonomyScheduleEnabled: boolean
+  autonomyWithinWindow: boolean
+  autonomyTimezone: string
+  autonomyReason: string
+  autonomyFallbackApprovals: number
+  autoApprovedLowRisk: number
+  riskLow: number
+  riskMedium: number
+  riskHigh: number
   toolCalls: AgentRunToolMetric[]
 }
 
@@ -57,6 +67,7 @@ export class AgentService {
     private users: UsersService,
     private audit: AuditService,
     private notifications: NotificationsService,
+    private lineage: DataLineageService,
   ) {}
 
   async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
@@ -76,6 +87,7 @@ export class AgentService {
       const settings = await this.users.getSettings(userId)
       const provider = settings.preferredProvider as LLMProvider
       const preferredModel = settings.preferredModel?.trim() || undefined
+      let autonomyStatus = await this.memory.getAutonomyStatus(userId)
 
       // 4. Build context: recent messages + long-term memory
       const recentMessages = await this.prisma.message.findMany({
@@ -88,6 +100,13 @@ export class AgentService {
         this.memory.getForUser(userId),
         this.memory.buildFilesystemContext(userId),
       ])
+      const lineageMemoryFiles = filesystemContext
+        ? ['SOUL.md', 'USER.md', 'MEMORY.md', 'HEARTBEAT.md']
+        : []
+      const lineageMemorySummaryIds = memories.map((memory) => memory.id)
+      const lineageTools: LineageToolInfluence[] = []
+      const lineageApprovals: string[] = []
+      const lineageExternalSources = new Set<string>()
       const memorySections = [
         memories.length ? memories.map((m) => `[${m.type}] ${m.content}`).join('\n') : '',
         filesystemContext ? `Filesystem memory:\n${filesystemContext}` : '',
@@ -137,6 +156,15 @@ export class AgentService {
         fallbackToOllama: false,
         maxToolRounds,
         toolRoundsUsed: 0,
+        autonomyScheduleEnabled: autonomyStatus.scheduleEnabled,
+        autonomyWithinWindow: autonomyStatus.withinWindow,
+        autonomyTimezone: autonomyStatus.timezone,
+        autonomyReason: autonomyStatus.reason,
+        autonomyFallbackApprovals: 0,
+        autoApprovedLowRisk: 0,
+        riskLow: 0,
+        riskMedium: 0,
+        riskHigh: 0,
         toolCalls: [],
       }
       const completeWithProviderFallback = async (messages: Array<{ role: 'user' | 'assistant'; content: string }>) => {
@@ -156,7 +184,7 @@ export class AgentService {
           )
         } catch (error: any) {
           const shouldFallbackToOllama =
-            (activeProvider === 'anthropic' || activeProvider === 'openai')
+            activeProvider !== 'ollama'
             && typeof error?.message === 'string'
             && error.message.toLowerCase().includes('api key is not configured')
 
@@ -215,20 +243,65 @@ export class AgentService {
             continue
           }
 
-          if (toolDef.requiresApproval) {
+          autonomyStatus = await this.memory.getAutonomyStatus(userId)
+          runMetrics.autonomyScheduleEnabled = autonomyStatus.scheduleEnabled
+          runMetrics.autonomyWithinWindow = autonomyStatus.withinWindow
+          runMetrics.autonomyTimezone = autonomyStatus.timezone
+          runMetrics.autonomyReason = autonomyStatus.reason
+          const outsideAutonomyWindow = !toolDef.requiresApproval && !autonomyStatus.withinWindow
+          const risk = this.approvals.scoreToolRisk({
+            toolName: toolCall.name,
+            toolInput: toolCall.input,
+            requiresApprovalByPolicy: toolDef.requiresApproval,
+            outsideAutonomyWindow,
+          })
+          const autoApprovedLowRisk = this.approvals.shouldAutoApproveLowRisk({
+            riskLevel: risk.level,
+            withinAutonomyWindow: autonomyStatus.withinWindow,
+            requiresApprovalByPolicy: toolDef.requiresApproval,
+          })
+          const requiresApproval = toolDef.requiresApproval || outsideAutonomyWindow || !autoApprovedLowRisk
+
+          if (risk.level === 'low') runMetrics.riskLow += 1
+          else if (risk.level === 'medium') runMetrics.riskMedium += 1
+          else runMetrics.riskHigh += 1
+          if (autoApprovedLowRisk) runMetrics.autoApprovedLowRisk += 1
+
+          this.approvals.recordRiskState(userId, {
+            toolName: toolCall.name,
+            level: risk.level,
+            score: risk.score,
+            reason: risk.reason,
+            autoApproved: autoApprovedLowRisk,
+            autonomyWithinWindow: autonomyStatus.withinWindow,
+          })
+
+          if (requiresApproval) {
             runMetrics.approvalsRequested += 1
+            if (outsideAutonomyWindow) {
+              runMetrics.autonomyFallbackApprovals += 1
+            }
             runMetrics.toolCalls.push({
               name: toolCall.name,
               requiresApproval: true,
               status: 'pending_approval',
             })
+            this.addExternalSources(lineageExternalSources, toolCall.input)
             const toolMsg = await this.prisma.message.create({
               data: {
                 conversationId,
                 role: 'tool',
-                content: `Requesting to use tool: ${toolCall.name}`,
+                content: outsideAutonomyWindow
+                  ? `Outside autonomy window. Requesting approval to use tool: ${toolCall.name} (risk: ${risk.level}, score: ${risk.score}).`
+                  : `Requesting to use tool: ${toolCall.name} (risk: ${risk.level}, score: ${risk.score}).`,
                 status: 'pending',
                 toolCallJson: JSON.stringify(toolCall),
+                metadata: JSON.stringify({
+                  riskLevel: risk.level,
+                  riskScore: risk.score,
+                  riskReason: risk.reason,
+                  autonomyWithinWindow: autonomyStatus.withinWindow,
+                }),
               },
             })
 
@@ -238,6 +311,14 @@ export class AgentService {
               userId,
               toolName: toolCall.name,
               toolInput: toolCall.input,
+            })
+            lineageApprovals.push(approval.id)
+            lineageTools.push({
+              toolName: toolCall.name,
+              status: 'pending_approval',
+              requiresApproval: true,
+              approvalId: approval.id,
+              ...(this.compactRecord(toolCall.input) ? { input: this.compactRecord(toolCall.input)! } : {}),
             })
 
             await this.prisma.agentRun.update({
@@ -249,10 +330,22 @@ export class AgentService {
             })
 
             this.notifications
-              .create(userId, 'Action required', `Agent wants to use: ${toolCall.name}`, 'warning')
+              .create(
+                userId,
+                'Action required',
+                outsideAutonomyWindow
+                  ? `Outside autonomy window (${autonomyStatus.timezone}). Approve tool: ${toolCall.name}`
+                  : `Agent wants to use: ${toolCall.name} (risk: ${risk.level}).`,
+                'warning',
+              )
               .catch((e) => this.logger.error('Notification create failed', e))
 
-            emit('approval_required', { approval, message: toolMsg })
+            emit('approval_required', {
+              approval,
+              message: toolMsg,
+              risk,
+              autonomy: outsideAutonomyWindow ? autonomyStatus : undefined,
+            })
             return
           }
 
@@ -271,6 +364,16 @@ export class AgentService {
             name: toolCall.name,
             requiresApproval: false,
             status: result.success ? 'executed' : 'failed',
+          })
+          this.addExternalSources(lineageExternalSources, toolCall.input)
+          this.addExternalSources(lineageExternalSources, result.output)
+          lineageTools.push({
+            toolName: toolCall.name,
+            status: result.success ? 'executed' : 'failed',
+            requiresApproval: false,
+            ...(this.compactRecord(toolCall.input) ? { input: this.compactRecord(toolCall.input)! } : {}),
+            outputPreview: resultContent ?? null,
+            error: result.success ? null : (result.error ?? 'Tool execution failed'),
           })
 
           await this.prisma.message.create({
@@ -314,6 +417,25 @@ export class AgentService {
           data: { conversationId, role: 'agent', content: finalResponseContent, status: 'done' },
         })
         emit('message', agentMsg)
+        await this.lineage.recordMessage({
+          userId,
+          conversationId,
+          messageId: agentMsg.id,
+          source: 'agent',
+          runId: run.id,
+          memoryFiles: lineageMemoryFiles,
+          memorySummaryIds: lineageMemorySummaryIds,
+          tools: lineageTools,
+          approvals: lineageApprovals,
+          externalSources: [...lineageExternalSources],
+          notes: [
+            `provider:${activeProvider}`,
+            `toolRounds:${toolRound}`,
+            `fallbackToOllama:${runMetrics.fallbackToOllama}`,
+          ],
+        }).catch((error) => {
+          this.logger.warn(`Failed to record lineage for message ${agentMsg.id}: ${this.safeError(error)}`)
+        })
 
         // 10. Auto-title: set conversation title from first exchange if not yet set
         const conv = await this.prisma.conversation.findUnique({ where: { id: conversationId } })
@@ -393,6 +515,42 @@ export class AgentService {
       model: model ?? null,
       estimatedLlmCostOnly: true,
     })
+  }
+
+  private compactRecord(value: unknown): Record<string, unknown> | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const out: Record<string, unknown> = {}
+    const entries = Object.entries(value as Record<string, unknown>).slice(0, 20)
+    for (const [key, raw] of entries) {
+      const clippedKey = key.slice(0, 80)
+      if (typeof raw === 'string') {
+        out[clippedKey] = raw.slice(0, 500)
+        continue
+      }
+      if (typeof raw === 'number' || typeof raw === 'boolean' || raw == null) {
+        out[clippedKey] = raw
+        continue
+      }
+      try {
+        out[clippedKey] = JSON.parse(JSON.stringify(raw))
+      } catch {
+        out[clippedKey] = String(raw).slice(0, 500)
+      }
+    }
+    return out
+  }
+
+  private addExternalSources(target: Set<string>, value: unknown) {
+    for (const source of this.lineage.extractExternalSources(value)) {
+      if (!source) continue
+      target.add(source)
+      if (target.size >= 80) break
+    }
+  }
+
+  private safeError(error: unknown) {
+    if (error instanceof Error) return error.message
+    return typeof error === 'string' ? error : 'Unknown error'
   }
 
   private async autoTitle(

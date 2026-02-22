@@ -44,6 +44,11 @@ export interface NanobotSkillState extends NanobotSkillManifest {
 }
 
 export type NanobotThoughtMode = 'explore' | 'plan' | 'act' | 'reflect'
+export type NanobotTaskType = 'research' | 'ops' | 'support' | 'general'
+export type NanobotThinkingDepth = 'fast' | 'balanced' | 'deep'
+export type NanobotComplexity = 'low' | 'medium' | 'high'
+export type NanobotUrgency = 'low' | 'normal' | 'high'
+export type ApprovalRiskLevel = 'low' | 'medium' | 'high'
 
 export interface NanobotPersonaProfile {
   id: string
@@ -73,11 +78,18 @@ export interface NanobotRoleDecision {
   criticConcerns: string[]
   confidence: number
   thoughtMode: NanobotThoughtMode
+  taskType: NanobotTaskType
+  thinkingDepth: NanobotThinkingDepth
+  complexity: NanobotComplexity
+  urgency: NanobotUrgency
 }
 
 export interface NanobotAliveState {
   activeGoal: string | null
   thoughtMode: NanobotThoughtMode
+  taskType: NanobotTaskType
+  thinkingDepth: NanobotThinkingDepth
+  urgency: NanobotUrgency
   confidence: number
   intentionQueue: string[]
   waitingReason: string | null
@@ -107,6 +119,9 @@ export interface NanobotBusEvent {
     | 'cron.triggered'
     | 'subagent.spawned'
     | 'subagent.completed'
+    | 'orchestration.updated'
+    | 'voice.processed'
+    | 'capture.received'
     | 'run.event'
   payload: Record<string, unknown>
   createdAt: string
@@ -129,6 +144,8 @@ export interface NanobotMarketplacePack {
   personaProfileId?: string
   skills: NanobotSkillManifest[]
   installed: boolean
+  signature?: NanobotSkillSignature
+  signatureVerified?: boolean
 }
 
 export interface NanobotMarketplaceExportInput {
@@ -149,10 +166,21 @@ export interface NanobotMarketplaceExportPack {
   skills: NanobotSkillManifest[]
 }
 
+export interface NanobotSkillSignature {
+  algorithm: 'HMAC-SHA256'
+  keyId: string
+  signedAt: string
+  value: string
+}
+
+export interface NanobotSignedMarketplacePack extends NanobotMarketplaceExportPack {
+  signature: NanobotSkillSignature
+}
+
 export interface NanobotMarketplaceExportResult {
   fileName: string
   savedAt: string
-  pack: NanobotMarketplaceExportPack
+  pack: NanobotSignedMarketplacePack
 }
 
 export interface NanobotMarketplaceInstallResult {
@@ -160,8 +188,109 @@ export interface NanobotMarketplaceInstallResult {
   installedAt: string
   installedSkills: string[]
   appliedPersonaProfileId?: string
+  signatureVerified?: boolean
   activeSkills: NanobotSkillState[]
   personality: NanobotPersonalityState
+}
+
+export interface NanobotMarketplaceVerifyResult {
+  valid: boolean
+  reason: string | null
+  signature: NanobotSkillSignature
+}
+
+export interface NanobotMarketplaceImportInput {
+  pack: NanobotSignedMarketplacePack
+}
+
+export type NanobotOrchestrationStage = 'planning' | 'executing' | 'reviewing' | 'done' | 'error'
+export type NanobotOrchestrationTaskStatus = 'queued' | 'running' | 'done' | 'error'
+
+export interface NanobotOrchestrationTask {
+  id: string
+  role: 'planner' | 'executor' | 'reviewer'
+  label: string
+  status: NanobotOrchestrationTaskStatus
+  notes: string[]
+  updatedAt: string
+}
+
+export interface NanobotOrchestrationSharedState {
+  plan: string[]
+  concerns: string[]
+  toolLog: string[]
+  summary: string | null
+}
+
+export interface NanobotOrchestrationRun {
+  runId: string
+  userId: string
+  conversationId: string
+  objective: string
+  stage: NanobotOrchestrationStage
+  sharedState: NanobotOrchestrationSharedState
+  tasks: NanobotOrchestrationTask[]
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
+}
+
+export interface NanobotVoiceTranscriptionInput {
+  transcript?: string
+  audioBase64?: string
+  locale?: string
+}
+
+export interface NanobotVoiceTranscriptionResult {
+  transcript: string
+  locale: string
+  confidence: number
+  provider: string
+}
+
+export interface NanobotVoiceSynthesisInput {
+  text: string
+  voice?: string
+  locale?: string
+  rate?: number
+  pitch?: number
+}
+
+export interface NanobotVoiceSynthesisResult {
+  text: string
+  locale: string
+  voice: string
+  ssml: string
+  estimatedDurationMs: number
+}
+
+export interface NanobotAutonomyWindow {
+  label?: string
+  days: number[]
+  start: string
+  end: string
+}
+
+export interface NanobotAutonomySchedule {
+  enabled: boolean
+  timezone: string
+  windows: NanobotAutonomyWindow[]
+  updatedAt: string
+}
+
+export interface UpdateNanobotAutonomyInput {
+  enabled?: boolean
+  timezone?: string
+  windows?: NanobotAutonomyWindow[]
+}
+
+export interface NanobotAutonomyStatus {
+  now: string
+  scheduleEnabled: boolean
+  timezone: string
+  withinWindow: boolean
+  reason: string
+  activeWindow: NanobotAutonomyWindow | null
 }
 
 export interface NanobotTrustAutonomy {
@@ -211,6 +340,80 @@ export interface NanobotTrustSnapshot {
   cost: NanobotTrustCost
 }
 
+export interface NanobotThinkingRoute {
+  thoughtMode: NanobotThoughtMode
+  thinkingDepth: NanobotThinkingDepth
+  taskType: NanobotTaskType
+  complexity: NanobotComplexity
+  urgency: NanobotUrgency
+  rationale: string
+}
+
+export interface NanobotRuntimeAutomationState {
+  updatedAt: string
+  personaAutoSwitch: {
+    enabled: boolean
+    switched: boolean
+    fromProfileId: string | null
+    toProfileId: string | null
+    reason: string
+    taskType: NanobotTaskType
+  }
+  thinkingRouter: NanobotThinkingRoute
+  approvalRisk: {
+    level: ApprovalRiskLevel
+    score: number
+    reason: string
+    autoApproved: boolean
+    autonomyWithinWindow: boolean
+    toolName: string | null
+  }
+}
+
+export interface NanobotHeartbeatRecoveryResult {
+  recovered: boolean
+  staleMs: number
+  staleSessions: number
+  actions: string[]
+  notified: boolean
+  curated: boolean
+  recoveredAt: string | null
+}
+
+export interface NanobotHeartbeatStatus {
+  lastTickAt: string | null
+  lastMissedAt: string | null
+  lastRecoveryAt: string | null
+  missedCount: number
+  recoveryCount: number
+}
+
+export interface NanobotHeartbeatTickResult {
+  userId: string
+  tickedAt: string
+  source: 'manual' | 'auto'
+  recovery: NanobotHeartbeatRecoveryResult | null
+  nightlyCurated: boolean
+}
+
+export interface NanobotMemoryCurationStatus {
+  lastCuratedAt: string | null
+  lastSource: 'manual' | 'nightly' | 'heartbeat-recovery' | null
+  summaryPoints: number
+  dedupedEntries: number
+  expiredEntries: number
+}
+
+export interface NanobotMemoryCurationResult {
+  curatedAt: string
+  source: 'manual' | 'nightly' | 'heartbeat-recovery'
+  summaryPoints: number
+  dedupedEntries: number
+  expiredEntries: number
+  memoryEntries: number
+  memoryFileBytes: number
+}
+
 export interface NanobotHealth {
   config: NanobotRuntimeConfig
   activeSessions: NanobotSessionState[]
@@ -221,6 +424,10 @@ export interface NanobotHealth {
   personality: NanobotPersonalityState
   alive: NanobotAliveState
   subagents: NanobotSubagentTask[]
+  orchestration: NanobotOrchestrationRun[]
+  runtimeAutomation: NanobotRuntimeAutomationState
+  heartbeat: NanobotHeartbeatStatus
+  memoryCuration: NanobotMemoryCurationStatus
 }
 
 export interface NanobotCronTriggerInput {

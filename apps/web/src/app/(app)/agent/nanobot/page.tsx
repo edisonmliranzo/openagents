@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { sdk } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
-import type { NanobotBusEvent, NanobotHealth, UpdateNanobotConfigInput } from '@openagents/shared'
+import type {
+  NanobotAutonomySchedule,
+  NanobotAutonomyStatus,
+  NanobotBusEvent,
+  NanobotHealth,
+  UpdateNanobotConfigInput,
+} from '@openagents/shared'
 import {
   Activity,
   Clock3,
@@ -47,8 +53,12 @@ export default function OpenAgentPage() {
   })
   const [cronJobName, setCronJobName] = useState('daily-health-check')
   const [selectedProfileId, setSelectedProfileId] = useState('operator')
+  const [autonomySchedule, setAutonomySchedule] = useState<NanobotAutonomySchedule | null>(null)
+  const [autonomyStatus, setAutonomyStatus] = useState<NanobotAutonomyStatus | null>(null)
+  const [autonomyJson, setAutonomyJson] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingConfig, setIsSavingConfig] = useState(false)
+  const [isSavingAutonomy, setIsSavingAutonomy] = useState(false)
   const [isRunningAction, setIsRunningAction] = useState(false)
   const [error, setError] = useState('')
 
@@ -56,12 +66,21 @@ export default function OpenAgentPage() {
     setIsLoading(true)
     setError('')
     try {
-      const [nextHealth, nextEvents] = await Promise.all([
+      const [nextHealth, nextEvents, nextAutonomySchedule, nextAutonomyStatus] = await Promise.all([
         sdk.nanobot.health(),
         sdk.nanobot.listEvents(80),
+        sdk.nanobot.getAutonomySchedule(),
+        sdk.nanobot.getAutonomyStatus(),
       ])
       setHealth(nextHealth)
       setEvents(nextEvents)
+      setAutonomySchedule(nextAutonomySchedule)
+      setAutonomyStatus(nextAutonomyStatus)
+      setAutonomyJson(JSON.stringify({
+        enabled: nextAutonomySchedule.enabled,
+        timezone: nextAutonomySchedule.timezone,
+        windows: nextAutonomySchedule.windows,
+      }, null, 2))
       setConfigDraft({
         enabled: nextHealth.config.enabled,
         maxLoopSteps: nextHealth.config.maxLoopSteps,
@@ -152,12 +171,40 @@ export default function OpenAgentPage() {
     setIsRunningAction(true)
     setError('')
     try {
-      await sdk.nanobot.heartbeat()
+      const result = await sdk.nanobot.heartbeat()
       const nextEvents = await sdk.nanobot.listEvents(80)
       setEvents(nextEvents)
-      addToast('info', 'Heartbeat tick sent')
+      if (result.recovery?.recovered) {
+        addToast('warning', `Heartbeat recovered after ${Math.round(result.recovery.staleMs / 1000)}s gap`)
+      } else {
+        addToast('info', 'Heartbeat tick sent')
+      }
     } catch (err: any) {
       const message = err?.message ?? 'Failed to send heartbeat'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsRunningAction(false)
+    }
+  }
+
+  async function handleCurateMemory() {
+    setIsRunningAction(true)
+    setError('')
+    try {
+      const result = await sdk.nanobot.curateMemory()
+      const [nextHealth, nextEvents] = await Promise.all([
+        sdk.nanobot.health(),
+        sdk.nanobot.listEvents(80),
+      ])
+      setHealth(nextHealth)
+      setEvents(nextEvents)
+      addToast(
+        'success',
+        `Memory curated: ${result.summaryPoints} summary points, ${result.dedupedEntries} deduped, ${result.expiredEntries} expired`,
+      )
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to run memory curator'
       setError(message)
       addToast('error', message)
     } finally {
@@ -254,6 +301,45 @@ export default function OpenAgentPage() {
     }
   }
 
+  async function handleSaveAutonomy() {
+    setIsSavingAutonomy(true)
+    setError('')
+    try {
+      const parsed = JSON.parse(autonomyJson) as {
+        enabled?: boolean
+        timezone?: string
+        windows?: Array<{ label?: string; days?: number[]; start?: string; end?: string }>
+      }
+      const next = await sdk.nanobot.updateAutonomySchedule({
+        enabled: parsed.enabled,
+        timezone: parsed.timezone,
+        windows: Array.isArray(parsed.windows)
+          ? parsed.windows.map((window) => ({
+              ...(window.label ? { label: window.label } : {}),
+              days: Array.isArray(window.days) ? window.days : [],
+              start: typeof window.start === 'string' ? window.start : '09:00',
+              end: typeof window.end === 'string' ? window.end : '17:00',
+            }))
+          : undefined,
+      })
+      const status = await sdk.nanobot.getAutonomyStatus()
+      setAutonomySchedule(next)
+      setAutonomyStatus(status)
+      setAutonomyJson(JSON.stringify({
+        enabled: next.enabled,
+        timezone: next.timezone,
+        windows: next.windows,
+      }, null, 2))
+      addToast('success', 'Autonomy windows saved')
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to save autonomy schedule'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsSavingAutonomy(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -332,6 +418,19 @@ export default function OpenAgentPage() {
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Persona Auto-Switch</p>
+              <p className="mt-1 text-xs text-slate-700">
+                task type: {health?.runtimeAutomation.personaAutoSwitch.taskType ?? 'general'}
+              </p>
+              <p className="mt-1 text-xs text-slate-700">
+                transition: {(health?.runtimeAutomation.personaAutoSwitch.fromProfileId ?? 'n/a')}
+                {' -> '}
+                {(health?.runtimeAutomation.personaAutoSwitch.toProfileId ?? 'n/a')}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">{health?.runtimeAutomation.personaAutoSwitch.reason}</p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Persona Profile</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <select
@@ -400,6 +499,29 @@ export default function OpenAgentPage() {
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Waiting Reason</p>
               <p className="mt-1 text-sm text-slate-700">{health?.alive.waitingReason ?? 'none'}</p>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Thinking Router</p>
+              <p className="mt-1 text-xs text-slate-700">
+                depth: {health?.runtimeAutomation.thinkingRouter.thinkingDepth ?? 'balanced'}
+              </p>
+              <p className="mt-1 text-xs text-slate-700">
+                complexity: {health?.runtimeAutomation.thinkingRouter.complexity ?? 'low'} / urgency: {health?.runtimeAutomation.thinkingRouter.urgency ?? 'normal'}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">{health?.runtimeAutomation.thinkingRouter.rationale}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Approval Risk</p>
+              <p className="mt-1 text-xs text-slate-700">
+                {health?.runtimeAutomation.approvalRisk.level ?? 'low'} ({health?.runtimeAutomation.approvalRisk.score ?? 0}/100)
+              </p>
+              <p className="mt-1 text-xs text-slate-700">
+                tool: {health?.runtimeAutomation.approvalRisk.toolName ?? 'n/a'}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">{health?.runtimeAutomation.approvalRisk.reason}</p>
             </div>
           </div>
 
@@ -526,6 +648,16 @@ export default function OpenAgentPage() {
             Presence Tick
           </button>
 
+          <button
+            type="button"
+            onClick={() => void handleCurateMemory()}
+            disabled={isRunningAction}
+            className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+          >
+            <ShieldCheck size={14} />
+            Run Memory Curator
+          </button>
+
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <label className="block text-xs font-medium text-slate-500">Cron job name</label>
             <input
@@ -564,6 +696,72 @@ export default function OpenAgentPage() {
             </ul>
           </div>
         </article>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Scheduled Autonomy Windows</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Outside allowed windows, direct tool actions are converted into approval requests.
+            </p>
+          </div>
+          <div
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              autonomyStatus?.withinWindow
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-amber-100 text-amber-700'
+            }`}
+          >
+            {autonomyStatus?.withinWindow ? 'inside window' : 'outside window'}
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_auto]">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">
+              Timezone: <span className="font-semibold text-slate-700">{autonomySchedule?.timezone ?? 'UTC'}</span>
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Status: <span className="text-slate-700">{autonomyStatus?.reason ?? 'n/a'}</span>
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Heartbeat: <span className="text-slate-700">
+                {health?.heartbeat.lastTickAt ? `last tick ${timeAgo(health.heartbeat.lastTickAt)}` : 'no ticks yet'}
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Recovery: <span className="text-slate-700">
+                {health?.heartbeat.recoveryCount ?? 0} recoveries / {health?.heartbeat.missedCount ?? 0} misses
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Memory Curator: <span className="text-slate-700">
+                {health?.memoryCuration.lastCuratedAt
+                  ? `${timeAgo(health.memoryCuration.lastCuratedAt)} (${health.memoryCuration.lastSource})`
+                  : 'not run yet'}
+              </span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleSaveAutonomy()}
+            disabled={isSavingAutonomy}
+            className="h-10 rounded-lg bg-indigo-500 px-4 text-xs font-semibold text-white transition hover:bg-indigo-600 disabled:opacity-50"
+          >
+            {isSavingAutonomy ? 'Saving...' : 'Save Autonomy'}
+          </button>
+        </div>
+
+        <label className="mt-3 block text-xs font-medium text-slate-500">
+          JSON schedule
+          <textarea
+            value={autonomyJson}
+            onChange={(e) => setAutonomyJson(e.target.value)}
+            rows={10}
+            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700 outline-none focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100"
+          />
+        </label>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
