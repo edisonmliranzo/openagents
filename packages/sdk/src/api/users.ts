@@ -1,5 +1,14 @@
 import type { OpenAgentsClient } from '../client'
-import type { User, UserSettings, UpdateSettingsDto, LlmApiKey, UpsertLlmKeyDto } from '@openagents/shared'
+import type {
+  User,
+  UserSettings,
+  UpdateSettingsDto,
+  LlmApiKey,
+  UpsertLlmKeyDto,
+  UserDomain,
+  CreateUserDomainDto,
+  UpdateUserDomainDto,
+} from '@openagents/shared'
 
 export interface UpdateProfileDto {
   name?: string
@@ -28,5 +37,17 @@ export function createUsersApi(client: OpenAgentsClient) {
 
     deleteLlmKey: (provider: string) =>
       client.delete<void>(`/api/v1/users/me/llm-keys/${provider}`),
+
+    listDomains: () =>
+      client.get<UserDomain[]>('/api/v1/users/me/domains'),
+
+    createDomain: (dto: CreateUserDomainDto) =>
+      client.post<UserDomain>('/api/v1/users/me/domains', dto),
+
+    updateDomain: (id: string, dto: UpdateUserDomainDto) =>
+      client.patch<UserDomain>(`/api/v1/users/me/domains/${id}`, dto),
+
+    deleteDomain: (id: string) =>
+      client.delete<{ ok: true }>(`/api/v1/users/me/domains/${id}`),
   }
 }

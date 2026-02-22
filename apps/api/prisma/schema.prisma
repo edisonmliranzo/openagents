@@ -25,6 +25,7 @@ model User {
   memories       Memory[]
   refreshTokens  RefreshToken[]
   settings       UserSettings?
+  domains        UserDomain[]
   auditLogs      AuditLog[]
   notifications  Notification[]
   cronJobs       CronJob[]
@@ -153,6 +154,23 @@ model UserSettings {
   updatedAt          DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserDomain {
+  id                String   @id @default(cuid())
+  userId            String
+  domain            String
+  status            String   @default("pending") // pending | active | error
+  provider          String   @default("manual")  // manual | cloudflare | caddy | nginx
+  targetHost        String?  // public IP/host and port, e.g. 203.0.113.10:4300
+  proxyInstructions String?  // free-form notes
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domain])
+  @@index([userId, createdAt])
 }
 
 model AuditLog {
