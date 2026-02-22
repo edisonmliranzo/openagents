@@ -1,5 +1,6 @@
 import type { ChannelRuntimeStatus } from './channels'
 import type { SystemCostBreakdown } from './system'
+import type { UserRole } from './user'
 
 export type PlatformPlanId = 'free' | 'pro' | 'team'
 export type PlatformTemplateRequiredPlan = PlatformPlanId
@@ -172,3 +173,60 @@ export interface PlatformInboxSnapshot {
   threads: PlatformInboxThread[]
 }
 
+export interface PlatformAdminDailyPoint {
+  date: string
+  newUsers: number
+  newDevices: number
+  activeDevices: number
+}
+
+export interface PlatformAdminRecentDevice {
+  id: string
+  userId: string
+  email: string
+  role: UserRole
+  userAgent: string | null
+  ipAddress: string | null
+  firstSeenAt: string
+  lastSeenAt: string
+  loginCount: number
+}
+
+export interface PlatformAdminTopUser {
+  userId: string
+  email: string
+  role: UserRole
+  devices: number
+  loginEvents: number
+  lastSeenAt: string | null
+}
+
+export interface PlatformAdminOverviewSnapshot {
+  generatedAt: string
+  viewer: {
+    id: string
+    email: string
+    role: UserRole
+  }
+  totals: {
+    totalUsers: number
+    owners: number
+    admins: number
+    members: number
+    newUsers30d: number
+    activeUsers30d: number
+    totalConversations: number
+    totalMessages: number
+    pendingApprovals: number
+    trackedDevices: number
+    newDevices30d: number
+    activeDevices30d: number
+    totalDeviceLoginEvents: number
+    linkedWhatsAppDevices: number
+    mappedDomains: number
+    llmKeysConfigured: number
+  }
+  daily: PlatformAdminDailyPoint[]
+  topUsers: PlatformAdminTopUser[]
+  recentDevices: PlatformAdminRecentDevice[]
+}

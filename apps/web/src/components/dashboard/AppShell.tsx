@@ -38,7 +38,7 @@ interface NavGroup {
   items: NavItem[]
 }
 
-const NAV_GROUPS: NavGroup[] = [
+const BASE_NAV_GROUPS: NavGroup[] = [
   {
     title: 'Workspace',
     items: [
@@ -110,6 +110,18 @@ export function AppShell({ children }: AppShellProps) {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const notifRef = useRef<HTMLDivElement | null>(null)
   const profileSyncedRef = useRef(false)
+  const isOwnerUser = (user?.role ?? '').toLowerCase() === 'owner'
+
+  const navGroups = useMemo<NavGroup[]>(() => {
+    if (!isOwnerUser) return BASE_NAV_GROUPS
+    return [
+      ...BASE_NAV_GROUPS,
+      {
+        title: 'Creator',
+        items: [{ label: 'Admin', href: '/control/admin', icon: ShieldCheck }],
+      },
+    ]
+  }, [isOwnerUser])
 
   useEffect(() => {
     try {
@@ -140,12 +152,16 @@ export function AppShell({ children }: AppShellProps) {
   }, [hydrated, accessToken, router])
 
   useEffect(() => {
-    if (!hydrated || !accessToken || user || profileSyncedRef.current) return
+    profileSyncedRef.current = false
+  }, [accessToken])
+
+  useEffect(() => {
+    if (!hydrated || !accessToken || profileSyncedRef.current) return
     profileSyncedRef.current = true
     if (typeof syncUser === 'function') {
       void syncUser()
     }
-  }, [hydrated, accessToken, user, syncUser])
+  }, [hydrated, accessToken, syncUser])
 
   const loadNotifications = useCallback(async () => {
     if (!accessToken) return
@@ -187,7 +203,7 @@ export function AppShell({ children }: AppShellProps) {
   )
 
   const activeRouteLabel =
-    NAV_GROUPS.flatMap((group) => group.items).find((item) => isActivePath(pathname, item.href))?.label ??
+    navGroups.flatMap((group) => group.items).find((item) => isActivePath(pathname, item.href))?.label ??
     'Dashboard'
 
   async function handleSignOut() {
@@ -265,7 +281,7 @@ export function AppShell({ children }: AppShellProps) {
         <div className="mx-4 mb-3 h-px bg-white/5" />
 
         <nav className="flex-1 space-y-5 px-3 pb-4">
-          {NAV_GROUPS.map((group) => (
+          {navGroups.map((group) => (
             <div key={group.title}>
               <p className="mb-1.5 px-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-600">
                 {group.title}

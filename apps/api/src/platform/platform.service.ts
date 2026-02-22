@@ -9,6 +9,9 @@ import { LabsService } from '../labs/labs.service'
 import { WhatsAppService } from '../channels/whatsapp/whatsapp.service'
 import { NanobotMarketplaceService } from '../nanobot/marketplace/nanobot-marketplace.service'
 import type {
+  PlatformAdminDailyPoint,
+  PlatformAdminOverviewSnapshot,
+  PlatformAdminTopUser,
   ChannelRuntimeStatus,
   PlatformBillingChannelRow,
   PlatformBillingSnapshot,
@@ -27,6 +30,7 @@ import type {
   PlatformSubscriptionSnapshot,
   PlatformTemplate,
   PlatformTemplateInstallResult,
+  UserRole,
 } from '@openagents/shared'
 
 interface PlatformPlanDef {
@@ -607,6 +611,174 @@ export class PlatformService {
     }
   }
 
+  async adminOverview(
+    viewer: { id: string; email: string; role: string },
+    days = 30,
+    limit = 40,
+  ): Promise<PlatformAdminOverviewSnapshot> {
+    const now = new Date()
+    const safeDays = Math.max(7, Math.min(days, 120))
+    const safeLimit = Math.max(5, Math.min(limit, 200))
+    const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const since = new Date(now.getTime() - safeDays * 24 * 60 * 60 * 1000)
+
+    const [
+      totalUsers,
+      owners,
+      admins,
+      members,
+      newUsers30d,
+      totalConversations,
+      totalMessages,
+      pendingApprovals,
+      trackedDevices,
+      newDevices30d,
+      activeDevices30d,
+      deviceLoginAgg,
+      linkedWhatsAppDevices,
+      mappedDomains,
+      llmKeysConfigured,
+      activeUsersByDevice,
+      activeUsersByConversation,
+      userCreatedRows,
+      newDeviceRows,
+      activeDeviceRows,
+      recentDeviceRows,
+      topUserDeviceRows,
+    ] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.user.count({ where: { role: 'owner' } }),
+      this.prisma.user.count({ where: { role: 'admin' } }),
+      this.prisma.user.count({ where: { role: 'member' } }),
+      this.prisma.user.count({ where: { createdAt: { gte: since30d } } }),
+      this.prisma.conversation.count(),
+      this.prisma.message.count(),
+      this.prisma.approval.count({ where: { status: 'pending' } }),
+      this.prisma.deviceInstall.count(),
+      this.prisma.deviceInstall.count({ where: { firstSeenAt: { gte: since30d } } }),
+      this.prisma.deviceInstall.count({ where: { lastSeenAt: { gte: since30d } } }),
+      this.prisma.deviceInstall.aggregate({ _sum: { loginCount: true } }),
+      this.prisma.whatsAppDevice.count(),
+      this.prisma.userDomain.count(),
+      this.prisma.llmApiKey.count({ where: { isActive: true } }),
+      this.prisma.deviceInstall.findMany({
+        where: { lastSeenAt: { gte: since30d } },
+        distinct: ['userId'],
+        select: { userId: true },
+      }),
+      this.prisma.conversation.findMany({
+        where: { updatedAt: { gte: since30d } },
+        distinct: ['userId'],
+        select: { userId: true },
+      }),
+      this.prisma.user.findMany({
+        where: { createdAt: { gte: since } },
+        select: { createdAt: true },
+      }),
+      this.prisma.deviceInstall.findMany({
+        where: { firstSeenAt: { gte: since } },
+        select: { firstSeenAt: true },
+      }),
+      this.prisma.deviceInstall.findMany({
+        where: { lastSeenAt: { gte: since } },
+        select: { lastSeenAt: true },
+      }),
+      this.prisma.deviceInstall.findMany({
+        orderBy: { lastSeenAt: 'desc' },
+        take: safeLimit,
+        include: {
+          user: {
+            select: { id: true, email: true, role: true },
+          },
+        },
+      }),
+      this.prisma.deviceInstall.groupBy({
+        by: ['userId'],
+        _count: { userId: true },
+        _sum: { loginCount: true },
+        _max: { lastSeenAt: true },
+        orderBy: { _count: { userId: 'desc' } },
+        take: Math.min(20, safeLimit),
+      }),
+    ])
+
+    const activeUserIds = new Set<string>()
+    for (const row of activeUsersByDevice) activeUserIds.add(row.userId)
+    for (const row of activeUsersByConversation) activeUserIds.add(row.userId)
+    const activeUsers30d = activeUserIds.size
+
+    const topUserIds = topUserDeviceRows.map((row) => row.userId)
+    const topUserProfiles = topUserIds.length > 0
+      ? await this.prisma.user.findMany({
+        where: { id: { in: topUserIds } },
+        select: { id: true, email: true, role: true },
+      })
+      : []
+    const topUserMap = new Map(topUserProfiles.map((row) => [row.id, row]))
+
+    const topUsers: PlatformAdminTopUser[] = topUserDeviceRows.map((row) => {
+      const profile = topUserMap.get(row.userId)
+      return {
+        userId: row.userId,
+        email: profile?.email ?? 'unknown',
+        role: this.normalizeUserRole(profile?.role ?? 'member'),
+        devices: row._count.userId,
+        loginEvents: row._sum.loginCount ?? 0,
+        lastSeenAt: row._max.lastSeenAt?.toISOString() ?? null,
+      }
+    })
+
+    const recentDevices = recentDeviceRows.map((row) => ({
+      id: row.id,
+      userId: row.userId,
+      email: row.user.email,
+      role: this.normalizeUserRole(row.user.role),
+      userAgent: row.userAgent ?? null,
+      ipAddress: row.ipAddress ?? null,
+      firstSeenAt: row.firstSeenAt.toISOString(),
+      lastSeenAt: row.lastSeenAt.toISOString(),
+      loginCount: row.loginCount,
+    }))
+
+    const daily = this.buildAdminDailySeries(
+      safeDays,
+      now,
+      userCreatedRows.map((row) => row.createdAt),
+      newDeviceRows.map((row) => row.firstSeenAt),
+      activeDeviceRows.map((row) => row.lastSeenAt),
+    )
+
+    return {
+      generatedAt: now.toISOString(),
+      viewer: {
+        id: viewer.id,
+        email: viewer.email,
+        role: this.normalizeUserRole(viewer.role),
+      },
+      totals: {
+        totalUsers,
+        owners,
+        admins,
+        members,
+        newUsers30d,
+        activeUsers30d,
+        totalConversations,
+        totalMessages,
+        pendingApprovals,
+        trackedDevices,
+        newDevices30d,
+        activeDevices30d,
+        totalDeviceLoginEvents: deviceLoginAgg._sum.loginCount ?? 0,
+        linkedWhatsAppDevices,
+        mappedDomains,
+        llmKeysConfigured,
+      },
+      daily,
+      topUsers,
+      recentDevices,
+    }
+  }
+
   private buildFeatureGates(planId: PlatformPlanId): PlatformFeatureGate[] {
     const proOrTeam = planId === 'pro' || planId === 'team'
     const teamOnly = planId === 'team'
@@ -708,6 +880,56 @@ export class PlatformService {
     return Math.round(value * 10000) / 10000
   }
 
+  private normalizeUserRole(role: string): UserRole {
+    const normalized = role.trim().toLowerCase()
+    if (normalized === 'owner' || normalized === 'admin' || normalized === 'member') {
+      return normalized
+    }
+    return 'member'
+  }
+
+  private toDateKey(value: Date) {
+    return value.toISOString().slice(0, 10)
+  }
+
+  private buildAdminDailySeries(
+    days: number,
+    now: Date,
+    userCreatedAt: Date[],
+    deviceFirstSeenAt: Date[],
+    deviceLastSeenAt: Date[],
+  ): PlatformAdminDailyPoint[] {
+    const dateKeys: string[] = []
+    for (let offset = days - 1; offset >= 0; offset -= 1) {
+      const date = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000)
+      dateKeys.push(this.toDateKey(date))
+    }
+
+    const usersMap = new Map(dateKeys.map((key) => [key, 0]))
+    const newDevicesMap = new Map(dateKeys.map((key) => [key, 0]))
+    const activeDevicesMap = new Map(dateKeys.map((key) => [key, 0]))
+
+    for (const date of userCreatedAt) {
+      const key = this.toDateKey(date)
+      if (usersMap.has(key)) usersMap.set(key, (usersMap.get(key) ?? 0) + 1)
+    }
+    for (const date of deviceFirstSeenAt) {
+      const key = this.toDateKey(date)
+      if (newDevicesMap.has(key)) newDevicesMap.set(key, (newDevicesMap.get(key) ?? 0) + 1)
+    }
+    for (const date of deviceLastSeenAt) {
+      const key = this.toDateKey(date)
+      if (activeDevicesMap.has(key)) activeDevicesMap.set(key, (activeDevicesMap.get(key) ?? 0) + 1)
+    }
+
+    return dateKeys.map((date) => ({
+      date,
+      newUsers: usersMap.get(date) ?? 0,
+      newDevices: newDevicesMap.get(date) ?? 0,
+      activeDevices: activeDevicesMap.get(date) ?? 0,
+    }))
+  }
+
   private channelFromSessionLabel(sessionLabel: string | null): PlatformChannelId {
     const normalized = (sessionLabel ?? '').trim().toLowerCase()
     if (!normalized) return 'web'
@@ -795,4 +1017,3 @@ export class PlatformService {
     return path.join(root, `${userId}.json`)
   }
 }
-

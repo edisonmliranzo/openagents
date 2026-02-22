@@ -47,7 +47,7 @@ COPY --from=api-build /app /app
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "pnpm --filter @openagents/api exec prisma migrate deploy && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "(pnpm --filter @openagents/api exec prisma migrate deploy || pnpm --filter @openagents/api exec prisma db push) && node apps/api/dist/main.js"]
 
 FROM base AS web-build
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001

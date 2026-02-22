@@ -7,7 +7,7 @@
     "build": "nest build",
     "start": "node dist/main",
     "type-check": "tsc -p tsconfig.json --noEmit",
-    "db:migrate": "prisma migrate dev",
+    "db:migrate": "prisma db push",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "db:seed": "ts-node prisma/seed.ts"

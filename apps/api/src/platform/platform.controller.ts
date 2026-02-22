@@ -3,6 +3,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsArray, IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
+import { RolesGuard } from '../auth/guards/roles.guard'
+import { Roles } from '../auth/decorators/roles.decorator'
 import { PlatformService } from './platform.service'
 import type { PlatformPlanId } from '@openagents/shared'
 
@@ -88,5 +90,15 @@ export class PlatformController {
     const safe = Number.isFinite(parsed) ? parsed : 80
     return this.platform.inbox(req.user.id, safe)
   }
-}
 
+  @Get('admin/overview')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('owner')
+  adminOverview(@Req() req: any, @Query('days') days?: string, @Query('limit') limit?: string) {
+    const parsedDays = Number.parseInt(days ?? '30', 10)
+    const parsedLimit = Number.parseInt(limit ?? '40', 10)
+    const safeDays = Number.isFinite(parsedDays) ? Math.max(7, Math.min(parsedDays, 120)) : 30
+    const safeLimit = Number.isFinite(parsedLimit) ? Math.max(5, Math.min(parsedLimit, 200)) : 40
+    return this.platform.adminOverview(req.user, safeDays, safeLimit)
+  }
+}
