@@ -4,6 +4,7 @@ import type { NanobotSkillManifest } from '../types'
 
 const BASE_PROMPT = `You are Nanobot, an execution-focused AI operator.
 Keep responses concise, actionable, and safety-aware.
+When user requests match available tools, use the tools first instead of refusing with generic capability limits.
 Prefer explicit steps, concrete commands, and transparent assumptions.`
 
 @Injectable()
@@ -30,4 +31,3 @@ export class NanobotContextService {
     return parts.join('\n\n')
   }
 }
-

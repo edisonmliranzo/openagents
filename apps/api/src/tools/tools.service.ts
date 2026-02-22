@@ -7,6 +7,7 @@ import { NotesTool } from './connectors/notes.tool'
 import { WebSearchTool } from './connectors/web-search.tool'
 import { TimeTool } from './connectors/time.tool'
 import { CronTool } from './connectors/cron.tool'
+import { BybitTool } from './connectors/bybit.tool'
 import type { ToolResult } from '@openagents/shared'
 
 export interface ToolDefinition {
@@ -30,6 +31,7 @@ export class ToolsService {
     private webSearch: WebSearchTool,
     private time: TimeTool,
     private cron: CronTool,
+    private bybit: BybitTool,
   ) {
     this.registry = new Map([
       ['gmail_search', { def: this.gmail.searchDef, execute: this.gmail.search.bind(this.gmail) }],
@@ -44,6 +46,10 @@ export class ToolsService {
       ['cron_remove', { def: this.cron.removeDef, execute: this.cron.remove.bind(this.cron) }],
       ['notes_create', { def: this.notes.createDef, execute: this.notes.create.bind(this.notes) }],
       ['notes_list', { def: this.notes.listDef, execute: this.notes.list.bind(this.notes) }],
+      ['bybit_get_ticker', { def: this.bybit.tickerDef, execute: this.bybit.getTicker.bind(this.bybit) }],
+      ['bybit_get_positions', { def: this.bybit.positionsDef, execute: this.bybit.getPositions.bind(this.bybit) }],
+      ['bybit_get_wallet_balance', { def: this.bybit.walletBalanceDef, execute: this.bybit.getWalletBalance.bind(this.bybit) }],
+      ['bybit_place_demo_order', { def: this.bybit.placeDemoOrderDef, execute: this.bybit.placeDemoOrder.bind(this.bybit) }],
     ])
   }
 

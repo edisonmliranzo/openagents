@@ -630,6 +630,12 @@ export class NanobotLoopService {
     const normalized = topic.toLowerCase()
     const tools = new Set<string>(['notes'])
 
+    if (/(bybit|futures|perp|perpetual)/i.test(normalized)) {
+      tools.add('bybit_get_ticker')
+      tools.add('bybit_get_positions')
+      tools.add('bybit_get_wallet_balance')
+      tools.add('bybit_place_demo_order')
+    }
     if (/(binance|crypto|bitcoin|eth|trading|market)/i.test(normalized)) {
       tools.add('web_search')
       tools.add('web_fetch')

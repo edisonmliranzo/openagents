@@ -52,6 +52,30 @@ const MARKETPLACE_PACKS: PackDefinition[] = [
     ],
   },
   {
+    id: 'bybit-demo-ops',
+    version: '1.0.0',
+    title: 'Bybit Demo Ops',
+    description: 'Bybit demo futures workflow pack for market checks, risk review, and paper-order execution.',
+    tags: ['finance', 'crypto', 'bybit', 'futures', 'demo'],
+    personaProfileId: 'strategist',
+    skills: [
+      {
+        id: 'custom-bybit-demo-scout',
+        title: 'Bybit Demo Scout',
+        description: 'Pull Bybit ticker, positions, and wallet context before proposing trade actions.',
+        tools: ['bybit_get_ticker', 'bybit_get_positions', 'bybit_get_wallet_balance', 'notes'],
+        promptAppendix: 'Use Bybit private tools only with approval. Always include risk limits and invalidation levels.',
+      },
+      {
+        id: 'custom-bybit-demo-execution',
+        title: 'Bybit Demo Execution',
+        description: 'Execute demo orders with explicit side, quantity, and safety checks.',
+        tools: ['bybit_place_demo_order', 'bybit_get_positions', 'notes'],
+        promptAppendix: 'Only place demo/testnet orders. Confirm symbol, side, qty, and stop-loss before execution.',
+      },
+    ],
+  },
+  {
     id: 'builder-fastlane',
     version: '1.0.0',
     title: 'Builder Fastlane',
