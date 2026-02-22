@@ -31,12 +31,12 @@ export class AuthController {
 
   @Post('register')
   register(@Body() dto: RegisterDto, @Req() req: any) {
-    return this.auth.register(dto.email, dto.password, dto.name, this.getClientIp(req))
+    return this.auth.register(dto.email, dto.password, dto.name, this.getClientIp(req), this.getUserAgent(req))
   }
 
   @Post('login')
   login(@Body() dto: LoginDto, @Req() req: any) {
-    return this.auth.login(dto.email, dto.password, this.getClientIp(req))
+    return this.auth.login(dto.email, dto.password, this.getClientIp(req), this.getUserAgent(req))
   }
 
   @Post('refresh')
@@ -67,5 +67,16 @@ export class AuthController {
       return forwarded.split(',')[0]?.trim() ?? 'unknown'
     }
     return String(req?.ip ?? req?.socket?.remoteAddress ?? 'unknown').trim()
+  }
+
+  private getUserAgent(req: any) {
+    const raw = req?.headers?.['user-agent']
+    if (Array.isArray(raw) && raw.length > 0) {
+      return String(raw[0]).trim()
+    }
+    if (typeof raw === 'string' && raw.trim()) {
+      return raw.trim()
+    }
+    return 'unknown'
   }
 }

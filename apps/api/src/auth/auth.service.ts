@@ -16,9 +16,16 @@ export class AuthService {
     private authRateLimit: AuthRateLimitService,
   ) {}
 
-  async register(email: string, password: string, name?: string, _clientIp = 'unknown') {
+  async register(
+    email: string,
+    password: string,
+    name?: string,
+    clientIp = 'unknown',
+    userAgent = 'unknown',
+  ) {
     const normalizedEmail = this.normalizeEmail(email)
     this.validatePasswordStrength(password)
+    const shouldAssignOwner = this.isCreatorEmail(normalizedEmail)
 
     const existing = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
     if (existing) throw new ConflictException('Email already in use')
@@ -27,19 +34,25 @@ export class AuthService {
     const trimmedName = name?.trim() || undefined
 
     const user = await this.prisma.user.create({
-      data: { email: normalizedEmail, passwordHash, ...(trimmedName ? { name: trimmedName } : {}) },
+      data: {
+        email: normalizedEmail,
+        passwordHash,
+        ...(trimmedName ? { name: trimmedName } : {}),
+        ...(shouldAssignOwner ? { role: 'owner' } : {}),
+      },
       select: { id: true, email: true, name: true, avatarUrl: true, role: true, createdAt: true },
     })
+    await this.recordDeviceInstall(user.id, clientIp, userAgent)
 
     const tokens = await this.generateTokens(user.id, user.email)
     return { user, tokens }
   }
 
-  async login(email: string, password: string, clientIp = 'unknown') {
+  async login(email: string, password: string, clientIp = 'unknown', userAgent = 'unknown') {
     const normalizedEmail = this.normalizeEmail(email)
     this.authRateLimit.assertLoginAllowed(normalizedEmail, clientIp)
 
-    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
+    let user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
     if (!user) {
       this.authRateLimit.recordLoginFailure(normalizedEmail, clientIp)
       throw new UnauthorizedException('Invalid credentials')
@@ -52,6 +65,8 @@ export class AuthService {
     }
 
     this.authRateLimit.clearLoginFailures(normalizedEmail)
+    user = await this.ensureCreatorOwnerRole(user)
+    await this.recordDeviceInstall(user.id, clientIp, userAgent)
 
     const { passwordHash: _, ...safeUser } = user
     const tokens = await this.generateTokens(user.id, user.email)
@@ -132,6 +147,81 @@ export class AuthService {
 
   private hashRefreshToken(token: string) {
     return createHash('sha256').update(token).digest('hex')
+  }
+
+  private creatorEmails() {
+    const direct = this.config.get<string>('CREATOR_EMAIL') ?? ''
+    const list = this.config.get<string>('CREATOR_EMAILS') ?? ''
+    const emails = [direct, ...list.split(',')]
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+    return new Set(emails)
+  }
+
+  private isCreatorEmail(email: string) {
+    return this.creatorEmails().has(email.trim().toLowerCase())
+  }
+
+  private async ensureCreatorOwnerRole(user: {
+    id: string
+    email: string
+    role: string
+    passwordHash: string
+    name: string | null
+    avatarUrl: string | null
+    createdAt: Date
+    updatedAt: Date
+  }) {
+    if (!this.isCreatorEmail(user.email)) return user
+    if ((user.role ?? '').toLowerCase() === 'owner') return user
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: { role: 'owner' },
+    })
+  }
+
+  private normalizeClientIp(value: string) {
+    const raw = value.trim()
+    if (!raw || raw.toLowerCase() === 'unknown') return null
+    return raw.slice(0, 96)
+  }
+
+  private normalizeUserAgent(value: string) {
+    const raw = value.trim()
+    if (!raw || raw.toLowerCase() === 'unknown') return null
+    return raw.slice(0, 1024)
+  }
+
+  private hashDeviceFingerprint(userAgent: string | null, ipAddress: string | null) {
+    const ua = userAgent ?? 'unknown-agent'
+    const ip = ipAddress ?? 'unknown-ip'
+    return createHash('sha256').update(`${ua}|${ip}`).digest('hex')
+  }
+
+  private async recordDeviceInstall(userId: string, clientIp: string, userAgent: string) {
+    const ipAddress = this.normalizeClientIp(clientIp)
+    const normalizedAgent = this.normalizeUserAgent(userAgent)
+    const deviceHash = this.hashDeviceFingerprint(normalizedAgent, ipAddress)
+
+    try {
+      await this.prisma.deviceInstall.upsert({
+        where: { userId_deviceHash: { userId, deviceHash } },
+        update: {
+          userAgent: normalizedAgent,
+          ipAddress,
+          lastSeenAt: new Date(),
+          loginCount: { increment: 1 },
+        },
+        create: {
+          userId,
+          deviceHash,
+          userAgent: normalizedAgent,
+          ipAddress,
+        },
+      })
+    } catch {
+      // Device analytics should never block auth flow.
+    }
   }
 
   private normalizeEmail(email: string) {

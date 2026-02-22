@@ -1,6 +1,7 @@
 import type { OpenAgentsClient } from '../client'
 import type {
   PlatformBillingSnapshot,
+  PlatformAdminOverviewSnapshot,
   PlatformEvalRunInput,
   PlatformEvalRunResult,
   PlatformEvalSuite,
@@ -18,6 +19,11 @@ export interface PlatformBillingQuery {
 }
 
 export interface PlatformInboxQuery {
+  limit?: number
+}
+
+export interface PlatformAdminOverviewQuery {
+  days?: number
   limit?: number
 }
 
@@ -56,6 +62,17 @@ export function createPlatformApi(client: OpenAgentsClient) {
       const qs = params.toString()
       return client.get<PlatformInboxSnapshot>(`/api/v1/platform/inbox${qs ? `?${qs}` : ''}`)
     },
+
+    adminOverview: (query: PlatformAdminOverviewQuery = {}) => {
+      const params = new URLSearchParams()
+      if (Number.isFinite(query.days) && Number(query.days) > 0) {
+        params.set('days', `${Math.floor(Number(query.days))}`)
+      }
+      if (Number.isFinite(query.limit) && Number(query.limit) > 0) {
+        params.set('limit', `${Math.floor(Number(query.limit))}`)
+      }
+      const qs = params.toString()
+      return client.get<PlatformAdminOverviewSnapshot>(`/api/v1/platform/admin/overview${qs ? `?${qs}` : ''}`)
+    },
   }
 }
-

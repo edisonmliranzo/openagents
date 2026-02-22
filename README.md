@@ -172,6 +172,7 @@ Then edit `infra/docker/.env.prod` and set real values for:
 - host ports if needed: `WEB_HOST_PORT`, `API_HOST_PORT`, `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`
 - API runtime port (inside container): `API_PORT` (default `3001`)
 - matching URLs: `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`
+- private creator bootstrap email(s): `CREATOR_EMAIL` or `CREATOR_EMAILS`
 
 ### 2. Build and start production stack
 
@@ -469,6 +470,15 @@ Key env vars in `apps/api/.env`:
 - `WHATSAPP_DEFAULT_USER_ID`
 - `WHATSAPP_PAIR_COMMAND`
 - `WHATSAPP_WEBHOOK_TOKEN` (optional)
+- `CREATOR_EMAIL` (optional, private owner bootstrap email)
+- `CREATOR_EMAILS` (optional, comma-separated private owner bootstrap emails)
+
+Creator-only admin dashboard:
+
+- Set `CREATOR_EMAIL` (or `CREATOR_EMAILS`) in `apps/api/.env` with your private email.
+- On next register/login, that account is promoted to `owner`.
+- Only the `owner` account can access private install/device analytics at `/control/admin`.
+- Do not commit real creator emails to Git; keep them only in runtime env files or VPS secrets.
 
 For Docker production stack, set these in `infra/docker/.env.prod`.
 

@@ -130,11 +130,7 @@ const OPENAGENT_STACK = [
 
 function isCreatorUser(user: { role?: string | null; email?: string | null }) {
   const role = (user.role ?? '').toLowerCase()
-  if (role === 'owner' || role === 'admin') return true
-
-  const creatorEmail = (process.env.NEXT_PUBLIC_CREATOR_EMAIL ?? '').trim().toLowerCase()
-  if (!creatorEmail) return false
-  return (user.email ?? '').toLowerCase() === creatorEmail
+  return role === 'owner' || role === 'admin'
 }
 
 export default function RootPage() {
