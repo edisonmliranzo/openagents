@@ -1,19 +1,20 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import {
   IsArray,
   IsBoolean,
   IsInt,
+  IsNumber,
+  IsObject,
   IsOptional,
   IsString,
-  Max,
   MaxLength,
+  Max,
   Min,
   MinLength,
 } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { NanobotService } from './nanobot.service'
-import { NanobotHeartbeatService } from './heartbeat/nanobot-heartbeat.service'
 
 class UpdateNanobotConfigDto {
   @IsOptional()
@@ -92,15 +93,83 @@ class SelfHealCronDto {
   staleAfterMinutes?: number
 }
 
+class ImportMarketplaceDto {
+  @IsObject()
+  pack: Record<string, unknown>
+}
+
+class VoiceTranscribeDto {
+  @IsString()
+  @IsOptional()
+  transcript?: string
+
+  @IsString()
+  @IsOptional()
+  audioBase64?: string
+
+  @IsString()
+  @IsOptional()
+  locale?: string
+}
+
+class VoiceSpeakDto {
+  @IsString()
+  @MinLength(1)
+  text: string
+
+  @IsString()
+  @IsOptional()
+  voice?: string
+
+  @IsString()
+  @IsOptional()
+  locale?: string
+
+  @IsNumber()
+  @IsOptional()
+  rate?: number
+
+  @IsNumber()
+  @IsOptional()
+  pitch?: number
+}
+
+class AutonomyWindowDto {
+  @IsString()
+  @IsOptional()
+  label?: string
+
+  @IsArray()
+  @IsInt({ each: true })
+  days: number[]
+
+  @IsString()
+  start: string
+
+  @IsString()
+  end: string
+}
+
+class UpdateAutonomyDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean
+
+  @IsOptional()
+  @IsString()
+  timezone?: string
+
+  @IsOptional()
+  @IsArray()
+  windows?: AutonomyWindowDto[]
+}
+
 @ApiTags('nanobot')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('nanobot')
 export class NanobotController {
-  constructor(
-    private nanobot: NanobotService,
-    private heartbeat: NanobotHeartbeatService,
-  ) {}
+  constructor(private nanobot: NanobotService) {}
 
   @Get('health')
   health(@Req() req: any) {
@@ -170,7 +239,7 @@ export class NanobotController {
 
   @Post('heartbeat')
   heartbeatTick(@Req() req: any) {
-    return this.heartbeat.tick(req.user.id)
+    return this.nanobot.heartbeatTick(req.user.id)
   }
 
   @Post('presence/tick')
@@ -191,6 +260,58 @@ export class NanobotController {
   @Post('marketplace/export')
   exportMarketplacePack(@Req() req: any, @Body() dto: ExportMarketplaceDto) {
     return this.nanobot.exportMarketplacePack(req.user.id, dto)
+  }
+
+  @Post('marketplace/verify')
+  verifyMarketplacePack(@Body() dto: ImportMarketplaceDto) {
+    return this.nanobot.verifyMarketplacePack(dto as any)
+  }
+
+  @Post('marketplace/import')
+  importMarketplacePack(@Req() req: any, @Body() dto: ImportMarketplaceDto) {
+    return this.nanobot.importMarketplacePack(req.user.id, dto as any)
+  }
+
+  @Get('orchestration/runs')
+  orchestrationRuns(@Req() req: any, @Query('limit') limit?: string) {
+    const parsed = Number.parseInt(limit ?? '20', 10)
+    const safe = Number.isFinite(parsed) ? parsed : 20
+    return this.nanobot.listOrchestrationRuns(req.user.id, safe)
+  }
+
+  @Get('orchestration/runs/:runId')
+  orchestrationRun(@Req() req: any, @Param('runId') runId: string) {
+    return this.nanobot.getOrchestrationRun(req.user.id, runId)
+  }
+
+  @Post('voice/transcribe')
+  transcribe(@Req() req: any, @Body() dto: VoiceTranscribeDto) {
+    return this.nanobot.transcribeVoice(req.user.id, dto)
+  }
+
+  @Post('voice/speak')
+  speak(@Req() req: any, @Body() dto: VoiceSpeakDto) {
+    return this.nanobot.speakVoice(req.user.id, dto)
+  }
+
+  @Get('autonomy/windows')
+  autonomyWindows(@Req() req: any) {
+    return this.nanobot.getAutonomyWindows(req.user.id)
+  }
+
+  @Put('autonomy/windows')
+  updateAutonomyWindows(@Req() req: any, @Body() dto: UpdateAutonomyDto) {
+    return this.nanobot.updateAutonomyWindows(req.user.id, dto)
+  }
+
+  @Get('autonomy/status')
+  autonomyStatus(@Req() req: any) {
+    return this.nanobot.getAutonomyStatus(req.user.id)
+  }
+
+  @Post('memory/curate')
+  memoryCurate(@Req() req: any) {
+    return this.nanobot.curateMemory(req.user.id)
   }
 
   @Get('trust')

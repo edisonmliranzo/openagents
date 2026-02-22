@@ -18,6 +18,13 @@ import { LabsModule } from './labs/labs.module'
 import { WhatsAppModule } from './channels/whatsapp/whatsapp.module'
 import { PlatformModule } from './platform/platform.module'
 import { HealthModule } from './health/health.module'
+import { WorkflowsModule } from './workflows/workflows.module'
+import { MissionControlModule } from './mission-control/mission-control.module'
+import { PlaybooksModule } from './playbooks/playbooks.module'
+import { AgentVersionsModule } from './agent-versions/agent-versions.module'
+import { HandoffsModule } from './handoffs/handoffs.module'
+import { SkillReputationModule } from './skill-reputation/skill-reputation.module'
+import { DataLineageModule } from './lineage/lineage.module'
 
 @Module({
   imports: [
@@ -25,6 +32,10 @@ import { HealthModule } from './health/health.module'
     // BullModule disabled for local dev (requires Redis).
     // Enable when running with Docker: BullModule.forRoot({ redis: process.env.REDIS_URL })
     PrismaModule,
+    MissionControlModule,
+    DataLineageModule,
+    HandoffsModule,
+    SkillReputationModule,
     AuthModule,
     ConversationsModule,
     AgentModule,
@@ -42,6 +53,9 @@ import { HealthModule } from './health/health.module'
     WhatsAppModule,
     PlatformModule,
     HealthModule,
+    WorkflowsModule,
+    PlaybooksModule,
+    AgentVersionsModule,
   ],
 })
 export class AppModule {}

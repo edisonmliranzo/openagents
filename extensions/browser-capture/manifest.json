@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "OpenAgents Browser Capture",
+  "description": "Send selected web content directly to OpenAgents memory and optional tasks.",
+  "version": "0.1.0",
+  "permissions": ["contextMenus", "storage", "notifications"],
+  "host_permissions": ["http://localhost:3001/*", "http://127.0.0.1:3001/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "OpenAgents Capture"
+  },
+  "options_page": "options.html"
+}

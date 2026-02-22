@@ -9,11 +9,24 @@ import { NanobotPersonalityService } from './agent/nanobot-personality.service'
 import { NanobotAliveStateService } from './agent/nanobot-alive-state.service'
 import { NanobotCronService } from './cron/nanobot-cron.service'
 import { NanobotSubagentService } from './agent/nanobot-subagent.service'
+import { NanobotOrchestrationService } from './agent/nanobot-orchestration.service'
 import { NanobotPresenceService } from './agent/nanobot-presence.service'
+import { NanobotVoiceService } from './agent/nanobot-voice.service'
+import { NanobotRuntimeIntelligenceService } from './agent/nanobot-runtime-intelligence.service'
 import { NanobotMarketplaceService } from './marketplace/nanobot-marketplace.service'
 import { NanobotTrustService } from './trust/nanobot-trust.service'
+import { NanobotHeartbeatService } from './heartbeat/nanobot-heartbeat.service'
 import { CronService } from '../cron/cron.service'
-import type { NanobotConfigPatch, NanobotMarketplaceExportInput } from './types'
+import { MemoryService } from '../memory/memory.service'
+import { ApprovalsService } from '../approvals/approvals.service'
+import type {
+  NanobotConfigPatch,
+  NanobotMarketplaceExportInput,
+  NanobotMarketplaceImportInput,
+  NanobotVoiceSynthesisInput,
+  NanobotVoiceTranscriptionInput,
+  UpdateNanobotAutonomyInput,
+} from './types'
 import type { CronSelfHealInput } from '@openagents/shared'
 
 @Injectable()
@@ -28,11 +41,17 @@ export class NanobotService {
     private personality: NanobotPersonalityService,
     private alive: NanobotAliveStateService,
     private subagents: NanobotSubagentService,
+    private orchestration: NanobotOrchestrationService,
     private cron: NanobotCronService,
     private presence: NanobotPresenceService,
+    private voice: NanobotVoiceService,
+    private runtimeIntelligence: NanobotRuntimeIntelligenceService,
     private marketplace: NanobotMarketplaceService,
     private trust: NanobotTrustService,
+    private heartbeat: NanobotHeartbeatService,
     private cronService: CronService,
+    private memory: MemoryService,
+    private approvals: ApprovalsService,
   ) {}
 
   async health(userId: string) {
@@ -40,6 +59,8 @@ export class NanobotService {
       this.skills.listForUser(userId),
       this.personality.getForUser(userId),
     ])
+    const runtimeAutomation = this.runtimeIntelligence.getState(userId)
+    const latestRisk = this.approvals.getLatestRiskState(userId)
 
     return {
       config: this.config.toJSON(),
@@ -51,6 +72,20 @@ export class NanobotService {
       personality,
       alive: this.alive.getForUser(userId),
       subagents: this.subagents.listForUser(userId),
+      orchestration: this.orchestration.listForUser(userId, 10),
+      runtimeAutomation: {
+        ...runtimeAutomation,
+        approvalRisk: {
+          level: latestRisk.level,
+          score: latestRisk.score,
+          reason: latestRisk.reason,
+          autoApproved: latestRisk.autoApproved,
+          autonomyWithinWindow: latestRisk.autonomyWithinWindow,
+          toolName: latestRisk.toolName,
+        },
+      },
+      heartbeat: this.heartbeat.getStatus(userId),
+      memoryCuration: this.memory.getCurationStatus(userId),
     }
   }
 
@@ -102,6 +137,10 @@ export class NanobotService {
     return this.presence.tick(userId, 'manual')
   }
 
+  heartbeatTick(userId: string) {
+    return this.heartbeat.tick(userId, 'manual')
+  }
+
   listMarketplacePacks(userId: string) {
     return this.marketplace.listPacks(userId)
   }
@@ -112,6 +151,48 @@ export class NanobotService {
 
   exportMarketplacePack(userId: string, input: NanobotMarketplaceExportInput) {
     return this.marketplace.exportPack(userId, input)
+  }
+
+  verifyMarketplacePack(input: NanobotMarketplaceImportInput) {
+    return this.marketplace.verifyPack(input)
+  }
+
+  importMarketplacePack(userId: string, input: NanobotMarketplaceImportInput) {
+    return this.marketplace.importPack(userId, input)
+  }
+
+  listOrchestrationRuns(userId: string, limit?: number) {
+    return this.orchestration.listForUser(userId, limit)
+  }
+
+  getOrchestrationRun(userId: string, runId: string) {
+    return this.orchestration.getForUser(userId, runId)
+  }
+
+  transcribeVoice(userId: string, input: NanobotVoiceTranscriptionInput) {
+    this.bus.publish('voice.processed', { userId, action: 'transcribe' })
+    return this.voice.transcribe(input)
+  }
+
+  speakVoice(userId: string, input: NanobotVoiceSynthesisInput) {
+    this.bus.publish('voice.processed', { userId, action: 'speak' })
+    return this.voice.synthesize(input)
+  }
+
+  getAutonomyWindows(userId: string) {
+    return this.memory.getAutonomySchedule(userId)
+  }
+
+  updateAutonomyWindows(userId: string, input: UpdateNanobotAutonomyInput) {
+    return this.memory.updateAutonomySchedule(userId, input)
+  }
+
+  getAutonomyStatus(userId: string) {
+    return this.memory.getAutonomyStatus(userId)
+  }
+
+  curateMemory(userId: string) {
+    return this.memory.curateNightly(userId, 'manual')
   }
 
   trustSnapshot(userId: string) {

@@ -2,7 +2,8 @@
 
 import clsx from 'clsx'
 import { useCallback, useMemo, useState } from 'react'
-import type { Message } from '@openagents/shared'
+import { sdk } from '@/stores/auth'
+import type { DataLineageRecord, Message } from '@openagents/shared'
 import { Copy } from 'lucide-react'
 
 function formatClock(iso: string) {
@@ -136,6 +137,10 @@ export function MessageBubble({ message }: { message: Message }) {
   )
   const [copiedCodeIndex, setCopiedCodeIndex] = useState<number | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
+  const [lineage, setLineage] = useState<DataLineageRecord | null>(null)
+  const [lineageOpen, setLineageOpen] = useState(false)
+  const [lineageLoading, setLineageLoading] = useState(false)
+  const [lineageError, setLineageError] = useState('')
 
   const handleCopyBlock = useCallback(async (index: number, content: string) => {
     try {
@@ -159,6 +164,30 @@ export function MessageBubble({ message }: { message: Message }) {
     }
   }, [codeBlocks])
 
+  const handleToggleLineage = useCallback(async () => {
+    if (lineageOpen) {
+      setLineageOpen(false)
+      return
+    }
+
+    setLineageOpen(true)
+    if (lineage || lineageLoading) return
+
+    setLineageLoading(true)
+    setLineageError('')
+    try {
+      const result = await sdk.lineage.byMessage(message.id)
+      setLineage(result)
+      if (!result) {
+        setLineageError('No lineage recorded for this response.')
+      }
+    } catch (error: any) {
+      setLineageError(error?.message ?? 'Failed to load lineage.')
+    } finally {
+      setLineageLoading(false)
+    }
+  }, [lineage, lineageLoading, lineageOpen, message.id])
+
   if (isUser) {
     return (
       <div className="flex justify-end">
@@ -181,16 +210,25 @@ export function MessageBubble({ message }: { message: Message }) {
             <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">OpenAgent</p>
           </div>
 
-          {codeBlocks.length > 0 && (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => void handleCopyAll()}
+              onClick={() => void handleToggleLineage()}
               className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
             >
-              <Copy size={12} />
-              {copiedAll ? 'Copied' : codeBlocks.length > 1 ? 'Copy all code' : 'Copy code'}
+              Why this answer
             </button>
-          )}
+            {codeBlocks.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleCopyAll()}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                <Copy size={12} />
+                {copiedAll ? 'Copied' : codeBlocks.length > 1 ? 'Copy all code' : 'Copy code'}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-1">
@@ -234,6 +272,22 @@ export function MessageBubble({ message }: { message: Message }) {
             </div>
           )}
         </div>
+
+        {lineageOpen && (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            {lineageLoading && <p>Loading lineage...</p>}
+            {!lineageLoading && lineageError && <p className="text-amber-700 dark:text-amber-300">{lineageError}</p>}
+            {!lineageLoading && lineage && (
+              <div className="space-y-2">
+                <p className="font-semibold text-slate-800 dark:text-slate-200">Source: {lineage.source}</p>
+                <p>Memory files: {lineage.memoryFiles.length > 0 ? lineage.memoryFiles.join(', ') : 'none'}</p>
+                <p>Tools: {lineage.tools.length > 0 ? lineage.tools.map((tool) => `${tool.toolName} (${tool.status})`).join(', ') : 'none'}</p>
+                <p>External sources: {lineage.externalSources.length > 0 ? lineage.externalSources.join(', ') : 'none'}</p>
+                {lineage.notes.length > 0 && <p>Notes: {lineage.notes.join(' | ')}</p>}
+              </div>
+            )}
+          </div>
+        )}
       </article>
 
       <p className={clsx('pl-1 text-xs text-slate-400 dark:text-slate-500')}>

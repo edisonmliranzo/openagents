@@ -1,15 +1,31 @@
 import { Injectable } from '@nestjs/common'
-import type { NanobotPersonalityState, NanobotRoleDecision, NanobotThoughtMode } from '../types'
+import type {
+  NanobotComplexity,
+  NanobotPersonalityState,
+  NanobotRoleDecision,
+  NanobotThinkingDepth,
+  NanobotThinkingRoute,
+  NanobotThoughtMode,
+  NanobotUrgency,
+} from '../types'
 
 @Injectable()
 export class NanobotRoleEngineService {
-  evaluate(userMessage: string, personality: NanobotPersonalityState): NanobotRoleDecision {
+  evaluate(
+    userMessage: string,
+    personality: NanobotPersonalityState,
+    route?: NanobotThinkingRoute,
+  ): NanobotRoleDecision {
     const compact = userMessage.trim().replace(/\s+/g, ' ')
     const goal = this.extractGoal(compact)
-    const thoughtMode = this.pickThoughtMode(compact)
-    const plan = this.buildPlan(goal, thoughtMode)
+    const thoughtMode = route?.thoughtMode ?? this.pickThoughtMode(compact)
+    const thinkingDepth = route?.thinkingDepth ?? 'balanced'
+    const complexity = route?.complexity ?? 'low'
+    const urgency = route?.urgency ?? 'normal'
+    const taskType = route?.taskType ?? 'general'
+    const plan = this.buildPlan(goal, thoughtMode, thinkingDepth, urgency)
     const concerns = this.buildConcerns(compact)
-    const confidence = this.scoreConfidence(compact, personality, concerns.length)
+    const confidence = this.scoreConfidence(compact, personality, concerns.length, complexity, urgency)
 
     return {
       plannerGoal: goal,
@@ -18,6 +34,10 @@ export class NanobotRoleEngineService {
       criticConcerns: concerns,
       confidence,
       thoughtMode,
+      taskType,
+      thinkingDepth,
+      complexity,
+      urgency,
     }
   }
 
@@ -36,6 +56,10 @@ export class NanobotRoleEngineService {
       `Critic concerns:\n${concernLines.join('\n')}`,
       `Confidence: ${decision.confidence.toFixed(2)}`,
       `Thought mode: ${decision.thoughtMode}`,
+      `Thinking depth: ${decision.thinkingDepth}`,
+      `Task type: ${decision.taskType}`,
+      `Complexity: ${decision.complexity}`,
+      `Urgency: ${decision.urgency}`,
       'Follow this plan unless new evidence forces revision.',
     ].join('\n')
   }
@@ -57,32 +81,46 @@ export class NanobotRoleEngineService {
     return 'reflect'
   }
 
-  private buildPlan(goal: string, mode: NanobotThoughtMode) {
+  private buildPlan(
+    goal: string,
+    mode: NanobotThoughtMode,
+    depth: NanobotThinkingDepth,
+    urgency: NanobotUrgency,
+  ) {
+    const validationStep = depth === 'deep'
+      ? 'Perform an additional verification pass and call out risks explicitly.'
+      : 'Validate output and return concise next actions.'
+    const urgencyStep = urgency === 'high'
+      ? 'Prioritize the smallest safe action that unblocks execution immediately.'
+      : 'Prioritize correctness before speed.'
+
     if (mode === 'explore') {
       return [
         'Clarify constraints and expected output.',
         'Gather only the missing facts needed to answer.',
-        'Deliver concise answer with explicit assumptions.',
+        validationStep,
       ]
     }
     if (mode === 'plan') {
       return [
         `Break down objective: ${goal}`,
         'Compare at least two approaches and choose one.',
-        'Execute the first safe incremental step.',
+        urgencyStep,
+        validationStep,
       ]
     }
     if (mode === 'act') {
       return [
         'Verify current state and preconditions.',
         'Apply the smallest change that moves task forward.',
-        'Validate outcome and report the result.',
+        urgencyStep,
+        validationStep,
       ]
     }
     return [
       'Summarize what is known.',
       'Identify one actionable next step.',
-      'Keep context ready for follow-up iteration.',
+      validationStep,
     ]
   }
 
@@ -104,15 +142,22 @@ export class NanobotRoleEngineService {
     return concerns
   }
 
-  private scoreConfidence(message: string, personality: NanobotPersonalityState, concernCount: number) {
+  private scoreConfidence(
+    message: string,
+    personality: NanobotPersonalityState,
+    concernCount: number,
+    complexity: NanobotComplexity,
+    urgency: NanobotUrgency,
+  ) {
     let score = 0.55
     if (message.length > 20) score += 0.1
     if (message.length > 120) score += 0.05
     score += (personality.decisiveness - 0.5) * 0.2
     score += (personality.energy - 0.5) * 0.1
+    if (complexity === 'high') score -= 0.08
+    if (urgency === 'high') score -= 0.03
     score -= concernCount * 0.08
     const bounded = Math.max(0.05, Math.min(0.95, score))
     return Math.round(bounded * 10000) / 10000
   }
 }
-

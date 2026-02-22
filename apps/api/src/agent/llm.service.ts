@@ -26,6 +26,7 @@ const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LLMProvider, string>> = {
   google: 'https://generativelanguage.googleapis.com/v1beta/openai',
   minimax: 'https://api.minimaxi.chat/v1',
 }
+const DEFAULT_OLLAMA_ALLOWED_HOSTS = ['localhost', '127.0.0.1', '::1']
 
 export interface LLMMessage {
   role: 'user' | 'assistant'
@@ -59,8 +60,13 @@ export class LLMService {
   private readonly logger = new Logger(LLMService.name)
   private envApiKeys: Partial<Record<Exclude<LLMProvider, 'ollama'>, string>> = {}
   private defaultProvider: LLMProvider
+  private readonly allowCustomOpenAIBaseUrls: boolean
+  private readonly allowedOllamaHosts: Set<string>
 
   constructor(private config: ConfigService) {
+    this.allowCustomOpenAIBaseUrls = this.readBooleanEnv('ALLOW_CUSTOM_LLM_BASE_URLS', false)
+    this.allowedOllamaHosts = this.readAllowedOllamaHosts()
+
     this.envApiKeys = {
       anthropic: this.readFirstEnv(PROVIDER_ENV_VARS.anthropic),
       openai: this.readFirstEnv(PROVIDER_ENV_VARS.openai),
@@ -145,7 +151,8 @@ export class LLMService {
 
       if (requestedProvider === 'ollama') {
         const client = this.createOllamaClient(baseUrl)
-        const targetModel = model ?? LLM_MODELS.ollama.default
+        const requestedModel = model ?? LLM_MODELS.ollama.default
+        const targetModel = await this.resolveRequestedOllamaModel(requestedModel, baseUrl)
 
         try {
           const res = await client.chat.completions.create({
@@ -213,7 +220,8 @@ export class LLMService {
     modelOverride?: string,
     baseUrl?: string,
   ): Promise<LLMResponse> {
-    const defaultModel = modelOverride ?? LLM_MODELS.ollama.default
+    const requestedModel = modelOverride ?? LLM_MODELS.ollama.default
+    const defaultModel = await this.resolveRequestedOllamaModel(requestedModel, baseUrl)
 
     try {
       return await this.completeOpenAI(messages, tools, systemPrompt, client, defaultModel)
@@ -245,6 +253,31 @@ export class LLMService {
     const localModels = await this.listLocalOllamaModels(baseUrl)
     if (localModels.length > 0) return localModels[0] ?? null
     return null
+  }
+
+  private async resolveRequestedOllamaModel(requestedModel: string, baseUrl?: string) {
+    const requested = requestedModel.trim()
+    if (!requested) return requestedModel
+
+    const models = await this.listLocalOllamaModels(baseUrl)
+    if (models.length === 0) return requested
+
+    const normalizedRequested = requested.toLowerCase()
+
+    const exact = models.find((id) => id.toLowerCase() === normalizedRequested)
+    if (exact) return exact
+
+    // Ollama Cloud models are often exposed as "<id>:cloud".
+    const cloudAlias = models.find((id) => id.toLowerCase() === `${normalizedRequested}:cloud`)
+    if (cloudAlias) return cloudAlias
+
+    const prefix = models.find((id) => id.toLowerCase().startsWith(normalizedRequested))
+    if (prefix) return prefix
+
+    const includes = models.find((id) => id.toLowerCase().includes(normalizedRequested))
+    if (includes) return includes
+
+    return requested
   }
 
   private isOllamaModelMissingError(error: unknown) {
@@ -346,13 +379,32 @@ export class LLMService {
   }
 
   private resolveOllamaBaseUrl(baseUrl?: string) {
-    const raw = (baseUrl ?? 'http://localhost:11434').trim().replace(/\/+$/, '')
-    return raw.endsWith('/v1') ? raw : `${raw}/v1`
+    return `${this.resolveOllamaHttpBaseUrl(baseUrl)}/v1`
   }
 
   private resolveOllamaHttpBaseUrl(baseUrl?: string) {
-    const raw = (baseUrl ?? 'http://localhost:11434').trim().replace(/\/+$/, '')
-    return raw.endsWith('/v1') ? raw.slice(0, -3) : raw
+    const raw = (baseUrl ?? 'http://localhost:11434').trim()
+    const candidate = raw.match(/^[a-z]+:\/\//i) ? raw : `http://${raw}`
+    let parsed: URL
+    try {
+      parsed = new URL(candidate)
+    } catch {
+      throw new Error('Invalid Ollama server URL.')
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Ollama server URL must use http or https.')
+    }
+
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+    if (!this.allowedOllamaHosts.has(host)) {
+      throw new Error(`Blocked Ollama host "${host}". Add it to OLLAMA_ALLOWED_HOSTS to allow it.`)
+    }
+
+    parsed.pathname = ''
+    parsed.search = ''
+    parsed.hash = ''
+    return parsed.origin
   }
 
   private noLocalOllamaModelsMessage(baseUrl?: string) {
@@ -361,8 +413,8 @@ export class LLMService {
   }
 
   private async listLocalOllamaModels(baseUrl?: string) {
-    const endpoint = `${this.resolveOllamaHttpBaseUrl(baseUrl)}/api/tags`
     try {
+      const endpoint = `${this.resolveOllamaHttpBaseUrl(baseUrl)}/api/tags`
       const response = await fetch(endpoint)
       if (!response.ok) return []
       const json = await response.json() as {
@@ -378,12 +430,19 @@ export class LLMService {
         ids.push(id)
       }
 
-      // Prefer strictly local models. Keep cloud-tagged entries only if no local models exist.
-      const localOnly = ids.filter((id) => {
+      // Keep all models, but rank local models before cloud-tagged entries.
+      const local: string[] = []
+      const cloud: string[] = []
+      for (const id of ids) {
         const normalized = id.toLowerCase()
-        return !normalized.includes(':cloud') && !normalized.includes('/cloud') && !normalized.endsWith('-cloud')
-      })
-      return localOnly.length > 0 ? localOnly : ids
+        if (normalized.includes(':cloud') || normalized.includes('/cloud') || normalized.endsWith('-cloud')) {
+          cloud.push(id)
+        } else {
+          local.push(id)
+        }
+      }
+
+      return [...local, ...cloud]
     } catch {
       return []
     }
@@ -394,7 +453,12 @@ export class LLMService {
     baseUrl?: string,
   ) {
     const override = baseUrl?.trim().replace(/\/+$/, '')
-    if (override) return override
+    if (override) {
+      if (!this.allowCustomOpenAIBaseUrls) {
+        throw new Error('Custom LLM base URLs are disabled. Set ALLOW_CUSTOM_LLM_BASE_URLS=true to enable.')
+      }
+      return override
+    }
     return OPENAI_COMPATIBLE_BASE_URLS[provider]
   }
 
@@ -423,5 +487,24 @@ export class LLMService {
       if (value) return value
     }
     return undefined
+  }
+
+  private readBooleanEnv(name: string, fallback: boolean) {
+    const raw = this.config.get<string>(name)
+    if (raw == null) return fallback
+    const normalized = raw.trim().toLowerCase()
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+    return fallback
+  }
+
+  private readAllowedOllamaHosts() {
+    const fromEnv = (this.config.get<string>('OLLAMA_ALLOWED_HOSTS') ?? '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase().replace(/^\[|\]$/g, ''))
+      .filter(Boolean)
+
+    const hosts = fromEnv.length > 0 ? fromEnv : DEFAULT_OLLAMA_ALLOWED_HOSTS
+    return new Set(hosts)
   }
 }

@@ -4,17 +4,29 @@ import type {
   CronSelfHealInput,
   CronSelfHealReport,
   NanobotBusEvent,
+  NanobotMarketplaceImportInput,
   NanobotCronTriggerInput,
   NanobotHealth,
+  NanobotMarketplaceVerifyResult,
   NanobotMarketplaceExportInput,
   NanobotMarketplaceExportResult,
   NanobotMarketplaceInstallResult,
   NanobotMarketplacePack,
+  NanobotOrchestrationRun,
   NanobotPersonaProfile,
   NanobotPersonalityState,
   NanobotPresenceTickResult,
   NanobotRuntimeConfig,
   NanobotSkillState,
+  NanobotAutonomySchedule,
+  NanobotAutonomyStatus,
+  NanobotMemoryCurationResult,
+  NanobotHeartbeatTickResult,
+  UpdateNanobotAutonomyInput,
+  NanobotVoiceSynthesisInput,
+  NanobotVoiceSynthesisResult,
+  NanobotVoiceTranscriptionInput,
+  NanobotVoiceTranscriptionResult,
   NanobotTrustSnapshot,
   UpdateNanobotConfigInput,
 } from '@openagents/shared'
@@ -46,7 +58,7 @@ export function createNanobotApi(client: OpenAgentsClient) {
     updateConfig: (input: UpdateNanobotConfigInput) =>
       client.patch<NanobotRuntimeConfig>('/api/v1/nanobot/config', input),
 
-    heartbeat: () => client.post<{ userId: string; tickedAt: string }>('/api/v1/nanobot/heartbeat'),
+    heartbeat: () => client.post<NanobotHeartbeatTickResult>('/api/v1/nanobot/heartbeat'),
 
     tickPresence: () =>
       client.post<NanobotPresenceTickResult>('/api/v1/nanobot/presence/tick'),
@@ -73,6 +85,36 @@ export function createNanobotApi(client: OpenAgentsClient) {
 
     exportMarketplacePack: (input: NanobotMarketplaceExportInput) =>
       client.post<NanobotMarketplaceExportResult>('/api/v1/nanobot/marketplace/export', input),
+
+    verifyMarketplacePack: (input: NanobotMarketplaceImportInput) =>
+      client.post<NanobotMarketplaceVerifyResult>('/api/v1/nanobot/marketplace/verify', input),
+
+    importMarketplacePack: (input: NanobotMarketplaceImportInput) =>
+      client.post<NanobotMarketplaceInstallResult>('/api/v1/nanobot/marketplace/import', input),
+
+    listOrchestrationRuns: (limit = 20) =>
+      client.get<NanobotOrchestrationRun[]>(`/api/v1/nanobot/orchestration/runs?limit=${limit}`),
+
+    getOrchestrationRun: (runId: string) =>
+      client.get<NanobotOrchestrationRun>(`/api/v1/nanobot/orchestration/runs/${runId}`),
+
+    transcribeVoice: (input: NanobotVoiceTranscriptionInput) =>
+      client.post<NanobotVoiceTranscriptionResult>('/api/v1/nanobot/voice/transcribe', input),
+
+    synthesizeVoice: (input: NanobotVoiceSynthesisInput) =>
+      client.post<NanobotVoiceSynthesisResult>('/api/v1/nanobot/voice/speak', input),
+
+    getAutonomySchedule: () =>
+      client.get<NanobotAutonomySchedule>('/api/v1/nanobot/autonomy/windows'),
+
+    updateAutonomySchedule: (input: UpdateNanobotAutonomyInput) =>
+      client.put<NanobotAutonomySchedule>('/api/v1/nanobot/autonomy/windows', input),
+
+    getAutonomyStatus: () =>
+      client.get<NanobotAutonomyStatus>('/api/v1/nanobot/autonomy/status'),
+
+    curateMemory: () =>
+      client.post<NanobotMemoryCurationResult>('/api/v1/nanobot/memory/curate'),
 
     trust: () => client.get<NanobotTrustSnapshot>('/api/v1/nanobot/trust'),
   }

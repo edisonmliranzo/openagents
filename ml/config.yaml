@@ -1,0 +1,39 @@
+dataset:
+  input_csv: ""
+  target_column: "target"
+  drop_columns: []
+  test_size: 0.2
+  random_state: 42
+
+preprocess:
+  numeric_imputer: "median"
+  categorical_imputer: "most_frequent"
+  scale_numeric: true
+
+model:
+  type: "random_forest" # random_forest | logistic_regression
+
+hpo:
+  enabled: true
+  cv_folds: 3
+  scoring: "f1_weighted"
+  param_grid: {}
+
+training:
+  min_accuracy_to_promote: 0.85
+
+artifacts:
+  base_dir: "ml/artifacts"
+
+api:
+  bearer_token: "" # Optional. If set, calls to /train must include Authorization: Bearer <token>
+
+schedule:
+  cron: "0 3 * * 1" # Every Monday at 03:00
+
+calendar:
+  ics_path: "" # Optional local .ics calendar file path
+  ics_url: "" # Optional URL to .ics feed
+  event_keyword: "OpenAgents Retrain"
+  lookahead_minutes: 30
+  poll_seconds: 60

@@ -2,51 +2,72 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { sdk } from '@/stores/auth'
+import { useUIStore } from '@/stores/ui'
+import type { NanobotSkillState, SkillReputationEntry } from '@openagents/shared'
 
-interface SkillTool {
-  name: string
-  displayName: string
-  description: string
-  requiresApproval: boolean
-  inputSchema: Record<string, unknown>
-}
-
-function categoryForTool(toolName: string) {
-  if (toolName.startsWith('gmail_')) return 'email'
-  if (toolName.startsWith('calendar_')) return 'calendar'
-  if (toolName.startsWith('web_')) return 'web'
-  if (toolName.startsWith('notes_')) return 'notes'
-  return 'custom'
+function badgeClass(entry: SkillReputationEntry) {
+  if (entry.badge === 'trusted') return 'bg-emerald-100 text-emerald-700'
+  if (entry.badge === 'stable') return 'bg-cyan-100 text-cyan-700'
+  return 'bg-amber-100 text-amber-700'
 }
 
 export default function SkillsPage() {
-  const [skills, setSkills] = useState<SkillTool[]>([])
+  const addToast = useUIStore((state) => state.addToast)
+  const [skills, setSkills] = useState<NanobotSkillState[]>([])
+  const [reputation, setReputation] = useState<SkillReputationEntry[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isMutating, setIsMutating] = useState(false)
   const [error, setError] = useState('')
 
   const loadSkills = useCallback(async () => {
     setIsLoading(true)
     setError('')
     try {
-      const tools = await sdk.tools.list()
-      setSkills(tools)
+      const [skills, reputation] = await Promise.all([
+        sdk.nanobot.listSkills(),
+        sdk.skillReputation.list(),
+      ])
+      setSkills(skills)
+      setReputation(reputation)
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to load skills')
+      const message = err?.message ?? 'Failed to load skills'
+      setError(message)
+      addToast('error', message)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [addToast])
 
   useEffect(() => {
     void loadSkills()
   }, [loadSkills])
+
+  async function handleToggle(skill: NanobotSkillState) {
+    setIsMutating(true)
+    setError('')
+    try {
+      const next = skill.enabled
+        ? await sdk.nanobot.disableSkill(skill.id)
+        : await sdk.nanobot.enableSkill(skill.id)
+      setSkills(next)
+      const latestReputation = await sdk.skillReputation.list()
+      setReputation(latestReputation)
+      addToast('success', `${skill.enabled ? 'Disabled' : 'Enabled'} ${skill.title}`)
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to toggle skill'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsMutating(false)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-[1300px] space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Skills</h1>
-          <p className="mt-1 text-sm text-slate-500">Registered tool skills exposed to the agent planner.</p>
+          <p className="mt-1 text-sm text-slate-500">Installed skill reliability, trust badges, and health signals.</p>
         </div>
         <button
           type="button"
@@ -59,39 +80,76 @@ export default function SkillsPage() {
       </header>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Tool Skills</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Installed Skills</h2>
         <p className="mt-1 text-sm text-slate-500">{skills.length} skills currently available.</p>
 
         <div className="mt-4 space-y-3">
           {skills.length === 0 && <p className="text-sm text-slate-500">{isLoading ? 'Loading skills...' : 'No skills found.'}</p>}
           {skills.map((skill) => (
-            <details key={skill.name} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <details key={skill.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <summary className="cursor-pointer list-none">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{skill.displayName}</p>
+                    <p className="text-sm font-semibold text-slate-800">{skill.title}</p>
                     <p className="mt-1 text-xs text-slate-500">{skill.description}</p>
-                    <p className="mt-1 font-mono text-[11px] text-slate-400">{skill.name}</p>
+                    <p className="mt-1 font-mono text-[11px] text-slate-400">{skill.id}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                      {categoryForTool(skill.name)}
-                    </span>
+                  <div className="flex items-center gap-2 text-xs">
+                    {(() => {
+                      const entry = reputation.find((item) => item.skillId === skill.id)
+                      if (!entry) return null
+                      return (
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badgeClass(entry)}`}>
+                          {entry.badge}
+                        </span>
+                      )
+                    })()}
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        skill.requiresApproval
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-emerald-100 text-emerald-700'
+                        skill.enabled
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-slate-200 text-slate-700'
                       }`}
                     >
-                      {skill.requiresApproval ? 'approval' : 'direct'}
+                      {skill.enabled ? 'enabled' : 'disabled'}
                     </span>
                   </div>
                 </div>
               </summary>
-              <pre className="mt-3 max-h-44 overflow-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100">
-                {JSON.stringify(skill.inputSchema, null, 2)}
-              </pre>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-700">
+                  <p className="font-semibold text-slate-800">Tools</p>
+                  <p className="mt-1">{skill.tools.length > 0 ? skill.tools.join(', ') : 'none'}</p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-700">
+                  <p className="font-semibold text-slate-800">Reputation</p>
+                  {(() => {
+                    const entry = reputation.find((item) => item.skillId === skill.id)
+                    if (!entry) return <p className="mt-1">No run history yet.</p>
+                    return (
+                      <div className="mt-1 space-y-1">
+                        <p>score: {entry.score}</p>
+                        <p>success rate: {entry.successRate}%</p>
+                        <p>7d success: {entry.sevenDaySuccessRate}%</p>
+                        <p>runs: {entry.totalRuns} (failed: {entry.failedRuns})</p>
+                        <p>last failure: {entry.lastFailureAt ? new Date(entry.lastFailureAt).toLocaleString() : 'none'}</p>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleToggle(skill)}
+                disabled={isMutating}
+                className={`mt-3 rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+                  skill.enabled
+                    ? 'border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    : 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                }`}
+              >
+                {skill.enabled ? 'Disable skill' : 'Enable skill'}
+              </button>
             </details>
           ))}
         </div>

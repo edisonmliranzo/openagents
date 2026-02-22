@@ -61,7 +61,7 @@ export class NanobotPresenceService implements OnModuleInit, OnModuleDestroy {
       actions.push('no active sessions')
     }
 
-    const hb = this.heartbeat.tick(userId)
+    const hb = await this.heartbeat.tick(userId, source)
     this.bus.publish('run.event', {
       source: 'nanobot.presence',
       userId,
@@ -92,4 +92,3 @@ export class NanobotPresenceService implements OnModuleInit, OnModuleDestroy {
     }
   }
 }
-

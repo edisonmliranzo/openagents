@@ -16,6 +16,26 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  function toErrorMessage(err: unknown, fallback: string) {
+    if (!err || typeof err !== 'object') return fallback
+    const message = (err as { message?: unknown }).message
+    if (typeof message !== 'string' || !message.trim()) return fallback
+
+    try {
+      const parsed = JSON.parse(message) as { message?: string | string[] }
+      if (Array.isArray(parsed.message) && parsed.message.length > 0) {
+        return parsed.message[0] ?? fallback
+      }
+      if (typeof parsed.message === 'string' && parsed.message.trim()) {
+        return parsed.message
+      }
+    } catch {
+      // message is not JSON
+    }
+
+    return message
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -41,16 +61,19 @@ export default function LoginPage() {
       } else {
         await safeRegister(email, password, name || undefined)
       }
-      router.push('/chat')
+      const nextPath = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('next')
+        : null
+      router.push(nextPath && nextPath.startsWith('/') ? nextPath : '/chat')
     } catch (err: any) {
-      setError(err.message ?? (mode === 'login' ? 'Login failed' : 'Registration failed'))
+      setError(toErrorMessage(err, mode === 'login' ? 'Login failed' : 'Registration failed'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+    <div className="flex min-h-[100dvh] items-center justify-center overflow-y-auto bg-slate-100 px-4 py-6">
       <div className="w-full max-w-sm space-y-5 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-sm font-bold text-white">*</span>
@@ -88,6 +111,7 @@ export default function LoginPage() {
               placeholder="Name (optional)"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              autoComplete="name"
               className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-slate-800 placeholder-slate-400 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
             />
           )}
@@ -98,6 +122,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoComplete="email"
             className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-slate-800 placeholder-slate-400 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
           />
 
@@ -107,8 +132,15 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-slate-800 placeholder-slate-400 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
           />
+
+          {mode === 'register' && (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Use 12+ characters with uppercase, lowercase, number, and symbol.
+            </p>
+          )}
 
           <button
             type="submit"
@@ -119,6 +151,10 @@ export default function LoginPage() {
               ? (mode === 'login' ? 'Signing in...' : 'Creating account...')
               : (mode === 'login' ? 'Sign in' : 'Create account')}
           </button>
+
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Safety tip: OpenAgents never asks for your password, refresh token, or one-time code in chat.
+          </p>
         </form>
       </div>
     </div>

@@ -16,6 +16,13 @@ export { createSystemApi } from './api/system'
 export { createLabsApi } from './api/labs'
 export { createChannelsApi } from './api/channels'
 export { createPlatformApi } from './api/platform'
+export { createWorkflowsApi } from './api/workflows'
+export { createMissionControlApi } from './api/mission-control'
+export { createPlaybooksApi } from './api/playbooks'
+export { createAgentVersionsApi } from './api/agent-versions'
+export { createHandoffsApi } from './api/handoffs'
+export { createSkillReputationApi } from './api/skill-reputation'
+export { createLineageApi } from './api/lineage'
 
 import { OpenAgentsClient } from './client'
 import { createAuthApi } from './api/auth'
@@ -34,6 +41,13 @@ import { createSystemApi } from './api/system'
 import { createLabsApi } from './api/labs'
 import { createChannelsApi } from './api/channels'
 import { createPlatformApi } from './api/platform'
+import { createWorkflowsApi } from './api/workflows'
+import { createMissionControlApi } from './api/mission-control'
+import { createPlaybooksApi } from './api/playbooks'
+import { createAgentVersionsApi } from './api/agent-versions'
+import { createHandoffsApi } from './api/handoffs'
+import { createSkillReputationApi } from './api/skill-reputation'
+import { createLineageApi } from './api/lineage'
 import type { SDKConfig } from './client'
 
 /** Convenience factory: creates a fully-wired SDK instance */
@@ -57,5 +71,12 @@ export function createSDK(config: SDKConfig) {
     labs: createLabsApi(client),
     channels: createChannelsApi(client),
     platform: createPlatformApi(client),
+    workflows: createWorkflowsApi(client),
+    missionControl: createMissionControlApi(client),
+    playbooks: createPlaybooksApi(client),
+    agentVersions: createAgentVersionsApi(client),
+    handoffs: createHandoffsApi(client),
+    skillReputation: createSkillReputationApi(client),
+    lineage: createLineageApi(client),
   }
 }

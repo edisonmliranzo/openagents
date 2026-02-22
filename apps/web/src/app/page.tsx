@@ -1,9 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { ArrowRight, CheckCircle2, Cloud, Laptop2, Sparkles } from 'lucide-react'
 import styles from './landing.module.css'
+import { useAuthStore } from '@/stores/auth'
 
 type Platform = 'windows' | 'macos' | 'ubuntu'
 
@@ -126,9 +128,69 @@ const OPENAGENT_STACK = [
   'openagent/cli',
 ]
 
+function isCreatorUser(user: { role?: string | null; email?: string | null }) {
+  const role = (user.role ?? '').toLowerCase()
+  if (role === 'owner' || role === 'admin') return true
+
+  const creatorEmail = (process.env.NEXT_PUBLIC_CREATOR_EMAIL ?? '').trim().toLowerCase()
+  if (!creatorEmail) return false
+  return (user.email ?? '').toLowerCase() === creatorEmail
+}
+
 export default function RootPage() {
+  const router = useRouter()
+  const hydrated = useAuthStore((state) => state.hydrated)
+  const accessToken = useAuthStore((state) => state.accessToken)
+  const user = useAuthStore((state) => state.user)
+  const syncUser = useAuthStore((state) => state.syncUser)
+  const clearAuth = useAuthStore((state) => state.clear)
   const [platform, setPlatform] = useState<Platform>('windows')
+  const [profileSyncState, setProfileSyncState] = useState<'idle' | 'inflight' | 'done'>('idle')
+  const hasNavigatedRef = useRef(false)
   const activeQuickStart = useMemo(() => QUICK_START[platform], [platform])
+
+  useEffect(() => {
+    if (!hydrated || hasNavigatedRef.current) return
+
+    if (!accessToken) {
+      hasNavigatedRef.current = true
+      router.replace('/login')
+      return
+    }
+
+    if (!user) {
+      if (profileSyncState === 'idle' && typeof syncUser === 'function') {
+        setProfileSyncState('inflight')
+        void syncUser().finally(() => {
+          setProfileSyncState('done')
+        })
+        return
+      }
+
+      if (profileSyncState === 'done') {
+        clearAuth()
+        hasNavigatedRef.current = true
+        router.replace('/login')
+      }
+
+      return
+    }
+
+    if (!isCreatorUser(user)) {
+      hasNavigatedRef.current = true
+      router.replace('/chat')
+    }
+  }, [accessToken, clearAuth, hydrated, profileSyncState, router, syncUser, user])
+
+  if (!hydrated || !accessToken || (!user && profileSyncState !== 'done')) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100">
+        <p className="text-sm font-medium text-slate-500">Loading...</p>
+      </main>
+    )
+  }
+
+  if (!user || !isCreatorUser(user)) return null
 
   return (
     <main className={styles.page}>

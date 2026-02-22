@@ -43,3 +43,5 @@ apps/api/prisma/dev.db
 
 # Runtime generated data
 apps/api/data/
+ml/artifacts/
+ml/.calendar_state.json

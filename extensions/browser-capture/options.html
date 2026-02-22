@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenAgents Browser Capture - Options</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+        color: #0f172a;
+      }
+      .card {
+        max-width: 760px;
+        background: #ffffff;
+        border: 1px solid #dbeafe;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 22px;
+      }
+      p {
+        margin: 0 0 14px;
+        color: #475569;
+      }
+      label {
+        display: block;
+        margin: 12px 0 6px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #334155;
+      }
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        font: inherit;
+        color: #0f172a;
+        background: #fff;
+      }
+      textarea {
+        min-height: 78px;
+        resize: vertical;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .actions {
+        margin-top: 16px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      button {
+        border: 0;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #2563eb, #4f46e5);
+        color: #fff;
+        font-weight: 700;
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #e2e8f0;
+        color: #1e293b;
+      }
+      #status {
+        font-size: 13px;
+        color: #0f766e;
+      }
+      code {
+        background: #e2e8f0;
+        padding: 2px 5px;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>OpenAgents Browser Capture</h1>
+      <p>
+        Right-click any selected text and choose <code>Send selection to OpenAgents</code>.
+      </p>
+
+      <label for="apiBase">API Base URL</label>
+      <input id="apiBase" type="text" placeholder="http://localhost:3001" />
+
+      <label for="token">Bearer Token (JWT)</label>
+      <input id="token" type="password" placeholder="Paste access token from OpenAgents login" />
+
+      <div class="row">
+        <div>
+          <label for="conversationId">Conversation ID (Optional)</label>
+          <input id="conversationId" type="text" placeholder="If set, captured text is also pushed as a user message" />
+        </div>
+        <div>
+          <label for="defaultNote">Default Note (Optional)</label>
+          <input id="defaultNote" type="text" placeholder="Example: captured from browser extension" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="saveBtn" type="button">Save</button>
+        <button id="resetBtn" class="secondary" type="button">Reset Defaults</button>
+        <span id="status"></span>
+      </div>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
