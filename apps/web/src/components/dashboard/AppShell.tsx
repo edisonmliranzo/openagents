@@ -42,6 +42,14 @@ interface NavGroup {
 
 const BASE_NAV_GROUPS: NavGroup[] = [
   {
+    title: 'Agent',
+    items: [
+      { label: 'OpenAgent', href: '/agent/openagent', icon: Activity },
+      { label: 'Skills', href: '/agent/skills', icon: Brain },
+      { label: 'Marketplace', href: '/agent/marketplace', icon: BookOpen },
+    ],
+  },
+  {
     title: 'Workspace',
     items: [
       { label: 'Chat', href: '/chat', icon: MessageSquare },
