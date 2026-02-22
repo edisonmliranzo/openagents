@@ -283,7 +283,9 @@ export class UsersService {
       throw new BadRequestException('Ollama server URL must use http or https.')
     }
 
-    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+    parsed = this.rewriteLoopbackToDefaultOllamaUrl(parsed)
+
+    const host = this.normalizeHost(parsed.hostname)
     const allowedHosts = this.allowedOllamaHosts()
     if (!allowedHosts.has('*') && !allowedHosts.has(host)) {
       throw new BadRequestException(
@@ -295,6 +297,38 @@ export class UsersService {
     parsed.search = ''
     parsed.hash = ''
     return parsed.origin
+  }
+
+  private rewriteLoopbackToDefaultOllamaUrl(parsed: URL) {
+    const requestedHost = this.normalizeHost(parsed.hostname)
+    if (!this.isLoopbackHost(requestedHost)) return parsed
+
+    const fallbackRaw = this.defaultOllamaBaseUrl().trim()
+    const fallbackCandidate = fallbackRaw.match(/^[a-z]+:\/\//i) ? fallbackRaw : `http://${fallbackRaw}`
+    let fallbackParsed: URL
+    try {
+      fallbackParsed = new URL(fallbackCandidate)
+    } catch {
+      return parsed
+    }
+
+    if (fallbackParsed.protocol !== 'http:' && fallbackParsed.protocol !== 'https:') return parsed
+
+    const fallbackHost = this.normalizeHost(fallbackParsed.hostname)
+    if (this.isLoopbackHost(fallbackHost)) return parsed
+
+    fallbackParsed.pathname = ''
+    fallbackParsed.search = ''
+    fallbackParsed.hash = ''
+    return fallbackParsed
+  }
+
+  private normalizeHost(hostname: string) {
+    return hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  }
+
+  private isLoopbackHost(host: string) {
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
   }
 
   private defaultOllamaBaseUrl() {

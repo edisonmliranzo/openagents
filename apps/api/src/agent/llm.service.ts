@@ -406,7 +406,9 @@ export class LLMService {
       throw new Error('Ollama server URL must use http or https.')
     }
 
-    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+    parsed = this.rewriteLoopbackToDefaultOllamaUrl(parsed)
+
+    const host = this.normalizeHost(parsed.hostname)
     if (!this.isAllowedOllamaHost(host)) {
       throw new Error(`Blocked Ollama host "${host}". Add it to OLLAMA_ALLOWED_HOSTS to allow it.`)
     }
@@ -525,6 +527,38 @@ export class LLMService {
   private readDefaultOllamaBaseUrl() {
     const fromEnv = this.config.get<string>('OLLAMA_BASE_URL')?.trim()
     return fromEnv || DEFAULT_OLLAMA_BASE_URL
+  }
+
+  private rewriteLoopbackToDefaultOllamaUrl(parsed: URL) {
+    const requestedHost = this.normalizeHost(parsed.hostname)
+    if (!this.isLoopbackHost(requestedHost)) return parsed
+
+    const fallbackRaw = this.defaultOllamaBaseUrl.trim()
+    const fallbackCandidate = fallbackRaw.match(/^[a-z]+:\/\//i) ? fallbackRaw : `http://${fallbackRaw}`
+    let fallbackParsed: URL
+    try {
+      fallbackParsed = new URL(fallbackCandidate)
+    } catch {
+      return parsed
+    }
+
+    if (fallbackParsed.protocol !== 'http:' && fallbackParsed.protocol !== 'https:') return parsed
+
+    const fallbackHost = this.normalizeHost(fallbackParsed.hostname)
+    if (this.isLoopbackHost(fallbackHost)) return parsed
+
+    fallbackParsed.pathname = ''
+    fallbackParsed.search = ''
+    fallbackParsed.hash = ''
+    return fallbackParsed
+  }
+
+  private normalizeHost(hostname: string) {
+    return hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  }
+
+  private isLoopbackHost(host: string) {
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
   }
 
   private isAllowedOllamaHost(host: string) {
