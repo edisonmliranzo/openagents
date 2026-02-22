@@ -145,13 +145,13 @@ Local URLs:
 - API: `http://localhost:3001`
 - API docs: `http://localhost:3001/docs`
 
-## Production-like deployment (Ubuntu / Windows / macOS)
+## Production deployment (latest method)
 
-Use Docker for consistent cross-platform testing.
+Use the Docker production stack with `infra/docker/.env.prod`.
 
-### Fresh Ubuntu VPS install (recommended)
+### 1. Bootstrap Ubuntu VPS
 
-If this is a new server, run from root shell:
+Run once on a fresh Ubuntu server:
 
 ```bash
 apt-get update
@@ -163,44 +163,44 @@ corepack prepare pnpm@9.0.0 --activate
 systemctl enable --now docker
 ```
 
-Clone and enter the repo (all `pnpm` commands below must be run here, not `/root`):
+Clone/pull into a fixed path (do not run production commands from `/root`):
 
 ```bash
 mkdir -p /opt
 cd /opt
-git clone https://github.com/edisonmliranzo/openagents.git
+if [ ! -d openagents/.git ]; then
+  git clone https://github.com/edisonmliranzo/openagents.git
+fi
 cd /opt/openagents
+git pull origin main
 ```
 
-### 1. Create production env file
-
-PowerShell:
-
-```powershell
-Copy-Item infra/docker/.env.prod.example infra/docker/.env.prod
-```
-
-macOS/Linux:
+### 2. Create and configure `infra/docker/.env.prod`
 
 ```bash
-cp infra/docker/.env.prod.example infra/docker/.env.prod
+cp -n infra/docker/.env.prod.example infra/docker/.env.prod
 ```
 
-Then edit `infra/docker/.env.prod` and set real values for:
+Set real secrets and ports in `infra/docker/.env.prod`:
 
 - `JWT_SECRET`
 - `JWT_REFRESH_SECRET`
 - `ENCRYPTION_KEY`
-- provider API keys (`ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY`)
-- host ports if needed: `WEB_HOST_PORT`, `API_HOST_PORT`, `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`
-- API runtime port (inside container): `API_PORT` (default `3001`)
-- matching URLs: `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_OLLAMA_BASE_URL`
-- Ollama bridge values (when API runs in Docker but Ollama runs on host):
-  - `OLLAMA_BASE_URL=http://host.docker.internal:11434`
-  - `OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1,host.docker.internal`
-- private creator bootstrap email(s): `CREATOR_EMAIL` or `CREATOR_EMAILS`
+- provider keys if used (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
+- `WEB_HOST_PORT`, `API_HOST_PORT`, `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT` (if defaults conflict)
+- `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`
+- creator bootstrap email(s): `CREATOR_EMAIL` or `CREATOR_EMAILS`
 
-### 2. Build and start production stack
+For Ollama on host + API in Docker, use:
+
+```env
+DEFAULT_LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1,host.docker.internal
+NEXT_PUBLIC_OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+### 3. Build and start
 
 ```bash
 pnpm install --frozen-lockfile
@@ -208,7 +208,7 @@ pnpm prod:build
 pnpm prod:up
 ```
 
-### 3. Verify services
+### 4. Verify
 
 ```bash
 pnpm prod:ps
@@ -220,6 +220,17 @@ Health checks:
 - API health: `http://localhost:<API_HOST_PORT>/api/v1/health`
 - Web login page: `http://localhost:<WEB_HOST_PORT>/login`
 - API docs: `http://localhost:<API_HOST_PORT>/docs`
+
+### 5. Update existing production install
+
+```bash
+cd /opt/openagents
+git pull origin main
+pnpm install --frozen-lockfile
+pnpm prod:build
+pnpm prod:up
+pnpm prod:check:ollama
+```
 
 ### Ubuntu outside-network setup (step-by-step)
 
