@@ -89,6 +89,37 @@ Notes:
 - OpenAgents appends `/v1` internally for Ollama compatibility.
 - If model list is empty, run `ollama pull <model>` first, then click `Refresh models`.
 
+### Server + Docker path (Ubuntu VPS)
+
+If OpenAgents API runs in Docker and Ollama runs on the VPS host:
+
+1. Set these in `infra/docker/.env.prod`:
+
+```env
+DEFAULT_LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1,host.docker.internal
+NEXT_PUBLIC_OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+2. Rebuild and restart:
+
+```bash
+pnpm prod:build
+pnpm prod:up
+```
+
+3. Verify from API container:
+
+```bash
+pnpm prod:check:ollama
+```
+
+4. In UI (`Settings -> Config`):
+   - Provider: `Ollama`
+   - Server URL: `http://host.docker.internal:11434`
+   - Click `Save Key`, then `Refresh models`
+
 ## 4) Push a model to ollama.com
 
 References:

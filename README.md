@@ -149,6 +149,29 @@ Local URLs:
 
 Use Docker for consistent cross-platform testing.
 
+### Fresh Ubuntu VPS install (recommended)
+
+If this is a new server, run from root shell:
+
+```bash
+apt-get update
+apt-get install -y git curl ca-certificates
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs docker.io docker-compose-plugin
+corepack enable
+corepack prepare pnpm@9.0.0 --activate
+systemctl enable --now docker
+```
+
+Clone and enter the repo (all `pnpm` commands below must be run here, not `/root`):
+
+```bash
+mkdir -p /opt
+cd /opt
+git clone https://github.com/edisonmliranzo/openagents.git
+cd /opt/openagents
+```
+
 ### 1. Create production env file
 
 PowerShell:
@@ -180,6 +203,7 @@ Then edit `infra/docker/.env.prod` and set real values for:
 ### 2. Build and start production stack
 
 ```bash
+pnpm install --frozen-lockfile
 pnpm prod:build
 pnpm prod:up
 ```
@@ -188,6 +212,7 @@ pnpm prod:up
 
 ```bash
 pnpm prod:ps
+pnpm prod:check:ollama
 ```
 
 Health checks:
