@@ -51,7 +51,9 @@ CMD ["sh", "-c", "(pnpm --filter @openagents/api exec prisma migrate deploy || p
 
 FROM base AS web-build
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001
+ARG NEXT_PUBLIC_OLLAMA_BASE_URL=http://localhost:11434
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_OLLAMA_BASE_URL=$NEXT_PUBLIC_OLLAMA_BASE_URL
 RUN pnpm --filter @openagents/web run build
 
 FROM node:20-bookworm-slim AS web-runtime

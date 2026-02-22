@@ -171,7 +171,10 @@ Then edit `infra/docker/.env.prod` and set real values for:
 - provider API keys (`ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY`)
 - host ports if needed: `WEB_HOST_PORT`, `API_HOST_PORT`, `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`
 - API runtime port (inside container): `API_PORT` (default `3001`)
-- matching URLs: `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`
+- matching URLs: `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_OLLAMA_BASE_URL`
+- Ollama bridge values (when API runs in Docker but Ollama runs on host):
+  - `OLLAMA_BASE_URL=http://host.docker.internal:11434`
+  - `OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1,host.docker.internal`
 - private creator bootstrap email(s): `CREATOR_EMAIL` or `CREATOR_EMAILS`
 
 ### 2. Build and start production stack
@@ -386,6 +389,8 @@ ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 GEMINI_API_KEY=AIza...
 MINIMAX_API_KEY=...
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1,host.docker.internal
 ```
 
 Per-user provider and model can be overridden in **Settings › Config** without restarting the server. Ollama models are discovered live from your local Ollama instance; models that don't support function calling fall back to plain-text mode automatically.
@@ -405,7 +410,8 @@ Auth + API hardening defaults (configurable via `apps/api/.env`):
 - `AUTH_MAX_FAILED_ATTEMPTS_PER_IP=30`
 - `AUTH_LOCKOUT_MS=1800000` (temporary lockout on repeated failures)
 - `ALLOW_CUSTOM_LLM_BASE_URLS=false` (prevents custom cloud-provider base URLs by default)
-- `OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1` (restricts Ollama host targets)
+- `OLLAMA_BASE_URL=http://localhost:11434` (default Ollama endpoint when no per-user URL is saved)
+- `OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1,host.docker.internal` (restricts Ollama host targets)
 
 Production recommendation:
 
@@ -515,6 +521,10 @@ pnpm prod:up
 - If login says "Failed to reach API":
   - confirm API is running on your configured port (default `http://localhost:3001`)
   - if you manually set `NEXT_PUBLIC_API_URL` in `apps/web/.env.local`, make sure it matches `API_PORT`
+- If Ollama says "No local models found" on server:
+  - set `OLLAMA_BASE_URL` to an endpoint reachable by the API process/container
+  - in Docker, use `OLLAMA_BASE_URL=http://host.docker.internal:11434`
+  - ensure `OLLAMA_ALLOWED_HOSTS` includes that host, then rebuild/restart and click **Refresh models**
 - For production Docker deploy:
   - verify `infra/docker/.env.prod` exists
   - verify `JWT_SECRET` and DB credentials are set

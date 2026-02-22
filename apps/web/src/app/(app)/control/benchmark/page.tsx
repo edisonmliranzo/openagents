@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { sdk } from '@/stores/auth'
 import type { PlatformEvalRunResult, PlatformEvalSuite } from '@openagents/shared'
 
-const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
+const DEFAULT_OLLAMA_BASE_URL = process.env.NEXT_PUBLIC_OLLAMA_BASE_URL?.trim() || 'http://localhost:11434'
 
 function formatMs(value: number) {
   if (!Number.isFinite(value)) return '0 ms'
@@ -140,7 +140,7 @@ export default function BenchmarkPage() {
             <input
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="http://localhost:11434"
+              placeholder={DEFAULT_OLLAMA_BASE_URL}
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
             />
           </label>
@@ -277,4 +277,3 @@ export default function BenchmarkPage() {
     </div>
   )
 }
-

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Req, Get, Query } from '@nestjs/common'
+import { Controller, Post, Body, UseGuards, Req, Get, Query, BadRequestException } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsString, IsOptional } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
@@ -34,8 +34,12 @@ export class AgentController {
       }
     }
 
-    const models = await this.llm.listOllamaModels(resolvedBaseUrl)
-    return { models }
+    try {
+      const models = await this.llm.listOllamaModels(resolvedBaseUrl)
+      return { models }
+    } catch (error: any) {
+      throw new BadRequestException(error?.message ?? 'Failed to load Ollama models.')
+    }
   }
 
   @Post('test-llm')

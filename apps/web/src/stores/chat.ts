@@ -18,8 +18,8 @@ function formatAgentError(raw: string) {
   if (lower.includes('does not support tools')) {
     return 'Selected model does not support tools. Pick a tools-capable model in Settings > Config and retry.'
   }
-  if (lower.includes('no local ollama models found')) {
-    return 'No local Ollama models were found. Run `ollama pull <model>` and refresh models in Settings > Config.'
+  if (lower.includes('no local ollama models found') || lower.includes('no ollama models found')) {
+    return 'No Ollama models were found at the configured server URL. Run `ollama pull <model>` and refresh models in Settings > Config.'
   }
   if (lower.includes('api key') && lower.includes('not configured')) {
     return value

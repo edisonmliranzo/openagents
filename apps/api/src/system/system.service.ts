@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { statfsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -56,6 +57,7 @@ const MODEL_RATES: Record<string, { provider: string; rate: ModelRate }> = {
 const TOOL_FLAT_COST_USD: Record<string, number> = {
   web_search: 0.002,
 }
+const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
 
 const BENCHMARK_PROMPTS: BenchmarkPromptDef[] = [
   {
@@ -80,6 +82,7 @@ export class SystemService {
   constructor(
     private prisma: PrismaService,
     private llm: LLMService,
+    private config: ConfigService,
   ) {}
 
   usage(): SystemUsageSnapshot {
@@ -253,7 +256,7 @@ export class SystemService {
   }
 
   async benchmarkOllama(baseUrl?: string, models?: string[], rounds = 1): Promise<OllamaBenchmarkResult> {
-    const resolvedBaseUrl = (baseUrl ?? 'http://localhost:11434').trim()
+    const resolvedBaseUrl = (baseUrl ?? this.defaultOllamaBaseUrl()).trim()
     const allModels = models?.map((value) => value.trim()).filter(Boolean) ?? []
     const sourceModels = allModels.length > 0 ? allModels : await this.llm.listOllamaModels(resolvedBaseUrl)
     const uniqueModels = [...new Set(sourceModels)].slice(0, 8)
@@ -531,6 +534,11 @@ export class SystemService {
       toolCostUsd: this.roundNumber(value.toolCostUsd),
       totalCostUsd: this.roundNumber(value.totalCostUsd),
     }
+  }
+
+  private defaultOllamaBaseUrl() {
+    const fromEnv = this.config.get<string>('OLLAMA_BASE_URL')?.trim()
+    return fromEnv || DEFAULT_OLLAMA_BASE_URL
   }
 
   private percentile95(values: number[]) {
