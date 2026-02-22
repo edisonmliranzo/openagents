@@ -198,6 +198,23 @@ pnpm prod:build
 pnpm prod:up
 pnpm prod:check:ollama`
 
+const BYBIT_DEMO_GUIDE = `# Bybit demo tools (optional)
+# infra/docker/.env.prod
+BYBIT_BASE_URL=https://api-demo.bybit.com
+BYBIT_PUBLIC_BASE_URL=https://api.bybit.com
+BYBIT_API_KEY=your_demo_key
+BYBIT_API_SECRET=your_demo_secret
+BYBIT_DEMO_ONLY=true
+BYBIT_RECV_WINDOW=5000
+
+# rebuild + restart
+cd /opt/openagents
+pnpm prod:build
+pnpm prod:up
+
+# then install marketplace pack:
+# /agent/marketplace -> Bybit Demo Ops`
+
 export default function DocsPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-5">
@@ -253,6 +270,14 @@ export default function DocsPage() {
         <p className="mt-1 text-sm text-slate-500">Canonical VPS deployment flow (same as README production method).</p>
         <pre className="mt-3 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
 {LATEST_INSTALL_GUIDE}
+        </pre>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Bybit Demo Setup</h2>
+        <p className="mt-1 text-sm text-slate-500">Enable approval-gated Bybit demo futures tools for OpenAgent.</p>
+        <pre className="mt-3 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
+{BYBIT_DEMO_GUIDE}
         </pre>
       </section>
 

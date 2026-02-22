@@ -8,11 +8,12 @@ import { NotesTool } from './connectors/notes.tool'
 import { WebSearchTool } from './connectors/web-search.tool'
 import { TimeTool } from './connectors/time.tool'
 import { CronTool } from './connectors/cron.tool'
+import { BybitTool } from './connectors/bybit.tool'
 import { CronModule } from '../cron/cron.module'
 
 @Module({
   imports: [CronModule],
-  providers: [ToolsService, GmailTool, CalendarTool, WebFetchTool, NotesTool, WebSearchTool, TimeTool, CronTool],
+  providers: [ToolsService, GmailTool, CalendarTool, WebFetchTool, NotesTool, WebSearchTool, TimeTool, CronTool, BybitTool],
   controllers: [ToolsController],
   exports: [ToolsService],
 })

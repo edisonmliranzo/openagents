@@ -200,6 +200,17 @@ OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1,host.docker.internal
 NEXT_PUBLIC_OLLAMA_BASE_URL=http://host.docker.internal:11434
 ```
 
+Optional: enable Bybit demo futures tools (approval-gated):
+
+```env
+BYBIT_BASE_URL=https://api-demo.bybit.com
+BYBIT_PUBLIC_BASE_URL=https://api.bybit.com
+BYBIT_API_KEY=your_demo_key
+BYBIT_API_SECRET=your_demo_secret
+BYBIT_DEMO_ONLY=true
+BYBIT_RECV_WINDOW=5000
+```
+
 ### 3. Build and start
 
 ```bash
@@ -231,6 +242,26 @@ pnpm prod:build
 pnpm prod:up
 pnpm prod:check:ollama
 ```
+
+### Bybit demo futures workflow (optional)
+
+1. Add Bybit demo credentials in `infra/docker/.env.prod` (example in section above).
+2. Rebuild/restart the stack:
+
+```bash
+cd /opt/openagents
+pnpm prod:build
+pnpm prod:up
+```
+
+3. In the dashboard, install marketplace pack `Bybit Demo Ops` from `/agent/marketplace`.
+4. Use chat prompts such as:
+   - `Check BTCUSDT ticker and my Bybit demo positions.`
+   - `Place a demo Buy market order on BTCUSDT with qty 0.001 and then show updated positions.`
+
+Notes:
+- Private Bybit tools are approval-gated.
+- With `BYBIT_DEMO_ONLY=true`, orders are blocked unless `BYBIT_BASE_URL` is a demo/testnet host.
 
 ### Ubuntu outside-network setup (step-by-step)
 
