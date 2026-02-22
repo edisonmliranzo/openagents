@@ -1,6 +1,6 @@
-import { Controller, Get, Put, Delete, Param, Body, UseGuards, Req } from '@nestjs/common'
+import { Controller, Get, Put, Post, Patch, Delete, Param, Body, UseGuards, Req } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
-import { IsString, IsOptional, IsBoolean } from 'class-validator'
+import { IsString, IsOptional, IsBoolean, IsIn } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { UsersService } from './users.service'
 
@@ -19,6 +19,21 @@ class UpsertLlmKeyDto {
   @IsString() @IsOptional() apiKey?: string
   @IsString() @IsOptional() baseUrl?: string
   @IsBoolean() @IsOptional() isActive?: boolean
+}
+
+class CreateUserDomainDto {
+  @IsString() domain!: string
+  @IsString() @IsOptional() @IsIn(['manual', 'cloudflare', 'caddy', 'nginx']) provider?: string
+  @IsString() @IsOptional() @IsIn(['pending', 'active', 'error']) status?: string
+  @IsString() @IsOptional() targetHost?: string
+  @IsString() @IsOptional() proxyInstructions?: string
+}
+
+class UpdateUserDomainDto {
+  @IsString() @IsOptional() @IsIn(['manual', 'cloudflare', 'caddy', 'nginx']) provider?: string
+  @IsString() @IsOptional() @IsIn(['pending', 'active', 'error']) status?: string
+  @IsString() @IsOptional() targetHost?: string
+  @IsString() @IsOptional() proxyInstructions?: string
 }
 
 @ApiTags('users')
@@ -67,5 +82,26 @@ export class UsersController {
   @Delete('me/llm-keys/:provider')
   deleteLlmKey(@Param('provider') provider: string, @Req() req: any) {
     return this.users.deleteLlmKey(req.user.id, provider)
+  }
+
+  // Domains
+  @Get('me/domains')
+  listDomains(@Req() req: any) {
+    return this.users.listDomains(req.user.id)
+  }
+
+  @Post('me/domains')
+  createDomain(@Body() dto: CreateUserDomainDto, @Req() req: any) {
+    return this.users.createDomain(req.user.id, dto)
+  }
+
+  @Patch('me/domains/:id')
+  updateDomain(@Param('id') id: string, @Body() dto: UpdateUserDomainDto, @Req() req: any) {
+    return this.users.updateDomain(req.user.id, id, dto)
+  }
+
+  @Delete('me/domains/:id')
+  deleteDomain(@Param('id') id: string, @Req() req: any) {
+    return this.users.deleteDomain(req.user.id, id)
   }
 }
