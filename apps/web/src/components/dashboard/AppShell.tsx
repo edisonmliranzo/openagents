@@ -12,6 +12,7 @@ import {
   ChevronDown,
   FileText,
   LogOut,
+  Menu,
   MessageSquare,
   Moon,
   ScrollText,
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   Sun,
   Terminal,
+  X,
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
 import type { Notification } from '@openagents/shared'
@@ -107,6 +109,7 @@ export function AppShell({ children }: AppShellProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isNotificationsLoading, setIsNotificationsLoading] = useState(false)
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const notifRef = useRef<HTMLDivElement | null>(null)
   const profileSyncedRef = useRef(false)
@@ -197,6 +200,10 @@ export function AppShell({ children }: AppShellProps) {
     return () => document.removeEventListener('mousedown', onPointerDown)
   }, [isNotificationsOpen])
 
+  useEffect(() => {
+    setIsMobileNavOpen(false)
+  }, [pathname])
+
   const unreadNotifications = useMemo(
     () => notifications.filter((notification) => !notification.read).length,
     [notifications],
@@ -261,8 +268,20 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="dashboard-theme flex min-h-screen">
+      {isMobileNavOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          onClick={() => setIsMobileNavOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-900/45 md:hidden"
+        />
+      )}
+
       <aside
-        className="sidebar-scroll fixed left-0 top-0 z-30 flex h-screen w-[220px] shrink-0 flex-col overflow-y-auto"
+        className={clsx(
+          'sidebar-scroll fixed left-0 top-0 z-50 flex h-screen w-[220px] shrink-0 flex-col overflow-y-auto transition-transform duration-200 md:z-30 md:translate-x-0',
+          isMobileNavOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
         style={{
           background: 'linear-gradient(180deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%)',
           borderRight: '1px solid var(--sidebar-border)',
@@ -276,6 +295,14 @@ export function AppShell({ children }: AppShellProps) {
             <p className="text-[11px] font-black tracking-[0.12em] text-white">OPENAGENTS</p>
             <p className="text-[9px] font-medium tracking-widest text-slate-500">GATEWAY</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileNavOpen(false)}
+            className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white md:hidden"
+            aria-label="Close sidebar"
+          >
+            <X size={14} />
+          </button>
         </div>
 
         <div className="mx-4 mb-3 h-px bg-white/5" />
@@ -294,6 +321,7 @@ export function AppShell({ children }: AppShellProps) {
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={() => setIsMobileNavOpen(false)}
                       className={clsx(
                         'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
                         active ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/6 hover:text-slate-200',
@@ -342,13 +370,21 @@ export function AppShell({ children }: AppShellProps) {
         </div>
       </aside>
 
-      <div className="ml-[220px] flex min-h-screen flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur-xl">
-          <div className="flex items-center gap-2 text-[13px]">
-            <span className="font-semibold text-slate-800">{activeRouteLabel}</span>
+      <div className="flex min-h-screen flex-1 flex-col md:ml-[220px]">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200/80 bg-white/90 px-3 backdrop-blur-xl sm:px-6">
+          <div className="flex min-w-0 items-center gap-2 text-[13px]">
+            <button
+              type="button"
+              onClick={() => setIsMobileNavOpen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 hover:text-slate-800 md:hidden"
+              aria-label="Open sidebar"
+            >
+              <Menu size={16} />
+            </button>
+            <span className="truncate font-semibold text-slate-800">{activeRouteLabel}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
@@ -381,7 +417,7 @@ export function AppShell({ children }: AppShellProps) {
               </button>
 
               {isNotificationsOpen && (
-                <div className="absolute right-0 z-30 mt-2 w-[320px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card-hover">
+                <div className="absolute right-0 z-30 mt-2 w-[min(92vw,320px)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card-hover">
                   <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notifications</p>
                     <button
@@ -421,7 +457,7 @@ export function AppShell({ children }: AppShellProps) {
               )}
             </div>
 
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 py-1 pl-1 pr-2.5 text-[12px] font-medium text-slate-700">
+            <div className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 py-1 pl-1 pr-2.5 text-[12px] font-medium text-slate-700 sm:flex">
               <UserInitials name={user?.name} email={user?.email} />
               <span className="hidden max-w-[120px] truncate sm:block">
                 {user?.name ?? user?.email ?? 'User'}
@@ -431,7 +467,7 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 animate-fade-in p-6">{children}</main>
+        <main className="flex-1 animate-fade-in p-3 sm:p-6">{children}</main>
       </div>
     </div>
   )

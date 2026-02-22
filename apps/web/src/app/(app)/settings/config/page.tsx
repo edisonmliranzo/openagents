@@ -714,12 +714,12 @@ export default function ConfigPage() {
 
           <div className="mt-4 flex flex-wrap items-end gap-3">
             {/* Provider select */}
-            <label className="flex flex-col gap-1">
+            <label className="flex w-full flex-col gap-1 sm:w-auto">
               <span className="text-xs font-medium text-slate-500">Provider</span>
               <select
                 value={activeProvider}
                 onChange={(e) => setActiveProvider(e.target.value as Provider)}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100 sm:w-auto"
               >
                 {providers.map((p) => (
                   <option key={p} value={p}>{PROVIDER_META[p].label}</option>
@@ -728,15 +728,15 @@ export default function ConfigPage() {
             </label>
 
             {/* Model select */}
-            <label className="flex min-w-[280px] flex-col gap-1">
+            <label className="flex w-full flex-col gap-1 sm:min-w-[280px]">
               <span className="text-xs font-medium text-slate-500">Model</span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                 {activeProvider === 'ollama' ? (
                   modelOptions.length > 0 ? (
                     <select
                       value={activeModel}
                       onChange={(e) => setActiveModel(e.target.value)}
-                      className="h-10 min-w-[240px] rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100 sm:min-w-[240px]"
                     >
                       {modelOptions.map((m) => (
                         <option key={m} value={m}>{m}</option>
@@ -747,14 +747,14 @@ export default function ConfigPage() {
                       value={activeModel}
                       onChange={(e) => setActiveModel(e.target.value)}
                       placeholder="Type model id (e.g. llama3.2)"
-                      className="h-10 min-w-[240px] rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100 sm:min-w-[240px]"
                     />
                   )
                 ) : (
                   <select
                     value={activeModel}
                     onChange={(e) => setActiveModel(e.target.value)}
-                    className="h-10 min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100 sm:min-w-[180px]"
                   >
                     {modelOptions.map((m) => (
                       <option key={m} value={m}>{m}</option>
@@ -767,7 +767,7 @@ export default function ConfigPage() {
                     type="button"
                     onClick={() => void loadOllamaModels(cards.ollama.baseUrl || undefined)}
                     disabled={ollamaModelsStatus === 'loading'}
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 sm:w-auto"
                   >
                     {ollamaModelsStatus === 'loading' ? 'Loading...' : 'Refresh models'}
                   </button>
@@ -784,12 +784,12 @@ export default function ConfigPage() {
               )}
             </label>
 
-            <div className="flex flex-col items-start gap-1">
+            <div className="flex w-full flex-col items-start gap-1 sm:w-auto">
               <button
                 type="button"
                 onClick={() => void handleSaveActive()}
                 disabled={isSavingActive}
-                className={`h-10 rounded-lg px-5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 transition-colors ${
+                className={`h-10 w-full rounded-lg px-5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 transition-colors sm:w-auto ${
                   savedActiveLabel ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600'
                 }`}
               >
