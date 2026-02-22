@@ -511,6 +511,7 @@ pnpm --filter @openagents/api run build
 pnpm --filter @openagents/web run build
 pnpm prod:build
 pnpm prod:up
+pnpm prod:check:ollama
 ```
 
 ## Troubleshooting
@@ -525,6 +526,7 @@ pnpm prod:up
   - set `OLLAMA_BASE_URL` to an endpoint reachable by the API process/container
   - in Docker, use `OLLAMA_BASE_URL=http://host.docker.internal:11434`
   - ensure `OLLAMA_ALLOWED_HOSTS` includes that host, then rebuild/restart and click **Refresh models**
+  - run `pnpm prod:check:ollama` to verify API-container reachability
 - For production Docker deploy:
   - verify `infra/docker/.env.prod` exists
   - verify `JWT_SECRET` and DB credentials are set
