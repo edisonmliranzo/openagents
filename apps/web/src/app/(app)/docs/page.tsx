@@ -168,6 +168,36 @@ const DOC_LINKS = [
   },
 ]
 
+const LATEST_INSTALL_GUIDE = `# Ubuntu VPS + Docker (latest)
+apt-get update
+apt-get install -y git curl ca-certificates
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs docker.io docker-compose-plugin
+corepack enable
+corepack prepare pnpm@9.0.0 --activate
+systemctl enable --now docker
+
+mkdir -p /opt
+cd /opt
+if [ ! -d openagents/.git ]; then
+  git clone https://github.com/edisonmliranzo/openagents.git
+fi
+cd /opt/openagents
+git pull origin main
+
+cp -n infra/docker/.env.prod.example infra/docker/.env.prod
+# edit infra/docker/.env.prod and set real secrets
+# for host Ollama + Docker API:
+# DEFAULT_LLM_PROVIDER=ollama
+# OLLAMA_BASE_URL=http://host.docker.internal:11434
+# OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1,host.docker.internal
+# NEXT_PUBLIC_OLLAMA_BASE_URL=http://host.docker.internal:11434
+
+pnpm install --frozen-lockfile
+pnpm prod:build
+pnpm prod:up
+pnpm prod:check:ollama`
+
 export default function DocsPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-5">
@@ -219,12 +249,23 @@ export default function DocsPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Latest Installation Method</h2>
+        <p className="mt-1 text-sm text-slate-500">Canonical VPS deployment flow (same as README production method).</p>
+        <pre className="mt-3 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
+{LATEST_INSTALL_GUIDE}
+        </pre>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">CLI Quick Commands</h2>
         <pre className="mt-3 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
 {`pnpm install
 pnpm --filter @openagents/api run db:migrate
 pnpm --filter @openagents/api run dev
-pnpm --filter @openagents/web run dev`}
+pnpm --filter @openagents/web run dev
+pnpm prod:build
+pnpm prod:up
+pnpm prod:check:ollama`}
         </pre>
       </section>
     </div>
