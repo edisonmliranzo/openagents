@@ -25,7 +25,8 @@
     "prod:up": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml up -d",
     "prod:down": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml down",
     "prod:logs": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml logs -f --tail=200",
-    "prod:ps": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml ps"
+    "prod:ps": "docker compose --env-file infra/docker/.env.prod -f infra/docker/docker-compose.prod.yml ps",
+    "prod:check:ollama": "node scripts/check-ollama-health.mjs"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
