@@ -26,7 +26,15 @@ const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LLMProvider, string>> = {
   google: 'https://generativelanguage.googleapis.com/v1beta/openai',
   minimax: 'https://api.minimaxi.chat/v1',
 }
-const DEFAULT_OLLAMA_ALLOWED_HOSTS = ['localhost', '127.0.0.1', '::1']
+const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
+const DEFAULT_OLLAMA_ALLOWED_HOSTS = [
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  'host.docker.internal',
+  'gateway.docker.internal',
+  'host.containers.internal',
+]
 
 export interface LLMMessage {
   role: 'user' | 'assistant'
@@ -61,10 +69,12 @@ export class LLMService {
   private envApiKeys: Partial<Record<Exclude<LLMProvider, 'ollama'>, string>> = {}
   private defaultProvider: LLMProvider
   private readonly allowCustomOpenAIBaseUrls: boolean
+  private readonly defaultOllamaBaseUrl: string
   private readonly allowedOllamaHosts: Set<string>
 
   constructor(private config: ConfigService) {
     this.allowCustomOpenAIBaseUrls = this.readBooleanEnv('ALLOW_CUSTOM_LLM_BASE_URLS', false)
+    this.defaultOllamaBaseUrl = this.readDefaultOllamaBaseUrl()
     this.allowedOllamaHosts = this.readAllowedOllamaHosts()
 
     this.envApiKeys = {
@@ -110,7 +120,7 @@ export class LLMService {
   }
 
   async listOllamaModels(baseUrl?: string): Promise<string[]> {
-    return this.listLocalOllamaModels(baseUrl)
+    return this.listLocalOllamaModels(baseUrl, true)
   }
 
   async runOllamaPrompt(baseUrl: string | undefined, model: string, prompt: string, maxTokens = 200) {
@@ -383,7 +393,7 @@ export class LLMService {
   }
 
   private resolveOllamaHttpBaseUrl(baseUrl?: string) {
-    const raw = (baseUrl ?? 'http://localhost:11434').trim()
+    const raw = (baseUrl ?? this.defaultOllamaBaseUrl).trim()
     const candidate = raw.match(/^[a-z]+:\/\//i) ? raw : `http://${raw}`
     let parsed: URL
     try {
@@ -397,7 +407,7 @@ export class LLMService {
     }
 
     const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '')
-    if (!this.allowedOllamaHosts.has(host)) {
+    if (!this.isAllowedOllamaHost(host)) {
       throw new Error(`Blocked Ollama host "${host}". Add it to OLLAMA_ALLOWED_HOSTS to allow it.`)
     }
 
@@ -409,14 +419,18 @@ export class LLMService {
 
   private noLocalOllamaModelsMessage(baseUrl?: string) {
     const endpoint = this.resolveOllamaHttpBaseUrl(baseUrl)
-    return `No local Ollama models found at ${endpoint}. Run "ollama pull <model>" and refresh models.`
+    return `No Ollama models found at ${endpoint}. Run "ollama pull <model>" and refresh models.`
   }
 
-  private async listLocalOllamaModels(baseUrl?: string) {
+  private async listLocalOllamaModels(baseUrl?: string, strict = false) {
+    let endpoint = ''
     try {
-      const endpoint = `${this.resolveOllamaHttpBaseUrl(baseUrl)}/api/tags`
+      endpoint = `${this.resolveOllamaHttpBaseUrl(baseUrl)}/api/tags`
       const response = await fetch(endpoint)
-      if (!response.ok) return []
+      if (!response.ok) {
+        if (!strict) return []
+        throw new Error(`Failed to load Ollama models from ${endpoint} (HTTP ${response.status}).`)
+      }
       const json = await response.json() as {
         models?: Array<{ name?: string; model?: string }>
       }
@@ -443,7 +457,17 @@ export class LLMService {
       }
 
       return [...local, ...cloud]
-    } catch {
+    } catch (error) {
+      if (strict) {
+        const message = error instanceof Error && error.message ? error.message : 'Failed to load Ollama models.'
+        if (message.toLowerCase().includes('failed to load ollama models')) {
+          throw new Error(message)
+        }
+        if (endpoint) {
+          throw new Error(`Failed to load Ollama models from ${endpoint}: ${message}`)
+        }
+        throw new Error(message)
+      }
       return []
     }
   }
@@ -496,6 +520,15 @@ export class LLMService {
     if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
     if (['0', 'false', 'no', 'off'].includes(normalized)) return false
     return fallback
+  }
+
+  private readDefaultOllamaBaseUrl() {
+    const fromEnv = this.config.get<string>('OLLAMA_BASE_URL')?.trim()
+    return fromEnv || DEFAULT_OLLAMA_BASE_URL
+  }
+
+  private isAllowedOllamaHost(host: string) {
+    return this.allowedOllamaHosts.has('*') || this.allowedOllamaHosts.has(host)
   }
 
   private readAllowedOllamaHosts() {

@@ -24,6 +24,7 @@ import { LLM_MODEL_OPTIONS } from '@openagents/shared'
 type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax'
 
 const PROVIDERS: Provider[] = ['anthropic', 'openai', 'google', 'minimax', 'ollama']
+const DEFAULT_OLLAMA_BASE_URL = process.env.NEXT_PUBLIC_OLLAMA_BASE_URL?.trim() || 'http://localhost:11434'
 
 interface ProviderCardState {
   apiKey: string
@@ -40,7 +41,7 @@ const DEFAULTS: Record<Provider, ProviderCardState> = {
   openai:    { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   google:    { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   minimax:   { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
-  ollama:    { apiKey: '', baseUrl: 'http://localhost:11434', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  ollama:    { apiKey: '', baseUrl: DEFAULT_OLLAMA_BASE_URL, showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
 }
 const OLLAMA_FALLBACK_MODELS: string[] = [...(LLM_MODEL_OPTIONS.ollama as unknown as string[])]
 
@@ -424,7 +425,7 @@ export default function ConfigPage() {
         const options = resolvedModels.length > 0 ? resolvedModels : OLLAMA_FALLBACK_MODELS
         const nextModel = resolveOllamaModel(activeModel, options)
         if (!nextModel) {
-          setError('No local Ollama models found. Run "ollama pull <model>" then click Refresh models.')
+          setError('No Ollama models found at the configured endpoint. Run "ollama pull <model>" then click Refresh models.')
           return
         }
         const baseUrl = cards.ollama.baseUrl.trim() || DEFAULTS.ollama.baseUrl
@@ -776,9 +777,9 @@ export default function ConfigPage() {
               {activeProvider === 'ollama' && (
                 <span className={`text-[11px] ${ollamaModelsStatus === 'error' ? 'text-red-500' : 'text-slate-500'}`}>
                   {ollamaModelsStatus === 'loaded' && ollamaModels.length > 0 && `Found ${ollamaModels.length} model${ollamaModels.length === 1 ? '' : 's'} via Ollama.`}
-                  {ollamaModelsStatus === 'loaded' && ollamaModels.length === 0 && 'No local models found. Run "ollama pull <model>".'}
+                  {ollamaModelsStatus === 'loaded' && ollamaModels.length === 0 && 'No Ollama models found at this endpoint. Run "ollama pull <model>".'}
                   {ollamaModelsStatus === 'error' && `Could not load local models: ${ollamaModelsError}`}
-                  {ollamaModelsStatus === 'idle' && 'Load models from your local Ollama server.'}
+                  {ollamaModelsStatus === 'idle' && 'Load models from your configured Ollama server.'}
                 </span>
               )}
             </label>
@@ -872,10 +873,10 @@ export default function ConfigPage() {
                       type="text"
                       value={card.baseUrl}
                       onChange={(e) => updateCard(provider, { baseUrl: e.target.value })}
-                      placeholder="http://localhost:11434"
+                      placeholder={DEFAULT_OLLAMA_BASE_URL}
                       className="h-9 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
                     />
-                    <p className="text-[11px] italic text-slate-400">Ollama must be running locally</p>
+                    <p className="text-[11px] italic text-slate-400">Ollama must be reachable from the API server host</p>
                   </label>
                 ) : (
                   /* Anthropic / OpenAI: masked key input */

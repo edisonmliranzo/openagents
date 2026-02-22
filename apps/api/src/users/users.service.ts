@@ -4,7 +4,15 @@ import { PrismaService } from '../prisma/prisma.service'
 import type { LLMProvider } from '@openagents/shared'
 
 const SUPPORTED_LLM_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax']
-const DEFAULT_OLLAMA_ALLOWED_HOSTS = ['localhost', '127.0.0.1', '::1']
+const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
+const DEFAULT_OLLAMA_ALLOWED_HOSTS = [
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  'host.docker.internal',
+  'gateway.docker.internal',
+  'host.containers.internal',
+]
 const SUPPORTED_DOMAIN_PROVIDERS = ['manual', 'cloudflare', 'caddy', 'nginx'] as const
 const SUPPORTED_DOMAIN_STATUSES = ['pending', 'active', 'error'] as const
 
@@ -262,7 +270,7 @@ export class UsersService {
   }
 
   private normalizeOllamaBaseUrl(input?: string) {
-    const raw = (input ?? 'http://localhost:11434').trim()
+    const raw = (input ?? this.defaultOllamaBaseUrl()).trim()
     const candidate = raw.match(/^[a-z]+:\/\//i) ? raw : `http://${raw}`
     let parsed: URL
     try {
@@ -276,12 +284,8 @@ export class UsersService {
     }
 
     const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '')
-    const fromEnv = (this.config.get<string>('OLLAMA_ALLOWED_HOSTS') ?? '')
-      .split(',')
-      .map((value) => value.trim().toLowerCase().replace(/^\[|\]$/g, ''))
-      .filter(Boolean)
-    const allowedHosts = new Set(fromEnv.length > 0 ? fromEnv : DEFAULT_OLLAMA_ALLOWED_HOSTS)
-    if (!allowedHosts.has(host)) {
+    const allowedHosts = this.allowedOllamaHosts()
+    if (!allowedHosts.has('*') && !allowedHosts.has(host)) {
       throw new BadRequestException(
         `Blocked Ollama host "${host}". Add it to OLLAMA_ALLOWED_HOSTS to allow it.`,
       )
@@ -291,5 +295,19 @@ export class UsersService {
     parsed.search = ''
     parsed.hash = ''
     return parsed.origin
+  }
+
+  private defaultOllamaBaseUrl() {
+    const fromEnv = this.config.get<string>('OLLAMA_BASE_URL')?.trim()
+    return fromEnv || DEFAULT_OLLAMA_BASE_URL
+  }
+
+  private allowedOllamaHosts() {
+    const fromEnv = (this.config.get<string>('OLLAMA_ALLOWED_HOSTS') ?? '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase().replace(/^\[|\]$/g, ''))
+      .filter(Boolean)
+
+    return new Set(fromEnv.length > 0 ? fromEnv : DEFAULT_OLLAMA_ALLOWED_HOSTS)
   }
 }
