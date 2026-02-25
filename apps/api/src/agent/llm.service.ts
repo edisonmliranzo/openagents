@@ -309,11 +309,13 @@ export class LLMService {
     client: Anthropic,
     modelOverride?: string,
   ): Promise<LLMResponse> {
+    const anthropicMessages = this.normalizeAnthropicMessages(messages)
+
     const response = await client.messages.create({
       model: modelOverride ?? LLM_MODELS.anthropic.default,
       max_tokens: 4096,
       system: systemPrompt,
-      messages,
+      messages: anthropicMessages,
       tools: tools.map((t) => ({
         name: t.name,
         description: t.description,
@@ -333,6 +335,24 @@ export class LLMService {
       })),
       stopReason: response.stop_reason === 'tool_use' ? 'tool_use' : 'end_turn',
     }
+  }
+
+  // Some Anthropic models reject assistant-prefill payloads; enforce a user-final turn.
+  private normalizeAnthropicMessages(messages: LLMMessage[]): LLMMessage[] {
+    const normalized = messages.filter((message) => message.content.trim().length > 0)
+
+    if (normalized.length === 0) {
+      return [{ role: 'user', content: 'Continue.' }]
+    }
+
+    if (normalized[normalized.length - 1]?.role === 'assistant') {
+      normalized.push({
+        role: 'user',
+        content: 'Continue based on the latest context.',
+      })
+    }
+
+    return normalized
   }
 
   private async completeOpenAI(
