@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { ConversationList } from '@/components/chat/ConversationList'
+import { LiveToolPanel } from '@/components/chat/LiveToolPanel'
 import { useChatStore } from '@/stores/chat'
 import { RefreshCw, Radio, ShieldCheck } from 'lucide-react'
 
@@ -153,13 +154,18 @@ export default function ChatPage() {
               </div>
             )}
 
-            <div className="min-h-0 flex-1">
-              <ChatWindow
-                gatewayConnected={gatewayConnected}
-                onNewSession={async () => {
-                  await createConversation()
-                }}
-              />
+            <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="min-h-0">
+                <ChatWindow
+                  gatewayConnected={gatewayConnected}
+                  onNewSession={async () => {
+                    await createConversation()
+                  }}
+                />
+              </div>
+              <div className="min-h-0">
+                <LiveToolPanel />
+              </div>
             </div>
           </section>
         </div>

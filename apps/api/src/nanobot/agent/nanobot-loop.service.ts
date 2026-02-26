@@ -642,8 +642,16 @@ export class NanobotLoopService {
     } else if (/(code|programming|typescript|javascript|python|debug|fix|build)/i.test(normalized)) {
       tools.add('web_fetch')
     } else if (/(research|news|latest|analysis)/i.test(normalized)) {
+      tools.add('deep_research')
       tools.add('web_search')
       tools.add('web_fetch')
+    }
+    if (/(browser|website|web\s+automation|click|navigation|form)/i.test(normalized)) {
+      tools.add('computer_session_start')
+      tools.add('computer_navigate')
+      tools.add('computer_click_link')
+      tools.add('computer_snapshot')
+      tools.add('computer_session_end')
     }
 
     const title = `${topic.slice(0, 56)} Skill`

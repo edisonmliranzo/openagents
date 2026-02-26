@@ -9,11 +9,25 @@ import { WebSearchTool } from './connectors/web-search.tool'
 import { TimeTool } from './connectors/time.tool'
 import { CronTool } from './connectors/cron.tool'
 import { BybitTool } from './connectors/bybit.tool'
+import { DeepResearchTool } from './connectors/deep-research.tool'
+import { ComputerUseTool } from './connectors/computer-use.tool'
 import { CronModule } from '../cron/cron.module'
 
 @Module({
   imports: [CronModule],
-  providers: [ToolsService, GmailTool, CalendarTool, WebFetchTool, NotesTool, WebSearchTool, TimeTool, CronTool, BybitTool],
+  providers: [
+    ToolsService,
+    GmailTool,
+    CalendarTool,
+    WebFetchTool,
+    NotesTool,
+    WebSearchTool,
+    TimeTool,
+    CronTool,
+    BybitTool,
+    DeepResearchTool,
+    ComputerUseTool,
+  ],
   controllers: [ToolsController],
   exports: [ToolsService],
 })

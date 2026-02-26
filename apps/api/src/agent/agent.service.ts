@@ -9,7 +9,7 @@ import { AuditService } from '../audit/audit.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { DataLineageService } from '../lineage/lineage.service'
 import { SHORT_TERM_MEMORY_LIMIT } from '@openagents/shared'
-import type { LLMProvider, LineageToolInfluence } from '@openagents/shared'
+import type { LLMProvider, LineageToolInfluence, ToolResult } from '@openagents/shared'
 
 export interface AgentRunParams {
   conversationId: string
@@ -25,13 +25,19 @@ If a user request maps to available tools, prefer using tools before claiming li
 Do not claim a capability is unavailable unless the tool is truly missing or the tool call returned an error.
 When you use a tool that requires approval, clearly explain what you're about to do and why.
 After getting tool results, summarize them clearly and suggest next steps.
+For web research, include source URLs from tool results in your answer when available.
+For complex tasks, decompose into plan -> execute -> verify before finalizing.
 Keep your responses concise and action-oriented.`
 const DEFAULT_MAX_TOOL_ROUNDS = 6
+const DEFAULT_TOOL_RETRY_ATTEMPTS = 1
+const DEFAULT_TOOL_RETRY_BASE_DELAY_MS = 500
 
 interface AgentRunToolMetric {
   name: string
   requiresApproval: boolean
   status: 'executed' | 'failed' | 'pending_approval'
+  attempts?: number
+  recoveredByRetry?: boolean
 }
 
 interface AgentRunMetrics {
@@ -43,7 +49,10 @@ interface AgentRunMetrics {
   approvalsRequested: number
   fallbackToOllama: boolean
   maxToolRounds: number
+  toolRetryAttemptsConfigured: number
   toolRoundsUsed: number
+  toolRetries: number
+  toolRecoveries: number
   autonomyScheduleEnabled: boolean
   autonomyWithinWindow: boolean
   autonomyTimezone: string
@@ -139,11 +148,20 @@ export class AgentService {
 
       // 7. Call LLM with user's preferred provider + per-user key if configured
       const userLlmKey = await this.users.getRawLlmKey(userId, provider)
-      const userApiKey = userLlmKey?.isActive ? (userLlmKey.apiKey ?? undefined) : undefined
+      const userApiKey = userLlmKey?.isActive
+        ? (userLlmKey.apiKey ?? userLlmKey.loginPassword ?? undefined)
+        : undefined
       const userBaseUrl = userLlmKey?.isActive ? (userLlmKey.baseUrl ?? undefined) : undefined
 
       const maxToolRoundsRaw = Number.parseInt(process.env.AGENT_MAX_TOOL_ROUNDS ?? `${DEFAULT_MAX_TOOL_ROUNDS}`, 10)
       const maxToolRounds = Number.isFinite(maxToolRoundsRaw) ? Math.max(1, Math.min(maxToolRoundsRaw, 12)) : DEFAULT_MAX_TOOL_ROUNDS
+      const toolRetryAttemptsRaw = Number.parseInt(
+        process.env.AGENT_TOOL_RETRY_ATTEMPTS ?? `${DEFAULT_TOOL_RETRY_ATTEMPTS}`,
+        10,
+      )
+      const toolRetryAttempts = Number.isFinite(toolRetryAttemptsRaw)
+        ? Math.max(0, Math.min(toolRetryAttemptsRaw, 4))
+        : DEFAULT_TOOL_RETRY_ATTEMPTS
       let activeProvider: LLMProvider = provider
       let activeUserApiKey = userApiKey
       let activeUserBaseUrl = userBaseUrl
@@ -157,7 +175,10 @@ export class AgentService {
         approvalsRequested: 0,
         fallbackToOllama: false,
         maxToolRounds,
+        toolRetryAttemptsConfigured: toolRetryAttempts,
         toolRoundsUsed: 0,
+        toolRetries: 0,
+        toolRecoveries: 0,
         autonomyScheduleEnabled: autonomyStatus.scheduleEnabled,
         autonomyWithinWindow: autonomyStatus.withinWindow,
         autonomyTimezone: autonomyStatus.timezone,
@@ -357,15 +378,33 @@ export class AgentService {
           })
           emit('status', { status: 'running_tool', tool: toolCall.name })
 
-          const result = await this.tools.execute(toolCall.name, toolCall.input, userId)
+          const toolExecution = await this.executeToolWithRetry({
+            toolName: toolCall.name,
+            toolInput: toolCall.input,
+            userId,
+            maxRetries: toolRetryAttempts,
+            emit,
+          })
+          const result = toolExecution.result
+          runMetrics.toolRetries += Math.max(0, toolExecution.attempts - 1)
+          if (toolExecution.recoveredByRetry) {
+            runMetrics.toolRecoveries += 1
+          }
           const resultContent = result.success
             ? this.renderToolData(result.output)
-            : (result.error ?? 'Error')
+            : this.renderToolData({
+                error: result.error ?? 'Error',
+                attempts: toolExecution.attempts,
+                retryable: this.isRetryableToolError(result.error),
+                output: result.output,
+              })
 
           runMetrics.toolCalls.push({
             name: toolCall.name,
             requiresApproval: false,
             status: result.success ? 'executed' : 'failed',
+            attempts: toolExecution.attempts,
+            recoveredByRetry: toolExecution.recoveredByRetry,
           })
           this.addExternalSources(lineageExternalSources, toolCall.input)
           this.addExternalSources(lineageExternalSources, result.output)
@@ -385,14 +424,25 @@ export class AgentService {
               content: resultContent,
               status: result.success ? 'done' : 'error',
               toolCallJson: JSON.stringify(toolCall),
-              toolResultJson: JSON.stringify(result),
+              toolResultJson: JSON.stringify({
+                ...result,
+                attempts: toolExecution.attempts,
+                recoveredByRetry: toolExecution.recoveredByRetry,
+              }),
             },
           })
 
-          emit('tool_result', { tool: toolCall.name, result })
+          emit('tool_result', {
+            tool: toolCall.name,
+            result,
+            attempts: toolExecution.attempts,
+            recoveredByRetry: toolExecution.recoveredByRetry,
+          })
           llmWorkingMessages.push({
             role: 'assistant',
-            content: `Tool result for ${toolCall.name}:\n${resultContent}`,
+            content: result.success
+              ? `Tool result for ${toolCall.name}:\n${resultContent}`
+              : `Tool ${toolCall.name} failed after ${toolExecution.attempts} attempt(s).\nTool result:\n${resultContent}\nAdjust inputs or choose an alternative tool before finalizing.`,
           })
           executedAnyTool = true
         }
@@ -493,6 +543,86 @@ export class AgentService {
       })
       throw err
     }
+  }
+
+  private async executeToolWithRetry(input: {
+    toolName: string
+    toolInput: Record<string, unknown>
+    userId: string
+    maxRetries: number
+    emit: (event: string, data: unknown) => void
+  }): Promise<{ result: ToolResult; attempts: number; recoveredByRetry: boolean }> {
+    let attempts = 0
+    let result: ToolResult = { success: false, output: null, error: 'Tool did not execute.' }
+
+    while (attempts <= input.maxRetries) {
+      attempts += 1
+      result = await this.tools.execute(input.toolName, input.toolInput, input.userId)
+      if (result.success) {
+        return {
+          result,
+          attempts,
+          recoveredByRetry: attempts > 1,
+        }
+      }
+
+      const canRetry = attempts <= input.maxRetries
+      const retryable = this.isRetryableToolError(result.error)
+      if (!canRetry || !retryable) break
+
+      const delayMs = this.computeToolRetryDelayMs(attempts)
+      input.emit('status', {
+        status: 'retrying_tool',
+        tool: input.toolName,
+        attempt: attempts + 1,
+        delayMs,
+        reason: result.error ?? 'retryable tool failure',
+      })
+      await this.sleep(delayMs)
+    }
+
+    return {
+      result,
+      attempts,
+      recoveredByRetry: false,
+    }
+  }
+
+  private isRetryableToolError(rawError: unknown) {
+    if (typeof rawError !== 'string') return false
+    const message = rawError.toLowerCase()
+    if (!message) return false
+    if (message.includes('unknown tool')) return false
+    if (/http\s*5\d\d/.test(message)) return true
+    return [
+      'timeout',
+      'timed out',
+      'network',
+      'fetch failed',
+      'connection reset',
+      'econnreset',
+      'etimedout',
+      'temporarily unavailable',
+      '429',
+      'rate limit',
+      'service unavailable',
+      'gateway timeout',
+      'bad gateway',
+    ].some((pattern) => message.includes(pattern))
+  }
+
+  private computeToolRetryDelayMs(attempt: number) {
+    const raw = Number.parseInt(
+      process.env.AGENT_TOOL_RETRY_BASE_DELAY_MS ?? `${DEFAULT_TOOL_RETRY_BASE_DELAY_MS}`,
+      10,
+    )
+    const base = Number.isFinite(raw) ? Math.max(100, Math.min(raw, 10_000)) : DEFAULT_TOOL_RETRY_BASE_DELAY_MS
+    return Math.min(base * Math.max(1, attempt), 12_000)
+  }
+
+  private async sleep(ms: number) {
+    if (ms <= 0) return
+    await new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   private renderToolData(data: unknown) {

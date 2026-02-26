@@ -4,6 +4,18 @@ import type { Conversation, Message, Approval, HumanHandoffTicket } from '@opena
 
 type GatewayStatus = 'connecting' | 'connected' | 'disconnected'
 
+export interface ChatToolStreamEvent {
+  id: string
+  conversationId: string
+  tool: string
+  success: boolean
+  output: unknown
+  error?: string
+  attempts?: number
+  recoveredByRetry?: boolean
+  createdAt: string
+}
+
 function formatAgentError(raw: string) {
   const value = raw.trim()
   if (!value) return 'Agent request failed.'
@@ -74,6 +86,8 @@ interface ChatState {
   messages: Message[]
   pendingApprovals: Approval[]
   activeHandoff: HumanHandoffTicket | null
+  streamToolEvents: ChatToolStreamEvent[]
+  runStatus: string | null
   isStreaming: boolean
   gatewayStatus: GatewayStatus
   gatewayMessage: string
@@ -97,6 +111,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   pendingApprovals: [],
   activeHandoff: null,
+  streamToolEvents: [],
+  runStatus: null,
   isStreaming: false,
   gatewayStatus: 'connecting',
   gatewayMessage: 'connecting...',
@@ -123,6 +139,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeConversationId: id,
         messages,
         activeHandoff: await sdk.handoffs.getActive(id),
+        streamToolEvents: [],
+        runStatus: null,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
@@ -140,6 +158,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeConversationId: conv.id,
         messages: [],
         activeHandoff: null,
+        streamToolEvents: [],
+        runStatus: null,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
@@ -169,6 +189,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...s.messages,
         { id: tempId, conversationId: activeConversationId, role: 'user', content, status: 'done', createdAt: new Date().toISOString() } as Message,
       ],
+      streamToolEvents: [],
+      runStatus: 'thinking',
       isStreaming: true,
       gatewayStatus: 'connected',
       gatewayMessage: 'connected',
@@ -204,11 +226,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
             set((s) => ({
               lastError: friendlyMessage,
+              runStatus: 'error',
               messages: s.messages.map((m) =>
                 m.id === agentTempId ? { ...m, content: friendlyMessage, status: 'error' } : m,
               ),
             }))
             return
+          }
+
+          if (data.event === 'status') {
+            const nextStatus = typeof data.data?.status === 'string' ? data.data.status : null
+            if (nextStatus) {
+              set({ runStatus: nextStatus })
+            }
           }
 
           if (data.event === 'message' && data.data?.role === 'agent') {
@@ -219,6 +249,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ),
             }))
           }
+
+          if (data.event === 'tool_result') {
+            const toolName = typeof data.data?.tool === 'string' ? data.data.tool : 'tool'
+            const result = data.data?.result as { success?: unknown; output?: unknown; error?: unknown } | undefined
+            const success = Boolean(result?.success)
+            const output = result?.output ?? null
+            const error = typeof result?.error === 'string' ? result.error : undefined
+            const attempts = Number.isFinite(Number(data.data?.attempts)) ? Number(data.data?.attempts) : undefined
+            const recoveredByRetry = typeof data.data?.recoveredByRetry === 'boolean'
+              ? data.data.recoveredByRetry
+              : undefined
+            const event: ChatToolStreamEvent = {
+              id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              conversationId: activeConversationId,
+              tool: toolName,
+              success,
+              output,
+              ...(error ? { error } : {}),
+              ...(attempts ? { attempts } : {}),
+              ...(typeof recoveredByRetry === 'boolean' ? { recoveredByRetry } : {}),
+              createdAt: new Date().toISOString(),
+            }
+            set((s) => ({
+              streamToolEvents: [...s.streamToolEvents.slice(-79), event],
+            }))
+          }
+
           if (data.event === 'approval_required') {
             sawApprovalRequest = true
             set((s) => ({ pendingApprovals: [...s.pendingApprovals, data.data.approval] }))
@@ -258,6 +315,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: nextMessages,
         activeHandoff,
         isStreaming: false,
+        runStatus: streamError ? 'error' : 'done',
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: streamError,
@@ -266,6 +324,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const failure = deriveGatewayFailure(err, 'Failed while streaming agent response.')
       set((s) => ({
         isStreaming: false,
+        runStatus: 'error',
         gatewayStatus: failure.gatewayStatus,
         gatewayMessage: failure.gatewayMessage,
         lastError: failure.lastError,

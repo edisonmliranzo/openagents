@@ -417,6 +417,12 @@ pnpm prod:down
 - `calendar_create_event`
 - `web_fetch`
 - `web_search`
+- `deep_research`
+- `computer_session_start`
+- `computer_navigate`
+- `computer_click_link`
+- `computer_snapshot`
+- `computer_session_end`
 - `get_current_time`
 - `cron_add`
 - `cron_list`
@@ -498,6 +504,23 @@ Free/self-hosted SearXNG:
 - `WEB_SEARCH_PROVIDER=searxng`
 - `SEARXNG_BASE_URL=http://localhost:8080`
 - `SEARXNG_API_KEY=` (optional)
+
+### Computer-use (Playwright)
+
+- Install runtime in API workspace: `pnpm --filter @openagents/api add playwright`
+- Browser mode config:
+  - `COMPUTER_USE_PROVIDER=auto` (`auto` | `playwright` | `http`)
+  - `COMPUTER_USE_PLAYWRIGHT_BROWSER=chromium` (`chromium` | `firefox` | `webkit`)
+  - `COMPUTER_USE_PLAYWRIGHT_HEADLESS=true`
+  - `COMPUTER_USE_MAX_SCREENSHOT_BYTES=120000`
+
+`auto` prefers Playwright for JS-heavy sites and falls back to static HTTP parsing if Playwright is unavailable.
+
+### Agent reliability tuning
+
+- `AGENT_MAX_TOOL_ROUNDS=6` max plan/act rounds per run
+- `AGENT_TOOL_RETRY_ATTEMPTS=1` retries for retryable tool errors
+- `AGENT_TOOL_RETRY_BASE_DELAY_MS=500` linear backoff base delay
 
 ### ML automation
 
