@@ -8,6 +8,8 @@ import { WebSearchTool } from './connectors/web-search.tool'
 import { TimeTool } from './connectors/time.tool'
 import { CronTool } from './connectors/cron.tool'
 import { BybitTool } from './connectors/bybit.tool'
+import { DeepResearchTool } from './connectors/deep-research.tool'
+import { ComputerUseTool } from './connectors/computer-use.tool'
 import type { ToolResult } from '@openagents/shared'
 
 export interface ToolDefinition {
@@ -32,6 +34,8 @@ export class ToolsService {
     private time: TimeTool,
     private cron: CronTool,
     private bybit: BybitTool,
+    private deepResearch: DeepResearchTool,
+    private computerUse: ComputerUseTool,
   ) {
     this.registry = new Map([
       ['gmail_search', { def: this.gmail.searchDef, execute: this.gmail.search.bind(this.gmail) }],
@@ -50,6 +54,12 @@ export class ToolsService {
       ['bybit_get_positions', { def: this.bybit.positionsDef, execute: this.bybit.getPositions.bind(this.bybit) }],
       ['bybit_get_wallet_balance', { def: this.bybit.walletBalanceDef, execute: this.bybit.getWalletBalance.bind(this.bybit) }],
       ['bybit_place_demo_order', { def: this.bybit.placeDemoOrderDef, execute: this.bybit.placeDemoOrder.bind(this.bybit) }],
+      ['deep_research', { def: this.deepResearch.def, execute: this.deepResearch.run.bind(this.deepResearch) }],
+      ['computer_session_start', { def: this.computerUse.sessionStartDef, execute: this.computerUse.start.bind(this.computerUse) }],
+      ['computer_navigate', { def: this.computerUse.navigateDef, execute: this.computerUse.navigate.bind(this.computerUse) }],
+      ['computer_click_link', { def: this.computerUse.clickDef, execute: this.computerUse.click.bind(this.computerUse) }],
+      ['computer_snapshot', { def: this.computerUse.snapshotDef, execute: this.computerUse.snapshot.bind(this.computerUse) }],
+      ['computer_session_end', { def: this.computerUse.endSessionDef, execute: this.computerUse.end.bind(this.computerUse) }],
     ])
   }
 
