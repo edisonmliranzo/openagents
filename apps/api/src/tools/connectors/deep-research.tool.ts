@@ -41,7 +41,7 @@ export class DeepResearchTool {
           query: { type: 'string', description: 'Research query or question' },
           maxResults: { type: 'number', description: `Max search results to scan (1-${MAX_RESULTS})` },
           maxPages: { type: 'number', description: `Max pages to fetch from results (1-${MAX_PAGES})` },
-          provider: { type: 'string', description: 'Optional search provider override: brave or searxng' },
+          provider: { type: 'string', description: 'Optional search provider override: auto, brave, searxng, or duckduckgo' },
           includePageContent: {
             type: 'boolean',
             description: 'Include larger content excerpts from fetched pages (default: false)',
