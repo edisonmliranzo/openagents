@@ -494,6 +494,11 @@ Production recommendation:
 
 ### Web search providers
 
+Auto fallback (recommended):
+
+- `WEB_SEARCH_PROVIDER=auto`
+- tries `brave` (if `BRAVE_SEARCH_API_KEY` is set), then `searxng` (if `SEARXNG_BASE_URL` is set), then `duckduckgo` (no key)
+
 Brave:
 
 - `WEB_SEARCH_PROVIDER=brave`
@@ -504,6 +509,10 @@ Free/self-hosted SearXNG:
 - `WEB_SEARCH_PROVIDER=searxng`
 - `SEARXNG_BASE_URL=http://localhost:8080`
 - `SEARXNG_API_KEY=` (optional)
+
+DuckDuckGo (no API key):
+
+- `WEB_SEARCH_PROVIDER=duckduckgo`
 
 ### Computer-use (Playwright)
 
