@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -33,6 +33,8 @@ model User {
   llmApiKeys     LlmApiKey[]
   whatsAppDevices  WhatsAppDevice[]
   whatsAppPairings WhatsAppPairing[]
+  subagentRuns   SubagentRun[]
+  delegationEdges DelegationEdge[]
 }
 
 model RefreshToken {
@@ -61,6 +63,7 @@ model Conversation {
   messages  Message[]
   approvals Approval[]
   agentRuns AgentRun[]
+  subagentRuns SubagentRun[]
 }
 
 model Message {
@@ -88,6 +91,55 @@ model AgentRun {
   metadata       String?   // JSON string
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model SubagentRun {
+  id             String    @id @default(cuid())
+  userId         String
+  conversationId String?
+  parentRunId    String?
+  role           String    // planner | researcher | builder | operator | reviewer
+  label          String
+  objective      String
+  input          String    @default("{}") // JSON string
+  output         String?
+  status         String    @default("queued") // queued | running | done | error
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  error          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation  Conversation?    @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  outgoingEdges DelegationEdge[] @relation("SubagentRunOutgoing")
+  incomingEdges DelegationEdge[] @relation("SubagentRunIncoming")
+
+  @@index([userId, createdAt])
+  @@index([conversationId])
+  @@index([parentRunId])
+  @@map("subagent_run")
+}
+
+model DelegationEdge {
+  id        String   @id @default(cuid())
+  userId    String
+  fromRunId String
+  toRunId   String
+  intent    String
+  status    String   @default("delegated") // delegated | accepted | completed | failed
+  metadata  String?  // JSON string
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromRun SubagentRun @relation("SubagentRunOutgoing", fields: [fromRunId], references: [id], onDelete: Cascade)
+  toRun   SubagentRun @relation("SubagentRunIncoming", fields: [toRunId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([fromRunId])
+  @@index([toRunId])
+  @@map("delegation_edge")
 }
 
 model Tool {
@@ -255,6 +307,9 @@ model LlmApiKey {
   provider  String   // 'anthropic' | 'openai' | 'ollama'
   apiKey    String?  // null for Ollama
   baseUrl   String?  // for Ollama: 'http://localhost:11434'
+  loginEmail String?
+  loginPassword String?
+  subscriptionPlan String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

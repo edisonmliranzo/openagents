@@ -98,6 +98,38 @@ class ImportMarketplaceDto {
   pack: Record<string, unknown>
 }
 
+class CreateSpecialistRunDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  objective: string
+
+  @IsOptional()
+  @IsString()
+  conversationId?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  context?: string
+
+  @IsOptional()
+  @IsString()
+  parentRunId?: string
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  maxDelegates?: number
+}
+
+class ExecuteSpecialistRunDto {
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean
+}
+
 class VoiceTranscribeDto {
   @IsString()
   @IsOptional()
@@ -282,6 +314,28 @@ export class NanobotController {
   @Get('orchestration/runs/:runId')
   orchestrationRun(@Req() req: any, @Param('runId') runId: string) {
     return this.nanobot.getOrchestrationRun(req.user.id, runId)
+  }
+
+  @Get('subagents/runs')
+  specialistRuns(@Req() req: any, @Query('limit') limit?: string) {
+    const parsed = Number.parseInt(limit ?? '20', 10)
+    const safe = Number.isFinite(parsed) ? parsed : 20
+    return this.nanobot.listSpecialistRuns(req.user.id, safe)
+  }
+
+  @Post('subagents/runs')
+  createSpecialistRun(@Req() req: any, @Body() dto: CreateSpecialistRunDto) {
+    return this.nanobot.createSpecialistRun(req.user.id, dto)
+  }
+
+  @Post('subagents/runs/:runId/execute')
+  executeSpecialistRun(@Req() req: any, @Param('runId') runId: string, @Body() dto: ExecuteSpecialistRunDto) {
+    return this.nanobot.runSpecialistRun(req.user.id, runId, dto)
+  }
+
+  @Get('subagents/runs/:runId')
+  specialistRunStatus(@Req() req: any, @Param('runId') runId: string) {
+    return this.nanobot.specialistRunStatus(req.user.id, runId)
   }
 
   @Post('voice/transcribe')

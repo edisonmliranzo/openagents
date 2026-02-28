@@ -73,6 +73,8 @@ export type NanobotUrgency = 'low' | 'normal' | 'high'
 export type ApprovalRiskLevel = 'low' | 'medium' | 'high'
 export type NanobotSubagentRole = 'planner' | 'executor' | 'critic' | 'telemetry'
 export type NanobotSubagentStatus = 'queued' | 'running' | 'done' | 'error'
+export type NanobotSpecialistRole = 'planner' | 'researcher' | 'builder' | 'operator' | 'reviewer'
+export type NanobotDelegationStatus = 'delegated' | 'accepted' | 'completed' | 'failed'
 
 export interface NanobotPersonaProfile {
   id: string
@@ -138,6 +140,59 @@ export interface NanobotSubagentTask {
   runId?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface CreateNanobotSpecialistRunInput {
+  objective: string
+  conversationId?: string
+  context?: string
+  parentRunId?: string
+  maxDelegates?: number
+}
+
+export interface ExecuteNanobotSpecialistRunInput {
+  force?: boolean
+}
+
+export interface NanobotSpecialistRun {
+  id: string
+  userId: string
+  conversationId: string | null
+  parentRunId: string | null
+  role: NanobotSpecialistRole
+  label: string
+  objective: string
+  input: Record<string, unknown>
+  output: string | null
+  status: NanobotSubagentStatus
+  startedAt: string | null
+  finishedAt: string | null
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NanobotDelegationEdge {
+  id: string
+  userId: string
+  fromRunId: string
+  toRunId: string
+  intent: string
+  status: NanobotDelegationStatus
+  metadata: Record<string, unknown> | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NanobotSpecialistRunStatus {
+  run: NanobotSpecialistRun
+  delegations: NanobotDelegationEdge[]
+  delegatedRuns: NanobotSpecialistRun[]
+  synthesizedOutput: string | null
+}
+
+export interface NanobotSpecialistRunExecutionResult extends NanobotSpecialistRunStatus {
+  steps: string[]
 }
 
 export interface NanobotPresenceTickResult {

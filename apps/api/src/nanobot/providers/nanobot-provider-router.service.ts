@@ -26,7 +26,9 @@ export class NanobotProviderRouterService {
       ? (settings.preferredModel?.trim() || undefined)
       : undefined
     const userKey = await this.users.getRawLlmKey(input.userId, provider)
-    const apiKey = userKey?.isActive ? (userKey.apiKey ?? undefined) : undefined
+    const apiKey = userKey?.isActive
+      ? (userKey.apiKey ?? userKey.loginPassword ?? undefined)
+      : undefined
     const baseUrl = userKey?.isActive ? (userKey.baseUrl ?? undefined) : undefined
 
     return this.llm.complete(

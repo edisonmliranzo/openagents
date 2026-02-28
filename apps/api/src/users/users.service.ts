@@ -65,12 +65,16 @@ export class UsersService {
     return keys.map((k) => ({
       ...k,
       apiKey: k.apiKey ? `...${k.apiKey.slice(-4)}` : null,
+      loginPassword: k.loginPassword ? `...${k.loginPassword.slice(-4)}` : null,
     }))
   }
 
   async upsertLlmKey(userId: string, provider: string, data: {
     apiKey?: string
     baseUrl?: string
+    loginEmail?: string
+    loginPassword?: string
+    subscriptionPlan?: string
     isActive?: boolean
   }) {
     const normalizedProvider = this.normalizeProvider(provider)
@@ -81,6 +85,9 @@ export class UsersService {
     const updateData: {
       apiKey?: string | null
       baseUrl?: string | null
+      loginEmail?: string | null
+      loginPassword?: string | null
+      subscriptionPlan?: string | null
       isActive?: boolean
     } = {}
 
@@ -91,16 +98,53 @@ export class UsersService {
     if (normalizedProvider === 'ollama') {
       updateData.apiKey = null
       updateData.baseUrl = this.normalizeOllamaBaseUrl(data.baseUrl ?? existing?.baseUrl ?? undefined)
+      updateData.loginEmail = null
+      updateData.loginPassword = null
+      updateData.subscriptionPlan = null
     } else {
       updateData.baseUrl = null
       if (data.apiKey != null) {
         const key = data.apiKey.trim()
-        if (!key) {
-          throw new BadRequestException('API key cannot be empty.')
+        updateData.apiKey = key.length > 0 ? key : null
+      }
+
+      const hasLoginEmail = data.loginEmail !== undefined
+      const hasLoginPassword = data.loginPassword !== undefined
+      if (hasLoginEmail !== hasLoginPassword) {
+        throw new BadRequestException('Login email and password must be provided together.')
+      }
+
+      if (hasLoginEmail && hasLoginPassword) {
+        const loginEmail = this.normalizeOptionalText(data.loginEmail)
+        const loginPassword = this.normalizeOptionalText(data.loginPassword)
+
+        if ((loginEmail && !loginPassword) || (!loginEmail && loginPassword)) {
+          throw new BadRequestException('Login email and password must be provided together.')
         }
-        updateData.apiKey = key
-      } else if (!existing?.apiKey) {
-        throw new BadRequestException(`API key is required for provider "${normalizedProvider}".`)
+
+        updateData.loginEmail = loginEmail
+        updateData.loginPassword = loginPassword
+      }
+
+      if (data.subscriptionPlan !== undefined) {
+        updateData.subscriptionPlan = this.normalizeOptionalText(data.subscriptionPlan)
+      }
+
+      const nextApiKey = updateData.apiKey !== undefined
+        ? updateData.apiKey
+        : (existing?.apiKey ?? null)
+      const nextLoginEmail = updateData.loginEmail !== undefined
+        ? updateData.loginEmail
+        : (existing?.loginEmail ?? null)
+      const nextLoginPassword = updateData.loginPassword !== undefined
+        ? updateData.loginPassword
+        : (existing?.loginPassword ?? null)
+      const hasLoginCredentials = Boolean(nextLoginEmail && nextLoginPassword)
+
+      if (!nextApiKey && !hasLoginCredentials) {
+        throw new BadRequestException(
+          `API key or login credentials are required for provider "${normalizedProvider}".`,
+        )
       }
     }
 
@@ -109,7 +153,11 @@ export class UsersService {
       update: updateData,
       create: { userId, provider: normalizedProvider, ...updateData },
     })
-    return { ...result, apiKey: result.apiKey ? `...${result.apiKey.slice(-4)}` : null }
+    return {
+      ...result,
+      apiKey: result.apiKey ? `...${result.apiKey.slice(-4)}` : null,
+      loginPassword: result.loginPassword ? `...${result.loginPassword.slice(-4)}` : null,
+    }
   }
 
   async deleteLlmKey(userId: string, provider: string) {

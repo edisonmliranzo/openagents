@@ -20,6 +20,8 @@ import { CronService } from '../cron/cron.service'
 import { MemoryService } from '../memory/memory.service'
 import { ApprovalsService } from '../approvals/approvals.service'
 import type {
+  CreateNanobotSpecialistRunInput,
+  ExecuteNanobotSpecialistRunInput,
   NanobotConfigPatch,
   NanobotMarketplaceExportInput,
   NanobotMarketplaceImportInput,
@@ -167,6 +169,22 @@ export class NanobotService {
 
   getOrchestrationRun(userId: string, runId: string) {
     return this.orchestration.getForUser(userId, runId)
+  }
+
+  listSpecialistRuns(userId: string, limit?: number) {
+    return this.subagents.listSpecialistRuns(userId, limit)
+  }
+
+  createSpecialistRun(userId: string, input: CreateNanobotSpecialistRunInput) {
+    return this.subagents.createSpecialistRun(userId, input)
+  }
+
+  runSpecialistRun(userId: string, runId: string, input: ExecuteNanobotSpecialistRunInput = {}) {
+    return this.subagents.runSpecialist(userId, runId, input)
+  }
+
+  specialistRunStatus(userId: string, runId: string) {
+    return this.subagents.getSpecialistStatus(userId, runId)
   }
 
   transcribeVoice(userId: string, input: NanobotVoiceTranscriptionInput) {

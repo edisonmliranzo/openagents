@@ -19,7 +19,7 @@ import {
 import type { LlmApiKey, UserDomain, UserDomainProvider, UserDomainStatus } from '@openagents/shared'
 import { LLM_MODEL_OPTIONS } from '@openagents/shared'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// Types
 
 type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax'
 
@@ -30,6 +30,10 @@ interface ProviderCardState {
   apiKey: string
   baseUrl: string
   showKey: boolean
+  loginEmail: string
+  loginPassword: string
+  showLoginPassword: boolean
+  subscriptionPlan: string
   testStatus: 'idle' | 'testing' | 'ok' | 'error'
   testModel: string
   testError: string
@@ -37,13 +41,19 @@ interface ProviderCardState {
 }
 
 const DEFAULTS: Record<Provider, ProviderCardState> = {
-  anthropic: { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
-  openai:    { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
-  google:    { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
-  minimax:   { apiKey: '', baseUrl: '', showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
-  ollama:    { apiKey: '', baseUrl: DEFAULT_OLLAMA_BASE_URL, showKey: false, testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  anthropic: { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  openai:    { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  google:    { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  minimax:   { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  ollama:    { apiKey: '', baseUrl: DEFAULT_OLLAMA_BASE_URL, showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
 }
 const OLLAMA_FALLBACK_MODELS: string[] = [...(LLM_MODEL_OPTIONS.ollama as unknown as string[])]
+const PROVIDER_PLAN_OPTIONS: Record<Exclude<Provider, 'ollama'>, string[]> = {
+  anthropic: ['Free', 'Pro', 'Max', 'Team', 'Enterprise'],
+  openai: ['Free', 'Plus (Codex)', 'Pro (Codex)', 'Team', 'Enterprise'],
+  google: ['Free', 'AI Pro', 'AI Ultra', 'Workspace Enterprise'],
+  minimax: ['Starter', 'Pro', 'Enterprise'],
+}
 
 const PROVIDER_META: Record<Provider, {
   label: string
@@ -228,7 +238,7 @@ function resolveOllamaModel(inputModel: string, availableModels: string[]) {
   return ''
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// Main Page
 
 export default function ConfigPage() {
   const [profileEmail, setProfileEmail] = useState('')
@@ -313,13 +323,27 @@ export default function ConfigPage() {
         ),
       )
 
-      // Pre-fill baseUrl for ollama if stored
-      const ollamaKey = keys.find((k) => k.provider === 'ollama')
-      const ollamaBaseUrl = ollamaKey?.baseUrl ?? DEFAULTS.ollama.baseUrl
-      setCards((prev) => ({
-        ...prev,
-        ollama: { ...prev.ollama, baseUrl: ollamaBaseUrl },
-      }))
+      const nextCards: Record<Provider, ProviderCardState> = {
+        anthropic: { ...DEFAULTS.anthropic },
+        openai: { ...DEFAULTS.openai },
+        google: { ...DEFAULTS.google },
+        minimax: { ...DEFAULTS.minimax },
+        ollama: { ...DEFAULTS.ollama },
+      }
+
+      for (const key of keys) {
+        if (!isProvider(key.provider)) continue
+        if (key.provider === 'ollama') {
+          nextCards.ollama.baseUrl = key.baseUrl ?? DEFAULTS.ollama.baseUrl
+          continue
+        }
+
+        nextCards[key.provider].loginEmail = key.loginEmail ?? ''
+        nextCards[key.provider].subscriptionPlan = key.subscriptionPlan ?? ''
+      }
+
+      setCards(nextCards)
+      const ollamaBaseUrl = nextCards.ollama.baseUrl
 
       if (preferredProvider === 'ollama') {
         await loadOllamaModels(ollamaBaseUrl)
@@ -387,7 +411,7 @@ export default function ConfigPage() {
         preferredModel: preferredModelToSave,
         customSystemPrompt: customSystemPrompt.trim() || null,
       })
-      const label = `${PROVIDER_META[activeProvider].label} · ${preferredModelToSave}`
+      const label = `${PROVIDER_META[activeProvider].label} - ${preferredModelToSave}`
       setStatus(`Saved: ${label}`)
       setSavedActiveLabel(label)
       setTimeout(() => setSavedActiveLabel(''), 3000)
@@ -491,7 +515,9 @@ export default function ConfigPage() {
       }
       const result = await sdk.agent.testLlmConnection({
         provider,
-        apiKey: provider !== 'ollama' ? card.apiKey || undefined : undefined,
+        apiKey: provider !== 'ollama'
+          ? (card.apiKey.trim() || card.loginPassword.trim() || undefined)
+          : undefined,
         baseUrl: provider === 'ollama' ? card.baseUrl || undefined : undefined,
         model: ollamaTestModel,
       })
@@ -531,15 +557,51 @@ export default function ConfigPage() {
         await sdk.users.upsertLlmKey(provider, { baseUrl: card.baseUrl, isActive: true })
         await loadOllamaModels(card.baseUrl || undefined)
       } else {
-        if (!card.apiKey) return
-        await sdk.users.upsertLlmKey(provider, { apiKey: card.apiKey, isActive: true })
+        const existing = existingKeys.find((k) => k.provider === provider)
+        const apiKey = card.apiKey.trim()
+        const loginEmail = card.loginEmail.trim()
+        const loginPassword = card.loginPassword.trim()
+        const hasApiKey = apiKey.length > 0
+        const hasStoredLogin = Boolean(existing?.loginEmail && existing?.loginPassword)
+        const hasLoginEmail = loginEmail.length > 0
+        const hasLoginPassword = loginPassword.length > 0
+        const hasLoginPair = hasLoginEmail && hasLoginPassword
+        const matchesStoredLoginEmail = hasLoginEmail
+          && loginEmail === (existing?.loginEmail ?? '').trim()
+        let shouldSendLoginCredentials = false
+
+        if (hasLoginEmail || hasLoginPassword) {
+          if (!hasLoginPair) {
+            const keepStoredLogin = hasStoredLogin && hasLoginEmail && !hasLoginPassword && matchesStoredLoginEmail
+            if (!keepStoredLogin) {
+              setError('Provider login email and password must be entered together.')
+              return
+            }
+          } else {
+            shouldSendLoginCredentials = true
+          }
+        }
+
+        if (!hasApiKey && !hasLoginPair && !existing) {
+          setError('Enter an API key or provider login credentials before saving.')
+          return
+        }
+
+        await sdk.users.upsertLlmKey(provider, {
+          apiKey: hasApiKey ? apiKey : undefined,
+          loginEmail: shouldSendLoginCredentials ? loginEmail : undefined,
+          loginPassword: shouldSendLoginCredentials ? loginPassword : undefined,
+          subscriptionPlan: card.subscriptionPlan,
+          isActive: true,
+        })
+        updateCard(provider, { loginPassword: '' })
       }
-      setStatus(`${PROVIDER_META[provider].label} key saved.`)
+      setStatus(`${PROVIDER_META[provider].label} credentials saved.`)
       // refresh stored keys
       const keys = await sdk.users.getLlmKeys()
       setExistingKeys(keys)
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to save key')
+      setError(err?.message ?? 'Failed to save credentials')
     } finally {
       updateCard(provider, { isSaving: false })
     }
@@ -550,14 +612,23 @@ export default function ConfigPage() {
     setStatus('')
     try {
       await sdk.users.deleteLlmKey(provider)
-      updateCard(provider, { apiKey: '', testStatus: 'idle', testModel: '', testError: '' })
+      updateCard(provider, {
+        apiKey: '',
+        loginEmail: '',
+        loginPassword: '',
+        showLoginPassword: false,
+        subscriptionPlan: '',
+        testStatus: 'idle',
+        testModel: '',
+        testError: '',
+      })
       if (provider === 'ollama') {
         updateCard(provider, { baseUrl: DEFAULTS.ollama.baseUrl })
         setOllamaModels([])
         setOllamaModelsStatus('idle')
         setOllamaModelsError('')
       }
-      setStatus(`${PROVIDER_META[provider].label} key removed.`)
+      setStatus(`${PROVIDER_META[provider].label} credentials removed.`)
       const keys = await sdk.users.getLlmKeys()
       setExistingKeys(keys)
     } catch (err: any) {
@@ -667,12 +738,12 @@ export default function ConfigPage() {
 
   return (
     <div className="mx-auto max-w-[1100px] space-y-6">
-      {/* ── Header ── */}
+      {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Config</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Signed in as <span className="font-medium text-slate-700">{profileEmail || '…'}</span>
+            Signed in as <span className="font-medium text-slate-700">{profileEmail || '...'}</span>
           </p>
         </div>
         <button
@@ -681,11 +752,11 @@ export default function ConfigPage() {
           disabled={isLoading}
           className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
         >
-          {isLoading ? 'Refreshing…' : 'Refresh'}
+          {isLoading ? 'Refreshing...' : 'Refresh'}
         </button>
       </header>
 
-      {/* ── Active Provider Bar ── */}
+      {/* Active Provider Bar */}
       <section className="relative overflow-hidden rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-orange-50 p-5 shadow-sm">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(244,63,94,0.08),transparent_60%)]" />
         <div className="relative">
@@ -793,7 +864,7 @@ export default function ConfigPage() {
                   savedActiveLabel ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600'
                 }`}
               >
-                {isSavingActive ? 'Saving…' : savedActiveLabel ? 'Saved ✓' : 'Save'}
+                {isSavingActive ? 'Saving...' : savedActiveLabel ? 'Saved' : 'Save'}
               </button>
               {savedActiveLabel && (
                 <span className="text-[11px] text-emerald-600 font-medium">{savedActiveLabel}</span>
@@ -808,14 +879,14 @@ export default function ConfigPage() {
               value={customSystemPrompt}
               onChange={(e) => setCustomSystemPrompt(e.target.value)}
               rows={4}
-              placeholder="Override the default system prompt…"
+              placeholder="Override the default system prompt..."
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
             />
           </label>
         </div>
       </section>
 
-      {/* ── Provider Cards ── */}
+      {/* Provider Cards */}
       <div className="flex justify-end">
         <button
           type="button"
@@ -823,7 +894,7 @@ export default function ConfigPage() {
           disabled={isTestingAll}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
         >
-          {isTestingAll ? 'Testing all…' : 'Test All Providers'}
+          {isTestingAll ? 'Testing all...' : 'Test All Providers'}
         </button>
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -833,6 +904,13 @@ export default function ConfigPage() {
           const existing = existingKeys.find((k) => k.provider === provider)
           const isConfigured = !!existing
           const isActive = activeProvider === provider
+          const planOptions = provider === 'ollama' ? [] : PROVIDER_PLAN_OPTIONS[provider]
+          const hasLoginPair = card.loginEmail.trim().length > 0 && card.loginPassword.trim().length > 0
+          const canSaveCredentials =
+            meta.isKeyless
+            || card.apiKey.trim().length > 0
+            || hasLoginPair
+            || Boolean(existing)
 
           return (
             <div
@@ -879,33 +957,99 @@ export default function ConfigPage() {
                     <p className="text-[11px] italic text-slate-400">Ollama must be reachable from the API server host</p>
                   </label>
                 ) : (
-                  /* Anthropic / OpenAI: masked key input */
-                  <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-slate-500">
-                      {meta.inputLabel}
-                      {isConfigured && (
-                        <span className="ml-1 font-normal text-slate-400">
-                          (stored: {existing.apiKey ?? '—'})
-                        </span>
-                      )}
-                    </span>
-                    <div className="relative">
+                  /* Cloud providers: API key + account login + plan */
+                  <div className="space-y-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-slate-500">
+                        {meta.inputLabel}
+                        {isConfigured && (
+                          <span className="ml-1 font-normal text-slate-400">
+                            (stored: {existing?.apiKey ?? 'not-set'})
+                          </span>
+                        )}
+                      </span>
+                      <div className="relative">
+                        <input
+                          type={card.showKey ? 'text' : 'password'}
+                          value={card.apiKey}
+                          onChange={(e) => updateCard(provider, { apiKey: e.target.value })}
+                          placeholder={isConfigured ? 'Enter new key to update...' : 'sk-...'}
+                          className="h-9 w-full rounded-lg border border-slate-200 py-0 pl-3 pr-9 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateCard(provider, { showKey: !card.showKey })}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {card.showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </label>
+
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-slate-500">
+                        Login Email
+                        {existing?.loginEmail && (
+                          <span className="ml-1 font-normal text-slate-400">(stored: {existing.loginEmail})</span>
+                        )}
+                      </span>
                       <input
-                        type={card.showKey ? 'text' : 'password'}
-                        value={card.apiKey}
-                        onChange={(e) => updateCard(provider, { apiKey: e.target.value })}
-                        placeholder={isConfigured ? 'Enter new key to update…' : 'sk-…'}
-                        className="h-9 w-full rounded-lg border border-slate-200 py-0 pl-3 pr-9 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                        type="email"
+                        value={card.loginEmail}
+                        onChange={(e) => updateCard(provider, { loginEmail: e.target.value })}
+                        placeholder="you@example.com"
+                        className="h-9 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
                       />
-                      <button
-                        type="button"
-                        onClick={() => updateCard(provider, { showKey: !card.showKey })}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    </label>
+
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-slate-500">
+                        Login Password / Token
+                        {existing?.loginPassword && (
+                          <span className="ml-1 font-normal text-slate-400">(stored: {existing.loginPassword})</span>
+                        )}
+                      </span>
+                      <div className="relative">
+                        <input
+                          type={card.showLoginPassword ? 'text' : 'password'}
+                          value={card.loginPassword}
+                          onChange={(e) => updateCard(provider, { loginPassword: e.target.value })}
+                          placeholder={existing?.loginPassword ? 'Enter new password/token to update...' : 'Password or token'}
+                          className="h-9 w-full rounded-lg border border-slate-200 py-0 pl-3 pr-9 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateCard(provider, { showLoginPassword: !card.showLoginPassword })}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {card.showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </label>
+
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-slate-500">Subscription Plan</span>
+                      <select
+                        value={card.subscriptionPlan}
+                        onChange={(event) => updateCard(provider, { subscriptionPlan: event.target.value })}
+                        className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
                       >
-                        {card.showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </label>
+                        <option value="">Not set</option>
+                        {planOptions.map((plan) => (
+                          <option key={plan} value={plan}>
+                            {plan}
+                          </option>
+                        ))}
+                        {card.subscriptionPlan && !planOptions.includes(card.subscriptionPlan) && (
+                          <option value={card.subscriptionPlan}>{card.subscriptionPlan}</option>
+                        )}
+                      </select>
+                    </label>
+
+                    <p className="text-[11px] text-slate-400">
+                      If API key is blank, password/token is used as provider auth token.
+                    </p>
+                  </div>
                 )}
 
                 {/* Test result */}
@@ -918,8 +1062,8 @@ export default function ConfigPage() {
                     {card.testStatus === 'ok' && <CheckCircle2 className="h-3.5 w-3.5" />}
                     {card.testStatus === 'error' && <XCircle className="h-3.5 w-3.5" />}
                     <span>
-                      {card.testStatus === 'testing' && 'Testing connection…'}
-                      {card.testStatus === 'ok' && `Connected · ${card.testModel}`}
+                      {card.testStatus === 'testing' && 'Testing connection...'}
+                      {card.testStatus === 'ok' && `Connected - ${card.testModel}`}
                       {card.testStatus === 'error' && card.testError}
                     </span>
                   </div>
@@ -933,16 +1077,16 @@ export default function ConfigPage() {
                     disabled={card.testStatus === 'testing'}
                     className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                   >
-                    {card.testStatus === 'testing' ? 'Testing…' : 'Test'}
+                    {card.testStatus === 'testing' ? 'Testing...' : 'Test'}
                   </button>
 
                   <button
                     type="button"
                     onClick={() => void handleSaveKey(provider)}
-                    disabled={card.isSaving || (!meta.isKeyless && !card.apiKey)}
+                    disabled={card.isSaving || !canSaveCredentials}
                     className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 bg-gradient-to-br ${meta.gradient}`}
                   >
-                    {card.isSaving ? 'Saving…' : 'Save Key'}
+                    {card.isSaving ? 'Saving...' : 'Save Credentials'}
                   </button>
 
                   {isConfigured && (

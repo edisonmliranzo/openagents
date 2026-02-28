@@ -20,6 +20,9 @@ export interface LlmApiKey {
   provider: string
   apiKey: string | null   // masked (last 4 chars only) in API responses
   baseUrl: string | null
+  loginEmail: string | null
+  loginPassword: string | null // masked (last 4 chars only) in API responses
+  subscriptionPlan: string | null
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -28,5 +31,8 @@ export interface LlmApiKey {
 export interface UpsertLlmKeyDto {
   apiKey?: string
   baseUrl?: string
+  loginEmail?: string
+  loginPassword?: string
+  subscriptionPlan?: string
   isActive?: boolean
 }

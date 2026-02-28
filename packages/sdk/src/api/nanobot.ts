@@ -15,6 +15,9 @@ import type {
   NanobotOrchestrationRun,
   NanobotPersonaProfile,
   NanobotPersonalityState,
+  NanobotSpecialistRun,
+  NanobotSpecialistRunStatus,
+  NanobotSpecialistRunExecutionResult,
   NanobotPresenceTickResult,
   NanobotRuntimeConfig,
   NanobotSkillState,
@@ -28,6 +31,8 @@ import type {
   NanobotVoiceTranscriptionInput,
   NanobotVoiceTranscriptionResult,
   NanobotTrustSnapshot,
+  CreateNanobotSpecialistRunInput,
+  ExecuteNanobotSpecialistRunInput,
   UpdateNanobotConfigInput,
 } from '@openagents/shared'
 
@@ -97,6 +102,18 @@ export function createNanobotApi(client: OpenAgentsClient) {
 
     getOrchestrationRun: (runId: string) =>
       client.get<NanobotOrchestrationRun>(`/api/v1/nanobot/orchestration/runs/${runId}`),
+
+    listSpecialistRuns: (limit = 20) =>
+      client.get<NanobotSpecialistRun[]>(`/api/v1/nanobot/subagents/runs?limit=${limit}`),
+
+    createSpecialistRun: (input: CreateNanobotSpecialistRunInput) =>
+      client.post<NanobotSpecialistRun>('/api/v1/nanobot/subagents/runs', input),
+
+    runSpecialistRun: (runId: string, input: ExecuteNanobotSpecialistRunInput = {}) =>
+      client.post<NanobotSpecialistRunExecutionResult>(`/api/v1/nanobot/subagents/runs/${runId}/execute`, input),
+
+    getSpecialistRunStatus: (runId: string) =>
+      client.get<NanobotSpecialistRunStatus>(`/api/v1/nanobot/subagents/runs/${runId}`),
 
     transcribeVoice: (input: NanobotVoiceTranscriptionInput) =>
       client.post<NanobotVoiceTranscriptionResult>('/api/v1/nanobot/voice/transcribe', input),
