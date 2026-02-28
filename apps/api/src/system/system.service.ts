@@ -161,6 +161,9 @@ export class SystemService {
       inputTokens: 0,
       outputTokens: 0,
       toolCalls: 0,
+      toolSuccesses: 0,
+      toolFailures: 0,
+      toolSuccessRate: 0,
       estimatedLlmCostUsd: 0,
       estimatedToolCostUsd: 0,
       estimatedTotalCostUsd: 0,
@@ -228,14 +231,29 @@ export class SystemService {
       daily.toolCostUsd += toolCost
       daily.totalCostUsd += toolCost
 
-      if (toolMessage.status === 'done') toolRow.successes += 1
-      if (toolMessage.status === 'error') toolRow.failures += 1
+      if (toolMessage.status === 'done') {
+        toolRow.successes += 1
+        totals.toolSuccesses += 1
+        daily.toolSuccesses += 1
+      }
+      if (toolMessage.status === 'error') {
+        toolRow.failures += 1
+        totals.toolFailures += 1
+        daily.toolFailures += 1
+      }
     }
 
     totals.estimatedTotalCostUsd = totals.estimatedLlmCostUsd + totals.estimatedToolCostUsd
+    totals.toolSuccessRate = this.computeRate(totals.toolSuccesses, totals.toolSuccesses + totals.toolFailures)
 
     for (const row of modelMap.values()) {
       row.avgCostPerRunUsd = row.runs > 0 ? row.estimatedCostUsd / row.runs : 0
+    }
+    for (const row of toolMap.values()) {
+      row.successRate = this.computeRate(row.successes, row.successes + row.failures)
+    }
+    for (const row of dailyMap.values()) {
+      row.toolSuccessRate = this.computeRate(row.toolSuccesses, row.toolSuccesses + row.toolFailures)
     }
 
     const providers = [...providerMap.values()].sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd)
@@ -462,6 +480,7 @@ export class SystemService {
       calls: 0,
       successes: 0,
       failures: 0,
+      successRate: 0,
       estimatedCostUsd: 0,
     }
     map.set(toolName, created)
@@ -480,6 +499,9 @@ export class SystemService {
       inputTokens: 0,
       outputTokens: 0,
       toolCalls: 0,
+      toolSuccesses: 0,
+      toolFailures: 0,
+      toolSuccessRate: 0,
     }
     map.set(date, created)
     return created
@@ -505,6 +527,7 @@ export class SystemService {
   private roundTotals(value: SystemCostTotals): SystemCostTotals {
     return {
       ...value,
+      toolSuccessRate: this.roundNumber(value.toolSuccessRate),
       estimatedLlmCostUsd: this.roundNumber(value.estimatedLlmCostUsd),
       estimatedToolCostUsd: this.roundNumber(value.estimatedToolCostUsd),
       estimatedTotalCostUsd: this.roundNumber(value.estimatedTotalCostUsd),
@@ -524,16 +547,26 @@ export class SystemService {
   }
 
   private roundTool(value: SystemCostToolRow): SystemCostToolRow {
-    return { ...value, estimatedCostUsd: this.roundNumber(value.estimatedCostUsd) }
+    return {
+      ...value,
+      successRate: this.roundNumber(value.successRate),
+      estimatedCostUsd: this.roundNumber(value.estimatedCostUsd),
+    }
   }
 
   private roundDaily(value: SystemCostDailyRow): SystemCostDailyRow {
     return {
       ...value,
+      toolSuccessRate: this.roundNumber(value.toolSuccessRate),
       llmCostUsd: this.roundNumber(value.llmCostUsd),
       toolCostUsd: this.roundNumber(value.toolCostUsd),
       totalCostUsd: this.roundNumber(value.totalCostUsd),
     }
+  }
+
+  private computeRate(numerator: number, denominator: number) {
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return 0
+    return numerator / denominator
   }
 
   private defaultOllamaBaseUrl() {

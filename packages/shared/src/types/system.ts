@@ -48,6 +48,9 @@ export interface SystemCostTotals {
   inputTokens: number
   outputTokens: number
   toolCalls: number
+  toolSuccesses: number
+  toolFailures: number
+  toolSuccessRate: number
   estimatedLlmCostUsd: number
   estimatedToolCostUsd: number
   estimatedTotalCostUsd: number
@@ -78,6 +81,7 @@ export interface SystemCostToolRow {
   calls: number
   successes: number
   failures: number
+  successRate: number
   estimatedCostUsd: number
 }
 
@@ -90,6 +94,9 @@ export interface SystemCostDailyRow {
   inputTokens: number
   outputTokens: number
   toolCalls: number
+  toolSuccesses: number
+  toolFailures: number
+  toolSuccessRate: number
 }
 
 export interface SystemCostBreakdown {
