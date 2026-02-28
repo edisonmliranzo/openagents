@@ -18,6 +18,9 @@ class UpdateSettingsDto {
 class UpsertLlmKeyDto {
   @IsString() @IsOptional() apiKey?: string
   @IsString() @IsOptional() baseUrl?: string
+  @IsString() @IsOptional() loginEmail?: string
+  @IsString() @IsOptional() loginPassword?: string
+  @IsString() @IsOptional() subscriptionPlan?: string
   @IsBoolean() @IsOptional() isActive?: boolean
 }
 

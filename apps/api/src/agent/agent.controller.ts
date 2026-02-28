@@ -51,7 +51,7 @@ export class AgentController {
     if (!apiKey && !baseUrl) {
       const stored = await this.users.getRawLlmKey(req.user.id, dto.provider)
       if (stored?.isActive) {
-        apiKey = stored.apiKey ?? undefined
+        apiKey = stored.apiKey ?? stored.loginPassword ?? undefined
         baseUrl = stored.baseUrl ?? undefined
       }
     }
