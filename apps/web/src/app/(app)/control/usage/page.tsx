@@ -17,6 +17,14 @@ function formatUsd(value: number) {
   }).format(value)
 }
 
+function formatPercent(value: number) {
+  return new Intl.NumberFormat(undefined, {
+    style: 'percent',
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(Number.isFinite(value) ? value : 0)
+}
+
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -92,6 +100,10 @@ export default function UsagePage() {
   const maxDailyCost = useMemo(() => {
     return (billing?.llmAndTool.daily ?? []).reduce((max, row) => Math.max(max, row.totalCostUsd), 0)
   }, [billing])
+  const totalTokens = (billing?.llmAndTool.totals.inputTokens ?? 0) + (billing?.llmAndTool.totals.outputTokens ?? 0)
+  const toolSuccesses = billing?.llmAndTool.totals.toolSuccesses ?? 0
+  const toolFailures = billing?.llmAndTool.totals.toolFailures ?? 0
+  const toolSuccessRate = billing?.llmAndTool.totals.toolSuccessRate ?? 0
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
@@ -155,7 +167,7 @@ export default function UsagePage() {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Invoice Estimate</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">{formatUsd(billing?.totals.estimatedInvoiceUsd ?? 0)}</p>
@@ -166,6 +178,28 @@ export default function UsagePage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">LLM + Tool</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">{formatUsd(billing?.totals.llmAndToolUsd ?? 0)}</p>
           <p className="mt-1 text-xs text-slate-500">{formatNumber(billing?.llmAndTool.totals.llmCalls ?? 0)} llm calls</p>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Token Volume</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">{formatNumber(totalTokens)}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            in {formatNumber(billing?.llmAndTool.totals.inputTokens ?? 0)} / out {formatNumber(billing?.llmAndTool.totals.outputTokens ?? 0)}
+          </p>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tool Success Rate</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">{formatPercent(toolSuccessRate)}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {formatNumber(toolSuccesses)} success / {formatNumber(toolFailures)} failed
+          </p>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tool Calls</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">{formatNumber(billing?.llmAndTool.totals.toolCalls ?? 0)}</p>
+          <p className="mt-1 text-xs text-slate-500">{formatNumber((billing?.llmAndTool.tools ?? []).length)} tools used</p>
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -243,6 +277,41 @@ export default function UsagePage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Tool Reliability</h2>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
+              <tr>
+                <th className="pb-2">Tool</th>
+                <th className="pb-2">Calls</th>
+                <th className="pb-2">Success</th>
+                <th className="pb-2">Failed</th>
+                <th className="pb-2">Success Rate</th>
+                <th className="pb-2 text-right">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(billing?.llmAndTool.tools ?? []).map((row) => (
+                <tr key={row.toolName} className="border-t border-slate-100 text-slate-700">
+                  <td className="py-2 font-medium">{row.toolName}</td>
+                  <td className="py-2">{formatNumber(row.calls)}</td>
+                  <td className="py-2">{formatNumber(row.successes)}</td>
+                  <td className="py-2">{formatNumber(row.failures)}</td>
+                  <td className="py-2">{formatPercent(row.successRate)}</td>
+                  <td className="py-2 text-right font-semibold">{formatUsd(row.estimatedCostUsd)}</td>
+                </tr>
+              ))}
+              {(billing?.llmAndTool.tools.length ?? 0) === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-4 text-sm text-slate-500">No tool execution activity in this range.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Daily LLM + Tool Spend</h2>
         <div className="mt-4 space-y-2">
           {(billing?.llmAndTool.daily ?? []).map((row) => {
@@ -284,4 +353,3 @@ export default function UsagePage() {
     </div>
   )
 }
-
