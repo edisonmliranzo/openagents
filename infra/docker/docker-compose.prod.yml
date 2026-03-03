@@ -100,6 +100,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:change-me@postgres:5432/openagents}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      APPROVAL_CONTINUATION_API_URL: ${APPROVAL_CONTINUATION_API_URL:-http://api:3001}
+      APPROVAL_CONTINUATION_HTTP_TIMEOUT_MS: ${APPROVAL_CONTINUATION_HTTP_TIMEOUT_MS:-15000}
     depends_on:
       postgres:
         condition: service_healthy

@@ -61,9 +61,11 @@ export const SHORT_TERM_MEMORY_LIMIT = 20 // last N messages for context
 
 export const QUEUE_NAMES = {
   approvals: 'approvals',
+  approvalsDeadLetter: 'approvals-dead-letter',
   toolRuns: 'tool-runs',
 } as const
 
 export const APPROVAL_JOB_NAMES = {
   resolved: 'approval.resolved',
+  deadLetter: 'approval.dead_letter',
 } as const

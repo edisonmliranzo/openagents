@@ -32,9 +32,9 @@ This document tracks parity work needed to align OpenAgents behavior with OpenCl
 
 ### 1) Queue-mode continuation parity
 
-- [ ] Worker executes approval continuation jobs end-to-end (not TODO stubs)
-- [ ] Idempotency guard to prevent duplicate continuation
-- [ ] Retry strategy with dead-letter behavior for persistent failures
+- [x] Worker executes approval continuation jobs end-to-end (not TODO stubs)
+- [x] Idempotency guard to prevent duplicate continuation
+- [x] Retry strategy with dead-letter behavior for persistent failures
 
 ### 2) Real connector parity
 
