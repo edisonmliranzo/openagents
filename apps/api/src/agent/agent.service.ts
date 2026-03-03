@@ -8,7 +8,7 @@ import { UsersService } from '../users/users.service'
 import { AuditService } from '../audit/audit.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { DataLineageService } from '../lineage/lineage.service'
-import { SHORT_TERM_MEMORY_LIMIT } from '@openagents/shared'
+import { LLM_MODELS, SHORT_TERM_MEMORY_LIMIT } from '@openagents/shared'
 import type { LLMProvider, LineageToolInfluence, ToolResult } from '@openagents/shared'
 
 export interface AgentRunParams {
@@ -31,6 +31,10 @@ Keep your responses concise and action-oriented.`
 const DEFAULT_MAX_TOOL_ROUNDS = 6
 const DEFAULT_TOOL_RETRY_ATTEMPTS = 1
 const DEFAULT_TOOL_RETRY_BASE_DELAY_MS = 500
+const MANUS_LITE_MAX_TOOL_ROUNDS = 10
+const MANUS_LITE_TOOL_RETRY_ATTEMPTS = 2
+const MANUS_LITE_TOOL_RETRY_BASE_DELAY_MS = 350
+const MANUS_LITE_DEFAULT_PROVIDER: LLMProvider = 'ollama'
 
 interface AgentRunToolMetric {
   name: string
@@ -53,6 +57,8 @@ interface AgentRunMetrics {
   toolRoundsUsed: number
   toolRetries: number
   toolRecoveries: number
+  manusLiteEnabled: boolean
+  manusLiteRoutingApplied: boolean
   autonomyScheduleEnabled: boolean
   autonomyWithinWindow: boolean
   autonomyTimezone: string
@@ -96,8 +102,9 @@ export class AgentService {
     try {
       // 3. Load user settings (provider, custom prompt)
       const settings = await this.users.getSettings(userId)
-      const provider = settings.preferredProvider as LLMProvider
-      const preferredModel = settings.preferredModel?.trim() || undefined
+      const routing = this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel)
+      const provider = routing.provider
+      const preferredModel = routing.model
       let autonomyStatus = await this.memory.getAutonomyStatus(userId)
 
       // 4. Build context: recent messages + long-term memory
@@ -153,15 +160,20 @@ export class AgentService {
         : undefined
       const userBaseUrl = userLlmKey?.isActive ? (userLlmKey.baseUrl ?? undefined) : undefined
 
-      const maxToolRoundsRaw = Number.parseInt(process.env.AGENT_MAX_TOOL_ROUNDS ?? `${DEFAULT_MAX_TOOL_ROUNDS}`, 10)
-      const maxToolRounds = Number.isFinite(maxToolRoundsRaw) ? Math.max(1, Math.min(maxToolRoundsRaw, 12)) : DEFAULT_MAX_TOOL_ROUNDS
-      const toolRetryAttemptsRaw = Number.parseInt(
-        process.env.AGENT_TOOL_RETRY_ATTEMPTS ?? `${DEFAULT_TOOL_RETRY_ATTEMPTS}`,
-        10,
+      const maxToolRounds = this.readToolLoopSetting(
+        'AGENT_MAX_TOOL_ROUNDS',
+        DEFAULT_MAX_TOOL_ROUNDS,
+        MANUS_LITE_MAX_TOOL_ROUNDS,
+        1,
+        12,
       )
-      const toolRetryAttempts = Number.isFinite(toolRetryAttemptsRaw)
-        ? Math.max(0, Math.min(toolRetryAttemptsRaw, 4))
-        : DEFAULT_TOOL_RETRY_ATTEMPTS
+      const toolRetryAttempts = this.readToolLoopSetting(
+        'AGENT_TOOL_RETRY_ATTEMPTS',
+        DEFAULT_TOOL_RETRY_ATTEMPTS,
+        MANUS_LITE_TOOL_RETRY_ATTEMPTS,
+        0,
+        4,
+      )
       let activeProvider: LLMProvider = provider
       let activeUserApiKey = userApiKey
       let activeUserBaseUrl = userBaseUrl
@@ -179,6 +191,8 @@ export class AgentService {
         toolRoundsUsed: 0,
         toolRetries: 0,
         toolRecoveries: 0,
+        manusLiteEnabled: this.isManusLiteEnabled(),
+        manusLiteRoutingApplied: routing.applied,
         autonomyScheduleEnabled: autonomyStatus.scheduleEnabled,
         autonomyWithinWindow: autonomyStatus.withinWindow,
         autonomyTimezone: autonomyStatus.timezone,
@@ -612,12 +626,100 @@ export class AgentService {
   }
 
   private computeToolRetryDelayMs(attempt: number) {
-    const raw = Number.parseInt(
-      process.env.AGENT_TOOL_RETRY_BASE_DELAY_MS ?? `${DEFAULT_TOOL_RETRY_BASE_DELAY_MS}`,
-      10,
+    const base = this.readToolLoopSetting(
+      'AGENT_TOOL_RETRY_BASE_DELAY_MS',
+      DEFAULT_TOOL_RETRY_BASE_DELAY_MS,
+      MANUS_LITE_TOOL_RETRY_BASE_DELAY_MS,
+      100,
+      10_000,
     )
-    const base = Number.isFinite(raw) ? Math.max(100, Math.min(raw, 10_000)) : DEFAULT_TOOL_RETRY_BASE_DELAY_MS
     return Math.min(base * Math.max(1, attempt), 12_000)
+  }
+
+  private readToolLoopSetting(
+    envName: string,
+    fallback: number,
+    manusLitePreset: number,
+    min: number,
+    max: number,
+  ) {
+    const parsed = Number.parseInt(process.env[envName] ?? '', 10)
+    const hasEnvValue = Number.isFinite(parsed)
+    const normalized = hasEnvValue
+      ? Math.max(min, Math.min(parsed, max))
+      : fallback
+
+    if (!this.isManusLiteEnabled()) {
+      return normalized
+    }
+
+    const shouldApplyPreset = !hasEnvValue || normalized === fallback
+    if (!shouldApplyPreset) {
+      return normalized
+    }
+    return Math.max(min, Math.min(manusLitePreset, max))
+  }
+
+  private resolveRoutingPreset(rawProvider?: string | null, rawModel?: string | null) {
+    const provider = this.normalizeProvider(rawProvider) ?? 'anthropic'
+    const model = rawModel?.trim() || undefined
+
+    if (!this.isManusLiteEnabled()) {
+      return { provider, model, applied: false }
+    }
+
+    const forceRouting = this.readBooleanEnv('MANUS_LITE_FORCE_ROUTING', false)
+    const onSchemaDefaults = provider === 'anthropic'
+      && (!model || model === LLM_MODELS.anthropic.default)
+    if (!forceRouting && !onSchemaDefaults) {
+      return { provider, model, applied: false }
+    }
+
+    const presetProvider = this.resolveManusLiteProvider()
+    return {
+      provider: presetProvider,
+      model: this.resolveManusLiteModel(presetProvider),
+      applied: true,
+    }
+  }
+
+  private resolveManusLiteProvider(): LLMProvider {
+    const fromEnv = this.normalizeProvider(process.env.MANUS_LITE_PROVIDER)
+    return fromEnv ?? MANUS_LITE_DEFAULT_PROVIDER
+  }
+
+  private resolveManusLiteModel(provider: LLMProvider) {
+    const explicit = process.env.MANUS_LITE_MODEL?.trim()
+    if (explicit) return explicit
+    return LLM_MODELS[provider].fast
+  }
+
+  private normalizeProvider(value?: string | null): LLMProvider | null {
+    const normalized = (value ?? '').trim().toLowerCase()
+    if (
+      normalized === 'anthropic'
+      || normalized === 'openai'
+      || normalized === 'google'
+      || normalized === 'ollama'
+      || normalized === 'minimax'
+    ) {
+      return normalized
+    }
+    return null
+  }
+
+  private isManusLiteEnabled() {
+    return this.readBooleanEnv('MANUS_LITE', false)
+  }
+
+  private readBooleanEnv(name: string, fallback: boolean) {
+    const raw = process.env[name]
+    if (raw == null) return fallback
+    const normalized = raw.trim().toLowerCase()
+    return normalized === '1'
+      || normalized === 'true'
+      || normalized === 'yes'
+      || normalized === 'on'
   }
 
   private async sleep(ms: number) {

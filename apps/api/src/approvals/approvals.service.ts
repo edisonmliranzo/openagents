@@ -39,6 +39,13 @@ export interface ApprovalRiskState extends ApprovalRiskScore {
   updatedAt: string
 }
 
+export interface ApprovalContinuationResult {
+  status: 'completed' | 'already_completed' | 'ignored'
+  toolName: string
+  detail: string
+  success?: boolean
+}
+
 @Injectable()
 export class ApprovalsService implements OnModuleDestroy {
   private readonly logger = new Logger(ApprovalsService.name)
@@ -194,12 +201,6 @@ export class ApprovalsService implements OnModuleDestroy {
       },
     })
 
-    // Update linked message status
-    await this.prisma.message.update({
-      where: { id: approval.messageId },
-      data: { status: approved ? 'done' : 'error' },
-    })
-
     if (approved) {
       const toolInput = this.parseToolInput(approval.toolInput, approval.id)
       if (this.approvalQueue) {
@@ -212,16 +213,14 @@ export class ApprovalsService implements OnModuleDestroy {
           toolInput,
         })
       } else {
-        await this.continueApprovedResolution({
-          approvalId: updated.id,
-          conversationId: approval.conversationId,
-          messageId: approval.messageId,
-          userId: approval.userId,
-          toolName: approval.toolName,
-          toolInput,
-        })
+        await this.continueApprovedResolutionById(updated.id, 'inline')
       }
     } else {
+      await this.prisma.message.update({
+        where: { id: approval.messageId },
+        data: { status: 'error' },
+      })
+
       await this.prisma.agentRun.updateMany({
         where: { conversationId: approval.conversationId, status: 'waiting_approval' },
         data: {
@@ -242,6 +241,58 @@ export class ApprovalsService implements OnModuleDestroy {
     }
 
     return updated
+  }
+
+  async continueApprovedResolutionById(
+    approvalId: string,
+    source: 'inline' | 'queue' = 'queue',
+  ): Promise<ApprovalContinuationResult> {
+    const approval = await this.prisma.approval.findUnique({
+      where: { id: approvalId },
+      select: {
+        id: true,
+        conversationId: true,
+        messageId: true,
+        userId: true,
+        toolName: true,
+        toolInput: true,
+        status: true,
+      },
+    })
+
+    if (!approval) throw new NotFoundException(`Approval not found: ${approvalId}`)
+    if (approval.status !== 'approved') {
+      return {
+        status: 'ignored',
+        toolName: approval.toolName,
+        detail: `Approval status is ${approval.status}.`,
+      }
+    }
+
+    const message = await this.prisma.message.findUnique({
+      where: { id: approval.messageId },
+      select: { id: true, toolResultJson: true },
+    })
+    if (!message) throw new NotFoundException(`Approval message not found: ${approval.messageId}`)
+
+    if (message.toolResultJson) {
+      return {
+        status: 'already_completed',
+        toolName: approval.toolName,
+        detail: `Approval ${approvalId} already has toolResultJson.`,
+      }
+    }
+
+    const toolInput = this.parseToolInput(approval.toolInput, approval.id)
+    return this.continueApprovedResolution({
+      approvalId: approval.id,
+      conversationId: approval.conversationId,
+      messageId: approval.messageId,
+      userId: approval.userId,
+      toolName: approval.toolName,
+      toolInput,
+      source,
+    })
   }
 
   private parseToolInput(raw: string, approvalId: string): Record<string, unknown> {
@@ -267,10 +318,11 @@ export class ApprovalsService implements OnModuleDestroy {
     }
 
     await this.approvalQueue.add(APPROVAL_JOB_NAMES.resolved, data, {
+      jobId: `approval:${data.approvalId}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 1000 },
       removeOnComplete: true,
-      removeOnFail: 100,
+      removeOnFail: false,
     })
   }
 
@@ -281,8 +333,14 @@ export class ApprovalsService implements OnModuleDestroy {
     userId: string
     toolName: string
     toolInput: Record<string, unknown>
-  }) {
-    const { approvalId, conversationId, messageId, userId, toolName, toolInput } = input
+    source: 'inline' | 'queue'
+  }): Promise<ApprovalContinuationResult> {
+    const { approvalId, conversationId, messageId, userId, toolName, toolInput, source } = input
+    await this.prisma.message.update({
+      where: { id: messageId },
+      data: { status: 'streaming' },
+    })
+
     const result = await this.tools.execute(toolName, toolInput, userId)
 
     await this.prisma.message.update({
@@ -354,8 +412,15 @@ export class ApprovalsService implements OnModuleDestroy {
       .catch((error) => this.logger.error('Failed to create continuation notification', error?.stack ?? String(error)))
 
     this.logger.log(
-      `Approval ${approvalId} continued inline. Tool ${toolName} ${result.success ? 'succeeded' : 'failed'}.`,
+      `Approval ${approvalId} continued via ${source}. Tool ${toolName} ${result.success ? 'succeeded' : 'failed'}.`,
     )
+
+    return {
+      status: 'completed',
+      toolName,
+      detail: `Tool ${toolName} ${result.success ? 'succeeded' : 'failed'}.`,
+      success: result.success,
+    }
   }
 
   private buildFollowupMessage(

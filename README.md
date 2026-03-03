@@ -522,14 +522,52 @@ DuckDuckGo (no API key):
   - `COMPUTER_USE_PLAYWRIGHT_BROWSER=chromium` (`chromium` | `firefox` | `webkit`)
   - `COMPUTER_USE_PLAYWRIGHT_HEADLESS=true`
   - `COMPUTER_USE_MAX_SCREENSHOT_BYTES=120000`
+  - `COMPUTER_USE_HTTP_RENDER_FALLBACK=true` (auto-upgrade HTTP sessions to Playwright for likely JS-rendered pages)
+  - `COMPUTER_USE_PLAYWRIGHT_WAIT_UNTIL=domcontentloaded` (`domcontentloaded` | `load` | `networkidle` | `commit`)
+  - `COMPUTER_USE_PLAYWRIGHT_NAV_TIMEOUT_MS=25000`
+  - `COMPUTER_USE_PLAYWRIGHT_NETWORK_IDLE_TIMEOUT_MS=1500` (`0` disables network-idle wait)
+  - `COMPUTER_USE_PLAYWRIGHT_WAIT_FOR_SELECTOR=` (optional global selector wait)
+  - `COMPUTER_USE_PLAYWRIGHT_WAIT_FOR_SELECTOR_TIMEOUT_MS=3500`
+  - `COMPUTER_USE_PLAYWRIGHT_SELECTOR_RETRY_COUNT=3`
+  - `COMPUTER_USE_PLAYWRIGHT_SELECTOR_RETRY_DELAY_MS=350`
+  - `COMPUTER_USE_PLAYWRIGHT_SETTLE_TIMEOUT_MS=4500`
+  - `COMPUTER_USE_PLAYWRIGHT_SETTLE_STABLE_MS=700`
+  - `COMPUTER_USE_PLAYWRIGHT_SETTLE_POLL_MS=140`
 
 `auto` prefers Playwright for JS-heavy sites and falls back to static HTTP parsing if Playwright is unavailable.
+`computer_navigate` and `computer_click_link` now also accept optional `waitForSelector` + `waitForSelectorTimeoutMs`.
+
+### MANUS_LITE preset
+
+Enable `MANUS_LITE=true` to apply a low-cost preset that improves autonomous tool execution defaults:
+
+- Routing defaults (applied when user settings are still stock defaults, or always with `MANUS_LITE_FORCE_ROUTING=true`):
+  - `MANUS_LITE_PROVIDER=ollama`
+  - `MANUS_LITE_MODEL=phi3`
+- Tool-loop defaults:
+  - `MANUS_LITE_MAX_TOOL_ROUNDS=10`
+  - `MANUS_LITE_TOOL_RETRY_ATTEMPTS=2`
+  - `MANUS_LITE_TOOL_RETRY_BASE_DELAY_MS=350`
+  - `MANUS_LITE_NANOBOT_MAX_LOOP_STEPS=10`
 
 ### Agent reliability tuning
 
 - `AGENT_MAX_TOOL_ROUNDS=6` max plan/act rounds per run
 - `AGENT_TOOL_RETRY_ATTEMPTS=1` retries for retryable tool errors
 - `AGENT_TOOL_RETRY_BASE_DELAY_MS=500` linear backoff base delay
+
+### Queue-mode approval continuation (OpenClaw-style)
+
+Use these when running approval continuation through the worker instead of inline API execution:
+
+- `APPROVAL_CONTINUATION_MODE=queue`
+- `APPROVAL_WORKER_TOKEN=<shared-secret>` (optional but recommended)
+- Worker API target:
+  - local dev: `APPROVAL_CONTINUATION_API_URL=http://localhost:3001`
+  - Docker: `APPROVAL_CONTINUATION_API_URL=http://api:3001`
+- `APPROVAL_CONTINUATION_HTTP_TIMEOUT_MS=15000`
+
+Queue jobs now retry with exponential backoff and land in `approvals-dead-letter` after final failure.
 
 ### ML automation
 

@@ -16,6 +16,11 @@ function parseNumber(value: string | undefined, fallback: number) {
   return Number.isFinite(n) ? n : fallback
 }
 
+function parseIntInRange(value: string | undefined, fallback: number, min: number, max: number) {
+  const n = parseNumber(value, fallback)
+  return Math.max(min, Math.min(Math.floor(n), max))
+}
+
 @Injectable()
 export class NanobotConfigService {
   private runtimeOverrides: NanobotConfigPatch = {}
@@ -31,7 +36,13 @@ export class NanobotConfigService {
     if (typeof this.runtimeOverrides.maxLoopSteps === 'number') {
       return Math.max(1, Math.floor(this.runtimeOverrides.maxLoopSteps))
     }
-    return Math.max(1, parseNumber(this.config.get<string>('NANOBOT_MAX_LOOP_STEPS'), 8))
+    const fallback = 8
+    const configured = parseIntInRange(this.config.get<string>('NANOBOT_MAX_LOOP_STEPS'), fallback, 1, 50)
+    const manusLiteEnabled = parseBoolean(this.config.get<string>('MANUS_LITE'), false)
+    if (!manusLiteEnabled) return configured
+    const shouldApplyPreset = configured === fallback
+    if (!shouldApplyPreset) return configured
+    return parseIntInRange(this.config.get<string>('MANUS_LITE_NANOBOT_MAX_LOOP_STEPS'), 10, 1, 50)
   }
 
   get shadowMode() {

@@ -5,6 +5,12 @@ import type { ToolDefinition } from '../tools.service'
 
 type ComputerMode = 'http' | 'playwright'
 type ComputerModeInput = ComputerMode | 'auto'
+type PlaywrightWaitUntil = 'domcontentloaded' | 'load' | 'networkidle' | 'commit'
+
+interface PlaywrightNavigateOptions {
+  waitForSelector?: string
+  waitForSelectorTimeoutMs?: number
+}
 
 interface ComputerLink {
   text: string
@@ -32,6 +38,17 @@ interface ComputerSessionState {
 const MAX_SESSIONS = 120
 const MAX_LINKS = 120
 const MAX_TEXT_CHARS = 16_000
+const HTTP_RENDER_MIN_TEXT_CHARS = 220
+const HTTP_RENDER_MIN_LINKS = 3
+const DEFAULT_PLAYWRIGHT_WAIT_UNTIL: PlaywrightWaitUntil = 'domcontentloaded'
+const DEFAULT_PLAYWRIGHT_NAV_TIMEOUT_MS = 25_000
+const DEFAULT_PLAYWRIGHT_NETWORK_IDLE_TIMEOUT_MS = 1_500
+const DEFAULT_PLAYWRIGHT_SELECTOR_RETRY_COUNT = 3
+const DEFAULT_PLAYWRIGHT_SELECTOR_RETRY_DELAY_MS = 350
+const DEFAULT_PLAYWRIGHT_SELECTOR_TIMEOUT_MS = 3_500
+const DEFAULT_PLAYWRIGHT_SETTLE_TIMEOUT_MS = 4_500
+const DEFAULT_PLAYWRIGHT_SETTLE_STABLE_MS = 700
+const DEFAULT_PLAYWRIGHT_SETTLE_POLL_MS = 140
 
 @Injectable()
 export class ComputerUseTool implements OnModuleDestroy {
@@ -71,6 +88,14 @@ export class ComputerUseTool implements OnModuleDestroy {
         properties: {
           sessionId: { type: 'string', description: 'Session id from computer_session_start.' },
           url: { type: 'string', description: 'Target URL (http/https or relative path).' },
+          waitForSelector: {
+            type: 'string',
+            description: 'Optional CSS selector to wait for after navigation (playwright mode).',
+          },
+          waitForSelectorTimeoutMs: {
+            type: 'number',
+            description: 'Optional selector wait timeout in ms (playwright mode).',
+          },
           captureScreenshot: {
             type: 'boolean',
             description: 'Capture a small screenshot data URL (playwright mode only).',
@@ -94,6 +119,14 @@ export class ComputerUseTool implements OnModuleDestroy {
           index: { type: 'number', description: '1-based link index from latest snapshot.' },
           text: { type: 'string', description: 'Case-insensitive link text contains match.' },
           url: { type: 'string', description: 'Exact or partial URL match from available links.' },
+          waitForSelector: {
+            type: 'string',
+            description: 'Optional CSS selector to wait for after click navigation (playwright mode).',
+          },
+          waitForSelectorTimeoutMs: {
+            type: 'number',
+            description: 'Optional selector wait timeout in ms (playwright mode).',
+          },
           captureScreenshot: {
             type: 'boolean',
             description: 'Capture a small screenshot data URL after navigation (playwright mode only).',
@@ -225,7 +258,13 @@ export class ComputerUseTool implements OnModuleDestroy {
   }
 
   async navigate(
-    input: { sessionId: string; url: string; captureScreenshot?: boolean },
+    input: {
+      sessionId: string
+      url: string
+      waitForSelector?: string
+      waitForSelectorTimeoutMs?: number
+      captureScreenshot?: boolean
+    },
     userId: string,
   ): Promise<ToolResult> {
     const session = this.getSession(input.sessionId, userId)
@@ -241,7 +280,10 @@ export class ComputerUseTool implements OnModuleDestroy {
       const resolved = this.resolveUrl(url, session.currentUrl ?? undefined)
       const captureScreenshot = Boolean(input.captureScreenshot)
       const warning = session.mode === 'playwright'
-        ? await this.navigatePlaywright(session, resolved)
+        ? await this.navigatePlaywright(session, resolved, {
+          waitForSelector: input.waitForSelector,
+          waitForSelectorTimeoutMs: input.waitForSelectorTimeoutMs,
+        })
         : await this.navigateHttp(session, resolved)
 
       const output: Record<string, unknown> = {
@@ -268,7 +310,15 @@ export class ComputerUseTool implements OnModuleDestroy {
   }
 
   async click(
-    input: { sessionId: string; index?: number; text?: string; url?: string; captureScreenshot?: boolean },
+    input: {
+      sessionId: string
+      index?: number
+      text?: string
+      url?: string
+      waitForSelector?: string
+      waitForSelectorTimeoutMs?: number
+      captureScreenshot?: boolean
+    },
     userId: string,
   ): Promise<ToolResult> {
     const session = this.getSession(input.sessionId, userId)
@@ -297,6 +347,8 @@ export class ComputerUseTool implements OnModuleDestroy {
     return this.navigate({
       sessionId: session.id,
       url: link.url,
+      waitForSelector: input.waitForSelector,
+      waitForSelectorTimeoutMs: input.waitForSelectorTimeoutMs,
       captureScreenshot: input.captureScreenshot,
     }, userId)
   }
@@ -428,6 +480,7 @@ export class ComputerUseTool implements OnModuleDestroy {
       throw new Error(`HTTP ${response.status} while opening ${url}`)
     }
 
+    const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
     const html = await response.text()
     const textContent = this.extractTextContent(html)
     const links = this.extractLinksFromHtml(html, response.url || url)
@@ -441,21 +494,304 @@ export class ComputerUseTool implements OnModuleDestroy {
     this.pushHistory(session, session.currentUrl)
     this.touch(session)
 
+    const renderFallbackWarning = await this.tryUpgradeHttpSessionToPlaywright({
+      session,
+      targetUrl: session.currentUrl || url,
+      contentType,
+      html,
+    })
+    if (renderFallbackWarning) return renderFallbackWarning
+
     return 'HTTP mode parses static HTML and may miss client-rendered UI.'
   }
 
-  private async navigatePlaywright(session: ComputerSessionState, url: string) {
+  private async tryUpgradeHttpSessionToPlaywright(input: {
+    session: ComputerSessionState
+    targetUrl: string
+    contentType: string
+    html: string
+  }) {
+    if (!this.shouldAttemptRenderedFallback(
+      input.contentType,
+      input.html,
+      input.session.textContent,
+      input.session.links.length,
+    )) {
+      return null
+    }
+
+    const runtime = await this.createPlaywrightSessionRuntime()
+    if (!runtime) {
+      return 'Detected likely client-rendered UI, but Playwright runtime is unavailable. Install playwright or start with mode="playwright".'
+    }
+
+    const previousMode = input.session.mode
+    input.session.mode = 'playwright'
+    input.session.runtime = runtime
+
+    try {
+      const warning = await this.navigatePlaywright(input.session, input.targetUrl)
+      return ['Detected likely client-rendered UI and auto-switched from HTTP to Playwright mode.', warning]
+        .filter(Boolean)
+        .join(' | ')
+    } catch (error: any) {
+      await this.closeSessionRuntime(input.session).catch(() => {})
+      input.session.mode = previousMode
+      return `Detected likely client-rendered UI, but Playwright render failed (${error?.message ?? 'unknown error'}). Using static HTTP snapshot.`
+    }
+  }
+
+  private shouldAttemptRenderedFallback(
+    contentType: string,
+    html: string,
+    textContent: string,
+    linkCount: number,
+  ) {
+    if (!this.readBooleanEnv('COMPUTER_USE_HTTP_RENDER_FALLBACK', true)) return false
+    if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return false
+
+    const hasJsRequirement = /enable javascript|turn on javascript|javascript is required|requires javascript/i.test(html)
+    const hasSpaShellHints = /id\s*=\s*["']?(?:root|app|__next|__nuxt|svelte|astro)/i.test(html)
+      || /data-reactroot|ng-version|window\.__next_data__|__nuxt/i.test(html)
+      || /<script[^>]+(?:type\s*=\s*["']module["']|src=)/i.test(html)
+
+    const sparseStaticSnapshot = textContent.length < HTTP_RENDER_MIN_TEXT_CHARS
+      || linkCount < HTTP_RENDER_MIN_LINKS
+    return hasJsRequirement || (hasSpaShellHints && sparseStaticSnapshot)
+  }
+
+  private async navigatePlaywright(
+    session: ComputerSessionState,
+    url: string,
+    options: PlaywrightNavigateOptions = {},
+  ) {
     const page = session.runtime?.page
     if (!page) {
       throw new Error('Playwright session runtime is missing.')
     }
 
+    const warnings: string[] = []
+    const navTimeoutMs = this.readNumberEnv(
+      'COMPUTER_USE_PLAYWRIGHT_NAV_TIMEOUT_MS',
+      DEFAULT_PLAYWRIGHT_NAV_TIMEOUT_MS,
+      2_000,
+      120_000,
+    )
+    const waitUntil = this.readPlaywrightWaitUntilEnv()
     await page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 20_000,
+      waitUntil,
+      timeout: navTimeoutMs,
     })
-    await page.waitForTimeout(200)
-    return this.refreshPlaywrightState(session)
+
+    const networkIdleTimeoutMs = this.readNumberEnv(
+      'COMPUTER_USE_PLAYWRIGHT_NETWORK_IDLE_TIMEOUT_MS',
+      DEFAULT_PLAYWRIGHT_NETWORK_IDLE_TIMEOUT_MS,
+      0,
+      30_000,
+    )
+    if (networkIdleTimeoutMs > 0) {
+      try {
+        await page.waitForLoadState('networkidle', { timeout: networkIdleTimeoutMs })
+      } catch {
+        warnings.push(`Network idle not reached within ${networkIdleTimeoutMs}ms.`)
+      }
+    }
+
+    const waitForSelector = options.waitForSelector?.trim()
+      || this.readStringEnv('COMPUTER_USE_PLAYWRIGHT_WAIT_FOR_SELECTOR')
+    const selectorTimeoutMs = this.normalizeTimeoutMs(
+      options.waitForSelectorTimeoutMs,
+      'COMPUTER_USE_PLAYWRIGHT_WAIT_FOR_SELECTOR_TIMEOUT_MS',
+      DEFAULT_PLAYWRIGHT_SELECTOR_TIMEOUT_MS,
+      250,
+      60_000,
+    )
+    const selectorWarning = waitForSelector
+      ? await this.waitForSelectorWithRetry(page, waitForSelector, selectorTimeoutMs)
+      : await this.autoWaitForVisibleContent(page)
+    if (selectorWarning) warnings.push(selectorWarning)
+
+    const settleWarning = await this.waitForPageSettled(page)
+    if (settleWarning) warnings.push(settleWarning)
+
+    const stateWarning = await this.refreshPlaywrightState(session)
+    if (stateWarning) warnings.push(stateWarning)
+
+    return warnings.length ? warnings.join(' | ') : null
+  }
+
+  private async waitForSelectorWithRetry(page: any, selector: string, totalTimeoutMs: number) {
+    const retries = this.readNumberEnv(
+      'COMPUTER_USE_PLAYWRIGHT_SELECTOR_RETRY_COUNT',
+      DEFAULT_PLAYWRIGHT_SELECTOR_RETRY_COUNT,
+      1,
+      10,
+    )
+    const retryDelayMs = this.readNumberEnv(
+      'COMPUTER_USE_PLAYWRIGHT_SELECTOR_RETRY_DELAY_MS',
+      DEFAULT_PLAYWRIGHT_SELECTOR_RETRY_DELAY_MS,
+      25,
+      5_000,
+    )
+    const perAttemptTimeoutMs = Math.max(150, Math.floor(totalTimeoutMs / retries))
+
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+      try {
+        await page.waitForSelector(selector, {
+          state: 'visible',
+          timeout: perAttemptTimeoutMs,
+        })
+        return null
+      } catch {
+        if (attempt < retries) {
+          await page.waitForTimeout(retryDelayMs)
+        }
+      }
+    }
+
+    return `Selector retry exhausted: "${this.clip(selector, 120)}" was not visible within ${totalTimeoutMs}ms.`
+  }
+
+  private async autoWaitForVisibleContent(page: any) {
+    const retries = this.readNumberEnv(
+      'COMPUTER_USE_PLAYWRIGHT_SELECTOR_RETRY_COUNT',
+      DEFAULT_PLAYWRIGHT_SELECTOR_RETRY_COUNT,
+      1,
+      10,
+    )
+    const retryDelayMs = this.readNumberEnv(
+      'COMPUTER_USE_PLAYWRIGHT_SELECTOR_RETRY_DELAY_MS',
+      DEFAULT_PLAYWRIGHT_SELECTOR_RETRY_DELAY_MS,
+      25,
+      5_000,
+    )
+    const selectors = [
+      'main',
+      '[role="main"]',
+      'article',
+      'form',
+      'button',
+      'a[href]',
+      'input',
+      '[data-testid]',
+    ]
+
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+      try {
+        const found = await page.evaluate((candidateSelectors: string[]) => {
+          const doc = (globalThis as any).document as any
+          return candidateSelectors.some((selector) => Boolean(doc?.querySelector?.(selector)))
+        }, selectors)
+        if (found) return null
+      } catch {
+        return 'Auto-wait selector probe failed; proceeding with current DOM.'
+      }
+
+      if (attempt < retries) {
+        await page.waitForTimeout(retryDelayMs)
+      }
+    }
+
+    return 'Auto-wait did not detect common interactive content selectors; proceeding with best-effort snapshot.'
+  }
+
+  private async waitForPageSettled(page: any) {
+    const timeoutMs = this.readNumberEnv(
+      'COMPUTER_USE_PLAYWRIGHT_SETTLE_TIMEOUT_MS',
+      DEFAULT_PLAYWRIGHT_SETTLE_TIMEOUT_MS,
+      300,
+      60_000,
+    )
+    const stableWindowMs = this.readNumberEnv(
+      'COMPUTER_USE_PLAYWRIGHT_SETTLE_STABLE_MS',
+      DEFAULT_PLAYWRIGHT_SETTLE_STABLE_MS,
+      150,
+      20_000,
+    )
+    const pollMs = this.readNumberEnv(
+      'COMPUTER_USE_PLAYWRIGHT_SETTLE_POLL_MS',
+      DEFAULT_PLAYWRIGHT_SETTLE_POLL_MS,
+      40,
+      2_000,
+    )
+
+    const deadline = Date.now() + timeoutMs
+    let stableSince = 0
+    let lastFingerprint = ''
+
+    while (Date.now() <= deadline) {
+      let snapshot: {
+        readyState: string
+        textLen: number
+        linkCount: number
+        nodeCount: number
+        busy: boolean
+      }
+      try {
+        snapshot = await page.evaluate(() => {
+          const doc = (globalThis as any).document as any
+          const text = typeof doc?.body?.innerText === 'string'
+            ? doc.body.innerText
+            : typeof doc?.documentElement?.innerText === 'string'
+              ? doc.documentElement.innerText
+              : ''
+          return {
+            readyState: typeof doc?.readyState === 'string' ? doc.readyState : 'unknown',
+            textLen: text.length,
+            linkCount: Number(doc?.querySelectorAll?.('a[href]')?.length ?? 0),
+            nodeCount: Number(doc?.getElementsByTagName?.('*')?.length ?? 0),
+            busy: Boolean(doc?.querySelector?.('[aria-busy="true"], [data-loading="true"], [data-busy="true"]')),
+          }
+        })
+      } catch {
+        return 'Page settle check failed while probing DOM; continuing with best-effort snapshot.'
+      }
+
+      const fingerprint = [
+        snapshot.readyState,
+        Math.round(snapshot.textLen / 30),
+        Math.round(snapshot.linkCount / 2),
+        Math.round(snapshot.nodeCount / 20),
+        snapshot.busy ? 'busy' : 'idle',
+      ].join('|')
+
+      const ready = snapshot.readyState === 'interactive' || snapshot.readyState === 'complete'
+      const stable = fingerprint === lastFingerprint && ready && !snapshot.busy
+      if (stable) {
+        if (!stableSince) stableSince = Date.now()
+        if (Date.now() - stableSince >= stableWindowMs) {
+          return null
+        }
+      } else {
+        stableSince = 0
+      }
+
+      lastFingerprint = fingerprint
+      await page.waitForTimeout(pollMs)
+    }
+
+    return `Page settle check timed out after ${timeoutMs}ms; snapshot may still be mid-render.`
+  }
+
+  private normalizeTimeoutMs(
+    raw: number | undefined,
+    envName: string,
+    fallback: number,
+    min: number,
+    max: number,
+  ) {
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return Math.max(min, Math.min(Math.floor(raw), max))
+    }
+    return this.readNumberEnv(envName, fallback, min, max)
+  }
+
+  private readPlaywrightWaitUntilEnv(): PlaywrightWaitUntil {
+    const raw = this.readStringEnv('COMPUTER_USE_PLAYWRIGHT_WAIT_UNTIL')
+    if (raw === 'load' || raw === 'networkidle' || raw === 'commit' || raw === 'domcontentloaded') {
+      return raw
+    }
+    return DEFAULT_PLAYWRIGHT_WAIT_UNTIL
   }
 
   private async refreshPlaywrightState(session: ComputerSessionState) {
@@ -703,8 +1039,7 @@ export class ComputerUseTool implements OnModuleDestroy {
   }
 
   private resolveHeadless() {
-    const raw = (process.env.COMPUTER_USE_PLAYWRIGHT_HEADLESS ?? 'true').trim().toLowerCase()
-    return raw !== 'false' && raw !== '0' && raw !== 'no'
+    return this.readBooleanEnv('COMPUTER_USE_PLAYWRIGHT_HEADLESS', true)
   }
 
   private async createPlaywrightSessionRuntime(): Promise<PlaywrightSessionRuntime | null> {
@@ -753,5 +1088,18 @@ export class ComputerUseTool implements OnModuleDestroy {
     const raw = Number.parseInt(process.env[name] ?? `${fallback}`, 10)
     if (!Number.isFinite(raw)) return fallback
     return Math.max(min, Math.min(raw, max))
+  }
+
+  private readStringEnv(name: string) {
+    const raw = process.env[name]
+    if (typeof raw !== 'string') return ''
+    return raw.trim()
+  }
+
+  private readBooleanEnv(name: string, fallback: boolean) {
+    const raw = process.env[name]
+    if (raw == null) return fallback
+    const normalized = raw.trim().toLowerCase()
+    return normalized !== 'false' && normalized !== '0' && normalized !== 'no'
   }
 }
