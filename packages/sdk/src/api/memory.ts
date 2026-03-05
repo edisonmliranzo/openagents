@@ -2,11 +2,13 @@ import type { OpenAgentsClient } from '../client'
 import type {
   BrowserCaptureInput,
   BrowserCaptureResult,
+  MemoryConflict,
   MemoryEvent,
   MemoryFact,
   MemoryEntry,
   MemoryFileDocument,
   MemoryFileSummary,
+  MemoryReviewItem,
   NanobotMemoryCurationResult,
   QueryMemoryInput,
   QueryMemoryResult,
@@ -53,6 +55,22 @@ export function createMemoryApi(client: OpenAgentsClient) {
 
     curate: () =>
       client.post<NanobotMemoryCurationResult>('/api/v1/memory/curate'),
+
+    listConflicts: (status?: 'open' | 'resolved' | 'ignored', limit?: number) => {
+      const qs = new URLSearchParams()
+      if (status) qs.set('status', status)
+      if (typeof limit === 'number') qs.set('limit', String(limit))
+      const suffix = qs.toString() ? `?${qs.toString()}` : ''
+      return client.get<MemoryConflict[]>(`/api/v1/memory/conflicts${suffix}`)
+    },
+
+    resolveConflict: (id: string, status: 'resolved' | 'ignored' = 'resolved') =>
+      client.post<MemoryConflict>(`/api/v1/memory/conflicts/${encodeURIComponent(id)}/resolve`, { status }),
+
+    reviewQueue: (limit?: number) => {
+      const suffix = typeof limit === 'number' ? `?limit=${limit}` : ''
+      return client.get<MemoryReviewItem[]>(`/api/v1/memory/review-queue${suffix}`)
+    },
 
     delete: (id: string) => client.delete<{ count: number }>(`/api/v1/memory/${id}`),
   }

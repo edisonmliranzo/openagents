@@ -28,6 +28,8 @@ import { DataLineageModule } from './lineage/lineage.module'
 import { PolicyModule } from './policy/policy.module'
 import { ExtractionModule } from './extraction/extraction.module'
 import { CiHealerModule } from './ci-healer/ci-healer.module'
+import { ConnectorsModule } from './connectors/connectors.module'
+import { SkillRegistryModule } from './skill-registry/skill-registry.module'
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { CiHealerModule } from './ci-healer/ci-healer.module'
     PolicyModule,
     ExtractionModule,
     CiHealerModule,
+    ConnectorsModule,
+    SkillRegistryModule,
     HandoffsModule,
     SkillReputationModule,
     AuthModule,

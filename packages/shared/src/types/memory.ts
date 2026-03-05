@@ -44,9 +44,14 @@ export interface MemoryEvent {
   kind: MemoryEventKind
   summary: string
   payload: Record<string, unknown> | null
+  sourceRef: string | null
   tags: string[]
   piiRedacted: boolean
   confidence: number
+  effectiveConfidence?: number
+  freshUntil: string | null
+  conflictGroup: string | null
+  reinforcedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -59,6 +64,10 @@ export interface MemoryFact {
   value: string
   sourceRef: string | null
   confidence: number
+  effectiveConfidence?: number
+  freshUntil: string | null
+  conflictGroup: string | null
+  reinforcedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -67,9 +76,13 @@ export interface WriteMemoryEventInput {
   kind: MemoryEventKind
   summary: string
   payload?: Record<string, unknown>
+  sourceRef?: string
   tags?: string[]
   piiRedacted?: boolean
   confidence?: number
+  freshUntil?: string
+  freshnessHours?: number
+  conflictGroup?: string
 }
 
 export interface UpsertMemoryFactInput {
@@ -78,6 +91,10 @@ export interface UpsertMemoryFactInput {
   value: string
   sourceRef?: string
   confidence?: number
+  freshUntil?: string
+  freshnessHours?: number
+  conflictGroup?: string
+  reinforce?: boolean
 }
 
 export interface QueryMemoryInput {
@@ -85,10 +102,40 @@ export interface QueryMemoryInput {
   limit?: number
   includeFacts?: boolean
   tags?: string[]
+  minConfidence?: number
+  includeConflicts?: boolean
+}
+
+export interface MemoryConflict {
+  id: string
+  userId: string
+  entity: string
+  key: string
+  existingValue: string
+  incomingValue: string
+  existingSourceRef: string | null
+  incomingSourceRef: string | null
+  status: 'open' | 'resolved' | 'ignored'
+  severity: 'low' | 'medium' | 'high'
+  confidenceDelta: number
+  createdAt: string
+  updatedAt: string
+  resolvedAt: string | null
+}
+
+export interface MemoryReviewItem {
+  id: string
+  type: 'event' | 'fact'
+  reason: 'low_confidence' | 'stale' | 'conflict'
+  confidence: number
+  summary: string
+  updatedAt: string
 }
 
 export interface QueryMemoryResult {
   events: MemoryEvent[]
   facts: MemoryFact[]
+  conflicts?: MemoryConflict[]
+  reviewQueue?: MemoryReviewItem[]
   queriedAt: string
 }

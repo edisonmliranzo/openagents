@@ -27,3 +27,14 @@ export interface CiHealerJobData {
   incidentId: string
   source: 'webhook' | 'manual'
 }
+
+export interface WorkflowRunJobData {
+  userId: string
+  workflowId: string
+  runId: string
+  triggerKind: 'manual' | 'schedule' | 'webhook' | 'inbox_event'
+  idempotencyKey?: string
+  sourceEvent?: string
+  approvedKeys?: string[]
+  input?: Record<string, unknown>
+}

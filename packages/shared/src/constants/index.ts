@@ -65,6 +65,7 @@ export const QUEUE_NAMES = {
   toolRuns: 'tool-runs',
   extractionJobs: 'extraction-jobs',
   ciHealer: 'ci-healer',
+  workflowRuns: 'workflow-runs',
 } as const
 
 export const APPROVAL_JOB_NAMES = {
@@ -78,4 +79,8 @@ export const EXTRACTION_JOB_NAMES = {
 
 export const CI_HEALER_JOB_NAMES = {
   run: 'ci_healer.run',
+} as const
+
+export const WORKFLOW_JOB_NAMES = {
+  run: 'workflow.run',
 } as const

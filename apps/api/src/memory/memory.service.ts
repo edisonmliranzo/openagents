@@ -5,9 +5,11 @@ import { PrismaService } from '../prisma/prisma.service'
 import type {
   BrowserCaptureInput,
   BrowserCaptureResult,
+  MemoryConflict,
   MemoryEvent,
   MemoryEventKind,
   MemoryFact,
+  MemoryReviewItem,
   NanobotAutonomySchedule,
   NanobotAutonomyStatus,
   NanobotAutonomyWindow,
@@ -34,6 +36,9 @@ const MEMORY_RETENTION_DAYS = 45
 const MAX_CURATED_SUMMARY_POINTS = 14
 const DEFAULT_MEMORY_EVENT_CONFIDENCE = 0.8
 const MAX_TIERED_MEMORY_RESULTS = 30
+const MEMORY_DECAY_DAYS = 30
+const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.45
+const STALE_REVIEW_DAYS = 21
 const MEMORY_EVENT_KINDS = new Set<MemoryEventKind>([
   'conversation',
   'workflow',
@@ -108,6 +113,9 @@ export class MemoryService {
     const tags = this.normalizeTags(input.tags)
     const payload = input.payload && typeof input.payload === 'object' ? input.payload : null
     const confidence = this.clampConfidence(input.confidence, DEFAULT_MEMORY_EVENT_CONFIDENCE)
+    const sourceRef = this.optionalText(input.sourceRef)?.slice(0, 800) ?? null
+    const freshUntil = this.resolveFreshUntil(input.freshUntil, input.freshnessHours)
+    const conflictGroup = this.optionalText(input.conflictGroup)?.slice(0, 120) ?? null
 
     const row = await this.prisma.memoryEvent.create({
       data: {
@@ -115,9 +123,13 @@ export class MemoryService {
         kind,
         summary,
         payload: payload ? this.safeSerialize(payload) : null,
+        sourceRef,
         tags: JSON.stringify(tags),
         piiRedacted: input.piiRedacted ?? true,
         confidence,
+        freshUntil,
+        conflictGroup,
+        reinforcedAt: new Date(),
       },
     })
 
@@ -134,6 +146,39 @@ export class MemoryService {
 
     const sourceRef = (input.sourceRef ?? '').trim().slice(0, 500) || null
     const confidence = this.clampConfidence(input.confidence, DEFAULT_MEMORY_EVENT_CONFIDENCE)
+    const freshUntil = this.resolveFreshUntil(input.freshUntil, input.freshnessHours)
+    const conflictGroup = this.optionalText(input.conflictGroup)?.slice(0, 120) ?? null
+    const existing = await this.prisma.memoryFact.findUnique({
+      where: {
+        userId_entity_key: {
+          userId,
+          entity,
+          key,
+        },
+      },
+    })
+
+    if (existing && existing.value.trim() !== value.trim()) {
+      const confidenceDelta = Number((confidence - this.clampConfidence(existing.confidence, DEFAULT_MEMORY_EVENT_CONFIDENCE)).toFixed(4))
+      await this.prisma.memoryConflict.create({
+        data: {
+          userId,
+          entity,
+          key,
+          existingValue: existing.value.slice(0, 4000),
+          incomingValue: value.slice(0, 4000),
+          existingSourceRef: existing.sourceRef,
+          incomingSourceRef: sourceRef,
+          status: 'open',
+          severity: this.conflictSeverity(existing.value, value),
+          confidenceDelta,
+        },
+      })
+    }
+
+    const reinforcedAt = input.reinforce === false
+      ? (existing?.reinforcedAt ?? new Date())
+      : new Date()
 
     const row = await this.prisma.memoryFact.upsert({
       where: {
@@ -147,6 +192,9 @@ export class MemoryService {
         value,
         sourceRef,
         confidence,
+        freshUntil,
+        conflictGroup,
+        reinforcedAt,
       },
       create: {
         userId,
@@ -155,6 +203,9 @@ export class MemoryService {
         value,
         sourceRef,
         confidence,
+        freshUntil,
+        conflictGroup,
+        reinforcedAt,
       },
     })
 
@@ -187,23 +238,31 @@ export class MemoryService {
     const tokens = this.queryTokens(query)
     const includeFacts = input.includeFacts ?? true
     const tagFilter = this.normalizeTags(input.tags)
+    const minConfidence = this.clampConfidence(input.minConfidence, 0)
 
     const eventRows = await this.prisma.memoryEvent.findMany({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
-      take: 180,
+      take: 240,
     })
 
     const eventCandidates = eventRows
       .map((row) => this.toMemoryEvent(row))
       .filter((event) => tagFilter.length === 0 || tagFilter.every((tag) => event.tags.includes(tag)))
+      .filter((event) => (event.effectiveConfidence ?? event.confidence) >= minConfidence)
       .map((event) => ({
         event,
-        score: this.scoreTextMatch(query, tokens, [
+        score: this.scoreTieredCandidate({
+          textScore: this.scoreTextMatch(query, tokens, [
           event.summary,
           ...event.tags,
+          event.sourceRef ?? '',
           event.payload ? this.safeSerialize(event.payload) : '',
-        ]),
+          ]),
+          confidence: event.effectiveConfidence ?? event.confidence,
+          updatedAtIso: event.updatedAt,
+          freshUntilIso: event.freshUntil,
+        }),
       }))
       .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score || b.event.updatedAt.localeCompare(a.event.updatedAt))
@@ -215,18 +274,24 @@ export class MemoryService {
       const factRows = await this.prisma.memoryFact.findMany({
         where: { userId },
         orderBy: { updatedAt: 'desc' },
-        take: 180,
+        take: 240,
       })
       facts = factRows
         .map((row) => this.toMemoryFact(row))
+        .filter((fact) => (fact.effectiveConfidence ?? fact.confidence) >= minConfidence)
         .map((fact) => ({
           fact,
-          score: this.scoreTextMatch(query, tokens, [
+          score: this.scoreTieredCandidate({
+            textScore: this.scoreTextMatch(query, tokens, [
             fact.entity,
             fact.key,
             fact.value,
             fact.sourceRef ?? '',
-          ]),
+            ]),
+            confidence: fact.effectiveConfidence ?? fact.confidence,
+            updatedAtIso: fact.updatedAt,
+            freshUntilIso: fact.freshUntil,
+          }),
         }))
         .filter((item) => item.score > 0)
         .sort((a, b) => b.score - a.score || b.fact.updatedAt.localeCompare(a.fact.updatedAt))
@@ -234,11 +299,136 @@ export class MemoryService {
         .map((item) => item.fact)
     }
 
+    const includeConflicts = input.includeConflicts ?? false
+    const conflicts = includeConflicts
+      ? await this.listConflicts(userId, 'open', Math.min(50, safeLimit * 3))
+      : undefined
+    const reviewQueue = includeConflicts
+      ? await this.getReviewQueue(userId, Math.min(80, safeLimit * 4))
+      : undefined
+
     return {
       events: eventCandidates,
       facts,
+      ...(conflicts ? { conflicts } : {}),
+      ...(reviewQueue ? { reviewQueue } : {}),
       queriedAt: new Date().toISOString(),
     }
+  }
+
+  async listConflicts(
+    userId: string,
+    status?: string,
+    limit = 30,
+  ): Promise<MemoryConflict[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 200))
+    const normalizedStatus = status === 'open' || status === 'resolved' || status === 'ignored'
+      ? status
+      : undefined
+
+    const rows = await this.prisma.memoryConflict.findMany({
+      where: {
+        userId,
+        ...(normalizedStatus ? { status: normalizedStatus } : {}),
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: safeLimit,
+    })
+
+    return rows.map((row) => this.toMemoryConflict(row))
+  }
+
+  async resolveConflict(
+    userId: string,
+    conflictId: string,
+    status: 'resolved' | 'ignored' = 'resolved',
+  ): Promise<MemoryConflict> {
+    const current = await this.prisma.memoryConflict.findUnique({
+      where: { id: conflictId },
+    })
+    if (!current || current.userId !== userId) {
+      throw new NotFoundException(`Memory conflict "${conflictId}" not found.`)
+    }
+
+    const row = await this.prisma.memoryConflict.update({
+      where: { id: conflictId },
+      data: {
+        status,
+        resolvedAt: new Date(),
+      },
+    })
+
+    return this.toMemoryConflict(row)
+  }
+
+  async getReviewQueue(userId: string, limit = 30): Promise<MemoryReviewItem[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 200))
+    const staleCutoff = Date.now() - STALE_REVIEW_DAYS * 24 * 60 * 60 * 1000
+
+    const [eventsRaw, factsRaw, conflictsRaw] = await Promise.all([
+      this.prisma.memoryEvent.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 220,
+      }),
+      this.prisma.memoryFact.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 220,
+      }),
+      this.prisma.memoryConflict.findMany({
+        where: { userId, status: 'open' },
+        orderBy: { updatedAt: 'desc' },
+        take: 120,
+      }),
+    ])
+
+    const items: MemoryReviewItem[] = []
+
+    for (const event of eventsRaw.map((row) => this.toMemoryEvent(row))) {
+      const confidence = event.effectiveConfidence ?? event.confidence
+      const updatedTs = new Date(event.updatedAt).getTime()
+      const stale = Number.isFinite(updatedTs) && updatedTs <= staleCutoff
+      if (confidence >= LOW_CONFIDENCE_REVIEW_THRESHOLD && !stale) continue
+      items.push({
+        id: event.id,
+        type: 'event',
+        reason: confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD ? 'low_confidence' : 'stale',
+        confidence,
+        summary: event.summary.slice(0, 200),
+        updatedAt: event.updatedAt,
+      })
+    }
+
+    for (const fact of factsRaw.map((row) => this.toMemoryFact(row))) {
+      const confidence = fact.effectiveConfidence ?? fact.confidence
+      const updatedTs = new Date(fact.updatedAt).getTime()
+      const stale = Number.isFinite(updatedTs) && updatedTs <= staleCutoff
+      if (confidence >= LOW_CONFIDENCE_REVIEW_THRESHOLD && !stale) continue
+      items.push({
+        id: fact.id,
+        type: 'fact',
+        reason: confidence < LOW_CONFIDENCE_REVIEW_THRESHOLD ? 'low_confidence' : 'stale',
+        confidence,
+        summary: `${fact.entity}.${fact.key}: ${fact.value}`.slice(0, 200),
+        updatedAt: fact.updatedAt,
+      })
+    }
+
+    for (const conflict of conflictsRaw.map((row) => this.toMemoryConflict(row))) {
+      items.push({
+        id: conflict.id,
+        type: 'fact',
+        reason: 'conflict',
+        confidence: Math.max(0, 1 - Math.abs(conflict.confidenceDelta)),
+        summary: `Conflict ${conflict.entity}.${conflict.key}: "${conflict.existingValue}" vs "${conflict.incomingValue}"`.slice(0, 220),
+        updatedAt: conflict.updatedAt,
+      })
+    }
+
+    return items
+      .sort((a, b) => a.confidence - b.confidence || b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, safeLimit)
   }
 
   async listFiles(userId: string): Promise<MemoryFileMeta[]> {
@@ -1014,13 +1204,23 @@ export class MemoryService {
     kind: string
     summary: string
     payload: string | null
+    sourceRef: string | null
     tags: string
     piiRedacted: boolean
     confidence: number
+    freshUntil: Date | null
+    conflictGroup: string | null
+    reinforcedAt: Date | null
     createdAt: Date
     updatedAt: Date
   }): MemoryEvent {
     const parsedPayload = this.parseRecordJson(row.payload, `memory-event:${row.id}:payload`)
+    const effectiveConfidence = this.effectiveConfidence(
+      row.confidence,
+      row.updatedAt,
+      row.reinforcedAt,
+      row.freshUntil,
+    )
     return {
       id: row.id,
       userId: row.userId,
@@ -1029,9 +1229,14 @@ export class MemoryService {
         : 'note',
       summary: row.summary,
       payload: parsedPayload,
+      sourceRef: row.sourceRef,
       tags: this.parseTags(row.tags, row.id),
       piiRedacted: row.piiRedacted,
       confidence: this.clampConfidence(row.confidence, DEFAULT_MEMORY_EVENT_CONFIDENCE),
+      effectiveConfidence,
+      freshUntil: row.freshUntil ? row.freshUntil.toISOString() : null,
+      conflictGroup: row.conflictGroup ?? null,
+      reinforcedAt: row.reinforcedAt ? row.reinforcedAt.toISOString() : null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     }
@@ -1045,9 +1250,18 @@ export class MemoryService {
     value: string
     sourceRef: string | null
     confidence: number
+    freshUntil: Date | null
+    conflictGroup: string | null
+    reinforcedAt: Date | null
     createdAt: Date
     updatedAt: Date
   }): MemoryFact {
+    const effectiveConfidence = this.effectiveConfidence(
+      row.confidence,
+      row.updatedAt,
+      row.reinforcedAt,
+      row.freshUntil,
+    )
     return {
       id: row.id,
       userId: row.userId,
@@ -1056,8 +1270,46 @@ export class MemoryService {
       value: row.value,
       sourceRef: row.sourceRef,
       confidence: this.clampConfidence(row.confidence, DEFAULT_MEMORY_EVENT_CONFIDENCE),
+      effectiveConfidence,
+      freshUntil: row.freshUntil ? row.freshUntil.toISOString() : null,
+      conflictGroup: row.conflictGroup ?? null,
+      reinforcedAt: row.reinforcedAt ? row.reinforcedAt.toISOString() : null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
+    }
+  }
+
+  private toMemoryConflict(row: {
+    id: string
+    userId: string
+    entity: string
+    key: string
+    existingValue: string
+    incomingValue: string
+    existingSourceRef: string | null
+    incomingSourceRef: string | null
+    status: string
+    severity: string
+    confidenceDelta: number
+    createdAt: Date
+    updatedAt: Date
+    resolvedAt: Date | null
+  }): MemoryConflict {
+    return {
+      id: row.id,
+      userId: row.userId,
+      entity: row.entity,
+      key: row.key,
+      existingValue: row.existingValue,
+      incomingValue: row.incomingValue,
+      existingSourceRef: row.existingSourceRef,
+      incomingSourceRef: row.incomingSourceRef,
+      status: row.status === 'resolved' || row.status === 'ignored' ? row.status : 'open',
+      severity: row.severity === 'low' || row.severity === 'high' ? row.severity : 'medium',
+      confidenceDelta: Number.isFinite(row.confidenceDelta) ? row.confidenceDelta : 0,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      resolvedAt: row.resolvedAt ? row.resolvedAt.toISOString() : null,
     }
   }
 
@@ -1111,6 +1363,84 @@ export class MemoryService {
     return score
   }
 
+  private scoreTieredCandidate(input: {
+    textScore: number
+    confidence: number
+    updatedAtIso: string
+    freshUntilIso: string | null
+  }) {
+    if (input.textScore <= 0) return 0
+    const recency = this.recencyScore(input.updatedAtIso, input.freshUntilIso)
+    return input.textScore * 5 + input.confidence * 3 + recency * 2
+  }
+
+  private recencyScore(updatedAtIso: string, freshUntilIso: string | null) {
+    const updatedTs = new Date(updatedAtIso).getTime()
+    if (!Number.isFinite(updatedTs)) return 0
+    const ageDays = Math.max(0, (Date.now() - updatedTs) / (24 * 60 * 60 * 1000))
+    let score = Math.max(0, 1 - ageDays / 30)
+    if (freshUntilIso) {
+      const freshUntilTs = new Date(freshUntilIso).getTime()
+      if (Number.isFinite(freshUntilTs) && freshUntilTs >= Date.now()) {
+        score = Math.min(1.5, score + 0.35)
+      }
+    }
+    return score
+  }
+
+  private effectiveConfidence(
+    base: number,
+    updatedAt: Date,
+    reinforcedAt: Date | null,
+    freshUntil: Date | null,
+  ) {
+    const clampedBase = this.clampConfidence(base, DEFAULT_MEMORY_EVENT_CONFIDENCE)
+    const lastSignalAt = reinforcedAt && reinforcedAt > updatedAt ? reinforcedAt : updatedAt
+    const ageDays = Math.max(0, (Date.now() - lastSignalAt.getTime()) / (24 * 60 * 60 * 1000))
+    let decayFactor = Math.exp(-ageDays / MEMORY_DECAY_DAYS)
+    if (freshUntil && freshUntil.getTime() >= Date.now()) {
+      decayFactor = Math.min(1, decayFactor + 0.2)
+    }
+    if (freshUntil && freshUntil.getTime() < Date.now()) {
+      decayFactor *= 0.7
+    }
+    const effective = clampedBase * decayFactor
+    return Number(Math.max(0, Math.min(1, effective)).toFixed(4))
+  }
+
+  private resolveFreshUntil(rawIso: string | undefined, freshnessHours: number | undefined) {
+    const explicit = this.normalizeDate(rawIso)
+    if (explicit) return explicit
+    const parsedHours = Number.parseInt(`${freshnessHours ?? ''}`, 10)
+    if (!Number.isFinite(parsedHours) || parsedHours <= 0) return null
+    const boundedHours = Math.max(1, Math.min(parsedHours, 24 * 365))
+    return new Date(Date.now() + boundedHours * 60 * 60 * 1000)
+  }
+
+  private normalizeDate(value: string | undefined) {
+    if (!value) return null
+    const date = new Date(value)
+    return Number.isFinite(date.getTime()) ? date : null
+  }
+
+  private conflictSeverity(existingValue: string, incomingValue: string): 'low' | 'medium' | 'high' {
+    const existing = existingValue.trim().toLowerCase()
+    const incoming = incomingValue.trim().toLowerCase()
+    if (!existing || !incoming) return 'medium'
+    if (existing === incoming) return 'low'
+
+    const sharedTokens = new Set(existing.split(/\s+/).filter(Boolean))
+    let overlap = 0
+    for (const token of incoming.split(/\s+/)) {
+      if (sharedTokens.has(token)) overlap += 1
+    }
+    const incomingTokens = incoming.split(/\s+/).filter(Boolean).length || 1
+    const overlapRatio = overlap / incomingTokens
+    if (overlapRatio <= 0.15) return 'high'
+    if (overlapRatio <= 0.5) return 'medium'
+    return 'low'
+  }
+
   private parseRecordJson(raw: string | null, context: string): Record<string, unknown> | null {
     if (!raw) return null
     try {
@@ -1149,5 +1479,11 @@ export class MemoryService {
       this.logger.warn(`Memory ${memoryId} has invalid tags JSON. Returning empty tags.`)
       return []
     }
+  }
+
+  private optionalText(value: unknown) {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    return trimmed || null
   }
 }

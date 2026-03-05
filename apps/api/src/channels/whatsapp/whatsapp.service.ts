@@ -11,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { NanobotLoopService } from '../../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../../nanobot/config/nanobot-config.service'
 import { NanobotBusService } from '../../nanobot/bus/nanobot-bus.service'
+import { ConnectorsService } from '../../connectors/connectors.service'
 
 export interface WhatsAppInboundPayload {
   Body?: string
@@ -50,6 +51,7 @@ export class WhatsAppService {
     private nanobotLoop: NanobotLoopService,
     private nanobotConfig: NanobotConfigService,
     private bus: NanobotBusService,
+    private connectors: ConnectorsService,
   ) {}
 
   health(): WhatsAppChannelHealth {
@@ -216,6 +218,10 @@ export class WhatsAppService {
       })
     } catch (error: any) {
       this.logger.error(`WhatsApp agent run failed for ${from}`, error)
+      await this.connectors.recordWhatsAppActivity(route.userId, {
+        success: false,
+        error: error?.message ?? 'WhatsApp agent run failed.',
+      }).catch(() => {})
       await this.sendMessage(
         from,
         'I hit an internal error while processing that. Please try again in a moment.',
@@ -234,6 +240,9 @@ export class WhatsAppService {
 
     const outbound = assistantReply || 'Done.'
     await this.sendMessage(from, outbound)
+    await this.connectors.recordWhatsAppActivity(route.userId, {
+      success: true,
+    }).catch(() => {})
     this.bus.publish('run.event', {
       source: 'channels.whatsapp',
       direction: 'outbound',

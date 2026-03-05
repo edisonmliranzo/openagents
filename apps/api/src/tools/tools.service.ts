@@ -11,6 +11,7 @@ import { BybitTool } from './connectors/bybit.tool'
 import { DeepResearchTool } from './connectors/deep-research.tool'
 import { ComputerUseTool } from './connectors/computer-use.tool'
 import type { ToolResult } from '@openagents/shared'
+import { ConnectorsService } from '../connectors/connectors.service'
 
 export interface ToolDefinition {
   name: string
@@ -26,6 +27,7 @@ export class ToolsService {
 
   constructor(
     private prisma: PrismaService,
+    private connectors: ConnectorsService,
     private gmail: GmailTool,
     private calendar: CalendarTool,
     private webFetch: WebFetchTool,
@@ -71,14 +73,35 @@ export class ToolsService {
   async execute(toolName: string, input: Record<string, unknown>, userId: string): Promise<ToolResult> {
     const tool = this.registry.get(toolName)
     if (!tool) return { success: false, output: null, error: `Unknown tool: ${toolName}` }
+    const startedAt = Date.now()
     try {
-      return await tool.execute(input, userId)
+      const result = await tool.execute(input, userId)
+      const latencyMs = Date.now() - startedAt
+      await this.connectors.recordToolExecution(userId, toolName, {
+        success: result.success,
+        latencyMs,
+        error: result.error ?? undefined,
+        rateLimited: this.isRateLimitError(result.error),
+      }).catch(() => {})
+      return result
     } catch (err: any) {
-      return { success: false, output: null, error: err.message }
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      await this.connectors.recordToolExecution(userId, toolName, {
+        success: false,
+        latencyMs: Date.now() - startedAt,
+        error: errorMessage,
+        rateLimited: this.isRateLimitError(errorMessage),
+      }).catch(() => {})
+      return { success: false, output: null, error: errorMessage }
     }
   }
 
   getAllDefinitions(): ToolDefinition[] {
     return Array.from(this.registry.values()).map((t) => t.def)
+  }
+
+  private isRateLimitError(message: string | undefined | null) {
+    if (!message) return false
+    return /rate\s*limit|too many requests|429/i.test(message)
   }
 }

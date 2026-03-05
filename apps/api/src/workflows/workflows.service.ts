@@ -9,10 +9,12 @@ import {
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import Bull, { type Queue } from 'bull'
 import { AgentService } from '../agent/agent.service'
 import { ToolsService } from '../tools/tools.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { MissionControlService } from '../mission-control/mission-control.service'
+import { QUEUE_NAMES, WORKFLOW_JOB_NAMES } from '@openagents/shared'
 import type {
   CreateWorkflowInput,
   RunWorkflowInput,
@@ -24,13 +26,16 @@ import type {
   WorkflowStepRunResult,
   WorkflowTrigger,
   WorkflowTriggerKind,
+  WorkflowRunJobData,
 } from '@openagents/shared'
 
 const WORKFLOWS_FILE = 'WORKFLOWS.json'
-const STORE_VERSION = 1
+const STORE_VERSION = 2
 const MAX_WORKFLOWS_PER_USER = 150
 const MAX_RUNS_PER_USER = 400
 const SCHEDULER_INTERVAL_MS = 30_000
+const MAX_WORKFLOW_STEP_RETRIES = 5
+const MAX_BRANCH_HOPS = 800
 
 interface WorkflowStoreFile {
   version: number
@@ -45,6 +50,8 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
   private readonly workflowsByUser = new Map<string, WorkflowDefinition[]>()
   private readonly runsByUser = new Map<string, WorkflowRun[]>()
   private readonly runningWorkflowIds = new Set<string>()
+  private readonly workflowQueue?: Queue<WorkflowRunJobData>
+  private processingMode: 'inline' | 'queue'
   private schedulerTimer?: NodeJS.Timeout
   private schedulerInFlight = false
 
@@ -53,7 +60,24 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
     private tools: ToolsService,
     private prisma: PrismaService,
     private mission: MissionControlService,
-  ) {}
+  ) {
+    const configuredMode = (process.env.WORKFLOW_PROCESSING_MODE ?? 'inline').toLowerCase()
+    this.processingMode = configuredMode === 'queue' ? 'queue' : 'inline'
+
+    const redisUrl = process.env.REDIS_URL
+    if (this.processingMode === 'queue' && !redisUrl) {
+      this.logger.warn('WORKFLOW_PROCESSING_MODE=queue but REDIS_URL is missing. Falling back to inline execution.')
+      this.processingMode = 'inline'
+      return
+    }
+
+    if (this.processingMode === 'queue' && redisUrl) {
+      this.workflowQueue = new Bull<WorkflowRunJobData>(QUEUE_NAMES.workflowRuns, redisUrl)
+      this.workflowQueue.on('error', (error) => {
+        this.logger.error('Workflow queue error', error?.stack ?? String(error))
+      })
+    }
+  }
 
   onModuleInit() {
     this.schedulerTimer = setInterval(() => {
@@ -66,6 +90,9 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
     if (this.schedulerTimer) {
       clearInterval(this.schedulerTimer)
       this.schedulerTimer = undefined
+    }
+    if (this.workflowQueue) {
+      void this.workflowQueue.close()
     }
   }
 
@@ -95,6 +122,7 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       name: this.requireName(input.name),
       description: this.optionalText(input.description),
       enabled: input.enabled ?? true,
+      version: 1,
       trigger,
       steps: this.sanitizeSteps(input.steps, true),
       createdAt: now,
@@ -127,6 +155,7 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       ...(input.name !== undefined ? { name: this.requireName(input.name) } : {}),
       ...(input.description !== undefined ? { description: this.optionalText(input.description) } : {}),
       enabled: nextEnabled,
+      version: Math.max(1, (current.version ?? 1) + 1),
       trigger: nextTrigger,
       ...(input.steps !== undefined ? { steps: this.sanitizeSteps(input.steps, false) } : {}),
       updatedAt,
@@ -170,6 +199,14 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
   async run(userId: string, workflowId: string, input: RunWorkflowInput = {}) {
     const triggerKind = this.sanitizeTriggerKind(input.triggerKind ?? 'manual')
     const workflow = await this.getWorkflow(userId, workflowId)
+    const idempotencyKey = this.sanitizeIdempotencyKey(input.idempotencyKey)
+    const sourceEvent = this.optionalText(input.sourceEvent)?.slice(0, 200) ?? null
+
+    if (idempotencyKey) {
+      await this.ensureLoaded(userId)
+      const existing = this.findRunByIdempotency(userId, workflowId, idempotencyKey)
+      if (existing) return existing
+    }
 
     if (!workflow.enabled && triggerKind !== 'manual') {
       throw new BadRequestException('Workflow is disabled.')
@@ -186,6 +223,19 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    if (triggerKind === 'inbox_event' && workflow.trigger.kind !== 'inbox_event') {
+      throw new BadRequestException('Workflow trigger kind does not allow inbox_event runs.')
+    }
+
+    if (this.workflowQueue && this.processingMode === 'queue') {
+      return this.enqueueWorkflowRun(userId, workflow, triggerKind, {
+        approvedKeys: input.approvedKeys,
+        idempotencyKey,
+        sourceEvent,
+        input: this.asRecord(input.input) ?? {},
+      })
+    }
+
     if (this.runningWorkflowIds.has(workflow.id)) {
       throw new BadRequestException('Workflow is already running.')
     }
@@ -195,6 +245,10 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       return await this.executeWorkflow(userId, workflow, triggerKind, {
         persistRun: true,
         source: 'workflow',
+        approvedKeys: input.approvedKeys,
+        idempotencyKey,
+        sourceEvent,
+        input: this.asRecord(input.input) ?? {},
       })
     } finally {
       this.runningWorkflowIds.delete(workflow.id)
@@ -217,6 +271,7 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       name: this.requireName(input.name),
       description: null,
       enabled: true,
+      version: 1,
       trigger: { kind: 'manual' },
       steps: this.sanitizeSteps(input.steps, true),
       createdAt: now,
@@ -232,8 +287,111 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       {
         persistRun: false,
         source: input.source ?? 'workflow.adhoc',
+        approvedKeys: [],
+        idempotencyKey: null,
+        sourceEvent: null,
+        input: {},
       },
     )
+  }
+
+  async processQueuedRun(input: WorkflowRunJobData) {
+    const workflow = await this.getWorkflow(input.userId, input.workflowId)
+    await this.ensureLoaded(input.userId)
+    const existing = this.findRunById(input.userId, input.runId)
+    if (!existing) {
+      throw new NotFoundException(`Workflow run "${input.runId}" not found.`)
+    }
+
+    if (existing.status === 'done' || existing.status === 'error' || existing.status === 'waiting_approval') {
+      return existing
+    }
+    if (existing.status === 'running') {
+      return existing
+    }
+
+    if (this.runningWorkflowIds.has(workflow.id)) {
+      return existing
+    }
+
+    this.runningWorkflowIds.add(workflow.id)
+    try {
+      const running: WorkflowRun = {
+        ...existing,
+        status: 'running',
+        error: null,
+      }
+      this.replaceRun(input.userId, running)
+      await this.persist(input.userId)
+
+      return await this.executeWorkflow(
+        input.userId,
+        workflow,
+        input.triggerKind,
+        {
+          persistRun: true,
+          source: 'workflow.queue',
+          approvedKeys: input.approvedKeys,
+          idempotencyKey: this.sanitizeIdempotencyKey(input.idempotencyKey),
+          sourceEvent: this.optionalText(input.sourceEvent)?.slice(0, 200) ?? null,
+          input: this.asRecord(input.input) ?? {},
+          runId: existing.id,
+          startedAt: existing.startedAt,
+          replaceExistingRun: true,
+        },
+      )
+    } finally {
+      this.runningWorkflowIds.delete(workflow.id)
+    }
+  }
+
+  private async enqueueWorkflowRun(
+    userId: string,
+    workflow: WorkflowDefinition,
+    triggerKind: WorkflowTriggerKind,
+    input: {
+      approvedKeys?: string[]
+      idempotencyKey: string | null
+      sourceEvent: string | null
+      input: Record<string, unknown>
+    },
+  ) {
+    if (!this.workflowQueue) {
+      throw new BadRequestException('Workflow queue is not available.')
+    }
+
+    const nowIso = new Date().toISOString()
+    const run: WorkflowRun = {
+      id: randomUUID(),
+      workflowId: workflow.id,
+      userId,
+      triggerKind,
+      status: 'queued',
+      startedAt: nowIso,
+      finishedAt: null,
+      error: null,
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      ...(input.sourceEvent ? { sourceEvent: input.sourceEvent } : {}),
+      stepResults: [],
+    }
+
+    await this.ensureLoaded(userId)
+    this.appendRun(userId, run)
+    this.updateWorkflowForRun(userId, workflow.id, workflow.trigger, nowIso)
+    await this.persist(userId)
+
+    await this.dispatchWorkflowRun({
+      userId,
+      workflowId: workflow.id,
+      runId: run.id,
+      triggerKind,
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      ...(input.sourceEvent ? { sourceEvent: input.sourceEvent } : {}),
+      ...(input.approvedKeys && input.approvedKeys.length > 0 ? { approvedKeys: input.approvedKeys } : {}),
+      ...(Object.keys(input.input).length > 0 ? { input: input.input } : {}),
+    })
+
+    return run
   }
 
   private async executeWorkflow(
@@ -243,11 +401,18 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
     options: {
       persistRun: boolean
       source: string
+      approvedKeys?: string[]
+      idempotencyKey: string | null
+      sourceEvent: string | null
+      input: Record<string, unknown>
+      runId?: string
+      startedAt?: string
+      replaceExistingRun?: boolean
     },
   ): Promise<WorkflowRun> {
-    const startedAt = new Date().toISOString()
+    const startedAt = options.startedAt ?? new Date().toISOString()
     const run: WorkflowRun = {
-      id: randomUUID(),
+      id: options.runId ?? randomUUID(),
       workflowId: workflow.id,
       userId,
       triggerKind,
@@ -255,12 +420,18 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       startedAt,
       finishedAt: null,
       error: null,
+      ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
+      ...(options.sourceEvent ? { sourceEvent: options.sourceEvent } : {}),
       stepResults: [],
     }
 
     if (options.persistRun) {
       await this.ensureLoaded(userId)
-      this.appendRun(userId, run)
+      if (options.replaceExistingRun) {
+        this.replaceRun(userId, run)
+      } else {
+        this.appendRun(userId, run)
+      }
       this.updateWorkflowForRun(userId, workflow.id, workflow.trigger, startedAt)
       await this.persist(userId)
     }
@@ -280,8 +451,24 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
 
     let activeConversationId: string | null = null
     let runError: string | null = null
+    let waitingApproval = false
+    let lastStepOutput = ''
+    const approvedKeys = new Set((options.approvedKeys ?? [])
+      .map((key) => this.normalizeApprovalKey(key))
+      .filter((key): key is string => Boolean(key)))
+    const stepIndexById = new Map(workflow.steps.map((step, index) => [step.id, index]))
 
-    for (const step of workflow.steps) {
+    let stepPointer = 0
+    let branchHops = 0
+
+    while (stepPointer < workflow.steps.length) {
+      if (branchHops > MAX_BRANCH_HOPS) {
+        runError = 'Workflow exceeded branch hop limit.'
+        break
+      }
+      branchHops += 1
+
+      const step = workflow.steps[stepPointer]
       const stepStartedAt = new Date().toISOString()
       const stepResult: WorkflowStepRunResult = {
         stepId: step.id,
@@ -293,49 +480,106 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
         error: null,
       }
 
-      try {
-        if (step.type === 'delay') {
-          const delayMs = Math.max(100, Math.min(step.delayMs ?? 1000, 5 * 60_000))
-          await this.sleep(delayMs)
-          stepResult.output = `Delayed for ${delayMs} ms.`
-        } else if (step.type === 'tool_call') {
-          const result = await this.tools.execute(step.toolName ?? '', step.input ?? {}, userId)
-          if (!result.success) {
-            throw new Error(result.error ?? `Tool call failed for ${step.toolName}`)
-          }
-          stepResult.output = this.renderOutput(result.output)
-        } else if (step.type === 'agent_prompt') {
-          if (!activeConversationId) {
-            activeConversationId = step.conversationId?.trim() || await this.createRunConversation(userId, workflow.name)
-          }
-          await this.agent.run({
-            conversationId: activeConversationId,
-            userId,
-            userMessage: step.prompt ?? '',
-            emit: () => {},
-          })
-          stepResult.output = `Agent run completed in conversation ${activeConversationId}.`
-        } else {
-          throw new Error(`Unsupported workflow step type: ${step.type}`)
-        }
+      const maxAttempts = Math.max(1, Math.min((step.retryAttempts ?? 0) + 1, MAX_WORKFLOW_STEP_RETRIES + 1))
+      let stepError: string | null = null
+      let nextPointer = stepPointer + 1
 
-        stepResult.status = 'done'
-      } catch (error: any) {
-        runError = this.safeError(error)
-        stepResult.status = 'error'
-        stepResult.error = runError
-        stepResult.finishedAt = new Date().toISOString()
-        run.stepResults.push(stepResult)
-        break
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const normalizedType = this.normalizeExecutionStepType(step.type)
+
+          if (normalizedType === 'delay') {
+            const delayMs = Math.max(100, Math.min(step.delayMs ?? 1000, 5 * 60_000))
+            await this.sleep(delayMs)
+            stepResult.output = `Delayed for ${delayMs} ms.`
+          } else if (normalizedType === 'tool_call') {
+            const result = await this.tools.execute(step.toolName ?? '', step.input ?? {}, userId)
+            if (!result.success) {
+              throw new Error(result.error ?? `Tool call failed for ${step.toolName}`)
+            }
+            stepResult.output = this.renderOutput(result.output)
+          } else if (normalizedType === 'agent_prompt') {
+            if (!activeConversationId) {
+              activeConversationId = step.conversationId?.trim() || await this.createRunConversation(userId, workflow.name)
+            }
+            await this.agent.run({
+              conversationId: activeConversationId,
+              userId,
+              userMessage: step.prompt ?? '',
+              emit: () => {},
+            })
+            stepResult.output = `Agent run completed in conversation ${activeConversationId}.`
+          } else if (normalizedType === 'wait_approval') {
+            const approvalKey = this.normalizeApprovalKey(step.approvalKey) ?? step.id
+            if (!approvedKeys.has(approvalKey)) {
+              waitingApproval = true
+              throw new Error(
+                `Approval gate "${approvalKey}" is not satisfied. Re-run with approvedKeys including this key.`,
+              )
+            }
+            stepResult.output = `Approval gate "${approvalKey}" satisfied.`
+          } else if (normalizedType === 'branch_condition') {
+            const matched = this.evaluateBranchCondition({
+              source: step.conditionSource ?? 'last_output',
+              operator: step.conditionOperator ?? 'contains',
+              expected: step.conditionValue ?? '',
+              lastOutput: lastStepOutput,
+              workflowName: workflow.name,
+              triggerKind,
+              runInput: options.input,
+            })
+            const nextStepId = matched ? step.ifTrueStepId : (step.ifFalseStepId ?? null)
+            if (nextStepId) {
+              const target = stepIndexById.get(nextStepId)
+              if (target == null) {
+                throw new Error(`Branch step "${step.id}" references unknown step "${nextStepId}".`)
+              }
+              nextPointer = target
+            } else {
+              nextPointer = stepPointer + 1
+            }
+            stepResult.output = `Branch condition ${matched ? 'matched' : 'did not match'}.`
+          } else {
+            throw new Error(`Unsupported workflow step type: ${step.type}`)
+          }
+
+          stepResult.status = 'done'
+          stepResult.attemptCount = attempt
+          stepError = null
+          break
+        } catch (error: any) {
+          stepError = this.safeError(error)
+          stepResult.attemptCount = attempt
+          if (attempt >= maxAttempts) {
+            stepResult.status = 'error'
+            stepResult.error = stepError
+            break
+          }
+        }
       }
 
       stepResult.finishedAt = new Date().toISOString()
       run.stepResults.push(stepResult)
+
+      if (stepResult.status === 'error') {
+        if (step.continueOnError) {
+          lastStepOutput = stepResult.error ?? ''
+          stepPointer += 1
+          continue
+        }
+        runError = stepError ?? 'Workflow step failed.'
+        break
+      }
+
+      lastStepOutput = stepResult.output ?? ''
+      stepPointer = nextPointer
     }
 
     run.finishedAt = new Date().toISOString()
     run.error = runError
-    run.status = runError ? 'error' : 'done'
+    run.status = waitingApproval
+      ? 'waiting_approval'
+      : (runError ? 'error' : 'done')
 
     if (options.persistRun) {
       this.replaceRun(userId, run)
@@ -343,10 +587,17 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       await this.persist(userId)
     }
 
+    const missionType = run.status === 'error'
+      ? 'failure'
+      : (run.status === 'waiting_approval' ? 'approval' : 'workflow_run')
+    const missionStatus = run.status === 'error'
+      ? 'failed'
+      : (run.status === 'waiting_approval' ? 'pending' : 'success')
+
     void this.mission.publish({
       userId,
-      type: run.status === 'error' ? 'failure' : 'workflow_run',
-      status: run.status === 'error' ? 'failed' : 'success',
+      type: missionType,
+      status: missionStatus,
       source: options.source,
       runId: run.id,
       payload: {
@@ -436,6 +687,28 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
     this.runsByUser.set(userId, runs.slice(-MAX_RUNS_PER_USER))
   }
 
+  private findRunById(userId: string, runId: string) {
+    return (this.runsByUser.get(userId) ?? []).find((run) => run.id === runId) ?? null
+  }
+
+  private async dispatchWorkflowRun(data: WorkflowRunJobData) {
+    if (!this.workflowQueue) {
+      throw new BadRequestException('Workflow queue is not available.')
+    }
+
+    await this.workflowQueue.add(
+      WORKFLOW_JOB_NAMES.run,
+      data,
+      {
+        jobId: `workflow:${data.runId}`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1_000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    )
+  }
+
   private sanitizeSteps(raw: WorkflowStep[] | undefined, requireSteps: boolean) {
     const out: WorkflowStep[] = []
     for (const [index, step] of (raw ?? []).entries()) {
@@ -456,23 +729,94 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
     const id = this.optionalText(step.id)?.slice(0, 80) ?? randomUUID()
     const label = this.optionalText(step.label)?.slice(0, 120) || `Step ${index + 1}`
     const conversationId = this.optionalText(step.conversationId)?.slice(0, 128) ?? undefined
+    const retryAttemptsRaw = Number.parseInt(`${step.retryAttempts ?? 0}`, 10)
+    const retryAttempts = Number.isFinite(retryAttemptsRaw)
+      ? Math.max(0, Math.min(retryAttemptsRaw, MAX_WORKFLOW_STEP_RETRIES))
+      : 0
+    const continueOnError = Boolean(step.continueOnError)
 
-    if (type === 'agent_prompt') {
+    if (type === 'agent_prompt' || type === 'run_agent') {
       const prompt = this.optionalText(step.prompt)
       if (!prompt) throw new BadRequestException(`Step ${index + 1}: agent prompt is required.`)
-      return { id, type, label, prompt: prompt.slice(0, 10_000), ...(conversationId ? { conversationId } : {}) }
+      return {
+        id,
+        type,
+        label,
+        prompt: prompt.slice(0, 10_000),
+        ...(conversationId ? { conversationId } : {}),
+        retryAttempts,
+        continueOnError,
+      }
     }
 
-    if (type === 'tool_call') {
+    if (type === 'tool_call' || type === 'run_tool') {
       const toolName = this.optionalText(step.toolName)
       if (!toolName) throw new BadRequestException(`Step ${index + 1}: tool name is required.`)
       const input = this.asRecord(step.input) ?? {}
-      return { id, type, label, toolName: toolName.slice(0, 120), input }
+      return {
+        id,
+        type,
+        label,
+        toolName: toolName.slice(0, 120),
+        input,
+        retryAttempts,
+        continueOnError,
+      }
+    }
+
+    if (type === 'wait_approval') {
+      const approvalKey = this.normalizeApprovalKey(step.approvalKey) ?? id
+      const approvalReason = this.optionalText(step.approvalReason)?.slice(0, 200) ?? undefined
+      return {
+        id,
+        type,
+        label,
+        approvalKey,
+        ...(approvalReason ? { approvalReason } : {}),
+        retryAttempts,
+        continueOnError,
+      }
+    }
+
+    if (type === 'branch_condition') {
+      const conditionSource = step.conditionSource === 'last_output'
+        || step.conditionSource === 'trigger_kind'
+        || step.conditionSource === 'workflow_name'
+        ? step.conditionSource
+        : 'last_output'
+      const conditionOperator = step.conditionOperator === 'contains'
+        || step.conditionOperator === 'not_contains'
+        || step.conditionOperator === 'equals'
+        || step.conditionOperator === 'not_equals'
+        ? step.conditionOperator
+        : 'contains'
+      const conditionValue = this.optionalText(step.conditionValue)?.slice(0, 500) ?? ''
+      const ifTrueStepId = this.optionalText(step.ifTrueStepId)?.slice(0, 120) ?? undefined
+      const ifFalseStepId = this.optionalText(step.ifFalseStepId)?.slice(0, 120) ?? undefined
+      return {
+        id,
+        type,
+        label,
+        conditionSource,
+        conditionOperator,
+        conditionValue,
+        ...(ifTrueStepId ? { ifTrueStepId } : {}),
+        ...(ifFalseStepId ? { ifFalseStepId } : {}),
+        retryAttempts,
+        continueOnError,
+      }
     }
 
     const delayRaw = Number.parseInt(`${step.delayMs ?? 0}`, 10)
     const delayMs = Number.isFinite(delayRaw) ? Math.max(100, Math.min(delayRaw, 5 * 60_000)) : 1000
-    return { id, type, label, delayMs }
+    return {
+      id,
+      type,
+      label,
+      delayMs,
+      retryAttempts,
+      continueOnError,
+    }
   }
 
   private sanitizeTrigger(
@@ -492,6 +836,11 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       return { kind: 'schedule', everyMinutes }
     }
 
+    if (kind === 'inbox_event') {
+      const eventName = this.optionalText(trigger?.eventName) ?? this.optionalText(fallback?.eventName) ?? 'message.received'
+      return { kind: 'inbox_event', eventName: eventName.slice(0, 120) }
+    }
+
     const providedSecret = this.optionalText(trigger?.webhookSecret) ?? this.optionalText(fallback?.webhookSecret)
     const webhookSecret = providedSecret
       ? providedSecret.slice(0, 200)
@@ -500,13 +849,77 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private sanitizeTriggerKind(kind: WorkflowTriggerKind | string) {
-    if (kind === 'manual' || kind === 'schedule' || kind === 'webhook') return kind
+    if (kind === 'manual' || kind === 'schedule' || kind === 'webhook' || kind === 'inbox_event') return kind
     throw new BadRequestException(`Unsupported trigger kind: ${kind}`)
   }
 
   private sanitizeStepType(type: string | undefined) {
-    if (type === 'agent_prompt' || type === 'tool_call' || type === 'delay') return type
+    if (
+      type === 'agent_prompt'
+      || type === 'tool_call'
+      || type === 'delay'
+      || type === 'run_agent'
+      || type === 'run_tool'
+      || type === 'wait_approval'
+      || type === 'branch_condition'
+    ) return type
     return null
+  }
+
+  private normalizeExecutionStepType(type: WorkflowStep['type']) {
+    if (type === 'run_agent') return 'agent_prompt'
+    if (type === 'run_tool') return 'tool_call'
+    return type
+  }
+
+  private evaluateBranchCondition(input: {
+    source: 'last_output' | 'trigger_kind' | 'workflow_name'
+    operator: 'contains' | 'not_contains' | 'equals' | 'not_equals'
+    expected: string
+    lastOutput: string
+    workflowName: string
+    triggerKind: WorkflowTriggerKind
+    runInput: Record<string, unknown>
+  }) {
+    const expected = (input.expected ?? '').toLowerCase().trim()
+    const sourceValue = this.branchSourceValue(input)
+    const haystack = sourceValue.toLowerCase().trim()
+
+    if (input.operator === 'equals') return haystack === expected
+    if (input.operator === 'not_equals') return haystack !== expected
+    if (input.operator === 'not_contains') return expected ? !haystack.includes(expected) : true
+    return expected ? haystack.includes(expected) : false
+  }
+
+  private branchSourceValue(input: {
+    source: 'last_output' | 'trigger_kind' | 'workflow_name'
+    lastOutput: string
+    workflowName: string
+    triggerKind: WorkflowTriggerKind
+    runInput: Record<string, unknown>
+  }) {
+    if (input.source === 'trigger_kind') return input.triggerKind
+    if (input.source === 'workflow_name') return input.workflowName
+    if (input.lastOutput.trim()) return input.lastOutput
+    return this.renderOutput(input.runInput) ?? ''
+  }
+
+  private sanitizeIdempotencyKey(raw: string | undefined) {
+    const value = this.optionalText(raw)
+    if (!value) return null
+    return value.slice(0, 160).toLowerCase()
+  }
+
+  private findRunByIdempotency(userId: string, workflowId: string, idempotencyKey: string) {
+    return [...(this.runsByUser.get(userId) ?? [])]
+      .filter((run) => run.workflowId === workflowId)
+      .find((run) => this.optionalText(run.idempotencyKey)?.toLowerCase() === idempotencyKey) ?? null
+  }
+
+  private normalizeApprovalKey(raw: string | undefined) {
+    const value = this.optionalText(raw)
+    if (!value) return null
+    return value.toLowerCase().replace(/[^a-z0-9:_-]+/g, '-').slice(0, 80)
   }
 
   private requireName(name: string) {
@@ -605,6 +1018,7 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
         name,
         description: this.optionalText(workflow.description),
         enabled: Boolean(workflow.enabled),
+        version: Number.isFinite(workflow.version) ? Math.max(1, Number(workflow.version)) : 1,
         trigger,
         steps,
         createdAt,
@@ -641,6 +1055,8 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       startedAt,
       finishedAt: this.normalizeIso(run.finishedAt),
       error: this.optionalText(run.error),
+      ...(this.optionalText(run.idempotencyKey) ? { idempotencyKey: this.optionalText(run.idempotencyKey)!.slice(0, 160) } : {}),
+      ...(this.optionalText(run.sourceEvent) ? { sourceEvent: this.optionalText(run.sourceEvent)!.slice(0, 200) } : {}),
       stepResults,
     }
   }
@@ -661,16 +1077,23 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       finishedAt,
       output: step.output == null ? null : String(step.output).slice(0, 6000),
       error: step.error == null ? null : String(step.error).slice(0, 6000),
+      ...(Number.isFinite(step.attemptCount) ? { attemptCount: Math.max(1, Number(step.attemptCount)) } : {}),
     }
   }
 
   private sanitizeStoredTriggerKind(kind: string | undefined): WorkflowTriggerKind | null {
-    if (kind === 'manual' || kind === 'schedule' || kind === 'webhook') return kind
+    if (kind === 'manual' || kind === 'schedule' || kind === 'webhook' || kind === 'inbox_event') return kind
     return null
   }
 
   private sanitizeRunStatus(status: string | undefined): WorkflowRunStatus | null {
-    if (status === 'running' || status === 'done' || status === 'error') return status
+    if (
+      status === 'queued'
+      || status === 'running'
+      || status === 'waiting_approval'
+      || status === 'done'
+      || status === 'error'
+    ) return status
     return null
   }
 

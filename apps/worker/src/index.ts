@@ -5,14 +5,17 @@ import {
   CI_HEALER_JOB_NAMES,
   EXTRACTION_JOB_NAMES,
   QUEUE_NAMES,
+  WORKFLOW_JOB_NAMES,
   type ApprovalDeadLetterJobData,
   type ApprovalJobData,
   type CiHealerJobData,
   type ExtractionJobData,
+  type WorkflowRunJobData,
 } from '@openagents/shared'
 import { processApprovalJob } from './processors/approval.processor'
 import { processExtractionJob } from './processors/extraction.processor'
 import { processCiHealerJob } from './processors/ci-healer.processor'
+import { processWorkflowJob } from './processors/workflow.processor'
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379'
 
@@ -21,10 +24,12 @@ export const approvalDeadLetterQueue = new Bull<ApprovalDeadLetterJobData>(QUEUE
 export const toolRunQueue = new Bull(QUEUE_NAMES.toolRuns, redisUrl)
 export const extractionQueue = new Bull<ExtractionJobData>(QUEUE_NAMES.extractionJobs, redisUrl)
 export const ciHealerQueue = new Bull<CiHealerJobData>(QUEUE_NAMES.ciHealer, redisUrl)
+export const workflowQueue = new Bull<WorkflowRunJobData>(QUEUE_NAMES.workflowRuns, redisUrl)
 
 approvalQueue.process(APPROVAL_JOB_NAMES.resolved, processApprovalJob)
 extractionQueue.process(EXTRACTION_JOB_NAMES.run, processExtractionJob)
 ciHealerQueue.process(CI_HEALER_JOB_NAMES.run, processCiHealerJob)
+workflowQueue.process(WORKFLOW_JOB_NAMES.run, processWorkflowJob)
 approvalQueue.on('failed', async (job, error) => {
   if (!job) return
 
@@ -67,7 +72,7 @@ toolRunQueue.process(async (job) => {
 })
 
 console.log('[worker] started, listening on queues: approvals, approvals-dead-letter, tool-runs')
-console.log('[worker] additional queues: extraction-jobs, ci-healer')
+console.log('[worker] additional queues: extraction-jobs, ci-healer, workflow-runs')
 
 process.on('SIGTERM', async () => {
   await approvalQueue.close()
@@ -75,5 +80,6 @@ process.on('SIGTERM', async () => {
   await toolRunQueue.close()
   await extractionQueue.close()
   await ciHealerQueue.close()
+  await workflowQueue.close()
   process.exit(0)
 })

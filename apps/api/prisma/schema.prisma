@@ -25,6 +25,9 @@ model User {
   memories       Memory[]
   memoryEvents   MemoryEvent[]
   memoryFacts    MemoryFact[]
+  memoryConflicts MemoryConflict[]
+  connectorHealth ConnectorHealth[]
+  skillRegistryEntries SkillRegistryEntry[]
   extractionJobs ExtractionJob[]
   ciIncidents    CiIncident[]
   refreshTokens  RefreshToken[]
@@ -207,9 +210,13 @@ model MemoryEvent {
   kind        String   // conversation | workflow | incident | extraction | note
   summary     String
   payload     String?  // JSON string
+  sourceRef   String?
   tags        String   @default("[]") // JSON array string
   piiRedacted Boolean  @default(true)
   confidence  Float    @default(0.8)
+  freshUntil  DateTime?
+  conflictGroup String?
+  reinforcedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -217,6 +224,8 @@ model MemoryEvent {
 
   @@index([userId, createdAt])
   @@index([userId, kind, updatedAt])
+  @@index([userId, confidence, updatedAt])
+  @@index([userId, freshUntil])
 }
 
 model MemoryFact {
@@ -227,6 +236,9 @@ model MemoryFact {
   value      String
   sourceRef  String?
   confidence Float    @default(0.8)
+  freshUntil DateTime?
+  conflictGroup String?
+  reinforcedAt DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -234,6 +246,87 @@ model MemoryFact {
 
   @@unique([userId, entity, key])
   @@index([userId, updatedAt])
+  @@index([userId, confidence, updatedAt])
+  @@index([userId, freshUntil])
+}
+
+model MemoryConflict {
+  id                String   @id @default(cuid())
+  userId            String
+  entity            String
+  key               String
+  existingValue     String
+  incomingValue     String
+  existingSourceRef String?
+  incomingSourceRef String?
+  status            String   @default("open") // open | resolved | ignored
+  severity          String   @default("medium") // low | medium | high
+  confidenceDelta   Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  resolvedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, updatedAt])
+  @@index([userId, entity, key, createdAt])
+}
+
+model ConnectorHealth {
+  id            String   @id @default(cuid())
+  userId        String
+  connectorId   String
+  status        String   @default("connected") // connected | degraded | down
+  lastSuccessAt DateTime?
+  lastFailureAt DateTime?
+  lastError     String?
+  tokenExpiresAt DateTime?
+  p95LatencyMs  Int?
+  rateLimitHits Int      @default(0)
+  failureStreak Int      @default(0)
+  metadata      String?  // JSON string
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, connectorId])
+  @@index([userId, status, updatedAt])
+}
+
+model SkillRegistryEntry {
+  id               String   @id @default(cuid())
+  userId           String
+  skillId          String
+  title            String
+  description      String
+  installedVersion String?
+  pinnedAgents     String   @default("{}") // JSON map { agentId: version }
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions SkillRegistryVersion[]
+
+  @@unique([userId, skillId])
+  @@index([userId, updatedAt])
+}
+
+model SkillRegistryVersion {
+  id                String   @id @default(cuid())
+  entryId           String
+  version           String
+  changelog         String
+  manifestJson      String   // JSON string
+  compatibilityJson String?  // JSON string
+  signature         String
+  createdAt         DateTime @default(now())
+  publishedAt       DateTime @default(now())
+
+  entry SkillRegistryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, version])
+  @@index([entryId, publishedAt])
 }
 
 model ExtractionJob {
