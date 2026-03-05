@@ -17,3 +17,13 @@ export interface ApprovalDeadLetterJobData {
   failedReason: string
   failedAt: string
 }
+
+export interface ExtractionJobData {
+  extractionId: string
+  requestedBy: string | null
+}
+
+export interface CiHealerJobData {
+  incidentId: string
+  source: 'webhook' | 'manual'
+}

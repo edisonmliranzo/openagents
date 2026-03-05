@@ -36,6 +36,9 @@ interface TwilioConfig {
 const DEFAULT_PAIRING_EXPIRES_MINUTES = 15
 const MIN_PAIRING_EXPIRES_MINUTES = 3
 const MAX_PAIRING_EXPIRES_MINUTES = 240
+const SKILL_COMMAND_PATTERN = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
+const ADAPTIVE_SKILL_INTENT_PATTERN =
+  /\b(trade|trading|crypto|bitcoin|forex|stock|stocks|futures|options|video script|video scripts|content ideas?|social media|tiktok|instagram|youtube|reels?|shorts|amazon|ebay|product research|products?\s+to\s+sell|dropship|shopify)\b/i
 
 @Injectable()
 export class WhatsAppService {
@@ -199,9 +202,9 @@ export class WhatsAppService {
     }
 
     try {
-      const isSkillCommand = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
-        .test(userMessage)
-      const run = this.nanobotConfig.enabled || isSkillCommand
+      const isSkillCommand = SKILL_COMMAND_PATTERN.test(userMessage)
+      const isAdaptiveSkillIntent = ADAPTIVE_SKILL_INTENT_PATTERN.test(userMessage)
+      const run = this.nanobotConfig.enabled || isSkillCommand || isAdaptiveSkillIntent
         ? this.nanobotLoop.run.bind(this.nanobotLoop)
         : this.agent.run.bind(this.agent)
 

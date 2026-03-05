@@ -88,6 +88,11 @@ interface ChatState {
   activeHandoff: HumanHandoffTicket | null
   streamToolEvents: ChatToolStreamEvent[]
   runStatus: string | null
+  learnedSkill: {
+    skillId: string
+    intent?: string
+    createdAt: string
+  } | null
   isStreaming: boolean
   gatewayStatus: GatewayStatus
   gatewayMessage: string
@@ -113,6 +118,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeHandoff: null,
   streamToolEvents: [],
   runStatus: null,
+  learnedSkill: null,
   isStreaming: false,
   gatewayStatus: 'connecting',
   gatewayMessage: 'connecting...',
@@ -141,6 +147,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeHandoff: await sdk.handoffs.getActive(id),
         streamToolEvents: [],
         runStatus: null,
+        learnedSkill: null,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
@@ -160,6 +167,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeHandoff: null,
         streamToolEvents: [],
         runStatus: null,
+        learnedSkill: null,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
@@ -191,6 +199,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ],
       streamToolEvents: [],
       runStatus: 'thinking',
+      learnedSkill: null,
       isStreaming: true,
       gatewayStatus: 'connected',
       gatewayMessage: 'connected',
@@ -236,8 +245,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
           if (data.event === 'status') {
             const nextStatus = typeof data.data?.status === 'string' ? data.data.status : null
+            const learnedSkillId = typeof data.data?.learnedSkill === 'string'
+              ? data.data.learnedSkill.trim()
+              : ''
+            const learnedIntent = typeof data.data?.learnedIntent === 'string'
+              ? data.data.learnedIntent.trim()
+              : ''
             if (nextStatus) {
               set({ runStatus: nextStatus })
+            }
+            if (learnedSkillId) {
+              set({
+                learnedSkill: {
+                  skillId: learnedSkillId,
+                  ...(learnedIntent ? { intent: learnedIntent } : {}),
+                  createdAt: new Date().toISOString(),
+                },
+              })
             }
           }
 

@@ -35,3 +35,60 @@ export interface BrowserCaptureResult {
   conversationId: string | null
   conversationMessageId: string | null
 }
+
+export type MemoryEventKind = 'conversation' | 'workflow' | 'incident' | 'extraction' | 'note'
+
+export interface MemoryEvent {
+  id: string
+  userId: string
+  kind: MemoryEventKind
+  summary: string
+  payload: Record<string, unknown> | null
+  tags: string[]
+  piiRedacted: boolean
+  confidence: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MemoryFact {
+  id: string
+  userId: string
+  entity: string
+  key: string
+  value: string
+  sourceRef: string | null
+  confidence: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WriteMemoryEventInput {
+  kind: MemoryEventKind
+  summary: string
+  payload?: Record<string, unknown>
+  tags?: string[]
+  piiRedacted?: boolean
+  confidence?: number
+}
+
+export interface UpsertMemoryFactInput {
+  entity: string
+  key: string
+  value: string
+  sourceRef?: string
+  confidence?: number
+}
+
+export interface QueryMemoryInput {
+  query: string
+  limit?: number
+  includeFacts?: boolean
+  tags?: string[]
+}
+
+export interface QueryMemoryResult {
+  events: MemoryEvent[]
+  facts: MemoryFact[]
+  queriedAt: string
+}

@@ -3,18 +3,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/chat'
 import { MessageBubble } from './MessageBubble'
-import { PlusCircle, SendHorizontal, Sparkles } from 'lucide-react'
+import { BrainCircuit, PlusCircle, SendHorizontal, Sparkles } from 'lucide-react'
 
 interface ChatWindowProps {
   gatewayConnected: boolean
   onNewSession: () => Promise<void> | void
 }
 
+function formatIntentLabel(intent: string | undefined) {
+  if (!intent) return null
+  const normalized = intent.replace(/^custom-intent-/, '').replace(/-/g, ' ').trim()
+  if (!normalized) return null
+  return normalized
+}
+
 export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) {
-  const { messages, sendMessage, isStreaming, activeConversationId } = useChatStore()
+  const { messages, sendMessage, isStreaming, activeConversationId, learnedSkill } = useChatStore()
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const learnedIntentLabel = formatIntentLabel(learnedSkill?.intent)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -44,6 +52,22 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-slate-200/90 bg-white/90 shadow-card backdrop-blur dark:border-slate-800 dark:bg-slate-900/75">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-r from-indigo-500/10 via-cyan-500/5 to-rose-500/10" />
+      {learnedSkill && (
+        <div className="relative px-5 pt-3">
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-indigo-200/80 bg-indigo-50/90 px-3 py-1 text-[11px] font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-200">
+            <BrainCircuit size={12} />
+            <span>Auto-learned skill active</span>
+            <code className="rounded-md bg-white/75 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-slate-900/65 dark:text-indigo-100">
+              {learnedSkill.skillId}
+            </code>
+            {learnedIntentLabel && (
+              <span className="rounded-full border border-indigo-200 bg-white px-2 py-0.5 text-[10px] font-medium capitalize text-indigo-700 dark:border-indigo-400/30 dark:bg-slate-900/60 dark:text-indigo-100">
+                {learnedIntentLabel}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="relative min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {messages.length === 0 ? (

@@ -20,6 +20,8 @@ import type {
   NanobotSpecialistRunExecutionResult,
   NanobotPresenceTickResult,
   NanobotRuntimeConfig,
+  NanobotSkillChatInput,
+  NanobotSkillChatResult,
   NanobotSkillState,
   NanobotAutonomySchedule,
   NanobotAutonomyStatus,
@@ -59,6 +61,9 @@ export function createNanobotApi(client: OpenAgentsClient) {
 
     disableSkill: (skillId: string) =>
       client.post<NanobotSkillState[]>(`/api/v1/nanobot/skills/${skillId}/disable`),
+
+    chatSkillBuilder: (input: NanobotSkillChatInput) =>
+      client.post<NanobotSkillChatResult>('/api/v1/nanobot/skills/chat', input),
 
     updateConfig: (input: UpdateNanobotConfigInput) =>
       client.patch<NanobotRuntimeConfig>('/api/v1/nanobot/config', input),

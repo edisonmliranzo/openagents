@@ -23,6 +23,10 @@ model User {
   connectedTools ConnectedTool[]
   approvals      Approval[]
   memories       Memory[]
+  memoryEvents   MemoryEvent[]
+  memoryFacts    MemoryFact[]
+  extractionJobs ExtractionJob[]
+  ciIncidents    CiIncident[]
   refreshTokens  RefreshToken[]
   settings       UserSettings?
   domains        UserDomain[]
@@ -195,6 +199,93 @@ model Memory {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MemoryEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  kind        String   // conversation | workflow | incident | extraction | note
+  summary     String
+  payload     String?  // JSON string
+  tags        String   @default("[]") // JSON array string
+  piiRedacted Boolean  @default(true)
+  confidence  Float    @default(0.8)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, kind, updatedAt])
+}
+
+model MemoryFact {
+  id         String   @id @default(cuid())
+  userId     String
+  entity     String
+  key        String
+  value      String
+  sourceRef  String?
+  confidence Float    @default(0.8)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entity, key])
+  @@index([userId, updatedAt])
+}
+
+model ExtractionJob {
+  id               String   @id @default(cuid())
+  userId           String
+  sourceKind       String   // pdf | email | web | text
+  sourceUri        String
+  schemaVersion    String
+  schemaJson       String   // JSON string
+  optionsJson      String?  // JSON string
+  status           String   @default("queued") // queued | processing | completed | failed | needs_review
+  outputJson       String?  // JSON string
+  confidence       Float    @default(0)
+  reviewerStatus   String?  // pending | approved | rejected
+  failureReason    String?
+  validationIssues String   @default("[]") // JSON array string
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model CiIncident {
+  id                 String   @id @default(cuid())
+  userId             String
+  provider           String
+  repo               String
+  branch             String?
+  pipelineId         String?
+  jobName            String?
+  commitSha          String?
+  logExcerpt         String?
+  artifactUrls       String   @default("[]") // JSON array string
+  failureClass       String   @default("unknown")
+  status             String   @default("queued") // queued | analyzing | auto_retrying | patch_proposed | resolved | failed
+  summary            String?
+  suggestedFix       String?
+  prUrl              String?
+  retryCount         Int      @default(0)
+  failureFingerprint String?
+  metadata           String?  // JSON string
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([repo, commitSha])
+  @@index([status, updatedAt])
 }
 
 model UserSettings {

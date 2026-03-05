@@ -23,6 +23,9 @@ export { createAgentVersionsApi } from './api/agent-versions'
 export { createHandoffsApi } from './api/handoffs'
 export { createSkillReputationApi } from './api/skill-reputation'
 export { createLineageApi } from './api/lineage'
+export { createPolicyApi } from './api/policy'
+export { createExtractionApi } from './api/extraction'
+export { createCiHealerApi } from './api/ci-healer'
 
 import { OpenAgentsClient } from './client'
 import { createAuthApi } from './api/auth'
@@ -48,6 +51,9 @@ import { createAgentVersionsApi } from './api/agent-versions'
 import { createHandoffsApi } from './api/handoffs'
 import { createSkillReputationApi } from './api/skill-reputation'
 import { createLineageApi } from './api/lineage'
+import { createPolicyApi } from './api/policy'
+import { createExtractionApi } from './api/extraction'
+import { createCiHealerApi } from './api/ci-healer'
 import type { SDKConfig } from './client'
 
 /** Convenience factory: creates a fully-wired SDK instance */
@@ -78,5 +84,8 @@ export function createSDK(config: SDKConfig) {
     handoffs: createHandoffsApi(client),
     skillReputation: createSkillReputationApi(client),
     lineage: createLineageApi(client),
+    policy: createPolicyApi(client),
+    extraction: createExtractionApi(client),
+    ciHealer: createCiHealerApi(client),
   }
 }
