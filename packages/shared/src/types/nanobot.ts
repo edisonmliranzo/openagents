@@ -45,6 +45,35 @@ export interface NanobotSkillState extends NanobotSkillManifest {
   enabled: boolean
 }
 
+export interface NanobotSkillDraftInput {
+  id?: string
+  title: string
+  description: string
+  tools: string[]
+  promptAppendix?: string
+}
+
+export interface NanobotSkillChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface NanobotSkillChatInput {
+  prompt?: string
+  messages?: NanobotSkillChatMessage[]
+  save?: boolean
+  draft?: NanobotSkillDraftInput
+}
+
+export interface NanobotSkillChatResult {
+  draft: NanobotSkillDraftInput
+  assistantMessage: string
+  llmProvider: string
+  saved: boolean
+  created: boolean
+  skills?: NanobotSkillState[]
+}
+
 export type NanobotThoughtMode = 'explore' | 'plan' | 'act' | 'reflect'
 export type NanobotTaskType = 'research' | 'ops' | 'support' | 'general'
 export type NanobotThinkingDepth = 'fast' | 'balanced' | 'deep'

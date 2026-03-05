@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNumber,
   IsObject,
@@ -196,6 +197,62 @@ class UpdateAutonomyDto {
   windows?: AutonomyWindowDto[]
 }
 
+class SkillChatMessageDto {
+  @IsIn(['user', 'assistant'])
+  role!: 'user' | 'assistant'
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4000)
+  content!: string
+}
+
+class SkillDraftDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  id?: string
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  title!: string
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(280)
+  description!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  tools!: string[]
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  promptAppendix?: string
+}
+
+class SkillChatDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  prompt?: string
+
+  @IsOptional()
+  @IsArray()
+  @IsObject({ each: true })
+  messages?: SkillChatMessageDto[]
+
+  @IsOptional()
+  @IsBoolean()
+  save?: boolean
+
+  @IsOptional()
+  @IsObject()
+  draft?: SkillDraftDto
+}
+
 @ApiTags('nanobot')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -247,6 +304,11 @@ export class NanobotController {
   @Post('skills/:skillId/disable')
   disableSkill(@Req() req: any, @Param('skillId') skillId: string) {
     return this.nanobot.setSkillEnabled(req.user.id, skillId, false)
+  }
+
+  @Post('skills/chat')
+  skillChat(@Req() req: any, @Body() dto: SkillChatDto) {
+    return this.nanobot.chatSkillBuilder(req.user.id, dto)
   }
 
   @Post('cron/trigger')

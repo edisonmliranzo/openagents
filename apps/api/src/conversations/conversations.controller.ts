@@ -11,6 +11,10 @@ import { NanobotLoopService } from '../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../nanobot/config/nanobot-config.service'
 import { HandoffsService } from '../handoffs/handoffs.service'
 
+const SKILL_COMMAND_PATTERN = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
+const ADAPTIVE_SKILL_INTENT_PATTERN =
+  /\b(trade|trading|crypto|bitcoin|forex|stock|stocks|futures|options|video script|video scripts|content ideas?|social media|tiktok|instagram|youtube|reels?|shorts|amazon|ebay|product research|products?\s+to\s+sell|dropship|shopify)\b/i
+
 class CreateConversationDto {
   @IsString() @IsOptional() title?: string
 }
@@ -76,9 +80,10 @@ export class ConversationsController {
         )
       }
 
-      const isSkillCommand = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
-        .test(dto.content ?? '')
-      const useNanobotLoop = this.nanobotConfig.enabled || isSkillCommand
+      const message = dto.content ?? ''
+      const isSkillCommand = SKILL_COMMAND_PATTERN.test(message)
+      const isAdaptiveSkillIntent = ADAPTIVE_SKILL_INTENT_PATTERN.test(message)
+      const useNanobotLoop = this.nanobotConfig.enabled || isSkillCommand || isAdaptiveSkillIntent
       const run = useNanobotLoop
         ? this.nanobotLoop.run.bind(this.nanobotLoop)
         : this.agent.run.bind(this.agent)

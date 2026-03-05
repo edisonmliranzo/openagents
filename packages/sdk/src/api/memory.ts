@@ -2,10 +2,16 @@ import type { OpenAgentsClient } from '../client'
 import type {
   BrowserCaptureInput,
   BrowserCaptureResult,
+  MemoryEvent,
+  MemoryFact,
   MemoryEntry,
   MemoryFileDocument,
   MemoryFileSummary,
   NanobotMemoryCurationResult,
+  QueryMemoryInput,
+  QueryMemoryResult,
+  UpsertMemoryFactInput,
+  WriteMemoryEventInput,
 } from '@openagents/shared'
 
 export interface UpdateMemoryFileDto {
@@ -15,6 +21,23 @@ export interface UpdateMemoryFileDto {
 export function createMemoryApi(client: OpenAgentsClient) {
   return {
     list: () => client.get<MemoryEntry[]>('/api/v1/memory'),
+
+    query: (input: QueryMemoryInput) =>
+      client.post<QueryMemoryResult>('/api/v1/memory/query', input),
+
+    writeEvent: (input: WriteMemoryEventInput) =>
+      client.post<MemoryEvent>('/api/v1/memory/events', input),
+
+    listFacts: (entity?: string, limit?: number) => {
+      const qs = new URLSearchParams()
+      if (entity) qs.set('entity', entity)
+      if (typeof limit === 'number') qs.set('limit', String(limit))
+      const suffix = qs.toString() ? `?${qs.toString()}` : ''
+      return client.get<MemoryFact[]>(`/api/v1/memory/facts${suffix}`)
+    },
+
+    upsertFact: (input: UpsertMemoryFactInput) =>
+      client.post<MemoryFact>('/api/v1/memory/facts', input),
 
     syncFiles: () => client.post<{ ok: true }>('/api/v1/memory/files/sync'),
 

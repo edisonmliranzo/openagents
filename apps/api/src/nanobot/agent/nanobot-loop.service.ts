@@ -26,6 +26,14 @@ interface ParsedSkillCommand {
   error?: string
 }
 
+interface IntentSkillTemplate {
+  id: string
+  title: string
+  description: string
+  promptAppendix: string
+  tools: string[]
+}
+
 @Injectable()
 export class NanobotLoopService {
   private readonly logger = new Logger(NanobotLoopService.name)
@@ -76,6 +84,26 @@ export class NanobotLoopService {
         this.logger.error('Nanobot skill command failed', error)
         throw error
       }
+    }
+
+    const autoIntentSkill = await this.maybeAutoLearnIntentSkill(params.userId, params.userMessage)
+    if (autoIntentSkill) {
+      this.bus.publish('run.event', {
+        source: 'nanobot.skills.intent',
+        runId,
+        userId: params.userId,
+        conversationId: params.conversationId,
+        action: autoIntentSkill.created ? 'created' : 'updated',
+        skillId: autoIntentSkill.skillId,
+        intent: autoIntentSkill.intent,
+      })
+      params.emit('status', {
+        status: 'thinking',
+        runtime: this.config.runtimeLabel,
+        runId,
+        learnedSkill: autoIntentSkill.skillId,
+        learnedIntent: autoIntentSkill.intent,
+      })
     }
 
     try {
@@ -621,6 +649,101 @@ export class NanobotLoopService {
       .filter(Boolean)
   }
 
+  private async maybeAutoLearnIntentSkill(userId: string, userMessage: string) {
+    const template = this.matchIntentSkillTemplate(userMessage)
+    if (!template) return null
+
+    const upserted = await this.skills.upsertCustomSkill(userId, {
+      id: template.id,
+      title: template.title,
+      description: template.description,
+      promptAppendix: template.promptAppendix,
+      tools: template.tools,
+    })
+
+    return {
+      skillId: upserted.skill.id,
+      created: upserted.created,
+      intent: template.id,
+    }
+  }
+
+  private matchIntentSkillTemplate(userMessage: string): IntentSkillTemplate | null {
+    const text = userMessage.toLowerCase()
+
+    if (/(trade|trading|crypto|bitcoin|forex|stock|stocks|futures|options|commodit)/i.test(text)) {
+      return {
+        id: 'custom-intent-market-ops',
+        title: 'Market Ops Assistant',
+        description: 'Assist with market analysis and execution planning for crypto, forex, stocks, and futures with risk-aware steps.',
+        promptAppendix: [
+          'For trading-related requests:',
+          '1. Clarify instrument, timeframe, risk limits, and objective before execution.',
+          '2. Gather market context and current price/position data.',
+          '3. Present scenarios, invalidation levels, and action steps.',
+          '4. Require explicit user confirmation before any order-like action.',
+        ].join('\n'),
+        tools: [
+          'web_search',
+          'web_fetch',
+          'deep_research',
+          'bybit_get_ticker',
+          'bybit_get_positions',
+          'bybit_get_wallet_balance',
+          'bybit_place_demo_order',
+          'notes_create',
+        ],
+      }
+    }
+
+    if (/(video script|video scripts|content ideas?|social media|tiktok|instagram|youtube|reels?|shorts|viral)/i.test(text)) {
+      return {
+        id: 'custom-intent-social-content',
+        title: 'Social Video Script Lab',
+        description: 'Generate and refine social-media video ideas, hooks, scripts, and posting plans tuned for short-form channels.',
+        promptAppendix: [
+          'For social content requests:',
+          '1. Identify audience, niche, and platform (TikTok/IG Reels/YouTube Shorts).',
+          '2. Propose multiple hook angles and select the strongest one.',
+          '3. Draft script with on-screen text, pacing, and CTA.',
+          '4. Provide posting schedule and iteration ideas based on performance signals.',
+        ].join('\n'),
+        tools: [
+          'web_search',
+          'web_fetch',
+          'deep_research',
+          'notes_create',
+          'notes_list',
+          'cron_add',
+        ],
+      }
+    }
+
+    if (/(amazon|ebay|shopify|product research|products?\s+to\s+sell|dropship|sourcing|wholesale)/i.test(text)) {
+      return {
+        id: 'custom-intent-product-sourcing',
+        title: 'Product Sourcing Scout',
+        description: 'Find and evaluate product opportunities for Amazon/eBay/Shopify with demand, margin, and competition checks.',
+        promptAppendix: [
+          'For product sourcing requests:',
+          '1. Clarify category, budget, target margin, and shipping constraints.',
+          '2. Research demand trends and competition for candidate products.',
+          '3. Rank options by margin potential, risk, and ease of execution.',
+          '4. Provide a shortlist with next validation steps before listing.',
+        ].join('\n'),
+        tools: [
+          'web_search',
+          'web_fetch',
+          'deep_research',
+          'notes_create',
+          'notes_list',
+        ],
+      }
+    }
+
+    return null
+  }
+
   private buildTopicSkillCommand(topicRaw: string): ParsedSkillCommand {
     const topic = topicRaw.trim().replace(/[.!?]+$/, '')
     if (!topic) {
@@ -636,15 +759,31 @@ export class NanobotLoopService {
       tools.add('bybit_get_wallet_balance')
       tools.add('bybit_place_demo_order')
     }
-    if (/(binance|crypto|bitcoin|eth|trading|market)/i.test(normalized)) {
+    if (/(binance|crypto|bitcoin|eth|trading|market|forex|stock|stocks|equity|options|commodit)/i.test(normalized)) {
       tools.add('web_search')
       tools.add('web_fetch')
+      tools.add('deep_research')
+      tools.add('get_current_time')
     } else if (/(code|programming|typescript|javascript|python|debug|fix|build)/i.test(normalized)) {
       tools.add('web_fetch')
     } else if (/(research|news|latest|analysis)/i.test(normalized)) {
       tools.add('deep_research')
       tools.add('web_search')
       tools.add('web_fetch')
+    }
+    if (/(video|script|social media|tiktok|instagram|youtube|reels?|shorts|content idea)/i.test(normalized)) {
+      tools.add('notes_create')
+      tools.add('notes_list')
+      tools.add('web_search')
+      tools.add('deep_research')
+      tools.add('cron_add')
+    }
+    if (/(amazon|ebay|shopify|product research|product to sell|dropship|sourc)/i.test(normalized)) {
+      tools.add('web_search')
+      tools.add('web_fetch')
+      tools.add('deep_research')
+      tools.add('notes_create')
+      tools.add('notes_list')
     }
     if (/(browser|website|web\s+automation|click|navigation|form)/i.test(normalized)) {
       tools.add('computer_session_start')

@@ -5,12 +5,19 @@ import { PrismaService } from '../prisma/prisma.service'
 import type {
   BrowserCaptureInput,
   BrowserCaptureResult,
+  MemoryEvent,
+  MemoryEventKind,
+  MemoryFact,
   NanobotAutonomySchedule,
   NanobotAutonomyStatus,
   NanobotAutonomyWindow,
   NanobotMemoryCurationResult,
   NanobotMemoryCurationStatus,
+  QueryMemoryInput,
+  QueryMemoryResult,
+  UpsertMemoryFactInput,
   UpdateNanobotAutonomyInput,
+  WriteMemoryEventInput,
 } from '@openagents/shared'
 
 const CORE_MEMORY_FILES = ['SOUL.md', 'USER.md', 'MEMORY.md', 'HEARTBEAT.md'] as const
@@ -25,6 +32,15 @@ const DEFAULT_AUTONOMY_TIMEZONE = 'UTC'
 const MEMORY_CURATION_WINDOW_HOURS = 24
 const MEMORY_RETENTION_DAYS = 45
 const MAX_CURATED_SUMMARY_POINTS = 14
+const DEFAULT_MEMORY_EVENT_CONFIDENCE = 0.8
+const MAX_TIERED_MEMORY_RESULTS = 30
+const MEMORY_EVENT_KINDS = new Set<MemoryEventKind>([
+  'conversation',
+  'workflow',
+  'incident',
+  'extraction',
+  'note',
+])
 const DEFAULT_AUTONOMY_WINDOWS: NanobotAutonomyWindow[] = [
   {
     label: 'business-hours',
@@ -80,6 +96,149 @@ export class MemoryService {
 
   async delete(id: string, userId: string) {
     return this.prisma.memory.deleteMany({ where: { id, userId } })
+  }
+
+  async writeEvent(userId: string, input: WriteMemoryEventInput): Promise<MemoryEvent> {
+    const kind = MEMORY_EVENT_KINDS.has(input.kind) ? input.kind : 'note'
+    const summary = (input.summary ?? '').trim().slice(0, 2_000)
+    if (!summary) {
+      throw new BadRequestException('Memory event summary is required.')
+    }
+
+    const tags = this.normalizeTags(input.tags)
+    const payload = input.payload && typeof input.payload === 'object' ? input.payload : null
+    const confidence = this.clampConfidence(input.confidence, DEFAULT_MEMORY_EVENT_CONFIDENCE)
+
+    const row = await this.prisma.memoryEvent.create({
+      data: {
+        userId,
+        kind,
+        summary,
+        payload: payload ? this.safeSerialize(payload) : null,
+        tags: JSON.stringify(tags),
+        piiRedacted: input.piiRedacted ?? true,
+        confidence,
+      },
+    })
+
+    return this.toMemoryEvent(row)
+  }
+
+  async upsertFact(userId: string, input: UpsertMemoryFactInput): Promise<MemoryFact> {
+    const entity = (input.entity ?? '').trim().slice(0, 180)
+    const key = (input.key ?? '').trim().slice(0, 180)
+    const value = (input.value ?? '').trim().slice(0, 4_000)
+    if (!entity || !key || !value) {
+      throw new BadRequestException('Fact entity, key, and value are required.')
+    }
+
+    const sourceRef = (input.sourceRef ?? '').trim().slice(0, 500) || null
+    const confidence = this.clampConfidence(input.confidence, DEFAULT_MEMORY_EVENT_CONFIDENCE)
+
+    const row = await this.prisma.memoryFact.upsert({
+      where: {
+        userId_entity_key: {
+          userId,
+          entity,
+          key,
+        },
+      },
+      update: {
+        value,
+        sourceRef,
+        confidence,
+      },
+      create: {
+        userId,
+        entity,
+        key,
+        value,
+        sourceRef,
+        confidence,
+      },
+    })
+
+    return this.toMemoryFact(row)
+  }
+
+  async listFacts(userId: string, entity?: string, limit = 30): Promise<MemoryFact[]> {
+    const safeLimit = Math.max(1, Math.min(limit, MAX_TIERED_MEMORY_RESULTS))
+    const normalizedEntity = (entity ?? '').trim()
+
+    const rows = await this.prisma.memoryFact.findMany({
+      where: {
+        userId,
+        ...(normalizedEntity ? { entity: normalizedEntity } : {}),
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: safeLimit,
+    })
+
+    return rows.map((row) => this.toMemoryFact(row))
+  }
+
+  async queryTiered(userId: string, input: QueryMemoryInput): Promise<QueryMemoryResult> {
+    const query = (input.query ?? '').trim().slice(0, 500)
+    if (!query) {
+      throw new BadRequestException('Memory query is required.')
+    }
+
+    const safeLimit = Math.max(1, Math.min(input.limit ?? 8, MAX_TIERED_MEMORY_RESULTS))
+    const tokens = this.queryTokens(query)
+    const includeFacts = input.includeFacts ?? true
+    const tagFilter = this.normalizeTags(input.tags)
+
+    const eventRows = await this.prisma.memoryEvent.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      take: 180,
+    })
+
+    const eventCandidates = eventRows
+      .map((row) => this.toMemoryEvent(row))
+      .filter((event) => tagFilter.length === 0 || tagFilter.every((tag) => event.tags.includes(tag)))
+      .map((event) => ({
+        event,
+        score: this.scoreTextMatch(query, tokens, [
+          event.summary,
+          ...event.tags,
+          event.payload ? this.safeSerialize(event.payload) : '',
+        ]),
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || b.event.updatedAt.localeCompare(a.event.updatedAt))
+      .slice(0, safeLimit)
+      .map((item) => item.event)
+
+    let facts: MemoryFact[] = []
+    if (includeFacts) {
+      const factRows = await this.prisma.memoryFact.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 180,
+      })
+      facts = factRows
+        .map((row) => this.toMemoryFact(row))
+        .map((fact) => ({
+          fact,
+          score: this.scoreTextMatch(query, tokens, [
+            fact.entity,
+            fact.key,
+            fact.value,
+            fact.sourceRef ?? '',
+          ]),
+        }))
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score || b.fact.updatedAt.localeCompare(a.fact.updatedAt))
+        .slice(0, safeLimit)
+        .map((item) => item.fact)
+    }
+
+    return {
+      events: eventCandidates,
+      facts,
+      queriedAt: new Date().toISOString(),
+    }
   }
 
   async listFiles(userId: string): Promise<MemoryFileMeta[]> {
@@ -847,6 +1006,129 @@ export class MemoryService {
     if (days.has(day) && minutes >= start) return true
     if (days.has(previousDay) && minutes < end) return true
     return false
+  }
+
+  private toMemoryEvent(row: {
+    id: string
+    userId: string
+    kind: string
+    summary: string
+    payload: string | null
+    tags: string
+    piiRedacted: boolean
+    confidence: number
+    createdAt: Date
+    updatedAt: Date
+  }): MemoryEvent {
+    const parsedPayload = this.parseRecordJson(row.payload, `memory-event:${row.id}:payload`)
+    return {
+      id: row.id,
+      userId: row.userId,
+      kind: MEMORY_EVENT_KINDS.has(row.kind as MemoryEventKind)
+        ? (row.kind as MemoryEventKind)
+        : 'note',
+      summary: row.summary,
+      payload: parsedPayload,
+      tags: this.parseTags(row.tags, row.id),
+      piiRedacted: row.piiRedacted,
+      confidence: this.clampConfidence(row.confidence, DEFAULT_MEMORY_EVENT_CONFIDENCE),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    }
+  }
+
+  private toMemoryFact(row: {
+    id: string
+    userId: string
+    entity: string
+    key: string
+    value: string
+    sourceRef: string | null
+    confidence: number
+    createdAt: Date
+    updatedAt: Date
+  }): MemoryFact {
+    return {
+      id: row.id,
+      userId: row.userId,
+      entity: row.entity,
+      key: row.key,
+      value: row.value,
+      sourceRef: row.sourceRef,
+      confidence: this.clampConfidence(row.confidence, DEFAULT_MEMORY_EVENT_CONFIDENCE),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    }
+  }
+
+  private normalizeTags(raw: string[] | undefined): string[] {
+    if (!Array.isArray(raw)) return []
+    const deduped = new Set<string>()
+    for (const value of raw) {
+      const normalized = typeof value === 'string'
+        ? value.trim().toLowerCase().slice(0, 80)
+        : ''
+      if (!normalized) continue
+      deduped.add(normalized)
+      if (deduped.size >= 20) break
+    }
+    return [...deduped]
+  }
+
+  private clampConfidence(value: unknown, fallback: number) {
+    const numeric = typeof value === 'number' ? value : Number.parseFloat(`${value ?? ''}`)
+    if (!Number.isFinite(numeric)) return fallback
+    return Math.max(0, Math.min(1, numeric))
+  }
+
+  private queryTokens(query: string) {
+    return [...new Set(
+      query
+        .toLowerCase()
+        .replace(/[^a-z0-9_\s-]/g, ' ')
+        .split(/\s+/)
+        .map((value) => value.trim())
+        .filter((value) => value.length >= 2)
+        .slice(0, 18),
+    )]
+  }
+
+  private scoreTextMatch(query: string, tokens: string[], values: string[]) {
+    const haystack = values
+      .filter((value) => typeof value === 'string' && value.length > 0)
+      .join(' ')
+      .toLowerCase()
+
+    if (!haystack) return 0
+
+    let score = 0
+    const normalizedQuery = query.toLowerCase()
+    if (haystack.includes(normalizedQuery)) score += 10
+    for (const token of tokens) {
+      if (!token) continue
+      if (haystack.includes(token)) score += 2
+    }
+    return score
+  }
+
+  private parseRecordJson(raw: string | null, context: string): Record<string, unknown> | null {
+    if (!raw) return null
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+      return parsed as Record<string, unknown>
+    } catch {
+      this.logger.warn(`Invalid JSON in ${context}.`)
+      return null
+    }
+  }
+
+  private safeSerialize(value: unknown) {
+    try {
+      return JSON.stringify(value) ?? ''
+    } catch {
+      return String(value)
+    }
   }
 
   private normalizeMemoryKey(value: string) {

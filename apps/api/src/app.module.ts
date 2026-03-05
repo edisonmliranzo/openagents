@@ -25,6 +25,9 @@ import { AgentVersionsModule } from './agent-versions/agent-versions.module'
 import { HandoffsModule } from './handoffs/handoffs.module'
 import { SkillReputationModule } from './skill-reputation/skill-reputation.module'
 import { DataLineageModule } from './lineage/lineage.module'
+import { PolicyModule } from './policy/policy.module'
+import { ExtractionModule } from './extraction/extraction.module'
+import { CiHealerModule } from './ci-healer/ci-healer.module'
 
 @Module({
   imports: [
@@ -34,6 +37,9 @@ import { DataLineageModule } from './lineage/lineage.module'
     PrismaModule,
     MissionControlModule,
     DataLineageModule,
+    PolicyModule,
+    ExtractionModule,
+    CiHealerModule,
     HandoffsModule,
     SkillReputationModule,
     AuthModule,

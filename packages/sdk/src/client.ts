@@ -134,33 +134,36 @@ export class OpenAgentsClient {
     }
   }
 
-  get<T>(path: string) {
-    return this.request<T>(path, { method: 'GET' })
+  get<T>(path: string, headers?: Record<string, string>) {
+    return this.request<T>(path, { method: 'GET', ...(headers ? { headers } : {}) })
   }
 
-  post<T>(path: string, body?: unknown) {
+  post<T>(path: string, body?: unknown, headers?: Record<string, string>) {
     return this.request<T>(path, {
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
+      ...(headers ? { headers } : {}),
     })
   }
 
-  patch<T>(path: string, body?: unknown) {
+  patch<T>(path: string, body?: unknown, headers?: Record<string, string>) {
     return this.request<T>(path, {
       method: 'PATCH',
       body: body ? JSON.stringify(body) : undefined,
+      ...(headers ? { headers } : {}),
     })
   }
 
-  put<T>(path: string, body?: unknown) {
+  put<T>(path: string, body?: unknown, headers?: Record<string, string>) {
     return this.request<T>(path, {
       method: 'PUT',
       body: body ? JSON.stringify(body) : undefined,
+      ...(headers ? { headers } : {}),
     })
   }
 
-  delete<T>(path: string) {
-    return this.request<T>(path, { method: 'DELETE' })
+  delete<T>(path: string, headers?: Record<string, string>) {
+    return this.request<T>(path, { method: 'DELETE', ...(headers ? { headers } : {}) })
   }
 
   /** Stream SSE from the agent endpoint */

@@ -145,6 +145,101 @@ Local URLs:
 - API: `http://localhost:3001`
 - API docs: `http://localhost:3001/docs`
 
+## Install and update commands (Windows / macOS / Ubuntu)
+
+### Windows (PowerShell)
+
+Install + first run:
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+winget install Docker.DockerDesktop
+corepack enable
+corepack prepare pnpm@9.0.0 --activate
+git clone https://github.com/edisonmliranzo/openagents.git
+cd openagents
+pnpm install
+pnpm --filter @openagents/api run db:generate
+pnpm --filter @openagents/api run db:migrate
+pnpm prod:up
+pnpm prod:ps
+```
+
+Update existing install:
+
+```powershell
+cd C:\Users\edins\githubrepo\openagents
+git pull origin main
+pnpm install --frozen-lockfile
+pnpm --filter @openagents/api run db:migrate
+pnpm prod:build
+pnpm prod:up
+pnpm prod:ps
+```
+
+### macOS (Terminal)
+
+Install + first run:
+
+```bash
+brew install node@20
+brew install --cask docker
+corepack enable
+corepack prepare pnpm@9.0.0 --activate
+git clone https://github.com/edisonmliranzo/openagents.git
+cd openagents
+pnpm install
+pnpm --filter @openagents/api run db:generate
+pnpm --filter @openagents/api run db:migrate
+pnpm prod:up
+pnpm prod:ps
+```
+
+Update existing install:
+
+```bash
+cd ~/githubrepo/openagents
+git pull origin main
+pnpm install --frozen-lockfile
+pnpm --filter @openagents/api run db:migrate
+pnpm prod:build
+pnpm prod:up
+pnpm prod:ps
+```
+
+### Ubuntu (local or server path)
+
+Install + first run:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git curl ca-certificates gnupg
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs docker.io docker-compose-plugin
+sudo systemctl enable --now docker
+corepack enable
+corepack prepare pnpm@9.0.0 --activate
+git clone https://github.com/edisonmliranzo/openagents.git
+cd openagents
+pnpm install
+pnpm --filter @openagents/api run db:generate
+pnpm --filter @openagents/api run db:migrate
+pnpm prod:up
+pnpm prod:ps
+```
+
+Update existing install:
+
+```bash
+cd /opt/openagents
+git pull origin main
+pnpm install --frozen-lockfile
+pnpm --filter @openagents/api run db:migrate
+pnpm prod:build
+pnpm prod:up
+pnpm prod:ps
+```
+
 ## Production deployment (latest method)
 
 Use the Docker production stack with `infra/docker/.env.prod`.
@@ -242,6 +337,54 @@ pnpm prod:build
 pnpm prod:up
 pnpm prod:check:ollama
 ```
+
+### 6. Restart after reboot (easy path)
+
+Use the included startup scripts:
+
+- `scripts/start-openagents.sh` (Ubuntu/macOS)
+- `scripts/start-openagents.ps1` (Windows PowerShell)
+- `scripts/start-openagents.cmd` (Windows CMD wrapper)
+
+Ubuntu VPS:
+
+```bash
+cd /opt/openagents
+bash scripts/start-openagents.sh
+```
+
+macOS:
+
+```bash
+cd ~/githubrepo/openagents
+bash scripts/start-openagents.sh
+```
+
+Windows PowerShell:
+
+```powershell
+cd C:\Users\edins\githubrepo\openagents
+.\scripts\start-openagents.ps1
+```
+
+Windows CMD:
+
+```cmd
+cd C:\Users\edins\githubrepo\openagents
+scripts\start-openagents.cmd
+```
+
+One-time host setup so services recover automatically:
+
+Ubuntu:
+
+```bash
+sudo systemctl enable --now docker
+```
+
+Windows/macOS:
+
+- Enable Docker Desktop auto-start on login.
 
 ### Bybit demo futures workflow (optional)
 

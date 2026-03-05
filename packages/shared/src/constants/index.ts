@@ -63,9 +63,19 @@ export const QUEUE_NAMES = {
   approvals: 'approvals',
   approvalsDeadLetter: 'approvals-dead-letter',
   toolRuns: 'tool-runs',
+  extractionJobs: 'extraction-jobs',
+  ciHealer: 'ci-healer',
 } as const
 
 export const APPROVAL_JOB_NAMES = {
   resolved: 'approval.resolved',
   deadLetter: 'approval.dead_letter',
+} as const
+
+export const EXTRACTION_JOB_NAMES = {
+  run: 'extraction.run',
+} as const
+
+export const CI_HEALER_JOB_NAMES = {
+  run: 'ci_healer.run',
 } as const
