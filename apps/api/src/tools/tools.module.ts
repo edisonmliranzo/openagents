@@ -12,9 +12,10 @@ import { BybitTool } from './connectors/bybit.tool'
 import { DeepResearchTool } from './connectors/deep-research.tool'
 import { ComputerUseTool } from './connectors/computer-use.tool'
 import { CronModule } from '../cron/cron.module'
+import { ConnectorsModule } from '../connectors/connectors.module'
 
 @Module({
-  imports: [CronModule],
+  imports: [CronModule, ConnectorsModule],
   providers: [
     ToolsService,
     GmailTool,

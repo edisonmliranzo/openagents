@@ -40,6 +40,16 @@ class QueryMemoryDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[]
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  minConfidence?: number
+
+  @IsOptional()
+  @IsBoolean()
+  includeConflicts?: boolean
 }
 
 class WriteMemoryEventDto {
@@ -55,6 +65,10 @@ class WriteMemoryEventDto {
   payload?: Record<string, unknown>
 
   @IsOptional()
+  @IsString()
+  sourceRef?: string
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   tags?: string[]
@@ -68,6 +82,20 @@ class WriteMemoryEventDto {
   @Min(0)
   @Max(1)
   confidence?: number
+
+  @IsOptional()
+  @IsString()
+  freshUntil?: string
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24 * 365)
+  freshnessHours?: number
+
+  @IsOptional()
+  @IsString()
+  conflictGroup?: string
 }
 
 class UpsertMemoryFactDto {
@@ -89,6 +117,30 @@ class UpsertMemoryFactDto {
   @Min(0)
   @Max(1)
   confidence?: number
+
+  @IsOptional()
+  @IsString()
+  freshUntil?: string
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24 * 365)
+  freshnessHours?: number
+
+  @IsOptional()
+  @IsString()
+  conflictGroup?: string
+
+  @IsOptional()
+  @IsBoolean()
+  reinforce?: boolean
+}
+
+class ResolveMemoryConflictDto {
+  @IsOptional()
+  @IsIn(['resolved', 'ignored'])
+  status?: 'resolved' | 'ignored'
 }
 
 class BrowserCaptureDto {
@@ -179,5 +231,24 @@ export class MemoryController {
   @Delete(':id')
   delete(@Param('id') id: string, @Req() req: any) {
     return this.memory.delete(id, req.user.id)
+  }
+
+  @Get('conflicts')
+  listConflicts(@Req() req: any, @Query('status') status?: string, @Query('limit') limit?: string) {
+    const parsed = Number.parseInt(limit ?? '30', 10)
+    const safe = Number.isFinite(parsed) ? parsed : 30
+    return this.memory.listConflicts(req.user.id, status, safe)
+  }
+
+  @Post('conflicts/:id/resolve')
+  resolveConflict(@Req() req: any, @Param('id') id: string, @Body() dto: ResolveMemoryConflictDto) {
+    return this.memory.resolveConflict(req.user.id, id, dto.status ?? 'resolved')
+  }
+
+  @Get('review-queue')
+  reviewQueue(@Req() req: any, @Query('limit') limit?: string) {
+    const parsed = Number.parseInt(limit ?? '30', 10)
+    const safe = Number.isFinite(parsed) ? parsed : 30
+    return this.memory.getReviewQueue(req.user.id, safe)
   }
 }

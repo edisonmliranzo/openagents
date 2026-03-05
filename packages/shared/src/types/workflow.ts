@@ -1,11 +1,19 @@
-export type WorkflowTriggerKind = 'manual' | 'schedule' | 'webhook'
-export type WorkflowStepType = 'agent_prompt' | 'tool_call' | 'delay'
-export type WorkflowRunStatus = 'running' | 'done' | 'error'
+export type WorkflowTriggerKind = 'manual' | 'schedule' | 'webhook' | 'inbox_event'
+export type WorkflowStepType =
+  | 'agent_prompt'
+  | 'tool_call'
+  | 'delay'
+  | 'run_agent'
+  | 'run_tool'
+  | 'wait_approval'
+  | 'branch_condition'
+export type WorkflowRunStatus = 'queued' | 'running' | 'waiting_approval' | 'done' | 'error'
 
 export interface WorkflowTrigger {
   kind: WorkflowTriggerKind
   everyMinutes?: number
   webhookSecret?: string
+  eventName?: string
 }
 
 export interface WorkflowStep {
@@ -17,6 +25,15 @@ export interface WorkflowStep {
   input?: Record<string, unknown>
   delayMs?: number
   conversationId?: string
+  retryAttempts?: number
+  continueOnError?: boolean
+  approvalKey?: string
+  approvalReason?: string
+  conditionSource?: 'last_output' | 'trigger_kind' | 'workflow_name'
+  conditionOperator?: 'contains' | 'not_contains' | 'equals' | 'not_equals'
+  conditionValue?: string
+  ifTrueStepId?: string
+  ifFalseStepId?: string
 }
 
 export interface WorkflowDefinition {
@@ -25,6 +42,7 @@ export interface WorkflowDefinition {
   name: string
   description: string | null
   enabled: boolean
+  version: number
   trigger: WorkflowTrigger
   steps: WorkflowStep[]
   createdAt: string
@@ -41,6 +59,7 @@ export interface WorkflowStepRunResult {
   finishedAt: string
   output: string | null
   error: string | null
+  attemptCount?: number
 }
 
 export interface WorkflowRun {
@@ -52,6 +71,8 @@ export interface WorkflowRun {
   startedAt: string
   finishedAt: string | null
   error: string | null
+  idempotencyKey?: string
+  sourceEvent?: string
   stepResults: WorkflowStepRunResult[]
 }
 
@@ -74,4 +95,8 @@ export interface UpdateWorkflowInput {
 export interface RunWorkflowInput {
   triggerKind?: WorkflowTriggerKind
   webhookSecret?: string
+  idempotencyKey?: string
+  approvedKeys?: string[]
+  sourceEvent?: string
+  input?: Record<string, unknown>
 }

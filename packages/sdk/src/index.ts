@@ -26,6 +26,8 @@ export { createLineageApi } from './api/lineage'
 export { createPolicyApi } from './api/policy'
 export { createExtractionApi } from './api/extraction'
 export { createCiHealerApi } from './api/ci-healer'
+export { createConnectorsApi } from './api/connectors'
+export { createSkillRegistryApi } from './api/skill-registry'
 
 import { OpenAgentsClient } from './client'
 import { createAuthApi } from './api/auth'
@@ -54,6 +56,8 @@ import { createLineageApi } from './api/lineage'
 import { createPolicyApi } from './api/policy'
 import { createExtractionApi } from './api/extraction'
 import { createCiHealerApi } from './api/ci-healer'
+import { createConnectorsApi } from './api/connectors'
+import { createSkillRegistryApi } from './api/skill-registry'
 import type { SDKConfig } from './client'
 
 /** Convenience factory: creates a fully-wired SDK instance */
@@ -87,5 +91,7 @@ export function createSDK(config: SDKConfig) {
     policy: createPolicyApi(client),
     extraction: createExtractionApi(client),
     ciHealer: createCiHealerApi(client),
+    connectors: createConnectorsApi(client),
+    skillRegistry: createSkillRegistryApi(client),
   }
 }

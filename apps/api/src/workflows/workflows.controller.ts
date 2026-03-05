@@ -10,7 +10,7 @@ import type {
   WorkflowTriggerKind,
 } from '@openagents/shared'
 
-const TRIGGER_KINDS: WorkflowTriggerKind[] = ['manual', 'schedule', 'webhook']
+const TRIGGER_KINDS: WorkflowTriggerKind[] = ['manual', 'schedule', 'webhook', 'inbox_event']
 
 class WorkflowTriggerDto {
   @IsIn(TRIGGER_KINDS)
@@ -26,6 +26,11 @@ class WorkflowTriggerDto {
   @IsString()
   @MaxLength(200)
   webhookSecret?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  eventName?: string
 }
 
 class WorkflowStepDto {
@@ -35,7 +40,7 @@ class WorkflowStepDto {
   id?: string
 
   @IsString()
-  @IsIn(['agent_prompt', 'tool_call', 'delay'])
+  @IsIn(['agent_prompt', 'tool_call', 'delay', 'run_agent', 'run_tool', 'wait_approval', 'branch_condition'])
   type!: string
 
   @IsOptional()
@@ -64,6 +69,51 @@ class WorkflowStepDto {
   @IsOptional()
   @IsString()
   conversationId?: string
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  retryAttempts?: number
+
+  @IsOptional()
+  @IsBoolean()
+  continueOnError?: boolean
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  approvalKey?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  approvalReason?: string
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['last_output', 'trigger_kind', 'workflow_name'])
+  conditionSource?: 'last_output' | 'trigger_kind' | 'workflow_name'
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['contains', 'not_contains', 'equals', 'not_equals'])
+  conditionOperator?: 'contains' | 'not_contains' | 'equals' | 'not_equals'
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  conditionValue?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  ifTrueStepId?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  ifFalseStepId?: string
 }
 
 class CreateWorkflowDto {
@@ -120,6 +170,25 @@ class RunWorkflowDto implements RunWorkflowInput {
   @IsString()
   @MaxLength(200)
   webhookSecret?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  idempotencyKey?: string
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  approvedKeys?: string[]
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  sourceEvent?: string
+
+  @IsOptional()
+  @IsObject()
+  input?: Record<string, unknown>
 }
 
 @ApiTags('workflows')
