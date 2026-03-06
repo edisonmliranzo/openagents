@@ -88,8 +88,8 @@ export default function ChatPage() {
   const hasPendingApprovals = pendingApprovals.length > 0
 
   return (
-    <div className="min-h-[calc(100dvh-56px)] px-0 py-1 sm:px-2 sm:py-2">
-      <div className="mx-auto flex min-h-[calc(100dvh-72px)] max-w-[1600px] flex-col gap-3 sm:gap-4">
+    <div className="min-h-[calc(100dvh-56px)] px-0 py-1 sm:px-2 sm:py-2 lg:h-[calc(100dvh-96px)] lg:min-h-0 lg:overflow-hidden">
+      <div className="mx-auto flex min-h-[calc(100dvh-72px)] max-w-[1600px] flex-col gap-3 sm:gap-4 lg:h-full lg:min-h-0">
         <header className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-4 py-4 sm:px-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -202,7 +202,7 @@ export default function ChatPage() {
               </div>
             )}
 
-            <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="grid min-h-0 flex-1 gap-3 lg:max-h-[72dvh] xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-h-0">
                 <ChatWindow
                   gatewayConnected={gatewayConnected}
