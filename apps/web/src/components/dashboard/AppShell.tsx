@@ -44,7 +44,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
   {
     title: 'Agent',
     items: [
-      { label: 'OpenAgent', href: '/agent/openagent', icon: Activity },
+      { label: 'OpenAgents', href: '/agent/openagent', icon: Activity },
       { label: 'Skills', href: '/agent/skills', icon: Brain },
       { label: 'Marketplace', href: '/agent/marketplace', icon: BookOpen },
     ],
@@ -285,10 +285,10 @@ export function AppShell({ children }: AppShellProps) {
         />
       )}
 
-      <div className="mx-auto flex w-full max-w-[1680px]">
+      <div className="mx-auto flex w-full max-w-[1720px]">
         <aside
           className={clsx(
-            'fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] px-3 py-4 transition-transform duration-200 md:static md:z-0 md:translate-x-0',
+            'fixed inset-y-0 left-0 z-50 flex w-[252px] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] px-3 py-4 transition-transform duration-200 md:static md:z-0 md:translate-x-0',
             isMobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -330,7 +330,7 @@ export function AppShell({ children }: AppShellProps) {
                         className={clsx(
                           'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] transition',
                           active
-                            ? 'bg-black text-white'
+                            ? 'bg-[var(--accent)] text-white shadow-sm dark:bg-[var(--surface-subtle)] dark:text-slate-100'
                             : 'text-slate-700 hover:bg-[var(--surface-subtle)] dark:text-slate-200 dark:hover:bg-[var(--surface-subtle)]',
                         )}
                       >
@@ -365,7 +365,8 @@ export function AppShell({ children }: AppShellProps) {
         </aside>
 
         <div className="min-w-0 flex-1 md:ml-0">
-          <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--background)]/90 px-3 py-3 backdrop-blur sm:px-6">
+          <header className="sticky top-0 z-20 px-3 py-3 sm:px-6">
+            <div className="oa-card-elevated rounded-2xl px-3 py-2.5 backdrop-blur sm:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <button
@@ -462,6 +463,7 @@ export function AppShell({ children }: AppShellProps) {
                   <ChevronDown size={12} className="text-slate-400 dark:text-slate-500" />
                 </div>
               </div>
+            </div>
             </div>
           </header>
 

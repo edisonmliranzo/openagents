@@ -191,9 +191,9 @@ export function MessageBubble({ message }: { message: Message }) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[92%] rounded-2xl rounded-br-md border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-slate-800 sm:max-w-[78%] dark:text-slate-100">
+        <div className="max-w-[92%] rounded-2xl rounded-br-sm border border-slate-900/15 bg-slate-900 px-4 py-3 text-sm text-slate-100 shadow-sm sm:max-w-[76%] dark:border-white/20 dark:bg-slate-100 dark:text-slate-900">
           <p className="whitespace-pre-wrap">{message.content}</p>
-          <p className="mt-2 text-right text-[11px] font-medium text-slate-400 dark:text-slate-500">{formatClock(message.createdAt)}</p>
+          <p className="mt-2 text-right text-[11px] font-medium text-slate-300 dark:text-slate-600">{formatClock(message.createdAt)}</p>
         </div>
       </div>
     )
@@ -201,20 +201,20 @@ export function MessageBubble({ message }: { message: Message }) {
 
   return (
     <div className="space-y-2">
-      <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+      <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-sm">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="inline-flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-[10px] font-bold text-white dark:bg-white dark:text-black">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white dark:bg-white dark:text-black">
               OA
             </div>
-            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">OpenAgents</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">OpenAgents</p>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => void handleToggleLineage()}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-[var(--surface-subtle)] dark:text-slate-300"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-[var(--surface-subtle)] hover:shadow-sm dark:text-slate-300"
             >
               Why this answer
             </button>
@@ -222,7 +222,7 @@ export function MessageBubble({ message }: { message: Message }) {
               <button
                 type="button"
                 onClick={() => void handleCopyAll()}
-                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-[var(--surface-subtle)] dark:text-slate-300"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-[var(--surface-subtle)] hover:shadow-sm dark:text-slate-300"
               >
                 <Copy size={12} />
                 {copiedAll ? 'Copied' : codeBlocks.length > 1 ? 'Copy all code' : 'Copy code'}
@@ -237,7 +237,7 @@ export function MessageBubble({ message }: { message: Message }) {
               if (block.type === 'text') {
                 if (!block.content.trim()) return <div key={`line-empty-${idx}`} className="h-2" />
                 return (
-                  <p key={`line-p-${idx}`} className="text-[14px] leading-relaxed text-slate-800 dark:text-slate-200">
+                  <p key={`line-p-${idx}`} className="text-[14px] leading-7 text-slate-800 dark:text-slate-200">
                     {block.content}
                   </p>
                 )

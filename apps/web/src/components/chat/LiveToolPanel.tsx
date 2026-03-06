@@ -199,8 +199,8 @@ export function LiveToolPanel() {
   const researchRuns = useMemo(() => buildDeepResearchRuns(records), [records])
 
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface)]">
-      <div className="border-b border-[var(--border)] px-4 py-3">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
+      <div className="border-b border-[var(--border)] bg-[var(--surface-muted)]/55 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Live Tool Runtime</p>
           <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
@@ -214,9 +214,9 @@ export function LiveToolPanel() {
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
           <div className="flex items-center gap-2">
-            <MonitorSmartphone size={14} className="text-indigo-500" />
+            <MonitorSmartphone size={14} className="text-blue-500" />
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Computer Sessions</p>
           </div>
           <div className="mt-2 space-y-2">
@@ -266,9 +266,9 @@ export function LiveToolPanel() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
           <div className="flex items-center gap-2">
-            <SearchCheck size={14} className="text-cyan-500" />
+            <SearchCheck size={14} className="text-sky-500" />
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Deep Research</p>
           </div>
           <div className="mt-2 space-y-3">
