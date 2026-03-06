@@ -1,5 +1,5 @@
-import type { Metadata } from 'next'
-import { IBM_Plex_Mono, Manrope } from 'next/font/google'
+import type { Metadata, Viewport } from 'next'
+import { IBM_Plex_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -7,11 +7,17 @@ export const metadata: Metadata = {
   description: 'OpenAgents local + cloud platform for AI agents and gateway control',
 }
 
-const manrope = Manrope({
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+}
+
+const plusJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
   variable: '--font-sans',
   display: 'swap',
-  weight: ['400', '500', '600', '700'],
+  weight: ['400', '500', '600', '700', '800'],
 })
 
 const ibmPlexMono = IBM_Plex_Mono({
@@ -23,7 +29,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${ibmPlexMono.variable}`}>
+    <html lang="en" className={`${plusJakarta.variable} ${ibmPlexMono.variable}`}>
       <body>{children}</body>
     </html>
   )

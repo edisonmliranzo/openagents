@@ -199,11 +199,11 @@ export function LiveToolPanel() {
   const researchRuns = useMemo(() => buildDeepResearchRuns(records), [records])
 
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-slate-200/90 bg-white/90 shadow-card backdrop-blur dark:border-slate-800 dark:bg-slate-900/75">
-      <div className="border-b border-slate-200/80 px-4 py-3 dark:border-slate-800">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface)]">
+      <div className="border-b border-[var(--border)] px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Live Tool Runtime</p>
-          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
             <Activity size={10} />
             {runStatus ?? (isStreaming ? 'running' : 'idle')}
           </span>
@@ -214,7 +214,7 @@ export function LiveToolPanel() {
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/70">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
           <div className="flex items-center gap-2">
             <MonitorSmartphone size={14} className="text-indigo-500" />
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Computer Sessions</p>
@@ -224,18 +224,18 @@ export function LiveToolPanel() {
               <p className="text-xs text-slate-500 dark:text-slate-400">No computer sessions yet in this conversation.</p>
             )}
             {computerSessions.map((session) => (
-              <article key={session.sessionId} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-700 dark:bg-slate-800/70">
+              <article key={session.sessionId} className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
                     {shortSessionId(session.sessionId)}
                   </p>
                   <div className="flex items-center gap-1.5">
-                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-200">
                       {session.mode}
                     </span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${session.status === 'active'
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
-                      : 'bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-200'}`}>
+                      ? 'bg-black text-white dark:bg-white dark:text-black'
+                      : 'bg-[var(--surface-subtle)] text-slate-700 dark:text-slate-200'}`}>
                       {session.status}
                     </span>
                   </div>
@@ -266,7 +266,7 @@ export function LiveToolPanel() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/70">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
           <div className="flex items-center gap-2">
             <SearchCheck size={14} className="text-cyan-500" />
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Deep Research</p>
@@ -276,7 +276,7 @@ export function LiveToolPanel() {
               <p className="text-xs text-slate-500 dark:text-slate-400">No deep research runs yet in this conversation.</p>
             )}
             {researchRuns.map((run, index) => (
-              <article key={`${run.createdAt}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-700 dark:bg-slate-800/70">
+              <article key={`${run.createdAt}-${index}`} className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-2.5">
                 <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">
                   Summary ({run.fetchedPages} page{run.fetchedPages === 1 ? '' : 's'} fetched)
                 </p>
@@ -291,13 +291,13 @@ export function LiveToolPanel() {
                       href={citation.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex items-start gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 transition hover:border-indigo-200 hover:text-indigo-700 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-indigo-400/40 dark:hover:text-indigo-200"
+                      className="flex items-start gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-slate-700 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
                     >
                       <Link2 size={10} className="mt-0.5 shrink-0" />
                       <span className="min-w-0 flex-1 truncate">{citation.title}</span>
                       <span className={`rounded px-1 py-0.5 text-[10px] font-medium ${citation.status === 'fetched'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
-                        : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'}`}>
+                        ? 'bg-black text-white dark:bg-white dark:text-black'
+                        : 'bg-[var(--surface-subtle)] text-slate-700 dark:text-slate-300'}`}>
                         {citation.status}
                       </span>
                       <ExternalLink size={10} className="mt-0.5 shrink-0" />

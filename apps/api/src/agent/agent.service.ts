@@ -28,12 +28,29 @@ After getting tool results, summarize them clearly and suggest next steps.
 For web research, include source URLs from tool results in your answer when available.
 For complex tasks, decompose into plan -> execute -> verify before finalizing.
 Keep your responses concise and action-oriented.`
+const MANUS_MODE_PROMPT_APPENDIX = `Manus mode operating contract:
+Operate as a highly autonomous execution agent.
+For non-trivial requests, follow this cycle: understand -> plan -> execute -> verify.
+If details are missing but not safety-critical, state assumptions briefly and proceed.
+Use tools proactively whenever they materially improve correctness.
+Before finalizing, run a verification pass and distinguish verified facts from remaining uncertainty.
+Format the final response using these headings:
+Intent:
+Plan:
+Actions:
+Verification:
+Result:
+Next actions:
+Keep each section concise and include source URLs when available.`
 const DEFAULT_MAX_TOOL_ROUNDS = 6
 const DEFAULT_TOOL_RETRY_ATTEMPTS = 1
 const DEFAULT_TOOL_RETRY_BASE_DELAY_MS = 500
 const MANUS_LITE_MAX_TOOL_ROUNDS = 10
 const MANUS_LITE_TOOL_RETRY_ATTEMPTS = 2
 const MANUS_LITE_TOOL_RETRY_BASE_DELAY_MS = 350
+const MANUS_MODE_MAX_TOOL_ROUNDS = 14
+const MANUS_MODE_TOOL_RETRY_ATTEMPTS = 3
+const MANUS_MODE_TOOL_RETRY_BASE_DELAY_MS = 250
 const MANUS_LITE_DEFAULT_PROVIDER: LLMProvider = 'ollama'
 
 interface AgentRunToolMetric {
@@ -57,6 +74,8 @@ interface AgentRunMetrics {
   toolRoundsUsed: number
   toolRetries: number
   toolRecoveries: number
+  manusModeEnabled: boolean
+  manusModeRoutingApplied: boolean
   manusLiteEnabled: boolean
   manusLiteRoutingApplied: boolean
   autonomyScheduleEnabled: boolean
@@ -132,11 +151,16 @@ export class AgentService {
       const memoryContext = memorySections.join('\n\n')
 
       const basePrompt = settings.customSystemPrompt ?? DEFAULT_SYSTEM_PROMPT
+      const manusModeEnabled = this.isManusModeEnabled()
       const systemPrompt = memoryContext
         ? `${basePrompt}\n\nUser context from memory:\n${memoryContext}`
         : basePrompt
-      const effectiveSystemPrompt = systemPromptAppendix?.trim()
-        ? `${systemPrompt}\n\n${systemPromptAppendix.trim()}`
+      const promptAppendices = [
+        manusModeEnabled ? MANUS_MODE_PROMPT_APPENDIX : '',
+        systemPromptAppendix?.trim() ?? '',
+      ].filter(Boolean)
+      const effectiveSystemPrompt = promptAppendices.length
+        ? `${systemPrompt}\n\n${promptAppendices.join('\n\n')}`
         : systemPrompt
 
       // 5. Get available tools for this user
@@ -152,6 +176,9 @@ export class AgentService {
         }))
 
       emit('status', { status: 'thinking' })
+      if (manusModeEnabled) {
+        emit('status', { status: 'planning' })
+      }
 
       // 7. Call LLM with user's preferred provider + per-user key if configured
       const userLlmKey = await this.users.getRawLlmKey(userId, provider)
@@ -164,15 +191,17 @@ export class AgentService {
         'AGENT_MAX_TOOL_ROUNDS',
         DEFAULT_MAX_TOOL_ROUNDS,
         MANUS_LITE_MAX_TOOL_ROUNDS,
+        MANUS_MODE_MAX_TOOL_ROUNDS,
         1,
-        12,
+        20,
       )
       const toolRetryAttempts = this.readToolLoopSetting(
         'AGENT_TOOL_RETRY_ATTEMPTS',
         DEFAULT_TOOL_RETRY_ATTEMPTS,
         MANUS_LITE_TOOL_RETRY_ATTEMPTS,
+        MANUS_MODE_TOOL_RETRY_ATTEMPTS,
         0,
-        4,
+        6,
       )
       let activeProvider: LLMProvider = provider
       let activeUserApiKey = userApiKey
@@ -191,8 +220,10 @@ export class AgentService {
         toolRoundsUsed: 0,
         toolRetries: 0,
         toolRecoveries: 0,
+        manusModeEnabled,
+        manusModeRoutingApplied: routing.preset === 'manus_mode',
         manusLiteEnabled: this.isManusLiteEnabled(),
-        manusLiteRoutingApplied: routing.applied,
+        manusLiteRoutingApplied: routing.preset === 'manus_lite',
         autonomyScheduleEnabled: autonomyStatus.scheduleEnabled,
         autonomyWithinWindow: autonomyStatus.withinWindow,
         autonomyTimezone: autonomyStatus.timezone,
@@ -265,6 +296,9 @@ export class AgentService {
           break
         }
 
+        if (manusModeEnabled) {
+          emit('status', { status: 'executing', round: toolRound + 1 })
+        }
         toolRound += 1
         let executedAnyTool = false
 
@@ -476,6 +510,15 @@ export class AgentService {
           ? 'Completed tool execution.'
           : 'I could not generate a response.'
       }
+      if (manusModeEnabled) {
+        emit('status', { status: 'verifying', toolRounds: toolRound, toolCalls: runMetrics.toolCalls.length })
+        finalResponseContent = this.applyManusModeResponseContract({
+          content: finalResponseContent,
+          userMessage,
+          runMetrics,
+          toolRound,
+        })
+      }
 
       // 9. Save agent response
       if (finalResponseContent) {
@@ -630,6 +673,7 @@ export class AgentService {
       'AGENT_TOOL_RETRY_BASE_DELAY_MS',
       DEFAULT_TOOL_RETRY_BASE_DELAY_MS,
       MANUS_LITE_TOOL_RETRY_BASE_DELAY_MS,
+      MANUS_MODE_TOOL_RETRY_BASE_DELAY_MS,
       100,
       10_000,
     )
@@ -640,6 +684,7 @@ export class AgentService {
     envName: string,
     fallback: number,
     manusLitePreset: number,
+    manusModePreset: number,
     min: number,
     max: number,
   ) {
@@ -649,7 +694,9 @@ export class AgentService {
       ? Math.max(min, Math.min(parsed, max))
       : fallback
 
-    if (!this.isManusLiteEnabled()) {
+    const manusModeEnabled = this.isManusModeEnabled()
+    const manusLiteEnabled = this.isManusLiteEnabled()
+    if (!manusModeEnabled && !manusLiteEnabled) {
       return normalized
     }
 
@@ -657,40 +704,58 @@ export class AgentService {
     if (!shouldApplyPreset) {
       return normalized
     }
+    if (manusModeEnabled) {
+      return Math.max(min, Math.min(manusModePreset, max))
+    }
     return Math.max(min, Math.min(manusLitePreset, max))
   }
 
   private resolveRoutingPreset(rawProvider?: string | null, rawModel?: string | null) {
     const provider = this.normalizeProvider(rawProvider) ?? 'anthropic'
     const model = rawModel?.trim() || undefined
+    const manusModeEnabled = this.isManusModeEnabled()
+    const manusLiteEnabled = this.isManusLiteEnabled()
 
-    if (!this.isManusLiteEnabled()) {
-      return { provider, model, applied: false }
+    if (!manusModeEnabled && !manusLiteEnabled) {
+      return { provider, model, applied: false, preset: 'none' as const }
     }
 
-    const forceRouting = this.readBooleanEnv('MANUS_LITE_FORCE_ROUTING', false)
+    const forceRouting = manusModeEnabled
+      ? this.readBooleanEnv('MANUS_MODE_FORCE_ROUTING', false) || this.readBooleanEnv('MANUS_LITE_FORCE_ROUTING', false)
+      : this.readBooleanEnv('MANUS_LITE_FORCE_ROUTING', false)
     const onSchemaDefaults = provider === 'anthropic'
       && (!model || model === LLM_MODELS.anthropic.default)
     if (!forceRouting && !onSchemaDefaults) {
-      return { provider, model, applied: false }
+      return { provider, model, applied: false, preset: 'none' as const }
     }
 
-    const presetProvider = this.resolveManusLiteProvider()
+    const presetProvider = this.resolveManusPresetProvider()
     return {
       provider: presetProvider,
-      model: this.resolveManusLiteModel(presetProvider),
+      model: this.resolveManusPresetModel(presetProvider),
       applied: true,
+      preset: manusModeEnabled ? 'manus_mode' as const : 'manus_lite' as const,
     }
   }
 
-  private resolveManusLiteProvider(): LLMProvider {
-    const fromEnv = this.normalizeProvider(process.env.MANUS_LITE_PROVIDER)
-    return fromEnv ?? MANUS_LITE_DEFAULT_PROVIDER
+  private resolveManusPresetProvider(): LLMProvider {
+    if (this.isManusModeEnabled()) {
+      const manusModeProvider = this.normalizeProvider(process.env.MANUS_MODE_PROVIDER)
+      if (manusModeProvider) {
+        return manusModeProvider
+      }
+    }
+    const manusLiteProvider = this.normalizeProvider(process.env.MANUS_LITE_PROVIDER)
+    return manusLiteProvider ?? MANUS_LITE_DEFAULT_PROVIDER
   }
 
-  private resolveManusLiteModel(provider: LLMProvider) {
-    const explicit = process.env.MANUS_LITE_MODEL?.trim()
-    if (explicit) return explicit
+  private resolveManusPresetModel(provider: LLMProvider) {
+    if (this.isManusModeEnabled()) {
+      const manusModeModel = process.env.MANUS_MODE_MODEL?.trim()
+      if (manusModeModel) return manusModeModel
+    }
+    const manusLiteModel = process.env.MANUS_LITE_MODEL?.trim()
+    if (manusLiteModel) return manusLiteModel
     return LLM_MODELS[provider].fast
   }
 
@@ -710,6 +775,10 @@ export class AgentService {
 
   private isManusLiteEnabled() {
     return this.readBooleanEnv('MANUS_LITE', false)
+  }
+
+  private isManusModeEnabled() {
+    return this.readBooleanEnv('MANUS_MODE', false)
   }
 
   private readBooleanEnv(name: string, fallback: boolean) {
@@ -785,6 +854,51 @@ export class AgentService {
   private safeError(error: unknown) {
     if (error instanceof Error) return error.message
     return typeof error === 'string' ? error : 'Unknown error'
+  }
+
+  private applyManusModeResponseContract(input: {
+    content: string
+    userMessage: string
+    runMetrics: AgentRunMetrics
+    toolRound: number
+  }) {
+    const content = input.content.trim()
+    if (!content) return content
+    if (this.hasManusResponseSections(content)) return content
+
+    const executedCount = input.runMetrics.toolCalls.filter((tool) => tool.status === 'executed').length
+    const failedCount = input.runMetrics.toolCalls.filter((tool) => tool.status === 'failed').length
+    const pendingCount = input.runMetrics.toolCalls.filter((tool) => tool.status === 'pending_approval').length
+    const actionSummary = input.runMetrics.toolCalls.length > 0
+      ? `Tool rounds: ${input.toolRound}. Executed: ${executedCount}. Failed: ${failedCount}. Pending approval: ${pendingCount}.`
+      : 'No tool calls were required for this request.'
+    const verificationSummary = input.runMetrics.toolCalls.length > 0
+      ? 'Reviewed tool outputs for consistency and surfaced any unresolved uncertainty in the final result.'
+      : 'Performed a direct reasoning self-check for consistency and completeness before finalizing.'
+
+    return [
+      `Intent: ${this.toSingleLine(input.userMessage, 180) || 'Fulfill the user request.'}`,
+      'Plan: Understand the goal, execute the best path, verify outcomes, and report concise next actions.',
+      `Actions: ${actionSummary}`,
+      `Verification: ${verificationSummary}`,
+      `Result:\n${content}`,
+      `Next actions: ${pendingCount > 0 ? 'Approve pending tool actions to continue execution.' : 'Share follow-up constraints or ask for the next step.'}`,
+    ].join('\n\n')
+  }
+
+  private hasManusResponseSections(content: string) {
+    const requiredHeadings = ['Intent:', 'Plan:', 'Actions:', 'Verification:', 'Result:']
+    return requiredHeadings.every((heading) => {
+      const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      return new RegExp(`^${escaped}`, 'mi').test(content)
+    })
+  }
+
+  private toSingleLine(value: string, maxLength: number) {
+    const normalized = value.replace(/\s+/g, ' ').trim()
+    if (normalized.length <= maxLength) return normalized
+    const head = normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()
+    return `${head}...`
   }
 
   private async autoTitle(

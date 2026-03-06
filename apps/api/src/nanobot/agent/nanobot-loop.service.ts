@@ -34,6 +34,12 @@ interface IntentSkillTemplate {
   tools: string[]
 }
 
+const MANUS_MODE_NANOBOT_PROMPT_APPENDIX = `Manus mode:
+Operate with high autonomy using understand -> plan -> execute -> verify cycles.
+Use tools proactively for factual or external tasks.
+If minor details are missing, state assumptions and continue.
+Conclude with concise sections: Intent, Plan, Actions, Verification, Result, Next actions.`
+
 @Injectable()
 export class NanobotLoopService {
   private readonly logger = new Logger(NanobotLoopService.name)
@@ -176,7 +182,14 @@ export class NanobotLoopService {
       const prompt = await this.context.buildSystemPrompt(params.userId, activeSkills)
       const rolePrompt = this.roles.buildPromptAppendix(roleDecision)
       const personalityPrompt = this.personality.buildPromptAppendix(personalityState)
-      const systemPromptAppendix = `${personalityPrompt}\n\n${rolePrompt}`
+      const promptAppendixParts = [personalityPrompt, rolePrompt]
+      if (this.config.manusModeEnabled) {
+        promptAppendixParts.push(MANUS_MODE_NANOBOT_PROMPT_APPENDIX)
+      }
+      const systemPromptAppendix = promptAppendixParts
+        .map((section) => section.trim())
+        .filter(Boolean)
+        .join('\n\n')
 
       this.bus.publish('context.built', {
         runId,
@@ -244,6 +257,21 @@ export class NanobotLoopService {
               params.emit(event, { ...data, alive: nextAlive })
               return
             }
+            if (status === 'planning') {
+              const nextAlive = this.alive.patchForUser(params.userId, {
+                waitingReason: 'planning',
+                thoughtMode: 'plan',
+              })
+              this.bus.publish('run.event', { runId, event, stage: 'planning' })
+              params.emit(event, { ...data, alive: nextAlive })
+              return
+            }
+            if (status === 'executing') {
+              const nextAlive = this.alive.markWaiting(params.userId, 'executing plan', 'act')
+              this.bus.publish('run.event', { runId, event, stage: 'executing' })
+              params.emit(event, { ...data, alive: nextAlive })
+              return
+            }
             if (status === 'thinking') {
               const nextAlive = this.alive.patchForUser(params.userId, {
                 waitingReason: 'thinking',
@@ -253,6 +281,15 @@ export class NanobotLoopService {
                 urgency: roleDecision.urgency,
               })
               this.bus.publish('run.event', { runId, event })
+              params.emit(event, { ...data, alive: nextAlive })
+              return
+            }
+            if (status === 'verifying') {
+              const nextAlive = this.alive.patchForUser(params.userId, {
+                waitingReason: 'verifying outputs',
+                thoughtMode: 'reflect',
+              })
+              this.bus.publish('run.event', { runId, event, stage: 'verifying' })
               params.emit(event, { ...data, alive: nextAlive })
               return
             }

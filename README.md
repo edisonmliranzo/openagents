@@ -693,6 +693,25 @@ Enable `MANUS_LITE=true` to apply a low-cost preset that improves autonomous too
   - `MANUS_LITE_TOOL_RETRY_BASE_DELAY_MS=350`
   - `MANUS_LITE_NANOBOT_MAX_LOOP_STEPS=10`
 
+### MANUS_MODE preset
+
+Enable `MANUS_MODE=true` to apply a higher-autonomy Manus-style runtime contract:
+
+- Prompt/runtime behavior:
+  - explicitly runs understand -> plan -> execute -> verify
+  - pushes proactive tool use for external/factual tasks
+  - normalizes final replies into sections (`Intent`, `Plan`, `Actions`, `Verification`, `Result`, `Next actions`)
+- Routing defaults (applied when user settings are still stock defaults, or always with `MANUS_MODE_FORCE_ROUTING=true`):
+  - `MANUS_MODE_PROVIDER=ollama`
+  - `MANUS_MODE_MODEL=` (defaults to provider fast model when blank)
+- Tool-loop defaults (applied when `AGENT_*` values remain defaults):
+  - max rounds: `14`
+  - retry attempts: `3`
+  - retry base delay: `250`
+  - nanobot loop steps: `MANUS_MODE_NANOBOT_MAX_LOOP_STEPS=14`
+
+If both `MANUS_MODE` and `MANUS_LITE` are enabled, `MANUS_MODE` presets take precedence.
+
 ### Agent reliability tuning
 
 - `AGENT_MAX_TOOL_ROUNDS=6` max plan/act rounds per run
