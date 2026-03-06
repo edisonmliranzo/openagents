@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
 import type { DelegationEdge, SubagentRun } from '@prisma/client'
+import { LLMService } from '../../agent/llm.service'
 import { PrismaService } from '../../prisma/prisma.service'
+import { UsersService } from '../../users/users.service'
 import { NanobotBusService } from '../bus/nanobot-bus.service'
 import type {
   CreateNanobotSpecialistRunInput,
@@ -17,10 +19,18 @@ import type {
   NanobotSubagentStatus,
   NanobotSubagentTask,
 } from '../types'
+import type { LLMProvider } from '@openagents/shared'
 
 const DEFAULT_MAX_DELEGATES = 3
 const MAX_DELEGATES = 4
 const SPECIALIST_DELEGATE_ROLES: NanobotSpecialistRole[] = ['researcher', 'builder', 'operator', 'reviewer']
+
+interface SpecialistLlmContext {
+  provider: LLMProvider
+  model?: string
+  apiKey?: string
+  baseUrl?: string
+}
 
 @Injectable()
 export class NanobotSubagentService {
@@ -30,6 +40,8 @@ export class NanobotSubagentService {
   constructor(
     private bus: NanobotBusService,
     private prisma: PrismaService,
+    private llm: LLMService,
+    private users: UsersService,
   ) {}
 
   spawn(userId: string, label: string, role: NanobotSubagentRole = 'telemetry', runId?: string) {
@@ -170,6 +182,8 @@ export class NanobotSubagentService {
       return {
         ...current,
         steps: ['Run already completed. Pass force=true to re-run.'],
+        parallelized: current.delegatedRuns.length > 1,
+        delegateCount: current.delegatedRuns.length,
       }
     }
 
@@ -266,53 +280,34 @@ export class NanobotSubagentService {
         steps.push(`Delegated "${delegate.role}" specialist task.`)
       }
 
-      const collectedOutputs: Array<{ role: NanobotSpecialistRole; output: string }> = []
-      for (let index = 0; index < delegatedRuns.length; index += 1) {
-        const child = delegatedRuns[index]
-        const edge = delegationEdges[index]
-        const role = this.normalizeSpecialistRole(child.role)
-        const payload = this.parseJsonRecord(child.input)
-        const output = this.buildSpecialistOutput({
-          role,
+      const llmContext = await this.resolveSpecialistLlmContext(userId)
+      const delegateResults = await Promise.allSettled(
+        delegatedRuns.map((child, index) => this.executeDelegatedRun({
+          userId,
+          rootRunId: root.id,
           objective: root.objective,
           context,
-          planStep: typeof payload.planStep === 'string' ? payload.planStep : '',
-        })
+          child,
+          edge: delegationEdges[index],
+          llmContext,
+        })),
+      )
 
-        await this.prisma.delegationEdge.update({
-          where: { id: edge.id },
-          data: { status: 'accepted' },
-        })
+      const collectedOutputs: Array<{ role: NanobotSpecialistRole; output: string }> = []
+      for (let index = 0; index < delegateResults.length; index += 1) {
+        const result = delegateResults[index]
+        const role = this.normalizeSpecialistRole(delegatedRuns[index].role)
+        if (result.status === 'fulfilled') {
+          collectedOutputs.push(result.value)
+          steps.push(`Collected "${role}" output in parallel.`)
+          continue
+        }
 
-        await this.prisma.subagentRun.update({
-          where: { id: child.id },
-          data: {
-            status: 'done',
-            output,
-            finishedAt: new Date(),
-            error: null,
-          },
-        })
+        steps.push(`"${role}" specialist failed: ${this.safeError(result.reason)}`)
+      }
 
-        await this.prisma.delegationEdge.update({
-          where: { id: edge.id },
-          data: {
-            status: 'completed',
-            metadata: this.stringifyJson({
-              role,
-              outputPreview: output.slice(0, 220),
-            }),
-          },
-        })
-
-        this.bus.publish('subagent.completed', {
-          taskId: child.id,
-          userId,
-          role: this.toLegacyRole(role),
-          runId: root.id,
-        })
-        collectedOutputs.push({ role, output })
-        steps.push(`Collected "${role}" output.`)
+      if (collectedOutputs.length === 0) {
+        throw new BadRequestException('All specialist delegates failed.')
       }
 
       const synthesis = this.synthesizeOutputs(root.objective, plan.steps, collectedOutputs)
@@ -335,7 +330,12 @@ export class NanobotSubagentService {
       })
 
       const status = await this.getSpecialistStatus(userId, runId)
-      return { ...status, steps }
+      return {
+        ...status,
+        steps,
+        parallelized: delegatedRuns.length > 1,
+        delegateCount: delegatedRuns.length,
+      }
     } catch (error: any) {
       const message = typeof error?.message === 'string'
         ? error.message
@@ -465,6 +465,90 @@ export class NanobotSubagentService {
     return { steps: planSteps, delegates }
   }
 
+  private async executeDelegatedRun(input: {
+    userId: string
+    rootRunId: string
+    objective: string
+    context: string
+    child: SubagentRun
+    edge: DelegationEdge
+    llmContext: SpecialistLlmContext
+  }) {
+    const role = this.normalizeSpecialistRole(input.child.role)
+    const payload = this.parseJsonRecord(input.child.input)
+    const planStep = typeof payload.planStep === 'string' ? payload.planStep : ''
+
+    try {
+      await this.prisma.delegationEdge.update({
+        where: { id: input.edge.id },
+        data: { status: 'accepted' },
+      })
+
+      const output = await this.generateSpecialistOutput({
+        userId: input.userId,
+        role,
+        objective: input.objective,
+        context: input.context,
+        planStep,
+        llmContext: input.llmContext,
+      })
+
+      await this.prisma.subagentRun.update({
+        where: { id: input.child.id },
+        data: {
+          status: 'done',
+          output,
+          finishedAt: new Date(),
+          error: null,
+        },
+      })
+
+      await this.prisma.delegationEdge.update({
+        where: { id: input.edge.id },
+        data: {
+          status: 'completed',
+          metadata: this.stringifyJson({
+            role,
+            outputPreview: output.slice(0, 220),
+          }),
+        },
+      })
+
+      this.bus.publish('subagent.completed', {
+        taskId: input.child.id,
+        userId: input.userId,
+        role: this.toLegacyRole(role),
+        runId: input.rootRunId,
+      })
+
+      return { role, output }
+    } catch (error) {
+      const message = this.safeError(error)
+
+      await this.prisma.subagentRun.update({
+        where: { id: input.child.id },
+        data: {
+          status: 'error',
+          error: message.slice(0, 800),
+          finishedAt: new Date(),
+        },
+      }).catch(() => {})
+
+      await this.prisma.delegationEdge.update({
+        where: { id: input.edge.id },
+        data: {
+          status: 'failed',
+          metadata: this.stringifyJson({
+            role,
+            error: message.slice(0, 400),
+          }),
+        },
+      }).catch(() => {})
+
+      throw error
+    }
+  }
+
   private buildDelegateIntent(role: NanobotSpecialistRole, objective: string, planStep: string) {
     const headline = objective.slice(0, 180)
     if (role === 'researcher') {
@@ -479,7 +563,34 @@ export class NanobotSubagentService {
     return `Review final plan for risk and quality on "${headline}" and propose corrective actions.`
   }
 
-  private buildSpecialistOutput(input: {
+  private async generateSpecialistOutput(input: {
+    userId: string
+    role: NanobotSpecialistRole
+    objective: string
+    context: string
+    planStep: string
+    llmContext: SpecialistLlmContext
+  }) {
+    const systemPrompt = this.buildSpecialistSystemPrompt(input.role)
+    const userPrompt = this.buildSpecialistUserPrompt(input)
+
+    try {
+      const response = await this.completeSpecialistPrompt(
+        input.userId,
+        input.llmContext,
+        systemPrompt,
+        userPrompt,
+      )
+      const content = response.content.trim()
+      if (content) return content.slice(0, 4_000)
+    } catch {
+      // Fall back to deterministic specialist scaffolding below.
+    }
+
+    return this.buildFallbackSpecialistOutput(input)
+  }
+
+  private buildFallbackSpecialistOutput(input: {
     role: NanobotSpecialistRole
     objective: string
     context: string
@@ -523,6 +634,114 @@ export class NanobotSubagentService {
       '- Correctness checks listed for edge cases and regressions.',
       '- Final recommendations include go/no-go criteria.',
     ].join('\n')
+  }
+
+  private buildSpecialistSystemPrompt(role: NanobotSpecialistRole) {
+    if (role === 'researcher') {
+      return [
+        'You are the Researcher specialist in a parallel execution crew.',
+        'Produce concise, high-signal findings for the main agent.',
+        'Return markdown with sections: Focus, Findings, Unknowns, Handoff.',
+        'Be concrete and avoid filler.',
+      ].join('\n')
+    }
+    if (role === 'builder') {
+      return [
+        'You are the Builder specialist in a parallel execution crew.',
+        'Turn the objective into an implementation path with practical milestones.',
+        'Return markdown with sections: Goal, Build Plan, Tradeoffs, Handoff.',
+        'Optimize for execution clarity.',
+      ].join('\n')
+    }
+    if (role === 'operator') {
+      return [
+        'You are the Operator specialist in a parallel execution crew.',
+        'Focus on execution order, validation, rollout, monitoring, and rollback.',
+        'Return markdown with sections: Preconditions, Execution, Verification, Rollback.',
+        'Be operational and specific.',
+      ].join('\n')
+    }
+    return [
+      'You are the Reviewer specialist in a parallel execution crew.',
+      'Stress-test the proposed work for correctness, safety, and regressions.',
+      'Return markdown with sections: Risks, Checks, Gaps, Recommendation.',
+      'Be direct and concrete.',
+    ].join('\n')
+  }
+
+  private buildSpecialistUserPrompt(input: {
+    role: NanobotSpecialistRole
+    objective: string
+    context: string
+    planStep: string
+  }) {
+    return [
+      `Role: ${input.role}`,
+      `Objective: ${input.objective}`,
+      `Assigned step: ${input.planStep || 'General support for the objective.'}`,
+      `Context: ${input.context || 'No extra context provided.'}`,
+      'Produce output that another agent can immediately use without re-explaining the task.',
+    ].join('\n\n')
+  }
+
+  private async completeSpecialistPrompt(
+    userId: string,
+    llmContext: SpecialistLlmContext,
+    systemPrompt: string,
+    userPrompt: string,
+  ) {
+    try {
+      return await this.llm.complete(
+        [{ role: 'user', content: userPrompt }],
+        [],
+        systemPrompt,
+        llmContext.provider,
+        llmContext.apiKey,
+        llmContext.baseUrl,
+        llmContext.model,
+      )
+    } catch (error: any) {
+      if (
+        llmContext.provider !== 'ollama'
+        && typeof error?.message === 'string'
+        && error.message.toLowerCase().includes('api key is not configured')
+      ) {
+        const fallback = await this.resolveFallbackOllamaContext(userId)
+        return this.llm.complete(
+          [{ role: 'user', content: userPrompt }],
+          [],
+          systemPrompt,
+          fallback.provider,
+          fallback.apiKey,
+          fallback.baseUrl,
+          fallback.model,
+        )
+      }
+      throw error
+    }
+  }
+
+  private async resolveSpecialistLlmContext(userId: string): Promise<SpecialistLlmContext> {
+    const settings = await this.users.getSettings(userId)
+    const provider = this.normalizeProvider(settings.preferredProvider) ?? 'anthropic'
+    const model = settings.preferredModel?.trim() || undefined
+    const key = await this.users.getRawLlmKey(userId, provider)
+    return {
+      provider,
+      model,
+      apiKey: key?.isActive ? (key.apiKey ?? undefined) : undefined,
+      baseUrl: key?.isActive ? (key.baseUrl ?? undefined) : undefined,
+    }
+  }
+
+  private async resolveFallbackOllamaContext(userId: string): Promise<SpecialistLlmContext> {
+    const ollama = await this.users.getRawLlmKey(userId, 'ollama')
+    return {
+      provider: 'ollama',
+      apiKey: undefined,
+      baseUrl: ollama?.isActive ? (ollama.baseUrl ?? undefined) : undefined,
+      model: undefined,
+    }
   }
 
   private synthesizeOutputs(
@@ -648,6 +867,25 @@ export class NanobotSubagentService {
     if (role === 'builder' || role === 'operator') return 'executor'
     if (role === 'reviewer') return 'critic'
     return 'planner'
+  }
+
+  private normalizeProvider(value?: string | null): LLMProvider | null {
+    const normalized = (value ?? '').trim().toLowerCase()
+    if (
+      normalized === 'anthropic'
+      || normalized === 'openai'
+      || normalized === 'google'
+      || normalized === 'ollama'
+      || normalized === 'minimax'
+    ) {
+      return normalized
+    }
+    return null
+  }
+
+  private safeError(error: unknown) {
+    if (error instanceof Error) return error.message
+    return typeof error === 'string' ? error : 'Unknown error'
   }
 
   private async clearDelegatedRuns(userId: string, runId: string) {

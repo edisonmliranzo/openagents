@@ -6,6 +6,7 @@ import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { ConversationList } from '@/components/chat/ConversationList'
 import { LiveToolPanel } from '@/components/chat/LiveToolPanel'
+import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { PanelRight, RefreshCw, ShieldCheck } from 'lucide-react'
 
@@ -25,6 +26,7 @@ export default function ChatPage() {
   const [showToolsPanel, setShowToolsPanel] = useState(false)
   const {
     conversations,
+    conversationsLoaded,
     activeConversationId,
     pendingApprovals,
     gatewayStatus,
@@ -49,9 +51,14 @@ export default function ChatPage() {
       }
 
       if (activeConversationId) return
+      if (!conversationsLoaded) return
 
       if (conversations.length > 0) {
-        await selectConversation(conversations[0].id)
+        const settings = await sdk.users.getSettings().catch(() => null)
+        const preferredConversationId = settings?.lastActiveConversationId ?? null
+        const resumeConversationId = conversations.find((conversation) => conversation.id === preferredConversationId)?.id
+          ?? conversations[0].id
+        await selectConversation(resumeConversationId)
         return
       }
 
@@ -68,6 +75,7 @@ export default function ChatPage() {
   }, [
     targetConversationId,
     activeConversationId,
+    conversationsLoaded,
     conversations,
     selectConversation,
     createConversation,

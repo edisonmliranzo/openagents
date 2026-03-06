@@ -13,6 +13,7 @@ import { DeepResearchTool } from './connectors/deep-research.tool'
 import { ComputerUseTool } from './connectors/computer-use.tool'
 import { CronModule } from '../cron/cron.module'
 import { ConnectorsModule } from '../connectors/connectors.module'
+import { McpService } from './mcp.service'
 
 @Module({
   imports: [CronModule, ConnectorsModule],
@@ -28,6 +29,7 @@ import { ConnectorsModule } from '../connectors/connectors.module'
     BybitTool,
     DeepResearchTool,
     ComputerUseTool,
+    McpService,
   ],
   controllers: [ToolsController],
   exports: [ToolsService],

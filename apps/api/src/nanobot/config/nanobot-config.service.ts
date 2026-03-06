@@ -65,6 +65,25 @@ export class NanobotConfigService {
     return this.config.get<string>('NANOBOT_RUNTIME_LABEL') ?? 'nanobot'
   }
 
+  get parallelDelegationEnabled() {
+    if (typeof this.runtimeOverrides.parallelDelegationEnabled === 'boolean') {
+      return this.runtimeOverrides.parallelDelegationEnabled
+    }
+    return parseBoolean(this.config.get<string>('NANOBOT_PARALLEL_DELEGATION_ENABLED'), true)
+  }
+
+  get parallelDelegationMaxAgents() {
+    if (typeof this.runtimeOverrides.parallelDelegationMaxAgents === 'number') {
+      return Math.max(1, Math.min(4, Math.floor(this.runtimeOverrides.parallelDelegationMaxAgents)))
+    }
+    return parseIntInRange(
+      this.config.get<string>('NANOBOT_PARALLEL_DELEGATION_MAX_AGENTS'),
+      3,
+      1,
+      4,
+    )
+  }
+
   updateRuntime(patch: NanobotConfigPatch): NanobotRuntimeConfig {
     const next: NanobotConfigPatch = { ...this.runtimeOverrides }
 
@@ -77,6 +96,15 @@ export class NanobotConfigService {
       const normalized = patch.runtimeLabel.trim()
       if (normalized) next.runtimeLabel = normalized
     }
+    if (typeof patch.parallelDelegationEnabled === 'boolean') {
+      next.parallelDelegationEnabled = patch.parallelDelegationEnabled
+    }
+    if (
+      typeof patch.parallelDelegationMaxAgents === 'number'
+      && Number.isFinite(patch.parallelDelegationMaxAgents)
+    ) {
+      next.parallelDelegationMaxAgents = Math.max(1, Math.min(4, Math.floor(patch.parallelDelegationMaxAgents)))
+    }
 
     this.runtimeOverrides = next
     return this.toJSON()
@@ -88,6 +116,8 @@ export class NanobotConfigService {
       maxLoopSteps: this.maxLoopSteps,
       shadowMode: this.shadowMode,
       runtimeLabel: this.runtimeLabel,
+      parallelDelegationEnabled: this.parallelDelegationEnabled,
+      parallelDelegationMaxAgents: this.parallelDelegationMaxAgents,
     }
   }
 }

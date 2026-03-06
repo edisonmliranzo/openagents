@@ -10,6 +10,8 @@ export interface NanobotRuntimeConfig {
   maxLoopSteps: number
   shadowMode: boolean
   runtimeLabel: string
+  parallelDelegationEnabled: boolean
+  parallelDelegationMaxAgents: number
 }
 
 export interface NanobotConfigPatch {
@@ -17,6 +19,8 @@ export interface NanobotConfigPatch {
   maxLoopSteps?: number
   shadowMode?: boolean
   runtimeLabel?: string
+  parallelDelegationEnabled?: boolean
+  parallelDelegationMaxAgents?: number
 }
 
 export interface NanobotChatMessage {
@@ -222,6 +226,8 @@ export interface NanobotSpecialistRunStatus {
 
 export interface NanobotSpecialistRunExecutionResult extends NanobotSpecialistRunStatus {
   steps: string[]
+  parallelized: boolean
+  delegateCount: number
 }
 
 export interface NanobotPresenceTickResult {

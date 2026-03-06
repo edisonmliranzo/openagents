@@ -1,4 +1,4 @@
-export type ToolCategory = 'email' | 'calendar' | 'web' | 'notes' | 'custom'
+export type ToolCategory = 'email' | 'calendar' | 'web' | 'notes' | 'custom' | 'mcp'
 export type ToolStatus = 'available' | 'connected' | 'error'
 
 export interface Tool {
@@ -9,6 +9,9 @@ export interface Tool {
   category: ToolCategory
   requiresApproval: boolean
   inputSchema: Record<string, unknown>
+  source?: 'builtin' | 'mcp'
+  serverId?: string | null
+  originalName?: string | null
 }
 
 export interface ConnectedTool {

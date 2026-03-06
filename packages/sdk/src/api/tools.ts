@@ -6,6 +6,9 @@ export interface ToolDefinition {
   description: string
   requiresApproval: boolean
   inputSchema: Record<string, unknown>
+  source?: 'builtin' | 'mcp'
+  serverId?: string
+  originalName?: string
 }
 
 export function createToolsApi(client: OpenAgentsClient) {

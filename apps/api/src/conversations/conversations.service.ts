@@ -35,7 +35,13 @@ export class ConversationsService {
 
   async delete(id: string, userId: string) {
     await this.get(id, userId)
-    await this.prisma.conversation.delete({ where: { id } })
+    await this.prisma.$transaction([
+      this.prisma.userSettings.updateMany({
+        where: { userId, lastActiveConversationId: id },
+        data: { lastActiveConversationId: null },
+      }),
+      this.prisma.conversation.delete({ where: { id } }),
+    ])
   }
 
   async touchLastMessage(conversationId: string) {

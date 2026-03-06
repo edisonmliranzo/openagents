@@ -13,6 +13,7 @@ class UpdateSettingsDto {
   @IsString() @IsOptional() preferredProvider?: string
   @IsString() @IsOptional() preferredModel?: string
   @IsString() @IsOptional() customSystemPrompt?: string
+  @IsString() @IsOptional() lastActiveConversationId?: string
 }
 
 class UpsertLlmKeyDto {
