@@ -50,11 +50,29 @@ export class UsersService {
     preferredProvider?: string
     preferredModel?: string
     customSystemPrompt?: string | null
+    lastActiveConversationId?: string | null
   }) {
+    const updateData: {
+      preferredProvider?: string
+      preferredModel?: string
+      customSystemPrompt?: string | null
+      lastActiveConversationId?: string | null
+    } = {}
+
+    if ('preferredProvider' in data) updateData.preferredProvider = data.preferredProvider
+    if ('preferredModel' in data) updateData.preferredModel = data.preferredModel
+    if ('customSystemPrompt' in data) updateData.customSystemPrompt = data.customSystemPrompt
+    if ('lastActiveConversationId' in data) {
+      updateData.lastActiveConversationId = await this.normalizeLastActiveConversationId(
+        userId,
+        data.lastActiveConversationId,
+      )
+    }
+
     return this.prisma.userSettings.upsert({
       where: { userId },
-      update: data,
-      create: { userId, ...data },
+      update: updateData,
+      create: { userId, ...updateData },
     })
   }
 
@@ -284,6 +302,22 @@ export class UsersService {
   private normalizeOptionalText(value?: string | null) {
     const normalized = (value ?? '').trim()
     return normalized.length > 0 ? normalized : null
+  }
+
+  private async normalizeLastActiveConversationId(userId: string, value?: string | null) {
+    const normalized = this.normalizeOptionalText(value)
+    if (!normalized) return null
+
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: normalized },
+      select: { id: true, userId: true },
+    })
+
+    if (!conversation || conversation.userId !== userId) {
+      throw new BadRequestException('Invalid active conversation.')
+    }
+
+    return conversation.id
   }
 
   private normalizeDomain(input: string) {

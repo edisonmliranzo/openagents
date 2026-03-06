@@ -387,6 +387,7 @@ model UserSettings {
   preferredProvider  String   @default("anthropic")
   preferredModel     String   @default("claude-sonnet-4-6")
   customSystemPrompt String?
+  lastActiveConversationId String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

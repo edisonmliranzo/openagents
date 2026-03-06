@@ -46,6 +46,20 @@ const sdk = createSDK({
 
 export { sdk as mobileSdk }
 
+async function rememberLastActiveConversation(conversationId: string | null) {
+  try {
+    await sdk.users.updateSettings({ lastActiveConversationId: conversationId })
+  } catch {
+    // Keep local chat usable even if account settings sync fails.
+  }
+}
+
+async function restoreConversation(conversationId: string) {
+  const messages = await sdk.conversations.messages(conversationId)
+  await rememberLastActiveConversation(conversationId)
+  return { conversationId, messages }
+}
+
 interface MobileChatState {
   // Auth
   user: User | null
@@ -100,6 +114,10 @@ export const useMobileChatStore = create<MobileChatState>((set, get) => ({
       user: result.user,
       accessToken: result.tokens.accessToken,
       refreshToken: result.tokens.refreshToken,
+      conversationId: null,
+      messages: [],
+      pendingApprovals: [],
+      isStreaming: false,
     })
   },
 
@@ -107,7 +125,15 @@ export const useMobileChatStore = create<MobileChatState>((set, get) => ({
     try { await sdk.auth.logout() } catch {}
     sdk.client.clearTokens()
     await AsyncStorage.removeItem('mobile-auth')
-    set({ user: null, accessToken: null, refreshToken: null, conversationId: null, messages: [] })
+    set({
+      user: null,
+      accessToken: null,
+      refreshToken: null,
+      conversationId: null,
+      messages: [],
+      pendingApprovals: [],
+      isStreaming: false,
+    })
   },
 
   conversationId: null,
@@ -117,12 +143,39 @@ export const useMobileChatStore = create<MobileChatState>((set, get) => ({
 
   async initConversation() {
     if (get().conversationId) return
+    const settings = await sdk.users.getSettings().catch(() => null)
+    const preferredConversationId = settings?.lastActiveConversationId?.trim() || null
+
+    if (preferredConversationId) {
+      try {
+        const restored = await restoreConversation(preferredConversationId)
+        set(restored)
+        return
+      } catch {
+        // Fall back to the latest available conversation below.
+      }
+    }
+
+    const conversations = await sdk.conversations.list()
+    const latestConversationId = conversations[0]?.id ?? null
+
+    if (latestConversationId) {
+      const restored = await restoreConversation(latestConversationId)
+      set(restored)
+      return
+    }
+
     const conv = await sdk.conversations.create()
-    set({ conversationId: conv.id })
+    await rememberLastActiveConversation(conv.id)
+    set({ conversationId: conv.id, messages: [] })
   },
 
   async sendMessage(content) {
-    const { conversationId } = get()
+    let { conversationId } = get()
+    if (!conversationId) {
+      await get().initConversation()
+      conversationId = get().conversationId
+    }
     if (!conversationId) return
 
     const tempMsg: Message = {

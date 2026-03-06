@@ -154,7 +154,7 @@ export class SkillRegistryService {
   ): Promise<SkillRegistryEntryDto> {
     const entry = await this.requireEntryWithVersions(userId, skillId)
     const selected = this.pickVersion(entry, input.version)
-    this.assertVersionCompatible(selected)
+    await this.assertVersionCompatible(selected)
 
     await this.skills.upsertCustomSkill(userId, {
       id: selected.manifest.id,
@@ -298,7 +298,7 @@ export class SkillRegistryService {
     return versions[currentIndex + 1] ?? null
   }
 
-  private assertVersionCompatible(version: StoredSkillVersion) {
+  private async assertVersionCompatible(version: StoredSkillVersion) {
     const compatibility = version.compatibility
     if (!compatibility) return
 
@@ -314,7 +314,7 @@ export class SkillRegistryService {
     }
 
     if (compatibility.requiredTools && compatibility.requiredTools.length > 0) {
-      const knownTools = new Set(this.tools.getAllDefinitions().map((tool) => tool.name))
+      const knownTools = new Set((await this.tools.getAllDefinitions()).map((tool) => tool.name))
       const missing = compatibility.requiredTools.filter((tool) => !knownTools.has(tool))
       if (missing.length > 0) {
         throw new BadRequestException(

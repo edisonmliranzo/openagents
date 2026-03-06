@@ -80,8 +80,16 @@ function deriveGatewayFailure(err: unknown, fallback: string): {
   }
 }
 
+function rememberActiveConversation(conversationId: string) {
+  return sdk.users.updateSettings({ lastActiveConversationId: conversationId }).catch(() => {
+    // Keep the selected conversation active locally even if settings sync fails.
+  })
+}
+
 interface ChatState {
   conversations: Conversation[]
+  conversationsLoading: boolean
+  conversationsLoaded: boolean
   activeConversationId: string | null
   messages: Message[]
   pendingApprovals: Approval[]
@@ -112,6 +120,8 @@ interface ChatState {
 
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
+  conversationsLoading: false,
+  conversationsLoaded: false,
   activeConversationId: null,
   messages: [],
   pendingApprovals: [],
@@ -125,26 +135,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
   lastError: null,
 
   async loadConversations() {
+    set({ conversationsLoading: true })
     try {
       const conversations = await sdk.conversations.list()
       set({
         conversations,
+        conversationsLoading: false,
+        conversationsLoaded: true,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
       })
     } catch (err: unknown) {
-      set(deriveGatewayFailure(err, 'Failed to load conversations.'))
+      set({
+        ...deriveGatewayFailure(err, 'Failed to load conversations.'),
+        conversationsLoading: false,
+        conversationsLoaded: true,
+      })
     }
   },
 
   async selectConversation(id) {
     try {
-      const messages = await sdk.conversations.messages(id)
+      const [messages, activeHandoff] = await Promise.all([
+        sdk.conversations.messages(id),
+        sdk.handoffs.getActive(id),
+      ])
       set({
         activeConversationId: id,
         messages,
-        activeHandoff: await sdk.handoffs.getActive(id),
+        activeHandoff,
         streamToolEvents: [],
         runStatus: null,
         learnedSkill: null,
@@ -152,6 +172,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         gatewayMessage: 'connected',
         lastError: null,
       })
+      void rememberActiveConversation(id)
     } catch (err: unknown) {
       set(deriveGatewayFailure(err, 'Failed to load conversation.'))
     }
@@ -172,6 +193,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         gatewayMessage: 'connected',
         lastError: null,
       }))
+      void rememberActiveConversation(conv.id)
       return conv.id
     } catch (err: unknown) {
       set(deriveGatewayFailure(err, 'Failed to create conversation.'))

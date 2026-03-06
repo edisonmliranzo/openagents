@@ -10,6 +10,8 @@ OpenAgents is a local-first AI agent platform with a modern web control plane, t
 - File-based memory model (`SOUL.md`, `USER.md`, `MEMORY.md`, `HEARTBEAT.md`, `cron.json`).
 - Browser capture ingest endpoint + extension scaffold for selected web content.
 - Tool execution loop with ReAct-style calls and approval gates.
+- Native MCP stdio server support with auto-discovered external tools.
+- Parallel specialist delegation for complex nanobot runs.
 - Signed marketplace packs, orchestration run state, and scheduled autonomy windows.
 - Platform control features:
   - templates marketplace
@@ -573,6 +575,8 @@ pnpm prod:down
 - `notes_create`
 - `notes_list`
 
+Additional MCP tools are auto-discovered at runtime from `MCP_SERVERS_JSON` and exposed as namespaced tools such as `mcp_filesystem_read_file`.
+
 ### Memory files
 
 Per-user memory is persisted as editable files under `data/memory/...`, including:
@@ -657,6 +661,35 @@ DuckDuckGo (no API key):
 
 - `WEB_SEARCH_PROVIDER=duckduckgo`
 
+### MCP servers (native stdio)
+
+OpenAgents can load external MCP servers directly into the API tool registry. Discovered tools are exposed to the agent, `/api/v1/tools`, and the Channels UI as first-class tools.
+
+- Transport: stdio
+- Config env: `MCP_SERVERS_JSON`
+- Tool naming: `mcp_<serverId>_<toolName>`
+- Approval default: MCP tools require approval unless the server marks them `readOnlyHint: true`
+
+Example:
+
+```env
+MCP_REQUEST_TIMEOUT_MS=20000
+MCP_SERVERS_JSON={"filesystem":{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","./data/memory"],"cwd":"."}}
+```
+
+Passing secrets through to an MCP server:
+
+```env
+GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...
+MCP_SERVERS_JSON={"github":{"command":"npx","args":["-y","@modelcontextprotocol/server-github"],"env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"${GITHUB_PERSONAL_ACCESS_TOKEN}"}}}
+```
+
+Notes:
+
+- Relative `cwd` values are resolved from the API process working directory.
+- The configured `command` must be available where the API runs, including inside Docker if you enable MCP in the container.
+- If an MCP server is unavailable or misconfigured, OpenAgents logs the error and continues without blocking built-in tools.
+
 ### Computer-use (Playwright)
 
 - Install runtime in API workspace: `pnpm --filter @openagents/api add playwright`
@@ -717,6 +750,21 @@ If both `MANUS_MODE` and `MANUS_LITE` are enabled, `MANUS_MODE` presets take pre
 - `AGENT_MAX_TOOL_ROUNDS=6` max plan/act rounds per run
 - `AGENT_TOOL_RETRY_ATTEMPTS=1` retries for retryable tool errors
 - `AGENT_TOOL_RETRY_BASE_DELAY_MS=500` linear backoff base delay
+
+### Nanobot parallel delegation
+
+Nanobot can spin up multiple specialist agents for complex work, run them in parallel, and feed the synthesized output back into the main run when the task warrants it.
+
+- `NANOBOT_PARALLEL_DELEGATION_ENABLED=true`
+- `NANOBOT_PARALLEL_DELEGATION_MAX_AGENTS=3`
+
+Current auto-trigger heuristics favor:
+
+- high-complexity requests
+- deep research tasks
+- multi-step asks involving comparison, architecture, migration, rollout, or tradeoffs
+
+Specialist roles currently fan out as researcher, builder, operator, and reviewer, then synthesize back into one plan.
 
 ### Queue-mode approval continuation (OpenClaw-style)
 

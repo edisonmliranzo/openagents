@@ -34,6 +34,12 @@ interface IntentSkillTemplate {
   tools: string[]
 }
 
+interface SpecialistCrewSupport {
+  runId: string
+  delegateCount: number
+  synthesizedOutput: string
+}
+
 const MANUS_MODE_NANOBOT_PROMPT_APPENDIX = `Manus mode:
 Operate with high autonomy using understand -> plan -> execute -> verify cycles.
 Use tools proactively for factual or external tasks.
@@ -182,7 +188,14 @@ export class NanobotLoopService {
       const prompt = await this.context.buildSystemPrompt(params.userId, activeSkills)
       const rolePrompt = this.roles.buildPromptAppendix(roleDecision)
       const personalityPrompt = this.personality.buildPromptAppendix(personalityState)
-      const promptAppendixParts = [personalityPrompt, rolePrompt]
+      const specialistCrew = await this.maybeRunSpecialistCrew(params, runId, roleDecision)
+      const specialistPrompt = specialistCrew?.synthesizedOutput
+        ? [
+            'Parallel specialist crew synthesis:',
+            specialistCrew.synthesizedOutput,
+          ].join('\n\n')
+        : ''
+      const promptAppendixParts = [personalityPrompt, rolePrompt, specialistPrompt]
       if (this.config.manusModeEnabled) {
         promptAppendixParts.push(MANUS_MODE_NANOBOT_PROMPT_APPENDIX)
       }
@@ -197,6 +210,8 @@ export class NanobotLoopService {
         toolCount: availableTools.length,
         promptLength: prompt.length,
         maxLoopSteps: this.config.maxLoopSteps,
+        specialistDelegationEnabled: this.config.parallelDelegationEnabled,
+        specialistDelegationAgents: specialistCrew?.delegateCount ?? 0,
         thoughtMode: roleDecision.thoughtMode,
         thinkingDepth: roleDecision.thinkingDepth,
         complexity: roleDecision.complexity,
@@ -217,6 +232,16 @@ export class NanobotLoopService {
         urgency: roleDecision.urgency,
         taskType: roleDecision.taskType,
       })
+      if (specialistCrew) {
+        this.bus.publish('run.event', {
+          source: 'nanobot.specialists.auto',
+          runId,
+          userId: params.userId,
+          conversationId: params.conversationId,
+          specialistRunId: specialistCrew.runId,
+          delegateCount: specialistCrew.delegateCount,
+        })
+      }
 
       this.subagents.spawnRoleCrew(params.userId, runId, roleDecision)
       this.subagents.spawn(params.userId, 'nanobot-telemetry', 'telemetry', runId)
@@ -474,6 +499,88 @@ export class NanobotLoopService {
       conversationId: params.conversationId,
       skillCommand: true,
     })
+  }
+
+  private async maybeRunSpecialistCrew(
+    params: NanobotRunParams,
+    runId: string,
+    roleDecision: ReturnType<NanobotRoleEngineService['evaluate']>,
+  ): Promise<SpecialistCrewSupport | null> {
+    if (!this.config.parallelDelegationEnabled) return null
+    if (!this.shouldUseSpecialists(params.userMessage, roleDecision)) return null
+
+    const delegateCount = this.pickDelegateCount(roleDecision, params.userMessage)
+    const context = [
+      `User request: ${params.userMessage}`,
+      `Task type: ${roleDecision.taskType}`,
+      `Thought mode: ${roleDecision.thoughtMode}`,
+      `Thinking depth: ${roleDecision.thinkingDepth}`,
+      `Complexity: ${roleDecision.complexity}`,
+      `Urgency: ${roleDecision.urgency}`,
+      roleDecision.plannerPlan.length > 0
+        ? `Planner plan:\n${roleDecision.plannerPlan.map((step, index) => `${index + 1}. ${step}`).join('\n')}`
+        : '',
+      roleDecision.criticConcerns.length > 0
+        ? `Critic concerns:\n${roleDecision.criticConcerns.map((item) => `- ${item}`).join('\n')}`
+        : '',
+    ].filter(Boolean).join('\n\n')
+
+    try {
+      params.emit('status', {
+        status: 'planning',
+        runtime: this.config.runtimeLabel,
+        runId,
+        specialists: {
+          enabled: true,
+          delegateCount,
+        },
+      })
+
+      const specialistRun = await this.subagents.createSpecialistRun(params.userId, {
+        objective: roleDecision.plannerGoal,
+        conversationId: params.conversationId,
+        context,
+        maxDelegates: delegateCount,
+      })
+      const specialistResult = await this.subagents.runSpecialist(params.userId, specialistRun.id)
+      const synthesizedOutput = specialistResult.synthesizedOutput?.trim()
+      if (!synthesizedOutput) return null
+
+      return {
+        runId: specialistRun.id,
+        delegateCount: specialistResult.delegateCount,
+        synthesizedOutput,
+      }
+    } catch (error: any) {
+      this.logger.warn(`Auto specialist delegation skipped: ${error?.message ?? 'unknown error'}`)
+      return null
+    }
+  }
+
+  private shouldUseSpecialists(
+    userMessage: string,
+    roleDecision: ReturnType<NanobotRoleEngineService['evaluate']>,
+  ) {
+    if (roleDecision.complexity === 'high') return true
+    if (roleDecision.taskType === 'research' && roleDecision.thinkingDepth === 'deep') return true
+    if (
+      roleDecision.plannerPlan.length >= 4
+      && /(and|then|compare|analy[sz]e|architecture|migration|multi-step|tradeoff|rollout)/i.test(userMessage)
+    ) {
+      return true
+    }
+    return false
+  }
+
+  private pickDelegateCount(
+    roleDecision: ReturnType<NanobotRoleEngineService['evaluate']>,
+    userMessage: string,
+  ) {
+    let count = 2
+    if (roleDecision.complexity === 'high') count = 3
+    if (roleDecision.taskType === 'ops') count = Math.max(count, 3)
+    if (/(review|verify|risk|rollback|qa)/i.test(userMessage)) count = Math.max(count, 3)
+    return Math.max(1, Math.min(count, this.config.parallelDelegationMaxAgents))
   }
 
   private async countRecentRunTools(conversationId: string) {

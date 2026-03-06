@@ -11,7 +11,7 @@ export class ToolsController {
   constructor(private tools: ToolsService) {}
 
   @Get()
-  list() {
+  async list() {
     return this.tools.getAllDefinitions()
   }
 }

@@ -35,6 +35,16 @@ class UpdateNanobotConfigDto {
   @IsOptional()
   @IsString()
   runtimeLabel?: string
+
+  @IsOptional()
+  @IsBoolean()
+  parallelDelegationEnabled?: boolean
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  parallelDelegationMaxAgents?: number
 }
 
 class TriggerCronDto {

@@ -327,12 +327,20 @@ export class AgentVersionsService {
     const record = this.asRecord(raw) ?? {}
     const maxLoopStepsRaw = Number.parseInt(`${record.maxLoopSteps ?? 8}`, 10)
     const maxLoopSteps = Number.isFinite(maxLoopStepsRaw) ? Math.max(1, Math.min(maxLoopStepsRaw, 64)) : 8
+    const parallelDelegationMaxAgentsRaw = Number.parseInt(`${record.parallelDelegationMaxAgents ?? 3}`, 10)
+    const parallelDelegationMaxAgents = Number.isFinite(parallelDelegationMaxAgentsRaw)
+      ? Math.max(1, Math.min(parallelDelegationMaxAgentsRaw, 4))
+      : 3
 
     return {
       enabled: Boolean(record.enabled),
       maxLoopSteps,
       shadowMode: Boolean(record.shadowMode),
       runtimeLabel: this.optionalText(record.runtimeLabel)?.slice(0, 80) ?? 'nanobot',
+      parallelDelegationEnabled: record.parallelDelegationEnabled == null
+        ? true
+        : Boolean(record.parallelDelegationEnabled),
+      parallelDelegationMaxAgents,
     }
   }
 

@@ -4,6 +4,7 @@ export interface UserSettings {
   preferredProvider: string
   preferredModel: string
   customSystemPrompt: string | null
+  lastActiveConversationId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -12,6 +13,7 @@ export interface UpdateSettingsDto {
   preferredProvider?: string
   preferredModel?: string
   customSystemPrompt?: string | null
+  lastActiveConversationId?: string | null
 }
 
 export interface LlmApiKey {

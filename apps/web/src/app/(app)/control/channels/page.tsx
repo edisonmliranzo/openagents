@@ -14,6 +14,9 @@ interface ConnectorTool {
   displayName: string
   description: string
   requiresApproval: boolean
+  source?: 'builtin' | 'mcp'
+  serverId?: string
+  originalName?: string
 }
 
 interface ChannelGroup {
@@ -27,10 +30,13 @@ const CHANNEL_GROUPS: ChannelGroup[] = [
   { id: 'calendar', label: 'Calendar', description: 'Availability and event creation' },
   { id: 'web', label: 'Web', description: 'Web content retrieval' },
   { id: 'notes', label: 'Notes', description: 'Internal notes and memory capture' },
+  { id: 'mcp', label: 'MCP', description: 'Model Context Protocol servers' },
   { id: 'other', label: 'Other', description: 'Additional connector capabilities' },
 ]
 
-function inferGroupId(toolName: string) {
+function inferGroupId(tool: ConnectorTool) {
+  if (tool.source === 'mcp') return 'mcp'
+  const toolName = tool.name
   if (toolName.startsWith('gmail_')) return 'gmail'
   if (toolName.startsWith('calendar_')) return 'calendar'
   if (toolName.startsWith('web_')) return 'web'
@@ -127,7 +133,7 @@ export default function ChannelsPage() {
     }
 
     for (const tool of tools) {
-      const groupId = inferGroupId(tool.name)
+      const groupId = inferGroupId(tool)
       const list = grouped.get(groupId) ?? []
       list.push(tool)
       grouped.set(groupId, list)
@@ -395,16 +401,29 @@ export default function ChannelsPage() {
                         <p className="text-sm font-semibold text-slate-800">{tool.displayName}</p>
                         <p className="mt-1 text-xs text-slate-500">{tool.description}</p>
                         <p className="mt-1 font-mono text-[11px] text-slate-400">{tool.name}</p>
+                        {tool.source === 'mcp' && (
+                          <p className="mt-1 text-[11px] text-slate-400">
+                            server: <span className="font-mono">{tool.serverId ?? 'unknown'}</span>
+                            {tool.originalName ? ` | original: ${tool.originalName}` : ''}
+                          </p>
+                        )}
                       </div>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                          tool.requiresApproval
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}
-                      >
-                        {tool.requiresApproval ? 'approval' : 'direct'}
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                            tool.requiresApproval
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-emerald-100 text-emerald-700'
+                          }`}
+                        >
+                          {tool.requiresApproval ? 'approval' : 'direct'}
+                        </span>
+                        {tool.source === 'mcp' && (
+                          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                            MCP
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
