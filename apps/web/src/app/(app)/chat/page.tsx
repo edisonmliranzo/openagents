@@ -56,8 +56,9 @@ export default function ChatPage() {
       if (conversations.length > 0) {
         const settings = await sdk.users.getSettings().catch(() => null)
         const preferredConversationId = settings?.lastActiveConversationId ?? null
-        const resumeConversationId = conversations.find((conversation) => conversation.id === preferredConversationId)?.id
-          ?? conversations[0].id
+        const resumeConversationId =
+          conversations.find((conversation) => conversation.id === preferredConversationId)?.id ??
+          conversations[0].id
         await selectConversation(resumeConversationId)
         return
       }
@@ -102,14 +103,14 @@ export default function ChatPage() {
         <header className="oa-card-elevated rounded-2xl px-4 py-3 sm:px-5">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--accent)] text-[11px] font-bold text-white dark:bg-white dark:text-black">
+              <div className="oa-brand-badge flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold text-white">
                 OA
               </div>
               <div className="min-w-0">
-                <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)] dark:text-[var(--muted)]">
                   OpenAgents Chat
                 </p>
-                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                <p className="truncate text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
                   {activeConversation?.title ?? 'New conversation'}
                 </p>
               </div>
@@ -119,25 +120,27 @@ export default function ChatPage() {
               <span
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
                   gatewayConnected
-                    ? 'border-[var(--border)] bg-[var(--surface-muted)] text-slate-700 dark:text-slate-200'
+                    ? 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--tone-default)] dark:text-[var(--tone-inverse)]'
                     : 'border-red-200 bg-red-50 text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300'
                 }`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${gatewayConnected ? 'bg-black dark:bg-white' : 'bg-red-500'}`} />
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${gatewayConnected ? 'bg-[var(--accent)]' : 'bg-red-500'}`}
+                />
                 {statusText}
               </span>
 
-              <div className="hidden rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 sm:block">
+              <div className="hidden rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-medium text-[var(--muted)] dark:text-[var(--muted)] sm:block">
                 {shortId(activeConversationId)}
               </div>
 
               <button
                 type="button"
                 onClick={() => setShowToolsPanel((open) => !open)}
-                className={`hidden h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition dark:text-slate-200 lg:inline-flex ${
+                className={`hidden h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition dark:text-[var(--tone-inverse)] lg:inline-flex ${
                   showToolsPanel
-                    ? 'border-[var(--border-strong)] bg-[var(--surface-muted)] text-slate-800 shadow-sm'
-                    : 'border-[var(--border)] bg-[var(--surface)] text-slate-600 hover:bg-[var(--surface-muted)]'
+                    ? 'border border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--tone-strong)] shadow-sm'
+                    : 'oa-soft-button text-[var(--tone-muted)]'
                 }`}
                 title={showToolsPanel ? 'Hide tool runtime panel' : 'Show tool runtime panel'}
               >
@@ -148,7 +151,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => void loadConversations()}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-slate-700 transition hover:bg-[var(--surface-muted)] hover:shadow-sm dark:text-slate-200"
+                className="oa-soft-button inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
                 title="Refresh sessions"
               >
                 <RefreshCw size={12} />
@@ -209,7 +212,9 @@ export default function ChatPage() {
           </div>
         </header>
 
-        <div className={`hidden min-h-0 flex-1 gap-3 lg:grid ${showToolsPanel ? 'lg:grid-cols-[290px_minmax(0,1fr)_330px]' : 'lg:grid-cols-[290px_minmax(0,1fr)]'}`}>
+        <div
+          className={`hidden min-h-0 flex-1 gap-3 lg:grid ${showToolsPanel ? 'lg:grid-cols-[290px_minmax(0,1fr)_330px]' : 'lg:grid-cols-[290px_minmax(0,1fr)]'}`}
+        >
           <aside className="oa-card-elevated min-h-0 overflow-hidden rounded-2xl">
             <ConversationList />
           </aside>

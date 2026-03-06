@@ -180,8 +180,8 @@ export default function RootPage() {
 
   if (!hydrated || !accessToken || (!user && profileSyncState !== 'done')) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100">
-        <p className="text-sm font-medium text-slate-500">Loading...</p>
+      <main className="flex min-h-screen items-center justify-center bg-[var(--background)]">
+        <p className="text-sm font-medium text-[var(--muted)]">Loading...</p>
       </main>
     )
   }
@@ -240,12 +240,16 @@ export default function RootPage() {
 
             <h1 className="mt-5 text-4xl font-semibold leading-tight text-white sm:text-5xl lg:text-6xl">
               Build AI agents that run
-              <span className="bg-gradient-to-r from-rose-300 to-orange-200 bg-clip-text text-transparent"> where you want.</span>
+              <span className="bg-gradient-to-r from-rose-300 to-orange-200 bg-clip-text text-transparent">
+                {' '}
+                where you want.
+              </span>
             </h1>
 
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
-              OpenAgents gives you a modern gateway dashboard, local-first execution, and a hosted Cloud option when
-              you need shared uptime. Start on your laptop in minutes, then scale your team with one click.
+              OpenAgents gives you a modern gateway dashboard, local-first execution, and a hosted
+              Cloud option when you need shared uptime. Start on your laptop in minutes, then scale
+              your team with one click.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -271,16 +275,22 @@ export default function RootPage() {
             <div className={styles.objectCardPrimary}>
               <p className="text-xs uppercase tracking-[0.14em] text-cyan-200">Gateway Status</p>
               <p className="mt-2 text-lg font-semibold text-white">Live Sessions + Approvals</p>
-              <p className="mt-3 text-sm text-slate-300">Monitor active runs, route tool calls, and take action in real time.</p>
+              <p className="mt-3 text-sm text-slate-300">
+                Monitor active runs, route tool calls, and take action in real time.
+              </p>
             </div>
             <div className={styles.objectCardSecondary}>
               <p className="text-xs uppercase tracking-[0.14em] text-rose-200">Cloud Pro</p>
               <p className="mt-2 text-lg font-semibold text-white">$9.99/month</p>
-              <p className="mt-3 text-sm text-slate-300">Hosted workspace, team access, and priority updates.</p>
+              <p className="mt-3 text-sm text-slate-300">
+                Hosted workspace, team access, and priority updates.
+              </p>
             </div>
             <div className={styles.objectCardTertiary}>
               <Laptop2 size={15} className="text-cyan-200" />
-              <p className="text-sm text-slate-200">Local mode stays available for development and offline work.</p>
+              <p className="text-sm text-slate-200">
+                Local mode stays available for development and offline work.
+              </p>
             </div>
           </div>
         </section>
@@ -290,7 +300,9 @@ export default function RootPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-semibold text-white">Quick Start</h2>
-                <p className="mt-1 text-sm text-slate-300">Run OpenAgents locally on Windows, macOS, or Ubuntu.</p>
+                <p className="mt-1 text-sm text-slate-300">
+                  Run OpenAgents locally on Windows, macOS, or Ubuntu.
+                </p>
               </div>
               <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300">
                 Local install guide
@@ -319,7 +331,9 @@ export default function RootPage() {
 
             <div className={styles.commandShell}>
               <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">{activeQuickStart.label}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
+                  {activeQuickStart.label}
+                </p>
                 <p className="text-xs text-slate-400">{activeQuickStart.runtimeNote}</p>
               </div>
               <pre className="space-y-2 overflow-x-auto text-sm text-slate-100">
@@ -345,7 +359,8 @@ export default function RootPage() {
               <span className="ml-1 text-sm">per month</span>
             </p>
             <p className="mt-4 text-sm leading-relaxed text-slate-300">
-              Use our hosted infrastructure for always-on agents, shared workspaces, and managed operations.
+              Use our hosted infrastructure for always-on agents, shared workspaces, and managed
+              operations.
             </p>
 
             <ul className="mt-5 space-y-3">
@@ -373,7 +388,9 @@ export default function RootPage() {
               key={item.title}
               className="rounded-2xl border border-white/10 bg-slate-950/55 p-5 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-rose-300/35 hover:bg-slate-950/70"
             >
-              <h4 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-200">{item.title}</h4>
+              <h4 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-200">
+                {item.title}
+              </h4>
               <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.detail}</p>
             </article>
           ))}
@@ -385,7 +402,9 @@ export default function RootPage() {
               key={mode.title}
               className="rounded-2xl border border-white/10 bg-slate-950/55 p-5 backdrop-blur-sm transition hover:border-cyan-300/35 hover:bg-slate-950/70"
             >
-              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-200">{mode.title}</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-200">
+                {mode.title}
+              </h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-400">{mode.detail}</p>
               <p className="mt-3 text-xs font-semibold text-cyan-300">{mode.action}</p>
             </article>
@@ -434,8 +453,7 @@ export default function RootPage() {
 
         <section className="mt-7 rounded-2xl border border-cyan-300/20 bg-cyan-400/5 px-5 py-4 backdrop-blur-sm">
           <p className="text-sm text-cyan-50">
-            Explore our ecosystem partner:
-            {' '}
+            Explore our ecosystem partner:{' '}
             <a
               href="https://soul.md/"
               target="_blank"

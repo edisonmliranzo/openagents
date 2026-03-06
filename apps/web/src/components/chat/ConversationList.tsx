@@ -17,7 +17,8 @@ function timeAgo(iso: string | null | undefined) {
 }
 
 export function ConversationList() {
-  const { conversations, activeConversationId, selectConversation, createConversation } = useChatStore()
+  const { conversations, activeConversationId, selectConversation, createConversation } =
+    useChatStore()
   const [query, setQuery] = useState('')
 
   const filtered = useMemo(() => {
@@ -32,13 +33,17 @@ export function ConversationList() {
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3.5">
         <div>
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Chats</h2>
-          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{filtered.length} conversations</p>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] dark:text-[var(--muted)]">
+            Chats
+          </h2>
+          <p className="mt-0.5 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+            {filtered.length} conversations
+          </p>
         </div>
         <button
           onClick={() => void createConversation()}
           title="New conversation"
-          className="inline-flex h-8 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold text-slate-700 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
+          className="oa-soft-button inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
         >
           <MessageSquarePlus size={14} />
           New
@@ -47,12 +52,15 @@ export function ConversationList() {
 
       <div className="shrink-0 px-3 pb-1 pt-2.5">
         <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 shadow-sm">
-          <Search size={12} className="shrink-0 text-slate-400 dark:text-slate-500" />
+          <Search
+            size={12}
+            className="shrink-0 text-[var(--tone-soft)] dark:text-[var(--tone-soft)]"
+          />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search chats..."
-            className="w-full bg-transparent text-[12px] text-slate-700 placeholder-slate-400 outline-none dark:text-slate-200 dark:placeholder-slate-500"
+            className="w-full bg-transparent text-[12px] text-[var(--tone-default)] placeholder:text-[var(--tone-soft)] outline-none dark:text-[var(--tone-inverse)] dark:placeholder:text-[var(--tone-soft)]"
           />
         </div>
       </div>
@@ -60,8 +68,11 @@ export function ConversationList() {
       <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 pt-1.5">
         {filtered.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <MessageSquare size={20} className="text-slate-300 dark:text-slate-600" />
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+            <MessageSquare
+              size={20}
+              className="text-[var(--tone-soft)] dark:text-[var(--tone-soft)]"
+            />
+            <p className="text-[11px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
               {query ? 'No matching conversations' : 'No conversations yet'}
             </p>
           </div>
@@ -76,37 +87,41 @@ export function ConversationList() {
               className={clsx(
                 'group flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-100',
                 active
-                  ? 'border-[var(--border-strong)] bg-[var(--surface-muted)] text-slate-900 shadow-sm dark:text-slate-100'
+                  ? 'border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--tone-strong)] shadow-sm dark:text-[var(--tone-inverse)]'
                   : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)] hover:shadow-sm',
               )}
             >
-              <div className={clsx(
-                'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md',
-                active
-                  ? 'bg-black text-white dark:bg-white dark:text-black'
-                  : 'bg-[var(--surface-muted)] text-slate-400 group-hover:bg-[var(--surface-subtle)]',
-              )}>
+              <div
+                className={clsx(
+                  'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md',
+                  active
+                    ? 'oa-brand-badge text-white'
+                    : 'bg-[var(--surface-muted)] text-[var(--tone-soft)] group-hover:bg-[var(--surface-subtle)]',
+                )}
+              >
                 <MessageSquare size={10} />
               </div>
               <div className="min-w-0 flex-1">
-                <p className={clsx(
-                  'truncate text-[12px] font-medium leading-snug',
-                  active
-                    ? 'text-slate-900 dark:text-slate-100'
-                    : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-200 dark:group-hover:text-white',
-                )}>
+                <p
+                  className={clsx(
+                    'truncate text-[12px] font-medium leading-snug',
+                    active
+                      ? 'text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]'
+                      : 'text-[var(--tone-default)] group-hover:text-[var(--tone-strong)] dark:text-[var(--tone-inverse)] dark:group-hover:text-[var(--tone-inverse)]',
+                  )}
+                >
                   {c.title ?? 'Untitled conversation'}
                 </p>
                 {/* @ts-ignore updatedAt may exist */}
                 {c.updatedAt && (
-                  <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+                  <p className="mt-0.5 text-[10px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
                     {/* @ts-ignore */}
                     {timeAgo(c.updatedAt)}
                   </p>
                 )}
               </div>
               {active && (
-                <span className="mt-0.5 inline-flex h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+                <span className="mt-0.5 inline-flex h-2 w-2 shrink-0 rounded-full bg-[var(--accent)]" />
               )}
             </button>
           )
