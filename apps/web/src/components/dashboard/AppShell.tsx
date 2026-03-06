@@ -88,7 +88,7 @@ function UserInitials({ name, email }: { name?: string | null; email?: string | 
       : value.slice(0, 2).toUpperCase()
 
   return (
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-xs font-bold text-white">
+    <div className="oa-brand-badge flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
       {initials}
     </div>
   )
@@ -218,8 +218,8 @@ export function AppShell({ children }: AppShellProps) {
   )
 
   const activeRouteLabel =
-    navGroups.flatMap((group) => group.items).find((item) => isActivePath(pathname, item.href))?.label ??
-    'Dashboard'
+    navGroups.flatMap((group) => group.items).find((item) => isActivePath(pathname, item.href))
+      ?.label ?? 'Dashboard'
 
   async function handleSignOut() {
     if (typeof logout !== 'function') return
@@ -259,13 +259,13 @@ export function AppShell({ children }: AppShellProps) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--background)]">
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black">
+          <div className="oa-brand-badge flex h-10 w-10 items-center justify-center rounded-xl">
             <Activity size={20} className="text-white" />
           </div>
           <div className="flex gap-1.5">
-            <span className="typing-dot h-2 w-2 rounded-full bg-slate-400" />
-            <span className="typing-dot h-2 w-2 rounded-full bg-slate-400" />
-            <span className="typing-dot h-2 w-2 rounded-full bg-slate-400" />
+            <span className="typing-dot h-2 w-2 rounded-full bg-[var(--accent)]" />
+            <span className="typing-dot h-2 w-2 rounded-full bg-[var(--accent)]" />
+            <span className="typing-dot h-2 w-2 rounded-full bg-[var(--accent)]" />
           </div>
         </div>
       </div>
@@ -281,31 +281,33 @@ export function AppShell({ children }: AppShellProps) {
           type="button"
           aria-label="Close navigation menu"
           onClick={() => setIsMobileNavOpen(false)}
-          className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[1px] md:hidden"
+          className="fixed inset-0 z-40 bg-[var(--overlay)] backdrop-blur-[3px] md:hidden"
         />
       )}
 
       <div className="mx-auto flex w-full max-w-[1720px]">
         <aside
           className={clsx(
-            'fixed inset-y-0 left-0 z-50 flex w-[252px] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] px-3 py-4 transition-transform duration-200 md:static md:z-0 md:translate-x-0',
+            'fixed inset-y-0 left-0 z-50 flex w-[252px] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] px-3 py-4 backdrop-blur-2xl transition-transform duration-200 md:static md:z-0 md:translate-x-0',
             isMobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
           <div className="mb-4 flex items-center gap-3 px-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-black text-xs font-bold text-white">
+            <div className="oa-brand-badge flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold text-white">
               OA
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-200">
+              <p className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
                 OpenAgents
               </p>
-              <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">Workspace</p>
+              <p className="truncate text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+                Workspace
+              </p>
             </div>
             <button
               type="button"
               onClick={() => setIsMobileNavOpen(false)}
-              className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-[var(--surface-subtle)] md:hidden"
+              className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-subtle)] md:hidden"
               aria-label="Close sidebar"
             >
               <X size={14} />
@@ -315,7 +317,7 @@ export function AppShell({ children }: AppShellProps) {
           <nav className="flex-1 space-y-5 overflow-y-auto px-1">
             {navGroups.map((group) => (
               <div key={group.title}>
-                <p className="mb-1.5 px-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                <p className="mb-1.5 px-2 text-[11px] font-medium text-[var(--muted)] dark:text-[var(--muted)]">
                   {group.title}
                 </p>
                 <div className="space-y-1">
@@ -330,11 +332,16 @@ export function AppShell({ children }: AppShellProps) {
                         className={clsx(
                           'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] transition',
                           active
-                            ? 'bg-[var(--accent)] text-white shadow-sm dark:bg-[var(--surface-subtle)] dark:text-slate-100'
-                            : 'text-slate-700 hover:bg-[var(--surface-subtle)] dark:text-slate-200 dark:hover:bg-[var(--surface-subtle)]',
+                            ? 'oa-brand-badge text-white'
+                            : 'text-[var(--tone-default)] hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)] dark:hover:bg-[var(--surface-subtle)]',
                         )}
                       >
-                        <Icon size={14} className={clsx(active ? 'text-white' : 'text-slate-500 dark:text-slate-400')} />
+                        <Icon
+                          size={14}
+                          className={clsx(
+                            active ? 'text-white' : 'text-[var(--muted)] dark:text-[var(--muted)]',
+                          )}
+                        />
                         <span className="truncate">{item.label}</span>
                       </Link>
                     )
@@ -344,18 +351,22 @@ export function AppShell({ children }: AppShellProps) {
             ))}
           </nav>
 
-          <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5 dark:bg-[var(--surface-muted)]">
+          <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5 backdrop-blur-xl dark:bg-[var(--surface-muted)]">
             <div className="flex items-center gap-2.5">
               <UserInitials name={user?.name} email={user?.email} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[12px] font-semibold text-slate-800 dark:text-slate-100">{user?.name ?? 'User'}</p>
-                <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">{user?.email}</p>
+                <p className="truncate text-[12px] font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                  {user?.name ?? 'User'}
+                </p>
+                <p className="truncate text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+                  {user?.email}
+                </p>
               </div>
               <button
                 type="button"
                 onClick={handleSignOut}
                 disabled={isSigningOut}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-[var(--surface-subtle)] hover:text-black disabled:opacity-50 dark:hover:text-white"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-[var(--surface-subtle)] hover:text-[var(--tone-strong)] disabled:opacity-50 dark:hover:text-[var(--tone-inverse)]"
                 title="Sign out"
               >
                 <LogOut size={13} />
@@ -367,103 +378,120 @@ export function AppShell({ children }: AppShellProps) {
         <div className="min-w-0 flex-1 md:ml-0">
           <header className="sticky top-0 z-20 px-3 py-3 sm:px-6">
             <div className="oa-card-elevated rounded-2xl px-3 py-2.5 backdrop-blur sm:px-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsMobileNavOpen(true)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-slate-700 md:hidden"
-                  aria-label="Open sidebar"
-                >
-                  <Menu size={16} />
-                </button>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{activeRouteLabel}</p>
-                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">OpenAgents workspace</p>
-                </div>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium text-slate-700 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
-                  aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                  title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                >
-                  {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-                  <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>
-                </button>
-
-                <div className="relative" ref={notifRef}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsNotificationsOpen((open) => !open)}
-                    className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-slate-600 transition hover:bg-[var(--surface-muted)] hover:text-black dark:text-slate-300 dark:hover:text-white"
-                    aria-label="Notifications"
+                    onClick={() => setIsMobileNavOpen(true)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--tone-default)] md:hidden"
+                    aria-label="Open sidebar"
                   >
-                    <Bell size={15} />
-                    {unreadNotifications > 0 && (
-                      <span className="absolute -right-1 -top-1 min-w-[16px] rounded-full bg-black px-1 text-center text-[10px] font-semibold leading-4 text-white dark:bg-white dark:text-black">
-                        {unreadNotifications > 9 ? '9+' : unreadNotifications}
-                      </span>
-                    )}
+                    <Menu size={16} />
+                  </button>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                      {activeRouteLabel}
+                    </p>
+                    <p className="truncate text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                      OpenAgents workspace
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+                    className="oa-soft-button inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium transition dark:text-[var(--tone-inverse)]"
+                    aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  >
+                    {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+                    <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>
                   </button>
 
-                  {isNotificationsOpen && (
-                    <div className="absolute right-0 z-30 mt-2 w-[min(92vw,340px)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl">
-                      <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2.5">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Notifications
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => void handleMarkAllRead()}
-                          className="text-xs font-medium text-slate-600 hover:text-black dark:text-slate-300 dark:hover:text-white"
-                        >
-                          Mark all read
-                        </button>
-                      </div>
-                      <div className="max-h-[320px] overflow-y-auto">
-                        {isNotificationsLoading && notifications.length === 0 && (
-                          <p className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400">Loading...</p>
-                        )}
-                        {!isNotificationsLoading && notifications.length === 0 && (
-                          <p className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400">No notifications.</p>
-                        )}
-                        {notifications.map((notification) => (
-                          <button
-                            key={notification.id}
-                            type="button"
-                            onClick={() => void handleMarkNotificationRead(notification.id)}
-                            className={clsx(
-                              'block w-full border-b border-[var(--border)] px-3 py-2.5 text-left transition last:border-b-0',
-                              notification.read
-                                ? 'bg-[var(--surface)]'
-                                : 'bg-[var(--surface-muted)] hover:bg-[var(--surface-subtle)]',
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{notification.title}</p>
-                              <p className="text-[11px] text-slate-400 dark:text-slate-500">{relativeTime(notification.createdAt)}</p>
-                            </div>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{notification.message}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  <div className="relative" ref={notifRef}>
+                    <button
+                      type="button"
+                      onClick={() => setIsNotificationsOpen((open) => !open)}
+                      className="oa-soft-button relative inline-flex h-9 w-9 items-center justify-center rounded-xl text-[var(--tone-muted)] transition dark:text-[var(--tone-inverse)]"
+                      aria-label="Notifications"
+                    >
+                      <Bell size={15} />
+                      {unreadNotifications > 0 && (
+                        <span className="oa-brand-badge absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[10px] font-semibold leading-4 text-white">
+                          {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                        </span>
+                      )}
+                    </button>
 
-                <div className="hidden items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 pl-1 pr-2.5 text-[12px] font-medium text-slate-700 sm:flex dark:text-slate-200">
-                  <UserInitials name={user?.name} email={user?.email} />
-                  <span className="hidden max-w-[120px] truncate sm:block">
-                    {user?.name ?? user?.email ?? 'User'}
-                  </span>
-                  <ChevronDown size={12} className="text-slate-400 dark:text-slate-500" />
+                    {isNotificationsOpen && (
+                      <div className="absolute right-0 z-30 mt-2 w-[min(92vw,340px)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl">
+                        <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2.5">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] dark:text-[var(--muted)]">
+                            Notifications
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void handleMarkAllRead()}
+                            className="text-xs font-medium text-[var(--tone-muted)] hover:text-[var(--tone-strong)] dark:text-[var(--muted)] dark:hover:text-[var(--tone-inverse)]"
+                          >
+                            Mark all read
+                          </button>
+                        </div>
+                        <div className="max-h-[320px] overflow-y-auto">
+                          {isNotificationsLoading && notifications.length === 0 && (
+                            <p className="px-3 py-4 text-sm text-[var(--muted)] dark:text-[var(--muted)]">
+                              Loading...
+                            </p>
+                          )}
+                          {!isNotificationsLoading && notifications.length === 0 && (
+                            <p className="px-3 py-4 text-sm text-[var(--muted)] dark:text-[var(--muted)]">
+                              No notifications.
+                            </p>
+                          )}
+                          {notifications.map((notification) => (
+                            <button
+                              key={notification.id}
+                              type="button"
+                              onClick={() => void handleMarkNotificationRead(notification.id)}
+                              className={clsx(
+                                'block w-full border-b border-[var(--border)] px-3 py-2.5 text-left transition last:border-b-0',
+                                notification.read
+                                  ? 'bg-[var(--surface)]'
+                                  : 'bg-[var(--surface-muted)] hover:bg-[var(--surface-subtle)]',
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                                  {notification.title}
+                                </p>
+                                <p className="text-[11px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                                  {relativeTime(notification.createdAt)}
+                                </p>
+                              </div>
+                              <p className="mt-1 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                                {notification.message}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="hidden items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 pl-1 pr-2.5 text-[12px] font-medium text-[var(--tone-default)] sm:flex dark:text-[var(--tone-inverse)]">
+                    <UserInitials name={user?.name} email={user?.email} />
+                    <span className="hidden max-w-[120px] truncate sm:block">
+                      {user?.name ?? user?.email ?? 'User'}
+                    </span>
+                    <ChevronDown
+                      size={12}
+                      className="text-[var(--tone-soft)] dark:text-[var(--tone-soft)]"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
             </div>
           </header>
 

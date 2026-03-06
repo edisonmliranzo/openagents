@@ -2,7 +2,14 @@
 
 import { useMemo } from 'react'
 import type { Message } from '@openagents/shared'
-import { Activity, Compass, ExternalLink, Link2, MonitorSmartphone, SearchCheck } from 'lucide-react'
+import {
+  Activity,
+  Compass,
+  ExternalLink,
+  Link2,
+  MonitorSmartphone,
+  SearchCheck,
+} from 'lucide-react'
 import { useChatStore, type ChatToolStreamEvent } from '@/stores/chat'
 
 interface ToolRecord {
@@ -52,9 +59,14 @@ function toolRecordsFromMessages(messages: Message[]): ToolRecord[] {
   const out: ToolRecord[] = []
   for (const message of messages) {
     if (message.role !== 'tool') continue
-    const raw = message as Message & { toolCallJson?: string | null; toolResultJson?: string | null }
+    const raw = message as Message & {
+      toolCallJson?: string | null
+      toolResultJson?: string | null
+    }
     const call = safeParseJson<{ name?: unknown }>(raw.toolCallJson)
-    const result = safeParseJson<{ success?: unknown; output?: unknown; error?: unknown }>(raw.toolResultJson)
+    const result = safeParseJson<{ success?: unknown; output?: unknown; error?: unknown }>(
+      raw.toolResultJson,
+    )
     const tool = typeof call?.name === 'string' ? call.name : ''
     if (!tool) continue
     out.push({
@@ -68,7 +80,10 @@ function toolRecordsFromMessages(messages: Message[]): ToolRecord[] {
   return out
 }
 
-function toolRecordsFromStream(events: ChatToolStreamEvent[], conversationId: string | null): ToolRecord[] {
+function toolRecordsFromStream(
+  events: ChatToolStreamEvent[],
+  conversationId: string | null,
+): ToolRecord[] {
   if (!conversationId) return []
   return events
     .filter((event) => event.conversationId === conversationId)
@@ -94,9 +109,10 @@ function buildComputerSessions(records: ToolRecord[]) {
   const sessions = new Map<string, ComputerSessionView>()
   for (const record of records) {
     if (!record.tool.startsWith('computer_')) continue
-    const output = record.output && typeof record.output === 'object'
-      ? (record.output as Record<string, unknown>)
-      : null
+    const output =
+      record.output && typeof record.output === 'object'
+        ? (record.output as Record<string, unknown>)
+        : null
     const sessionId = typeof output?.sessionId === 'string' ? output.sessionId : ''
     if (!sessionId) continue
 
@@ -112,24 +128,30 @@ function buildComputerSessions(records: ToolRecord[]) {
       warning: null,
     }
 
-    const page = output?.page && typeof output.page === 'object'
-      ? (output.page as Record<string, unknown>)
-      : null
+    const page =
+      output?.page && typeof output.page === 'object'
+        ? (output.page as Record<string, unknown>)
+        : null
 
-    const mode = typeof output?.mode === 'string'
-      ? output.mode
-      : typeof output?.provider === 'string'
-        ? output.provider
-        : existing.mode
+    const mode =
+      typeof output?.mode === 'string'
+        ? output.mode
+        : typeof output?.provider === 'string'
+          ? output.provider
+          : existing.mode
     const title = typeof page?.title === 'string' ? page.title : existing.title
     const currentUrl = typeof page?.currentUrl === 'string' ? page.currentUrl : existing.currentUrl
-    const textPreview = typeof page?.textPreview === 'string' ? page.textPreview : existing.textPreview
-    const linkCount = Number.isFinite(Number(page?.linkCount)) ? Number(page?.linkCount) : existing.linkCount
-    const warning = typeof output?.warning === 'string'
-      ? output.warning
-      : typeof output?.note === 'string'
-        ? output.note
-        : existing.warning
+    const textPreview =
+      typeof page?.textPreview === 'string' ? page.textPreview : existing.textPreview
+    const linkCount = Number.isFinite(Number(page?.linkCount))
+      ? Number(page?.linkCount)
+      : existing.linkCount
+    const warning =
+      typeof output?.warning === 'string'
+        ? output.warning
+        : typeof output?.note === 'string'
+          ? output.note
+          : existing.warning
 
     const next: ComputerSessionView = {
       ...existing,
@@ -152,12 +174,15 @@ function buildDeepResearchRuns(records: ToolRecord[]) {
   const runs: DeepResearchRun[] = []
   for (const record of records) {
     if (record.tool !== 'deep_research') continue
-    const output = record.output && typeof record.output === 'object'
-      ? (record.output as Record<string, unknown>)
-      : null
+    const output =
+      record.output && typeof record.output === 'object'
+        ? (record.output as Record<string, unknown>)
+        : null
     if (!output) continue
     const summary = typeof output.summary === 'string' ? output.summary : ''
-    const fetchedPages = Number.isFinite(Number(output.fetchedPages)) ? Number(output.fetchedPages) : 0
+    const fetchedPages = Number.isFinite(Number(output.fetchedPages))
+      ? Number(output.fetchedPages)
+      : 0
     const citationsRaw = Array.isArray(output.citations) ? output.citations : []
     const citations: DeepResearchCitation[] = citationsRaw
       .map((entry) => {
@@ -185,7 +210,8 @@ function buildDeepResearchRuns(records: ToolRecord[]) {
 }
 
 export function LiveToolPanel() {
-  const { messages, streamToolEvents, activeConversationId, runStatus, isStreaming } = useChatStore()
+  const { messages, streamToolEvents, activeConversationId, runStatus, isStreaming } =
+    useChatStore()
 
   const records = useMemo(() => {
     const merged = [
@@ -200,15 +226,17 @@ export function LiveToolPanel() {
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
-      <div className="border-b border-[var(--border)] bg-[var(--surface-muted)]/55 px-4 py-3">
+      <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Live Tool Runtime</p>
-          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          <p className="text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+            Live Tool Runtime
+          </p>
+          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)] dark:text-[var(--muted)]">
             <Activity size={10} />
             {runStatus ?? (isStreaming ? 'running' : 'idle')}
           </span>
         </div>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mt-1 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
           Computer sessions and deep research citations update while tools execute.
         </p>
       </div>
@@ -217,30 +245,45 @@ export function LiveToolPanel() {
         <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
           <div className="flex items-center gap-2">
             <MonitorSmartphone size={14} className="text-blue-500" />
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Computer Sessions</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+              Computer Sessions
+            </p>
           </div>
           <div className="mt-2 space-y-2">
             {computerSessions.length === 0 && (
-              <p className="text-xs text-slate-500 dark:text-slate-400">No computer sessions yet in this conversation.</p>
+              <p className="text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                No computer sessions yet in this conversation.
+              </p>
             )}
             {computerSessions.map((session) => (
-              <article key={session.sessionId} className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-2.5">
+              <article
+                key={session.sessionId}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-2.5"
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  <p className="text-xs font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
                     {shortSessionId(session.sessionId)}
                   </p>
                   <div className="flex items-center gap-1.5">
-                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-200">
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted)] dark:text-[var(--tone-inverse)]">
                       {session.mode}
                     </span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${session.status === 'active'
-                      ? 'bg-black text-white dark:bg-white dark:text-black'
-                      : 'bg-[var(--surface-subtle)] text-slate-700 dark:text-slate-200'}`}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        session.status === 'active'
+                          ? 'oa-brand-badge text-white'
+                          : 'bg-[var(--surface-subtle)] text-[var(--tone-default)] dark:text-[var(--tone-inverse)]'
+                      }`}
+                    >
                       {session.status}
                     </span>
                   </div>
                 </div>
-                {session.title && <p className="mt-1 text-xs text-slate-700 dark:text-slate-200">{session.title}</p>}
+                {session.title && (
+                  <p className="mt-1 text-xs text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+                    {session.title}
+                  </p>
+                )}
                 {session.currentUrl && (
                   <a
                     href={session.currentUrl}
@@ -253,13 +296,17 @@ export function LiveToolPanel() {
                   </a>
                 )}
                 {session.textPreview && (
-                  <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">{session.textPreview}</p>
+                  <p className="mt-1.5 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+                    {session.textPreview}
+                  </p>
                 )}
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="mt-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
                   links: {session.linkCount}
                 </p>
                 {session.warning && (
-                  <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">{session.warning}</p>
+                  <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                    {session.warning}
+                  </p>
                 )}
               </article>
             ))}
@@ -269,21 +316,32 @@ export function LiveToolPanel() {
         <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
           <div className="flex items-center gap-2">
             <SearchCheck size={14} className="text-sky-500" />
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Deep Research</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+              Deep Research
+            </p>
           </div>
           <div className="mt-2 space-y-3">
             {researchRuns.length === 0 && (
-              <p className="text-xs text-slate-500 dark:text-slate-400">No deep research runs yet in this conversation.</p>
+              <p className="text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                No deep research runs yet in this conversation.
+              </p>
             )}
             {researchRuns.map((run, index) => (
-              <article key={`${run.createdAt}-${index}`} className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-2.5">
-                <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+              <article
+                key={`${run.createdAt}-${index}`}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-2.5"
+              >
+                <p className="text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
                   Summary ({run.fetchedPages} page{run.fetchedPages === 1 ? '' : 's'} fetched)
                 </p>
-                <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">{run.summary}</p>
+                <p className="mt-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+                  {run.summary}
+                </p>
                 <div className="mt-2 space-y-1.5">
                   {run.citations.length === 0 && (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">No citations found in output.</p>
+                    <p className="text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+                      No citations found in output.
+                    </p>
                   )}
                   {run.citations.map((citation) => (
                     <a
@@ -291,13 +349,17 @@ export function LiveToolPanel() {
                       href={citation.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex items-start gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-slate-700 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
+                      className="flex items-start gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--tone-default)] transition hover:bg-[var(--surface-muted)] dark:text-[var(--tone-inverse)]"
                     >
                       <Link2 size={10} className="mt-0.5 shrink-0" />
                       <span className="min-w-0 flex-1 truncate">{citation.title}</span>
-                      <span className={`rounded px-1 py-0.5 text-[10px] font-medium ${citation.status === 'fetched'
-                        ? 'bg-black text-white dark:bg-white dark:text-black'
-                        : 'bg-[var(--surface-subtle)] text-slate-700 dark:text-slate-300'}`}>
+                      <span
+                        className={`rounded px-1 py-0.5 text-[10px] font-medium ${
+                          citation.status === 'fetched'
+                            ? 'oa-brand-badge text-white'
+                            : 'bg-[var(--surface-subtle)] text-[var(--tone-default)] dark:text-[var(--tone-inverse)]'
+                        }`}
+                      >
                         {citation.status}
                       </span>
                       <ExternalLink size={10} className="mt-0.5 shrink-0" />

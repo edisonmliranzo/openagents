@@ -146,7 +146,10 @@ export function MessageBubble({ message }: { message: Message }) {
     try {
       await copyToClipboard(content)
       setCopiedCodeIndex(index)
-      window.setTimeout(() => setCopiedCodeIndex((current) => (current === index ? null : current)), 1200)
+      window.setTimeout(
+        () => setCopiedCodeIndex((current) => (current === index ? null : current)),
+        1200,
+      )
     } catch {
       setCopiedCodeIndex(null)
     }
@@ -191,9 +194,11 @@ export function MessageBubble({ message }: { message: Message }) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[92%] rounded-2xl rounded-br-sm border border-slate-900/15 bg-slate-900 px-4 py-3 text-sm text-slate-100 shadow-sm sm:max-w-[76%] dark:border-white/20 dark:bg-slate-100 dark:text-slate-900">
+        <div className="oa-user-bubble max-w-[92%] rounded-2xl rounded-br-sm px-4 py-3 text-sm shadow-sm sm:max-w-[76%]">
           <p className="whitespace-pre-wrap">{message.content}</p>
-          <p className="mt-2 text-right text-[11px] font-medium text-slate-300 dark:text-slate-600">{formatClock(message.createdAt)}</p>
+          <p className="mt-2 text-right text-[11px] font-medium text-[var(--tone-inverse-muted)]">
+            {formatClock(message.createdAt)}
+          </p>
         </div>
       </div>
     )
@@ -204,17 +209,19 @@ export function MessageBubble({ message }: { message: Message }) {
       <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-sm">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="inline-flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white dark:bg-white dark:text-black">
+            <div className="oa-brand-badge flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white">
               OA
             </div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">OpenAgents</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+              OpenAgents
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => void handleToggleLineage()}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-[var(--surface-subtle)] hover:shadow-sm dark:text-slate-300"
+              className="oa-soft-button inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
             >
               Why this answer
             </button>
@@ -222,7 +229,7 @@ export function MessageBubble({ message }: { message: Message }) {
               <button
                 type="button"
                 onClick={() => void handleCopyAll()}
-                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-[var(--surface-subtle)] hover:shadow-sm dark:text-slate-300"
+                className="oa-soft-button inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
               >
                 <Copy size={12} />
                 {copiedAll ? 'Copied' : codeBlocks.length > 1 ? 'Copy all code' : 'Copy code'}
@@ -237,7 +244,10 @@ export function MessageBubble({ message }: { message: Message }) {
               if (block.type === 'text') {
                 if (!block.content.trim()) return <div key={`line-empty-${idx}`} className="h-2" />
                 return (
-                  <p key={`line-p-${idx}`} className="text-[14px] leading-7 text-slate-800 dark:text-slate-200">
+                  <p
+                    key={`line-p-${idx}`}
+                    className="text-[14px] leading-7 text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]"
+                  >
                     {block.content}
                   </p>
                 )
@@ -245,27 +255,30 @@ export function MessageBubble({ message }: { message: Message }) {
 
               const lang = block.language?.trim() ?? ''
               return (
-                <div key={`line-code-${idx}`} className="my-2 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                <div
+                  key={`line-code-${idx}`}
+                  className="my-2 overflow-hidden rounded-xl border border-[var(--border)]"
+                >
                   <div className="flex items-center justify-between bg-[var(--surface-muted)] px-3 py-1.5">
-                    <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <span className="text-[10px] uppercase tracking-wide text-[var(--muted)] dark:text-[var(--muted)]">
                       {lang || 'code'}
                     </span>
                     <button
                       type="button"
                       onClick={() => void handleCopyBlock(idx, block.content)}
-                      className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
+                      className="oa-soft-button rounded px-2 py-0.5 text-[10px] font-semibold transition dark:text-[var(--tone-inverse)]"
                     >
                       {copiedCodeIndex === idx ? 'Copied' : 'Copy'}
                     </button>
                   </div>
-                  <pre className="overflow-x-auto bg-slate-950 px-3 py-2 text-xs text-slate-100">
+                  <pre className="oa-code-surface overflow-x-auto px-3 py-2 text-xs text-[var(--tone-inverse)]">
                     {block.content}
                   </pre>
                 </div>
               )
             })
           ) : (
-            <div className="flex items-center gap-1 py-1 text-slate-400">
+            <div className="flex items-center gap-1 py-1 text-[var(--tone-soft)]">
               <span className="typing-dot h-1.5 w-1.5 rounded-full bg-current" />
               <span className="typing-dot h-1.5 w-1.5 rounded-full bg-current" />
               <span className="typing-dot h-1.5 w-1.5 rounded-full bg-current" />
@@ -274,15 +287,30 @@ export function MessageBubble({ message }: { message: Message }) {
         </div>
 
         {lineageOpen && (
-          <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-xs text-slate-700 dark:text-slate-300">
+          <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-xs text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
             {lineageLoading && <p>Loading lineage...</p>}
-            {!lineageLoading && lineageError && <p className="text-amber-700 dark:text-amber-300">{lineageError}</p>}
+            {!lineageLoading && lineageError && (
+              <p className="text-amber-700 dark:text-amber-300">{lineageError}</p>
+            )}
             {!lineageLoading && lineage && (
               <div className="space-y-2">
-                <p className="font-semibold text-slate-800 dark:text-slate-200">Source: {lineage.source}</p>
-                <p>Memory files: {lineage.memoryFiles.length > 0 ? lineage.memoryFiles.join(', ') : 'none'}</p>
-                <p>Tools: {lineage.tools.length > 0 ? lineage.tools.map((tool) => `${tool.toolName} (${tool.status})`).join(', ') : 'none'}</p>
-                <p>External sources: {lineage.externalSources.length > 0 ? lineage.externalSources.join(', ') : 'none'}</p>
+                <p className="font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                  Source: {lineage.source}
+                </p>
+                <p>
+                  Memory files:{' '}
+                  {lineage.memoryFiles.length > 0 ? lineage.memoryFiles.join(', ') : 'none'}
+                </p>
+                <p>
+                  Tools:{' '}
+                  {lineage.tools.length > 0
+                    ? lineage.tools.map((tool) => `${tool.toolName} (${tool.status})`).join(', ')
+                    : 'none'}
+                </p>
+                <p>
+                  External sources:{' '}
+                  {lineage.externalSources.length > 0 ? lineage.externalSources.join(', ') : 'none'}
+                </p>
                 {lineage.notes.length > 0 && <p>Notes: {lineage.notes.join(' | ')}</p>}
               </div>
             )}
@@ -290,7 +318,7 @@ export function MessageBubble({ message }: { message: Message }) {
         )}
       </article>
 
-      <p className={clsx('pl-1 text-xs text-slate-400 dark:text-slate-500')}>
+      <p className={clsx('pl-1 text-xs text-[var(--tone-soft)] dark:text-[var(--tone-soft)]')}>
         {formatClock(message.createdAt)}
       </p>
     </div>
