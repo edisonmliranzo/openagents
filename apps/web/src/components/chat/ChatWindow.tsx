@@ -55,7 +55,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--surface)]">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--surface)]">
       {learnedSkill && (
         <div className="relative border-b border-[var(--border)] px-4 py-3 sm:px-5">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
@@ -73,7 +73,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+      <div className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5">
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center py-6">
             <div className="w-full max-w-[720px] space-y-6 text-center">
@@ -82,10 +82,10 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
               </div>
               <div>
                 <p className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
-                  What can OpenAgent do for you?
+                  What can OpenAgents do for you?
                 </p>
                 <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                  Manus-inspired chat flow with tool execution, approvals, and deep research.
+                  OpenAgents workspace with approvals, tool execution, and deep research.
                 </p>
               </div>
 
@@ -118,7 +118,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-[920px] space-y-4 pb-3 pt-2">
+          <div className="mx-auto max-w-[860px] space-y-4 pb-3 pt-2">
             {messages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
@@ -130,7 +130,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
       <div className="relative border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:px-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-1 px-1 text-[11px] text-slate-500 dark:text-slate-400">
           <p>Enter to send, Shift+Enter for a new line</p>
-          <p>{isStreaming ? 'OpenAgent is responding...' : 'Ready'}</p>
+          <p>{isStreaming ? 'OpenAgents is responding...' : 'Ready'}</p>
         </div>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
           <div className="flex w-full items-end gap-2 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 sm:flex-1">
@@ -143,7 +143,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
               rows={1}
               placeholder={
                 gatewayConnected
-                  ? 'Ask OpenAgent anything...'
+                  ? 'Ask OpenAgents anything...'
                   : 'Connect to the gateway to start chatting...'
               }
               className="max-h-44 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:text-slate-400 dark:text-slate-200"
