@@ -7,7 +7,7 @@ import { ChatWindow } from '@/components/chat/ChatWindow'
 import { ConversationList } from '@/components/chat/ConversationList'
 import { LiveToolPanel } from '@/components/chat/LiveToolPanel'
 import { useChatStore } from '@/stores/chat'
-import { RefreshCw, ShieldCheck } from 'lucide-react'
+import { PanelRight, RefreshCw, ShieldCheck } from 'lucide-react'
 
 function shortId(value?: string | null) {
   if (!value) return 'session'
@@ -22,6 +22,7 @@ export default function ChatPage() {
   const targetConversationId = searchParams.get('conversation')
   const autoCreatedRef = useRef(false)
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('chat')
+  const [showToolsPanel, setShowToolsPanel] = useState(false)
   const {
     conversations,
     activeConversationId,
@@ -90,23 +91,20 @@ export default function ChatPage() {
   return (
     <div className="min-h-[calc(100dvh-56px)] px-0 py-1 sm:px-2 sm:py-2 lg:h-[calc(100dvh-96px)] lg:min-h-0 lg:overflow-hidden">
       <div className="mx-auto flex min-h-[calc(100dvh-72px)] max-w-[1600px] flex-col gap-3 sm:gap-4 lg:h-full lg:min-h-0">
-        <header className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-4 py-4 sm:px-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                OpenAgent Chat
-              </div>
-              <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl dark:text-slate-100">
-                Prompt Workspace
-              </h1>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Manus-inspired conversation flow with approvals, tool traces, and session memory.
+        <header className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+                OpenAgents
+              </span>
+              <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                {activeConversation?.title ?? 'New conversation'}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <span
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
                   gatewayConnected
                     ? 'border-[var(--border)] bg-[var(--surface-muted)] text-slate-700 dark:text-slate-200'
                     : 'border-red-200 bg-red-50 text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300'
@@ -116,9 +114,19 @@ export default function ChatPage() {
                 {statusText}
               </span>
 
-              <div className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
-                Session {activeConversation?.title ?? shortId(activeConversationId)}
+              <div className="hidden rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 sm:block">
+                {shortId(activeConversationId)}
               </div>
+
+              <button
+                type="button"
+                onClick={() => setShowToolsPanel((open) => !open)}
+                className="hidden h-8 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-slate-600 transition hover:bg-[var(--surface-muted)] dark:text-slate-200 lg:inline-flex"
+                title={showToolsPanel ? 'Hide tool runtime panel' : 'Show tool runtime panel'}
+              >
+                <PanelRight size={12} />
+                {showToolsPanel ? 'Hide tools' : 'Show tools'}
+              </button>
 
               <button
                 type="button"
@@ -184,12 +192,12 @@ export default function ChatPage() {
           </div>
         </header>
 
-        <div className="hidden min-h-0 flex-1 gap-4 lg:grid lg:grid-cols-[300px_1fr]">
-          <aside className="min-h-0 rounded-[24px] border border-[var(--border)] bg-[var(--surface)]">
+        <div className={`hidden min-h-0 flex-1 gap-3 lg:grid ${showToolsPanel ? 'lg:grid-cols-[280px_minmax(0,1fr)_320px]' : 'lg:grid-cols-[280px_minmax(0,1fr)]'}`}>
+          <aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
             <ConversationList />
           </aside>
 
-          <section className="min-h-0 flex flex-col gap-3">
+          <section className="min-h-0 flex flex-col gap-2.5">
             {hasPendingApprovals && (
               <div className="space-y-2">
                 <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
@@ -202,20 +210,21 @@ export default function ChatPage() {
               </div>
             )}
 
-            <div className="grid min-h-0 flex-1 gap-3 lg:max-h-[72dvh] xl:grid-cols-[minmax(0,1fr)_340px]">
-              <div className="min-h-0">
-                <ChatWindow
-                  gatewayConnected={gatewayConnected}
-                  onNewSession={async () => {
-                    await createConversation()
-                  }}
-                />
-              </div>
-              <div className="min-h-0">
-                <LiveToolPanel />
-              </div>
+            <div className="min-h-0 flex-1">
+              <ChatWindow
+                gatewayConnected={gatewayConnected}
+                onNewSession={async () => {
+                  await createConversation()
+                }}
+              />
             </div>
           </section>
+
+          {showToolsPanel && (
+            <aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+              <LiveToolPanel />
+            </aside>
+          )}
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 lg:hidden">

@@ -207,7 +207,7 @@ export function MessageBubble({ message }: { message: Message }) {
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-[10px] font-bold text-white dark:bg-white dark:text-black">
               OA
             </div>
-            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">OpenAgent</p>
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">OpenAgents</p>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">

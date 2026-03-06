@@ -32,8 +32,8 @@ export function ConversationList() {
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
         <div>
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">Sessions</h2>
-          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{filtered.length} visible</p>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">Chats</h2>
+          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{filtered.length} conversations</p>
         </div>
         <button
           onClick={() => void createConversation()}
@@ -74,16 +74,16 @@ export function ConversationList() {
               key={c.id}
               onClick={() => void selectConversation(c.id)}
               className={clsx(
-                'group flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-100',
+                'group flex w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-all duration-100',
                 active
-                  ? 'border-black bg-black text-white'
+                  ? 'border-[var(--border)] bg-[var(--surface-muted)] text-slate-900 dark:text-slate-100'
                   : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)]',
               )}
             >
               <div className={clsx(
                 'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md',
                 active
-                  ? 'bg-white text-black'
+                  ? 'bg-black text-white dark:bg-white dark:text-black'
                   : 'bg-[var(--surface-muted)] text-slate-400 group-hover:bg-[var(--surface-subtle)]',
               )}>
                 <MessageSquare size={10} />
@@ -92,7 +92,7 @@ export function ConversationList() {
                 <p className={clsx(
                   'truncate text-[12px] font-medium leading-snug',
                   active
-                    ? 'text-white'
+                    ? 'text-slate-900 dark:text-slate-100'
                     : 'text-slate-700 group-hover:text-slate-900 dark:text-slate-200 dark:group-hover:text-white',
                 )}>
                   {c.title ?? 'Untitled conversation'}

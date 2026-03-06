@@ -378,7 +378,7 @@ export function AppShell({ children }: AppShellProps) {
                 </button>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{activeRouteLabel}</p>
-                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">Manus-style workspace</p>
+                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">OpenAgents workspace</p>
                 </div>
               </div>
 
