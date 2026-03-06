@@ -91,15 +91,20 @@ export default function ChatPage() {
   return (
     <div className="min-h-[calc(100dvh-56px)] px-0 py-1 sm:px-2 sm:py-2 lg:h-[calc(100dvh-96px)] lg:min-h-0 lg:overflow-hidden">
       <div className="mx-auto flex min-h-[calc(100dvh-72px)] max-w-[1600px] flex-col gap-3 sm:gap-4 lg:h-full lg:min-h-0">
-        <header className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:px-5">
+        <header className="oa-card-elevated rounded-2xl px-4 py-3 sm:px-5">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
-                OpenAgents
-              </span>
-              <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                {activeConversation?.title ?? 'New conversation'}
-              </p>
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--accent)] text-[11px] font-bold text-white dark:bg-white dark:text-black">
+                OA
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                  OpenAgents Chat
+                </p>
+                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {activeConversation?.title ?? 'New conversation'}
+                </p>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -121,7 +126,11 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => setShowToolsPanel((open) => !open)}
-                className="hidden h-8 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-slate-600 transition hover:bg-[var(--surface-muted)] dark:text-slate-200 lg:inline-flex"
+                className={`hidden h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition dark:text-slate-200 lg:inline-flex ${
+                  showToolsPanel
+                    ? 'border-[var(--border-strong)] bg-[var(--surface-muted)] text-slate-800 shadow-sm'
+                    : 'border-[var(--border)] bg-[var(--surface)] text-slate-600 hover:bg-[var(--surface-muted)]'
+                }`}
                 title={showToolsPanel ? 'Hide tool runtime panel' : 'Show tool runtime panel'}
               >
                 <PanelRight size={12} />
@@ -131,7 +140,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => void loadConversations()}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-slate-600 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-slate-700 transition hover:bg-[var(--surface-muted)] hover:shadow-sm dark:text-slate-200"
                 title="Refresh sessions"
               >
                 <RefreshCw size={12} />
@@ -155,13 +164,13 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 lg:hidden dark:border-slate-700 dark:bg-slate-800">
+          <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 lg:hidden">
             <button
               type="button"
               onClick={() => setMobilePanel('sessions')}
               className={`rounded-lg px-2 py-2 text-xs font-semibold transition ${
                 mobilePanel === 'sessions'
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                  ? 'bg-[var(--surface)] text-slate-900 shadow-sm dark:text-slate-100'
                   : 'text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-slate-100'
               }`}
             >
@@ -172,7 +181,7 @@ export default function ChatPage() {
               onClick={() => setMobilePanel('chat')}
               className={`rounded-lg px-2 py-2 text-xs font-semibold transition ${
                 mobilePanel === 'chat'
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                  ? 'bg-[var(--surface)] text-slate-900 shadow-sm dark:text-slate-100'
                   : 'text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-slate-100'
               }`}
             >
@@ -183,7 +192,7 @@ export default function ChatPage() {
               onClick={() => setMobilePanel('tools')}
               className={`rounded-lg px-2 py-2 text-xs font-semibold transition ${
                 mobilePanel === 'tools'
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                  ? 'bg-[var(--surface)] text-slate-900 shadow-sm dark:text-slate-100'
                   : 'text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-slate-100'
               }`}
             >
@@ -192,8 +201,8 @@ export default function ChatPage() {
           </div>
         </header>
 
-        <div className={`hidden min-h-0 flex-1 gap-3 lg:grid ${showToolsPanel ? 'lg:grid-cols-[280px_minmax(0,1fr)_320px]' : 'lg:grid-cols-[280px_minmax(0,1fr)]'}`}>
-          <aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+        <div className={`hidden min-h-0 flex-1 gap-3 lg:grid ${showToolsPanel ? 'lg:grid-cols-[290px_minmax(0,1fr)_330px]' : 'lg:grid-cols-[290px_minmax(0,1fr)]'}`}>
+          <aside className="oa-card-elevated min-h-0 overflow-hidden rounded-2xl">
             <ConversationList />
           </aside>
 
@@ -221,7 +230,7 @@ export default function ChatPage() {
           </section>
 
           {showToolsPanel && (
-            <aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+            <aside className="oa-card-elevated min-h-0 overflow-hidden rounded-2xl">
               <LiveToolPanel />
             </aside>
           )}
@@ -229,7 +238,7 @@ export default function ChatPage() {
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 lg:hidden">
           {mobilePanel === 'sessions' && (
-            <aside className="min-h-0 flex-1 rounded-[24px] border border-[var(--border)] bg-[var(--surface)]">
+            <aside className="oa-card-elevated min-h-0 flex-1 overflow-hidden rounded-2xl">
               <ConversationList />
             </aside>
           )}
@@ -261,7 +270,7 @@ export default function ChatPage() {
           )}
 
           {mobilePanel === 'tools' && (
-            <section className="min-h-0 flex-1">
+            <section className="oa-card-elevated min-h-0 flex-1 overflow-hidden rounded-2xl">
               <LiveToolPanel />
             </section>
           )}

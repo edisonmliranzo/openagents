@@ -30,34 +30,34 @@ export function ConversationList() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3.5">
         <div>
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">Chats</h2>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Chats</h2>
           <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{filtered.length} conversations</p>
         </div>
         <button
           onClick={() => void createConversation()}
           title="New conversation"
-          className="inline-flex h-8 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] font-semibold text-slate-600 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
+          className="inline-flex h-8 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold text-slate-700 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
         >
           <MessageSquarePlus size={14} />
           New
         </button>
       </div>
 
-      <div className="shrink-0 px-3 pb-1 pt-2">
-        <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2">
+      <div className="shrink-0 px-3 pb-1 pt-2.5">
+        <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 shadow-sm">
           <Search size={12} className="shrink-0 text-slate-400 dark:text-slate-500" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search sessions..."
+            placeholder="Search chats..."
             className="w-full bg-transparent text-[12px] text-slate-700 placeholder-slate-400 outline-none dark:text-slate-200 dark:placeholder-slate-500"
           />
         </div>
       </div>
 
-      <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3 pt-1">
+      <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 pt-1.5">
         {filtered.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <MessageSquare size={20} className="text-slate-300 dark:text-slate-600" />
@@ -74,10 +74,10 @@ export function ConversationList() {
               key={c.id}
               onClick={() => void selectConversation(c.id)}
               className={clsx(
-                'group flex w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-all duration-100',
+                'group flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-100',
                 active
-                  ? 'border-[var(--border)] bg-[var(--surface-muted)] text-slate-900 dark:text-slate-100'
-                  : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)]',
+                  ? 'border-[var(--border-strong)] bg-[var(--surface-muted)] text-slate-900 shadow-sm dark:text-slate-100'
+                  : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)] hover:shadow-sm',
               )}
             >
               <div className={clsx(
@@ -105,6 +105,9 @@ export function ConversationList() {
                   </p>
                 )}
               </div>
+              {active && (
+                <span className="mt-0.5 inline-flex h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+              )}
             </button>
           )
         })}

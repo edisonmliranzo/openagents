@@ -55,10 +55,10 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--surface)]">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
       {learnedSkill && (
-        <div className="relative border-b border-[var(--border)] px-4 py-3 sm:px-5">
-          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+        <div className="relative border-b border-[var(--border)] bg-[var(--surface-muted)]/65 px-4 py-3 sm:px-5">
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
             <BrainCircuit size={12} />
             <span>Auto-learned skill active</span>
             <code className="rounded-md bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-slate-700 dark:text-slate-200">
@@ -73,18 +73,18 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5">
+      <div className="relative min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-[var(--surface)] via-[var(--surface)] to-[var(--surface-muted)]/45 px-3 py-3 sm:px-5">
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center py-6">
             <div className="w-full max-w-[720px] space-y-6 text-center">
-              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-black text-white">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--accent)] text-white shadow-sm dark:bg-white dark:text-black">
                 <Sparkles size={17} />
               </div>
               <div>
-                <p className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
+                <p className="text-[30px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
                   What can OpenAgents do for you?
                 </p>
-                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                <p className="mx-auto mt-2 max-w-[580px] text-sm text-slate-500 dark:text-slate-400">
                   OpenAgents workspace with approvals, tool execution, and deep research.
                 </p>
               </div>
@@ -101,7 +101,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
                     type="button"
                     disabled={!gatewayConnected || isStreaming}
                     onClick={() => void handleQuickPrompt(prompt)}
-                    className="manus-chip max-w-full px-4 py-2 text-left text-[13px] text-slate-700 transition disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200"
+                    className="max-w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-left text-[13px] text-slate-700 transition hover:bg-[var(--surface-muted)] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-200"
                   >
                     {prompt}
                   </button>
@@ -118,7 +118,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-[860px] space-y-4 pb-3 pt-2">
+          <div className="mx-auto max-w-[920px] space-y-4 pb-3 pt-2">
             {messages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
@@ -133,7 +133,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
           <p>{isStreaming ? 'OpenAgents is responding...' : 'Ready'}</p>
         </div>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
-          <div className="flex w-full items-end gap-2 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 sm:flex-1">
+          <div className="flex w-full items-end gap-2 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 shadow-sm sm:flex-1">
             <textarea
               ref={textareaRef}
               value={input}
@@ -163,7 +163,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
             <button
               type="button"
               onClick={() => void onNewSession()}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-xs font-semibold text-slate-700 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-xs font-semibold text-slate-700 transition hover:bg-[var(--surface-muted)] hover:shadow-sm dark:text-slate-200"
             >
               <PlusCircle size={14} />
               New chat
