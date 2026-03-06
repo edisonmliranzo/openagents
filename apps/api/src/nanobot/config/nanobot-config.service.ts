@@ -38,11 +38,21 @@ export class NanobotConfigService {
     }
     const fallback = 8
     const configured = parseIntInRange(this.config.get<string>('NANOBOT_MAX_LOOP_STEPS'), fallback, 1, 50)
+    const manusModeEnabled = parseBoolean(this.config.get<string>('MANUS_MODE'), false)
+    if (manusModeEnabled) {
+      const shouldApplyPreset = configured === fallback
+      if (!shouldApplyPreset) return configured
+      return parseIntInRange(this.config.get<string>('MANUS_MODE_NANOBOT_MAX_LOOP_STEPS'), 14, 1, 50)
+    }
     const manusLiteEnabled = parseBoolean(this.config.get<string>('MANUS_LITE'), false)
     if (!manusLiteEnabled) return configured
     const shouldApplyPreset = configured === fallback
     if (!shouldApplyPreset) return configured
     return parseIntInRange(this.config.get<string>('MANUS_LITE_NANOBOT_MAX_LOOP_STEPS'), 10, 1, 50)
+  }
+
+  get manusModeEnabled() {
+    return parseBoolean(this.config.get<string>('MANUS_MODE'), false)
   }
 
   get shadowMode() {

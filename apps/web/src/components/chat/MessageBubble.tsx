@@ -191,9 +191,9 @@ export function MessageBubble({ message }: { message: Message }) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[78%] rounded-2xl rounded-br-md bg-gradient-to-r from-indigo-500 to-cyan-500 px-4 py-3 text-sm text-white shadow-card">
+        <div className="max-w-[92%] rounded-2xl rounded-br-md border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-slate-800 sm:max-w-[78%] dark:text-slate-100">
           <p className="whitespace-pre-wrap">{message.content}</p>
-          <p className="mt-2 text-right text-[11px] font-medium text-indigo-100">{formatClock(message.createdAt)}</p>
+          <p className="mt-2 text-right text-[11px] font-medium text-slate-400 dark:text-slate-500">{formatClock(message.createdAt)}</p>
         </div>
       </div>
     )
@@ -201,20 +201,20 @@ export function MessageBubble({ message }: { message: Message }) {
 
   return (
     <div className="space-y-2">
-      <article className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-card dark:border-slate-700 dark:bg-slate-900/90">
-        <div className="mb-2 flex items-center justify-between">
+      <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="inline-flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-cyan-500 text-[10px] font-bold text-white">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-[10px] font-bold text-white dark:bg-white dark:text-black">
               OA
             </div>
             <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">OpenAgent</p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => void handleToggleLineage()}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-[var(--surface-subtle)] dark:text-slate-300"
             >
               Why this answer
             </button>
@@ -222,7 +222,7 @@ export function MessageBubble({ message }: { message: Message }) {
               <button
                 type="button"
                 onClick={() => void handleCopyAll()}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-[var(--surface-subtle)] dark:text-slate-300"
               >
                 <Copy size={12} />
                 {copiedAll ? 'Copied' : codeBlocks.length > 1 ? 'Copy all code' : 'Copy code'}
@@ -246,14 +246,14 @@ export function MessageBubble({ message }: { message: Message }) {
               const lang = block.language?.trim() ?? ''
               return (
                 <div key={`line-code-${idx}`} className="my-2 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center justify-between bg-slate-100 px-3 py-1.5 dark:bg-slate-800">
+                  <div className="flex items-center justify-between bg-[var(--surface-muted)] px-3 py-1.5">
                     <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
                       {lang || 'code'}
                     </span>
                     <button
                       type="button"
                       onClick={() => void handleCopyBlock(idx, block.content)}
-                      className="rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                      className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-[var(--surface-muted)] dark:text-slate-200"
                     >
                       {copiedCodeIndex === idx ? 'Copied' : 'Copy'}
                     </button>
@@ -274,7 +274,7 @@ export function MessageBubble({ message }: { message: Message }) {
         </div>
 
         {lineageOpen && (
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-xs text-slate-700 dark:text-slate-300">
             {lineageLoading && <p>Loading lineage...</p>}
             {!lineageLoading && lineageError && <p className="text-amber-700 dark:text-amber-300">{lineageError}</p>}
             {!lineageLoading && lineage && (

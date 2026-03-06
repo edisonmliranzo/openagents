@@ -52,19 +52,28 @@ export class NanobotProviderRouterService {
     const provider = this.normalizeProvider(rawProvider) ?? 'anthropic'
     const model = rawModel?.trim() || undefined
 
-    if (!this.readBooleanEnv('MANUS_LITE', false)) {
+    const manusModeEnabled = this.readBooleanEnv('MANUS_MODE', false)
+    const manusLiteEnabled = this.readBooleanEnv('MANUS_LITE', false)
+    if (!manusModeEnabled && !manusLiteEnabled) {
       return { provider, model }
     }
 
-    const forceRouting = this.readBooleanEnv('MANUS_LITE_FORCE_ROUTING', false)
+    const forceRouting = manusModeEnabled
+      ? this.readBooleanEnv('MANUS_MODE_FORCE_ROUTING', false) || this.readBooleanEnv('MANUS_LITE_FORCE_ROUTING', false)
+      : this.readBooleanEnv('MANUS_LITE_FORCE_ROUTING', false)
     const onSchemaDefaults = provider === 'anthropic'
       && (!model || model === LLM_MODELS.anthropic.default)
     if (!forceRouting && !onSchemaDefaults) {
       return { provider, model }
     }
 
-    const presetProvider = this.normalizeProvider(process.env.MANUS_LITE_PROVIDER) ?? 'ollama'
-    const presetModel = process.env.MANUS_LITE_MODEL?.trim()
+    const presetProvider = manusModeEnabled
+      ? this.normalizeProvider(process.env.MANUS_MODE_PROVIDER)
+        ?? this.normalizeProvider(process.env.MANUS_LITE_PROVIDER)
+        ?? 'ollama'
+      : this.normalizeProvider(process.env.MANUS_LITE_PROVIDER) ?? 'ollama'
+    const presetModel = (manusModeEnabled ? process.env.MANUS_MODE_MODEL?.trim() : '')
+      || process.env.MANUS_LITE_MODEL?.trim()
       || LLM_MODELS[presetProvider].fast
 
     return {
