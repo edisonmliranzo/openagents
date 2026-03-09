@@ -4,59 +4,16 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, CheckCircle2, Cloud, Laptop2, Sparkles } from 'lucide-react'
+import {
+  OPENAGENTS_LOCAL_QUICK_START,
+  type OpenAgentsLocalQuickStartPlatform,
+} from '@openagents/shared'
 import styles from './landing.module.css'
 import { useAuthStore } from '@/stores/auth'
 
-type Platform = 'windows' | 'macos' | 'ubuntu'
+type Platform = OpenAgentsLocalQuickStartPlatform
 
-interface QuickStartConfig {
-  label: string
-  shellPrefix: string
-  localCommands: string[]
-  runtimeNote: string
-}
-
-const QUICK_START: Record<Platform, QuickStartConfig> = {
-  windows: {
-    label: 'Windows',
-    shellPrefix: 'PS>',
-    localCommands: [
-      'git clone https://github.com/openagents/openagents.git',
-      'cd openagents',
-      'pnpm install',
-      'copy apps\\api\\.env.example apps\\api\\.env',
-      'pnpm --filter @openagents/api db:migrate',
-      'pnpm dev',
-    ],
-    runtimeNote: 'Runs with PowerShell and local SQLite by default.',
-  },
-  macos: {
-    label: 'macOS',
-    shellPrefix: '$',
-    localCommands: [
-      'git clone https://github.com/openagents/openagents.git',
-      'cd openagents',
-      'pnpm install',
-      'cp apps/api/.env.example apps/api/.env',
-      'pnpm --filter @openagents/api db:migrate',
-      'pnpm dev',
-    ],
-    runtimeNote: 'Works with zsh/bash and local SQLite by default.',
-  },
-  ubuntu: {
-    label: 'Ubuntu',
-    shellPrefix: '$',
-    localCommands: [
-      'git clone https://github.com/openagents/openagents.git',
-      'cd openagents',
-      'pnpm install',
-      'cp apps/api/.env.example apps/api/.env',
-      'pnpm --filter @openagents/api db:migrate',
-      'pnpm dev',
-    ],
-    runtimeNote: 'Best on Ubuntu 22.04+ with Node.js 20+.',
-  },
-}
+const QUICK_START = OPENAGENTS_LOCAL_QUICK_START
 
 const CLOUD_STEPS = [
   'Sign in and activate OpenAgents Cloud Pro.',
@@ -87,7 +44,7 @@ const FEATURE_CARDS = [
 const DEPLOY_MODES = [
   {
     title: 'Local Runtime',
-    detail: 'Fast iteration on your laptop with SQLite and optional Ollama fallback.',
+    detail: 'Fast iteration on your laptop with Docker-backed Postgres/Redis and optional Ollama fallback.',
     action: 'Best for solo development',
   },
   {

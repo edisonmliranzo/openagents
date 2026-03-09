@@ -713,9 +713,10 @@ Notes:
 `auto` prefers Playwright for JS-heavy sites and falls back to static HTTP parsing if Playwright is unavailable.
 `computer_navigate` and `computer_click_link` now also accept optional `waitForSelector` + `waitForSelectorTimeoutMs`.
 
-### MANUS_LITE preset
+### Low-cost autonomy preset (`MANUS_LITE` compatibility)
 
-Enable `MANUS_LITE=true` to apply a low-cost preset that improves autonomous tool execution defaults:
+Enable `MANUS_LITE=true` to apply a low-cost OpenAgents compatibility preset that improves autonomous tool execution defaults.
+The `MANUS_*` env var names remain in place for backward compatibility:
 
 - Routing defaults (applied when user settings are still stock defaults, or always with `MANUS_LITE_FORCE_ROUTING=true`):
   - `MANUS_LITE_PROVIDER=ollama`
@@ -726,9 +727,10 @@ Enable `MANUS_LITE=true` to apply a low-cost preset that improves autonomous too
   - `MANUS_LITE_TOOL_RETRY_BASE_DELAY_MS=350`
   - `MANUS_LITE_NANOBOT_MAX_LOOP_STEPS=10`
 
-### MANUS_MODE preset
+### High-autonomy preset (`MANUS_MODE` compatibility)
 
-Enable `MANUS_MODE=true` to apply a higher-autonomy Manus-style runtime contract:
+Enable `MANUS_MODE=true` to apply the higher-autonomy OpenAgents compatibility preset.
+The `MANUS_*` env var names remain in place for backward compatibility:
 
 - Prompt/runtime behavior:
   - explicitly runs understand -> plan -> execute -> verify

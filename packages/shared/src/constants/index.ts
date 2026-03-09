@@ -84,3 +84,5 @@ export const CI_HEALER_JOB_NAMES = {
 export const WORKFLOW_JOB_NAMES = {
   run: 'workflow.run',
 } as const
+
+export * from './project'

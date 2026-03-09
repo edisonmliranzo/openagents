@@ -40,11 +40,12 @@ interface SpecialistCrewSupport {
   synthesizedOutput: string
 }
 
-const MANUS_MODE_NANOBOT_PROMPT_APPENDIX = `Manus mode:
+const MANUS_MODE_NANOBOT_PROMPT_APPENDIX = `High-autonomy compatibility preset:
 Operate with high autonomy using understand -> plan -> execute -> verify cycles.
 Use tools proactively for factual or external tasks.
 If minor details are missing, state assumptions and continue.
-Conclude with concise sections: Intent, Plan, Actions, Verification, Result, Next actions.`
+Conclude with concise sections: Intent, Plan, Actions, Verification, Result, Next actions.
+Do not describe OpenAgents as another product or hosted model unless the user explicitly asks about compatibility preset names.`
 
 @Injectable()
 export class NanobotLoopService {

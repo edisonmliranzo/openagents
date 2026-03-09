@@ -1,7 +1,12 @@
 'use client'
 
+import {
+  OPENAGENTS_REPO_WEB_URL,
+  OPENAGENTS_UBUNTU_SERVER_INSTALL_GUIDE,
+} from '@openagents/shared'
+
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
-const REPO_BASE = 'https://github.com/openagents/openagents'
+const REPO_BASE = OPENAGENTS_REPO_WEB_URL
 const FEATURE_FOCUS = [
   {
     title: 'Memory / Brain',
@@ -168,35 +173,7 @@ const DOC_LINKS = [
   },
 ]
 
-const LATEST_INSTALL_GUIDE = `# Ubuntu VPS + Docker (latest)
-apt-get update
-apt-get install -y git curl ca-certificates
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs docker.io docker-compose-plugin
-corepack enable
-corepack prepare pnpm@9.0.0 --activate
-systemctl enable --now docker
-
-mkdir -p /opt
-cd /opt
-if [ ! -d openagents/.git ]; then
-  git clone https://github.com/edisonmliranzo/openagents.git
-fi
-cd /opt/openagents
-git pull origin main
-
-cp -n infra/docker/.env.prod.example infra/docker/.env.prod
-# edit infra/docker/.env.prod and set real secrets
-# for host Ollama + Docker API:
-# DEFAULT_LLM_PROVIDER=ollama
-# OLLAMA_BASE_URL=http://host.docker.internal:11434
-# OLLAMA_ALLOWED_HOSTS=localhost,127.0.0.1,::1,host.docker.internal
-# NEXT_PUBLIC_OLLAMA_BASE_URL=http://host.docker.internal:11434
-
-pnpm install --frozen-lockfile
-pnpm prod:build
-pnpm prod:up
-pnpm prod:check:ollama`
+const LATEST_INSTALL_GUIDE = OPENAGENTS_UBUNTU_SERVER_INSTALL_GUIDE
 
 const BYBIT_DEMO_GUIDE = `# Bybit demo tools (optional)
 # infra/docker/.env.prod

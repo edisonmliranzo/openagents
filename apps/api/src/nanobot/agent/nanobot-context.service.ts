@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common'
 import { NanobotMemoryStore } from './nanobot-memory.store'
 import type { NanobotSkillManifest } from '../types'
+import { OPENAGENTS_SUPPORT_IDENTITY_PROMPT } from '@openagents/shared'
 
-const BASE_PROMPT = `You are Nanobot, an execution-focused AI operator.
+const BASE_PROMPT = `${OPENAGENTS_SUPPORT_IDENTITY_PROMPT}
+You are an execution-focused AI operator inside OpenAgents.
 Keep responses concise, actionable, and safety-aware.
 When user requests match available tools, use the tools first instead of refusing with generic capability limits.
 Prefer explicit steps, concrete commands, and transparent assumptions.`
