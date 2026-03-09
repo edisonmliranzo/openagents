@@ -538,6 +538,12 @@ export class AgentService {
         finalResponseContent =
           toolRound > 0 ? 'Completed tool execution.' : 'I could not generate a response.'
       }
+      finalResponseContent = this.enforceOpenAgentsIdentityAnswer({
+        content: finalResponseContent,
+        userMessage,
+        provider: activeProvider,
+        model: activeModel,
+      })
       if (manusModeEnabled) {
         emit('status', {
           status: 'verifying',
@@ -930,6 +936,47 @@ export class AgentService {
       const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       return new RegExp(`^${escaped}`, 'mi').test(content)
     })
+  }
+
+  private enforceOpenAgentsIdentityAnswer(input: {
+    content: string
+    userMessage: string
+    provider: LLMProvider
+    model: string | null | undefined
+  }) {
+    if (!this.isIdentityQuestion(input.userMessage)) {
+      return input.content
+    }
+
+    const runtime = this.describeRuntime(input.provider, input.model)
+    return runtime
+      ? `I'm OpenAgents, the assistant for the OpenAgents project.\n\nRuntime: ${runtime}. That is the underlying model/runtime, not my identity.`
+      : `I'm OpenAgents, the assistant for the OpenAgents project.`
+  }
+
+  private isIdentityQuestion(message: string) {
+    const normalized = message.trim().toLowerCase()
+    if (!normalized) return false
+    return /^(who are you|what are you|identify yourself|what is your name|who am i talking to)\b/.test(
+      normalized,
+    )
+  }
+
+  private describeRuntime(provider: LLMProvider, model?: string | null) {
+    const providerLabel =
+      provider === 'anthropic'
+        ? 'Anthropic'
+        : provider === 'openai'
+          ? 'OpenAI'
+          : provider === 'google'
+            ? 'Google'
+            : provider === 'ollama'
+              ? 'Ollama'
+              : provider === 'minimax'
+                ? 'MiniMax'
+                : provider
+    const modelLabel = model?.trim()
+    return modelLabel ? `${providerLabel} ${modelLabel}` : providerLabel
   }
 
   private toSingleLine(value: string, maxLength: number) {
