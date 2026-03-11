@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
 import type { ToolResult } from '@openagents/shared'
 import type { ToolDefinition } from '../tools.service'
+import { OutboundGuardService } from '../outbound-guard.service'
 
 type ComputerMode = 'http' | 'playwright'
 type ComputerModeInput = ComputerMode | 'auto'
@@ -33,6 +34,7 @@ interface ComputerSessionState {
   history: string[]
   updatedAt: string
   runtime: PlaywrightSessionRuntime | null
+  networkWarning: string | null
 }
 
 const MAX_SESSIONS = 120
@@ -57,6 +59,8 @@ export class ComputerUseTool implements OnModuleDestroy {
   private playwrightRuntime: any | null = null
   private playwrightLoadAttempted = false
   private browser: any | null = null
+
+  constructor(private outboundGuard: OutboundGuardService) {}
 
   get sessionStartDef(): ToolDefinition {
     return {
@@ -193,10 +197,11 @@ export class ComputerUseTool implements OnModuleDestroy {
       history: [],
       updatedAt: new Date().toISOString(),
       runtime: null,
+      networkWarning: null,
     }
 
     if (resolvedMode.mode === 'playwright') {
-      const runtime = await this.createPlaywrightSessionRuntime()
+      const runtime = await this.createPlaywrightSessionRuntime(session)
       if (!runtime) {
         if (modeRequest === 'playwright') {
           return {
@@ -278,13 +283,17 @@ export class ComputerUseTool implements OnModuleDestroy {
 
     try {
       const resolved = this.resolveUrl(url, session.currentUrl ?? undefined)
+      const safeUrl = await this.outboundGuard.assertSafeUrl(resolved, {
+        allowHttp: true,
+        context: 'Computer navigation',
+      })
       const captureScreenshot = Boolean(input.captureScreenshot)
       const warning = session.mode === 'playwright'
-        ? await this.navigatePlaywright(session, resolved, {
+        ? await this.navigatePlaywright(session, safeUrl, {
           waitForSelector: input.waitForSelector,
           waitForSelectorTimeoutMs: input.waitForSelectorTimeoutMs,
         })
-        : await this.navigateHttp(session, resolved)
+        : await this.navigateHttp(session, safeUrl)
 
       const output: Record<string, unknown> = {
         sessionId: session.id,
@@ -292,6 +301,10 @@ export class ComputerUseTool implements OnModuleDestroy {
         page: this.buildSnapshot(session),
       }
       if (warning) output.warning = warning
+      const networkWarning = this.takeNetworkWarning(session)
+      if (networkWarning) {
+        output.warning = [output.warning, networkWarning].filter(Boolean).join(' | ')
+      }
 
       if (captureScreenshot && session.mode === 'playwright') {
         const screenshot = await this.capturePlaywrightScreenshot(session)
@@ -301,10 +314,11 @@ export class ComputerUseTool implements OnModuleDestroy {
 
       return { success: true, output }
     } catch (error: any) {
+      const networkWarning = this.takeNetworkWarning(session)
       return {
         success: false,
         output: null,
-        error: error?.message ?? 'Navigation failed.',
+        error: [error?.message ?? 'Navigation failed.', networkWarning].filter(Boolean).join(' | '),
       }
     }
   }
@@ -373,6 +387,10 @@ export class ComputerUseTool implements OnModuleDestroy {
       page: this.buildSnapshot(session, input.maxLinks, input.maxTextChars),
     }
     if (warning) output.warning = warning
+    const networkWarning = this.takeNetworkWarning(session)
+    if (networkWarning) {
+      output.warning = [output.warning, networkWarning].filter(Boolean).join(' | ')
+    }
 
     if (Boolean(input.captureScreenshot) && session.mode === 'playwright') {
       const screenshot = await this.capturePlaywrightScreenshot(session)
@@ -472,9 +490,13 @@ export class ComputerUseTool implements OnModuleDestroy {
   }
 
   private async navigateHttp(session: ComputerSessionState, url: string) {
-    const response = await fetch(url, {
+    const { response, finalUrl } = await this.outboundGuard.fetchWithRedirectProtection(url, {
       headers: { 'User-Agent': 'OpenAgents-Computer/1.0' },
-      signal: AbortSignal.timeout(15_000),
+    }, {
+      allowHttp: true,
+      context: 'Computer navigation',
+      maxRedirects: 5,
+      timeoutMs: 15_000,
     })
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} while opening ${url}`)
@@ -483,10 +505,10 @@ export class ComputerUseTool implements OnModuleDestroy {
     const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
     const html = await response.text()
     const textContent = this.extractTextContent(html)
-    const links = this.extractLinksFromHtml(html, response.url || url)
-    const title = this.extractTitle(html) || response.url || url
+    const links = this.extractLinksFromHtml(html, finalUrl)
+    const title = this.extractTitle(html) || finalUrl
 
-    session.currentUrl = response.url || url
+    session.currentUrl = finalUrl
     session.title = this.clip(title, 240)
     session.textContent = this.clip(textContent, MAX_TEXT_CHARS)
     session.links = links
@@ -520,7 +542,7 @@ export class ComputerUseTool implements OnModuleDestroy {
       return null
     }
 
-    const runtime = await this.createPlaywrightSessionRuntime()
+    const runtime = await this.createPlaywrightSessionRuntime(input.session)
     if (!runtime) {
       return 'Detected likely client-rendered UI, but Playwright runtime is unavailable. Install playwright or start with mode="playwright".'
     }
@@ -984,6 +1006,20 @@ export class ComputerUseTool implements OnModuleDestroy {
     return value.length > max ? `${value.slice(0, max)}...` : value
   }
 
+  private noteNetworkWarning(session: ComputerSessionState, warning: string) {
+    const normalized = warning.trim()
+    if (!normalized) return
+    session.networkWarning = session.networkWarning && session.networkWarning !== normalized
+      ? `${session.networkWarning} | ${normalized}`
+      : normalized
+  }
+
+  private takeNetworkWarning(session: ComputerSessionState) {
+    const warning = session.networkWarning
+    session.networkWarning = null
+    return warning
+  }
+
   private async closeSessionRuntime(session: ComputerSessionState) {
     if (!session.runtime) return
     try {
@@ -1042,7 +1078,7 @@ export class ComputerUseTool implements OnModuleDestroy {
     return this.readBooleanEnv('COMPUTER_USE_PLAYWRIGHT_HEADLESS', true)
   }
 
-  private async createPlaywrightSessionRuntime(): Promise<PlaywrightSessionRuntime | null> {
+  private async createPlaywrightSessionRuntime(session: ComputerSessionState): Promise<PlaywrightSessionRuntime | null> {
     const browser = await this.ensurePlaywrightBrowser()
     if (!browser) return null
     const context = await browser.newContext({
@@ -1050,6 +1086,23 @@ export class ComputerUseTool implements OnModuleDestroy {
       userAgent: 'OpenAgents-Computer/1.0',
     })
     const page = await context.newPage()
+    await page.route('**/*', async (route: any) => {
+      const requestUrl = typeof route.request === 'function'
+        ? route.request()?.url?.() ?? ''
+        : ''
+      const blockReason = await this.outboundGuard.getBrowserRequestBlockReason(requestUrl)
+      if (blockReason) {
+        this.noteNetworkWarning(session, blockReason)
+        try {
+          await route.abort('blockedbyclient')
+        } catch {
+          await route.abort().catch(() => {})
+        }
+        return
+      }
+
+      await route.continue()
+    })
     return { context, page }
   }
 

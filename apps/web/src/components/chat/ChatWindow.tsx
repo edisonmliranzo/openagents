@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/chat'
+import { AgentAvatarPanel } from './AgentAvatarPanel'
 import { MessageBubble } from './MessageBubble'
 import { ArrowUp, BrainCircuit, PlusCircle, Sparkles } from 'lucide-react'
 
@@ -21,9 +22,12 @@ function formatIntentLabel(intent: string | undefined) {
 }
 
 export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) {
-  const { messages, sendMessage, isStreaming, activeConversationId, learnedSkill } = useChatStore()
+  const { messages, sendMessage, isStreaming, activeConversationId, learnedSkill, runStatus } =
+    useChatStore()
   const [input, setInput] = useState('')
+  const [showAvatarPanel, setShowAvatarPanel] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const contentLayoutRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const learnedIntentLabel = formatIntentLabel(learnedSkill?.intent)
 
@@ -37,6 +41,25 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`
   }, [input])
+
+  useEffect(() => {
+    const el = contentLayoutRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+
+    const syncLayout = (width: number) => {
+      setShowAvatarPanel(width >= 980)
+    }
+
+    syncLayout(el.clientWidth)
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      syncLayout(entry?.contentRect.width ?? el.clientWidth)
+    })
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   async function handleSend() {
     const text = input.trim()
@@ -57,26 +80,21 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
     }
   }
 
-  return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
-      {learnedSkill && (
-        <div className="relative border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 sm:px-5">
-          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-            <BrainCircuit size={12} />
-            <span>Auto-learned skill active</span>
-            <code className="rounded-md bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-              {learnedSkill.skillId}
-            </code>
-            {learnedIntentLabel && (
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-medium capitalize text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-                {learnedIntentLabel}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="relative min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-[var(--surface)] via-[var(--surface)] to-[var(--surface-muted)] px-3 py-3 sm:px-5">
+  const messageViewport = (
+    <div
+      className={
+        showAvatarPanel
+          ? 'min-h-0 h-full overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--surface)]'
+          : 'relative min-h-0 h-full'
+      }
+    >
+      <div
+        className={
+          showAvatarPanel
+            ? 'h-full overflow-y-auto bg-gradient-to-b from-[var(--surface)] via-[var(--surface)] to-[var(--surface-muted)] px-3 py-3 sm:px-5'
+            : 'h-full overflow-y-auto bg-gradient-to-b from-[var(--surface)] via-[var(--surface)] to-[var(--surface-muted)] px-3 py-3 sm:px-5'
+        }
+      >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center py-6">
             <div className="w-full max-w-[720px] space-y-6 text-center">
@@ -127,6 +145,47 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
             ))}
             <div ref={bottomRef} />
           </div>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
+      {learnedSkill && (
+        <div className="relative border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 sm:px-5">
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+            <BrainCircuit size={12} />
+            <span>Auto-learned skill active</span>
+            <code className="rounded-md bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+              {learnedSkill.skillId}
+            </code>
+            {learnedIntentLabel && (
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-medium capitalize text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+                {learnedIntentLabel}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div
+        ref={contentLayoutRef}
+        className={
+          showAvatarPanel
+            ? 'grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] gap-3 p-3 sm:p-4'
+            : 'min-h-0 flex flex-1 flex-col'
+        }
+      >
+        {messageViewport}
+
+        {showAvatarPanel && (
+          <AgentAvatarPanel
+            gatewayConnected={gatewayConnected}
+            isStreaming={isStreaming}
+            messages={messages}
+            runStatus={runStatus}
+          />
         )}
       </div>
 
