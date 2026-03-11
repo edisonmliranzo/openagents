@@ -14,6 +14,8 @@ import { ComputerUseTool } from './connectors/computer-use.tool'
 import { CronModule } from '../cron/cron.module'
 import { ConnectorsModule } from '../connectors/connectors.module'
 import { McpService } from './mcp.service'
+import { PromptGuardService } from './prompt-guard.service'
+import { OutboundGuardService } from './outbound-guard.service'
 
 @Module({
   imports: [CronModule, ConnectorsModule],
@@ -30,8 +32,10 @@ import { McpService } from './mcp.service'
     DeepResearchTool,
     ComputerUseTool,
     McpService,
+    PromptGuardService,
+    OutboundGuardService,
   ],
   controllers: [ToolsController],
-  exports: [ToolsService],
+  exports: [ToolsService, PromptGuardService, OutboundGuardService],
 })
 export class ToolsModule {}

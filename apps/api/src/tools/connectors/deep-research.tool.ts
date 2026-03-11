@@ -17,6 +17,8 @@ interface ResearchSource {
   status: 'fetched' | 'error'
   contentPreview: string | null
   error: string | null
+  guarded?: boolean
+  guardFindings?: Array<{ id: string; label: string; excerpt: string }>
 }
 
 const MAX_RESULTS = 12
@@ -33,15 +35,25 @@ export class DeepResearchTool {
     return {
       name: 'deep_research',
       displayName: 'Deep Research',
-      description: 'Research a topic by combining web search + multi-page fetch with citation-ready sources.',
+      description:
+        'Research a topic by combining web search + multi-page fetch with citation-ready sources and prompt-guard sanitization.',
       requiresApproval: false,
       inputSchema: {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Research query or question' },
-          maxResults: { type: 'number', description: `Max search results to scan (1-${MAX_RESULTS})` },
-          maxPages: { type: 'number', description: `Max pages to fetch from results (1-${MAX_PAGES})` },
-          provider: { type: 'string', description: 'Optional search provider override: auto, brave, searxng, or duckduckgo' },
+          maxResults: {
+            type: 'number',
+            description: `Max search results to scan (1-${MAX_RESULTS})`,
+          },
+          maxPages: {
+            type: 'number',
+            description: `Max pages to fetch from results (1-${MAX_PAGES})`,
+          },
+          provider: {
+            type: 'string',
+            description: 'Optional search provider override: auto, brave, searxng, or duckduckgo',
+          },
           includePageContent: {
             type: 'boolean',
             description: 'Include larger content excerpts from fetched pages (default: false)',
@@ -52,13 +64,16 @@ export class DeepResearchTool {
     }
   }
 
-  async run(input: {
-    query: string
-    maxResults?: number
-    maxPages?: number
-    provider?: string
-    includePageContent?: boolean
-  }, userId: string): Promise<ToolResult> {
+  async run(
+    input: {
+      query: string
+      maxResults?: number
+      maxPages?: number
+      provider?: string
+      includePageContent?: boolean
+    },
+    userId: string,
+  ): Promise<ToolResult> {
     const query = input.query?.trim()
     if (!query) {
       return { success: false, output: null, error: 'Query is required.' }
@@ -83,6 +98,7 @@ export class DeepResearchTool {
           provider: parsed.provider ?? 'unknown',
           searchedResults: 0,
           fetchedPages: 0,
+          guardedSources: 0,
           summary: `No search results were returned for "${query}".`,
           keyFindings: [],
           citations: [],
@@ -97,6 +113,7 @@ export class DeepResearchTool {
     )
     const fetched = sources.filter((source) => source.status === 'fetched')
     const synthesis = this.synthesize(query, fetched)
+    const guardedSources = fetched.filter((source) => source.guarded).length
 
     return {
       success: true,
@@ -105,6 +122,7 @@ export class DeepResearchTool {
         provider: parsed.provider ?? 'unknown',
         searchedResults: parsed.results.length,
         fetchedPages: fetched.length,
+        guardedSources,
         summary: synthesis.summary,
         keyFindings: synthesis.keyFindings,
         citations: sources.map((source, idx) => ({
@@ -150,7 +168,11 @@ export class DeepResearchTool {
     return { provider, results }
   }
 
-  private async fetchSource(result: WebResult, includePageContent: boolean, userId: string): Promise<ResearchSource> {
+  private async fetchSource(
+    result: WebResult,
+    includePageContent: boolean,
+    userId: string,
+  ): Promise<ResearchSource> {
     const fetched = await this.webFetch.fetch({ url: result.url }, userId)
     if (!fetched.success) {
       return {
@@ -164,6 +186,7 @@ export class DeepResearchTool {
     }
 
     const content = this.extractFetchContent(fetched.output)
+    const promptGuard = this.extractPromptGuard(fetched.output)
     const fallback = result.snippet || `Fetched source: ${result.url}`
     const previewLimit = includePageContent ? 2200 : 650
     return {
@@ -173,6 +196,8 @@ export class DeepResearchTool {
       status: 'fetched',
       contentPreview: this.clip(content || fallback, previewLimit),
       error: null,
+      guarded: promptGuard.flagged,
+      ...(promptGuard.findings.length > 0 ? { guardFindings: promptGuard.findings } : {}),
     }
   }
 
@@ -181,6 +206,43 @@ export class DeepResearchTool {
     const raw = output as Record<string, unknown>
     if (typeof raw.content !== 'string') return ''
     return raw.content
+  }
+
+  private extractPromptGuard(output: unknown) {
+    if (!output || typeof output !== 'object') {
+      return {
+        flagged: false,
+        findings: [] as Array<{ id: string; label: string; excerpt: string }>,
+      }
+    }
+
+    const raw = output as Record<string, unknown>
+    const promptGuard = raw.promptGuard
+    if (!promptGuard || typeof promptGuard !== 'object') {
+      return {
+        flagged: false,
+        findings: [] as Array<{ id: string; label: string; excerpt: string }>,
+      }
+    }
+
+    const guard = promptGuard as Record<string, unknown>
+    const findings = Array.isArray(guard.findings)
+      ? guard.findings
+          .filter(
+            (finding): finding is { id: string; label: string; excerpt: string } =>
+              Boolean(finding) &&
+              typeof finding === 'object' &&
+              typeof (finding as Record<string, unknown>).id === 'string' &&
+              typeof (finding as Record<string, unknown>).label === 'string' &&
+              typeof (finding as Record<string, unknown>).excerpt === 'string',
+          )
+          .slice(0, 6)
+      : []
+
+    return {
+      flagged: Boolean(guard.flagged),
+      findings,
+    }
   }
 
   private synthesize(query: string, sources: ResearchSource[]) {

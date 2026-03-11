@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { ToolResult } from '@openagents/shared'
 import type { ToolDefinition } from '../tools.service'
+import { PromptGuardService } from '../prompt-guard.service'
 
 type WebSearchProvider = 'auto' | 'brave' | 'searxng' | 'duckduckgo'
 
@@ -18,25 +19,34 @@ interface SearxngSearchResult {
 
 @Injectable()
 export class WebSearchTool {
+  constructor(private promptGuard: PromptGuardService) {}
+
   get def(): ToolDefinition {
     return {
       name: 'web_search',
       displayName: 'Web Search',
-      description: 'Search the web for current information via auto provider fallback (Brave, SearXNG, DuckDuckGo).',
+      description:
+        'Search the web for current information via auto provider fallback (Brave, SearXNG, DuckDuckGo) with prompt-guard sanitization.',
       requiresApproval: false,
       inputSchema: {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Search query' },
           count: { type: 'number', description: 'Number of results to return (1-10)' },
-          provider: { type: 'string', description: 'Optional provider override: auto, brave, searxng, or duckduckgo' },
+          provider: {
+            type: 'string',
+            description: 'Optional provider override: auto, brave, searxng, or duckduckgo',
+          },
         },
         required: ['query'],
       },
     }
   }
 
-  async search(input: { query: string; count?: number; provider?: string }, _userId: string): Promise<ToolResult> {
+  async search(
+    input: { query: string; count?: number; provider?: string },
+    _userId: string,
+  ): Promise<ToolResult> {
     const query = input.query?.trim()
     if (!query) {
       return { success: false, output: null, error: 'Query is required.' }
@@ -65,8 +75,15 @@ export class WebSearchTool {
   }
 
   private getProvider(inputProvider?: string): WebSearchProvider | string {
-    const configured = (inputProvider ?? process.env.WEB_SEARCH_PROVIDER ?? 'auto').trim().toLowerCase()
-    if (configured === 'auto' || configured === 'brave' || configured === 'searxng' || configured === 'duckduckgo') {
+    const configured = (inputProvider ?? process.env.WEB_SEARCH_PROVIDER ?? 'auto')
+      .trim()
+      .toLowerCase()
+    if (
+      configured === 'auto' ||
+      configured === 'brave' ||
+      configured === 'searxng' ||
+      configured === 'duckduckgo'
+    ) {
       return configured
     }
     return configured
@@ -132,27 +149,21 @@ export class WebSearchTool {
       })
 
       if (!response.ok) {
-        return { success: false, output: null, error: `Brave API request failed with status ${response.status}` }
+        return {
+          success: false,
+          output: null,
+          error: `Brave API request failed with status ${response.status}`,
+        }
       }
 
-      const payload = await response.json() as { web?: { results?: BraveSearchResult[] } }
-      const results = (payload.web?.results ?? [])
-        .slice(0, count)
-        .map((result) => ({
-          title: result.title ?? '',
-          url: result.url ?? '',
-          snippet: result.description ?? '',
-        }))
+      const payload = (await response.json()) as { web?: { results?: BraveSearchResult[] } }
+      const results = (payload.web?.results ?? []).slice(0, count).map((result) => ({
+        title: result.title ?? '',
+        url: result.url ?? '',
+        snippet: result.description ?? '',
+      }))
 
-      return {
-        success: true,
-        output: {
-          provider: 'brave',
-          query,
-          count: results.length,
-          results,
-        },
-      }
+      return this.buildSuccessOutput('brave', query, results)
     } catch (error: any) {
       return {
         success: false,
@@ -175,21 +186,17 @@ export class WebSearchTool {
       })
 
       if (!response.ok) {
-        return { success: false, output: null, error: `DuckDuckGo request failed with status ${response.status}` }
+        return {
+          success: false,
+          output: null,
+          error: `DuckDuckGo request failed with status ${response.status}`,
+        }
       }
 
       const html = await response.text()
       const results = this.parseDuckDuckGoHtml(html, count)
 
-      return {
-        success: true,
-        output: {
-          provider: 'duckduckgo',
-          query,
-          count: results.length,
-          results,
-        },
-      }
+      return this.buildSuccessOutput('duckduckgo', query, results)
     } catch (error: any) {
       return {
         success: false,
@@ -202,7 +209,8 @@ export class WebSearchTool {
   private parseDuckDuckGoHtml(html: string, count: number) {
     const results: Array<{ title: string; url: string; snippet: string }> = []
     const seenUrls = new Set<string>()
-    const anchorRegex = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+    const anchorRegex =
+      /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
     let match: RegExpExecArray | null
 
     while ((match = anchorRegex.exec(html)) && results.length < count) {
@@ -214,7 +222,9 @@ export class WebSearchTool {
       seenUrls.add(normalizedUrl)
 
       const windowHtml = html.slice(match.index, Math.min(html.length, match.index + 1500))
-      const snippetMatch = windowHtml.match(/class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i)
+      const snippetMatch = windowHtml.match(
+        /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i,
+      )
       const snippet = this.cleanHtmlText(snippetMatch?.[1] ?? '')
 
       results.push({
@@ -230,11 +240,12 @@ export class WebSearchTool {
   private normalizeDuckDuckGoResultUrl(rawHref: string) {
     if (!rawHref) return null
     try {
-      const candidate = rawHref.startsWith('//')
-        ? `https:${rawHref}`
-        : rawHref
+      const candidate = rawHref.startsWith('//') ? `https:${rawHref}` : rawHref
       const parsed = new URL(candidate, 'https://duckduckgo.com')
-      if ((parsed.hostname === 'duckduckgo.com' || parsed.hostname === 'www.duckduckgo.com') && parsed.pathname === '/l/') {
+      if (
+        (parsed.hostname === 'duckduckgo.com' || parsed.hostname === 'www.duckduckgo.com') &&
+        parsed.pathname === '/l/'
+      ) {
         const embedded = parsed.searchParams.get('uddg')
         if (!embedded) return null
         const decoded = decodeURIComponent(embedded)
@@ -323,32 +334,53 @@ export class WebSearchTool {
     }
   }
 
-  private async fetchSearxng(url: string, headers: Record<string, string>, query: string, count: number): Promise<ToolResult> {
+  private async fetchSearxng(
+    url: string,
+    headers: Record<string, string>,
+    query: string,
+    count: number,
+  ): Promise<ToolResult> {
     const response = await fetch(url, {
       headers,
       signal: AbortSignal.timeout(15_000),
     })
 
     if (!response.ok) {
-      return { success: false, output: null, error: `SearXNG request failed with status ${response.status}` }
+      return {
+        success: false,
+        output: null,
+        error: `SearXNG request failed with status ${response.status}`,
+      }
     }
 
-    const payload = await response.json() as { results?: SearxngSearchResult[] }
-    const results = (payload.results ?? [])
-      .slice(0, count)
-      .map((result) => ({
-        title: result.title ?? '',
-        url: result.url ?? '',
-        snippet: result.content ?? '',
-      }))
+    const payload = (await response.json()) as { results?: SearxngSearchResult[] }
+    const results = (payload.results ?? []).slice(0, count).map((result) => ({
+      title: result.title ?? '',
+      url: result.url ?? '',
+      snippet: result.content ?? '',
+    }))
 
+    return this.buildSuccessOutput('searxng', query, results)
+  }
+
+  private buildSuccessOutput(
+    provider: 'brave' | 'searxng' | 'duckduckgo',
+    query: string,
+    results: Array<{ title: string; url: string; snippet: string }>,
+  ): ToolResult {
+    const guarded = this.promptGuard.guardSearchResults(results)
     return {
       success: true,
       output: {
-        provider: 'searxng',
+        provider,
         query,
-        count: results.length,
-        results,
+        count: guarded.results.length,
+        results: guarded.results,
+        promptGuard: {
+          flaggedResults: guarded.flaggedResults,
+          findings: guarded.findings,
+          warning: guarded.warning ?? null,
+        },
       },
     }
   }
