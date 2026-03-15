@@ -17,7 +17,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import type { LlmApiKey, UserDomain, UserDomainProvider, UserDomainStatus } from '@openagents/shared'
-import { LLM_MODEL_OPTIONS } from '@openagents/shared'
+import { LLM_MODEL_OPTIONS, LLM_PROVIDER_CAPABILITIES } from '@openagents/shared'
 
 // Types
 
@@ -238,6 +238,34 @@ function resolveOllamaModel(inputModel: string, availableModels: string[]) {
   return ''
 }
 
+function describeModelSelection(provider: Provider, model: string) {
+  const normalized = model.trim().toLowerCase()
+  if (!normalized) return 'Pick a model that matches the run type: large models for complex tool chains, smaller ones for fast chat turns.'
+  if (provider === 'ollama') {
+    return normalized.includes('code')
+      ? 'Local coding-oriented model. Good for privacy-sensitive development tasks, but verify tool-heavy runs.'
+      : 'Local model selection. Quality and tool reliability depend on the model you have installed.'
+  }
+  if (
+    normalized.includes('mini')
+    || normalized.includes('nano')
+    || normalized.includes('flash-lite')
+    || normalized.includes('haiku')
+  ) {
+    return 'Fast/cheap tier. Good for lightweight chat and classification, but less reliable for long tool chains.'
+  }
+  if (
+    normalized.includes('opus')
+    || normalized.includes('sonnet')
+    || normalized.includes('gpt-5.1')
+    || normalized.includes('gemini-3.1')
+    || normalized.includes('pro')
+  ) {
+    return 'Higher-capability tier. Prefer this for multi-step reasoning, approvals, workflows, and tool orchestration.'
+  }
+  return 'Balanced tier. Good default when you want decent reasoning without the slowest or most expensive option.'
+}
+
 // Main Page
 
 export default function ConfigPage() {
@@ -287,6 +315,7 @@ export default function ConfigPage() {
     }
     return OLLAMA_FALLBACK_MODELS
   })()
+  const providerCapability = LLM_PROVIDER_CAPABILITIES[activeProvider]
 
   const loadOllamaModels = useCallback(async (baseUrl?: string) => {
     setOllamaModelsStatus('loading')
@@ -917,6 +946,53 @@ export default function ConfigPage() {
           </div>
 
           {/* Custom system prompt */}
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white/80 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {providerCapability.label} routing profile
+                </p>
+                <p className="mt-1 text-xs text-slate-500">{providerCapability.bestFor}</p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                  tool use: {providerCapability.toolUse}
+                </span>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                  latency: {providerCapability.latency}
+                </span>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                  context: {providerCapability.contextProfile}
+                </span>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Strengths</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {providerCapability.strengths.map((strength) => (
+                    <span key={strength} className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">
+                      {strength}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Routing caution</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {providerCapability.cautions.map((caution) => (
+                    <span key={caution} className="rounded-full bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
+                      {caution}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Selected model hint: {describeModelSelection(activeProvider, activeModel)}
+            </p>
+          </div>
+
           <label className="mt-4 block">
             <span className="text-xs font-medium text-slate-500">Custom System Prompt</span>
             <textarea

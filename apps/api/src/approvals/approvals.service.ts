@@ -4,12 +4,14 @@ import {
   ForbiddenException,
   BadRequestException,
   Logger,
+  OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common'
 import Bull, { type Queue } from 'bull'
 import {
   APPROVAL_JOB_NAMES,
   QUEUE_NAMES,
+  type Approval,
   type ApprovalJobData,
   type ApprovalRiskLevel,
 } from '@openagents/shared'
@@ -17,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ToolsService } from '../tools/tools.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { DataLineageService } from '../lineage/lineage.service'
+import { MissionControlService } from '../mission-control/mission-control.service'
 
 export interface CreateApprovalDto {
   conversationId: string
@@ -24,6 +27,9 @@ export interface CreateApprovalDto {
   userId: string
   toolName: string
   toolInput: Record<string, unknown>
+  risk?: ApprovalRiskScore
+  requiresApprovalByPolicy?: boolean
+  autonomyWithinWindow?: boolean
 }
 
 export interface ApprovalRiskScore {
@@ -47,7 +53,7 @@ export interface ApprovalContinuationResult {
 }
 
 @Injectable()
-export class ApprovalsService implements OnModuleDestroy {
+export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ApprovalsService.name)
   private readonly approvalQueue?: Queue<ApprovalJobData>
   private readonly continuationMode: 'inline' | 'queue'
@@ -58,6 +64,7 @@ export class ApprovalsService implements OnModuleDestroy {
     private tools: ToolsService,
     private notifications: NotificationsService,
     private lineage: DataLineageService,
+    private mission: MissionControlService,
   ) {
     const configuredMode = (process.env.APPROVAL_CONTINUATION_MODE ?? 'inline').toLowerCase()
     this.continuationMode = configuredMode === 'queue' ? 'queue' : 'inline'
@@ -74,6 +81,11 @@ export class ApprovalsService implements OnModuleDestroy {
         this.logger.error('Approval queue error', error?.stack ?? String(error))
       })
     }
+  }
+
+  onModuleInit() {
+    if (this.continuationMode !== 'inline') return
+    void this.resumeApprovedContinuations()
   }
 
   async onModuleDestroy() {
@@ -175,20 +187,48 @@ export class ApprovalsService implements OnModuleDestroy {
   }
 
   async create(dto: CreateApprovalDto) {
-    return this.prisma.approval.create({
+    const created = await this.prisma.approval.create({
       data: { ...dto, toolInput: JSON.stringify(dto.toolInput) },
     })
+    const approval = this.toApprovalView(created, dto)
+    await this.mission.publish({
+      userId: dto.userId,
+      type: 'approval',
+      status: 'pending',
+      source: 'agent.approval',
+      conversationId: dto.conversationId,
+      approvalId: created.id,
+      payload: {
+        toolName: dto.toolName,
+        risk: approval.risk ?? null,
+        inputKeys: approval.inputKeys ?? [],
+      },
+    })
+    return approval
   }
 
   async list(userId: string, status?: 'pending' | 'approved' | 'denied') {
-    return this.prisma.approval.findMany({
+    const approvals = await this.prisma.approval.findMany({
       where: { userId, ...(status ? { status } : {}) },
       orderBy: { createdAt: 'desc' },
+      include: {
+        message: {
+          select: { metadata: true },
+        },
+      },
     })
+    return approvals.map((approval) => this.toApprovalView(approval))
   }
 
   async resolve(id: string, userId: string, approved: boolean) {
-    const approval = await this.prisma.approval.findUnique({ where: { id } })
+    const approval = await this.prisma.approval.findUnique({
+      where: { id },
+      include: {
+        message: {
+          select: { metadata: true },
+        },
+      },
+    })
     if (!approval) throw new NotFoundException()
     if (approval.userId !== userId) throw new ForbiddenException()
     if (approval.status !== 'pending') throw new BadRequestException('Approval already resolved')
@@ -240,7 +280,23 @@ export class ApprovalsService implements OnModuleDestroy {
         .catch((error) => this.logger.error('Failed to create deny notification', error?.stack ?? String(error)))
     }
 
-    return updated
+    await this.mission.publish({
+      userId: approval.userId,
+      type: 'approval',
+      status: approved ? 'approved' : 'denied',
+      source: 'approval.resolve',
+      conversationId: approval.conversationId,
+      approvalId: approval.id,
+      payload: {
+        toolName: approval.toolName,
+        risk: this.toApprovalView(approval).risk ?? null,
+      },
+    })
+
+    return this.toApprovalView({
+      ...updated,
+      message: approval.message,
+    })
   }
 
   async continueApprovedResolutionById(
@@ -336,6 +392,18 @@ export class ApprovalsService implements OnModuleDestroy {
     source: 'inline' | 'queue'
   }): Promise<ApprovalContinuationResult> {
     const { approvalId, conversationId, messageId, userId, toolName, toolInput, source } = input
+    await this.mission.publish({
+      userId,
+      type: 'tool_call',
+      status: 'started',
+      source: `approval.${source}`,
+      conversationId,
+      approvalId,
+      payload: {
+        toolName,
+      },
+    })
+
     await this.prisma.message.update({
       where: { id: messageId },
       data: { status: 'streaming' },
@@ -411,6 +479,19 @@ export class ApprovalsService implements OnModuleDestroy {
       )
       .catch((error) => this.logger.error('Failed to create continuation notification', error?.stack ?? String(error)))
 
+    await this.mission.publish({
+      userId,
+      type: result.success ? 'tool_call' : 'failure',
+      status: result.success ? 'success' : 'failed',
+      source: `approval.${source}`,
+      conversationId,
+      approvalId,
+      payload: {
+        toolName,
+        error: result.success ? null : (result.error ?? 'Tool failed'),
+      },
+    })
+
     this.logger.log(
       `Approval ${approvalId} continued via ${source}. Tool ${toolName} ${result.success ? 'succeeded' : 'failed'}.`,
     )
@@ -476,6 +557,129 @@ export class ApprovalsService implements OnModuleDestroy {
       return JSON.stringify(value) ?? ''
     } catch {
       return String(value)
+    }
+  }
+
+  private async resumeApprovedContinuations() {
+    const candidates = await this.prisma.approval.findMany({
+      where: { status: 'approved' },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        toolName: true,
+        message: {
+          select: {
+            toolResultJson: true,
+          },
+        },
+      },
+    })
+
+    for (const candidate of candidates) {
+      if (candidate.message?.toolResultJson) continue
+      try {
+        await this.continueApprovedResolutionById(candidate.id, 'inline')
+      } catch (error) {
+        this.logger.warn(
+          `Failed to resume approved action ${candidate.id} (${candidate.toolName}): ${this.safeError(error)}`,
+        )
+      }
+    }
+  }
+
+  private toApprovalView(
+    approval: {
+      id: string
+      conversationId: string
+      messageId: string
+      userId: string
+      toolName: string
+      toolInput: string
+      status: string
+      resolvedAt: Date | null
+      createdAt: Date
+      message?: { metadata: string | null } | null
+    },
+    overrides?: {
+      risk?: ApprovalRiskScore
+      requiresApprovalByPolicy?: boolean
+      autonomyWithinWindow?: boolean
+    },
+  ): Approval {
+    const toolInput = this.parseToolInput(approval.toolInput, approval.id)
+    const metadata = this.parseApprovalMetadata(approval.message?.metadata)
+    const preview = this.renderToolOutput(toolInput)
+    const risk: Approval['risk'] =
+      overrides?.risk
+      ?? (metadata.riskLevel && Number.isFinite(metadata.riskScore)
+        ? {
+            level: metadata.riskLevel as 'low' | 'medium' | 'high',
+            score: Number(metadata.riskScore),
+            reason: metadata.riskReason || 'Approval review required.',
+          }
+        : null)
+
+    return {
+      id: approval.id,
+      conversationId: approval.conversationId,
+      messageId: approval.messageId,
+      userId: approval.userId,
+      toolName: approval.toolName,
+      toolInput,
+      ...(preview ? { toolInputPreview: preview.slice(0, 220) } : {}),
+      inputKeys: Object.keys(toolInput).slice(0, 8),
+      risk,
+      requiresApprovalByPolicy:
+        overrides?.requiresApprovalByPolicy ?? metadata.requiresApprovalByPolicy ?? false,
+      autonomyWithinWindow:
+        overrides?.autonomyWithinWindow ?? metadata.autonomyWithinWindow ?? false,
+      status: approval.status as Approval['status'],
+      resolvedAt: approval.resolvedAt ? approval.resolvedAt.toISOString() : null,
+      createdAt: approval.createdAt.toISOString(),
+    }
+  }
+
+  private parseApprovalMetadata(raw: string | null | undefined) {
+    if (!raw) {
+      return {
+        riskLevel: null as ApprovalRiskLevel | null,
+        riskScore: null as number | null,
+        riskReason: '',
+        autonomyWithinWindow: null as boolean | null,
+        requiresApprovalByPolicy: null as boolean | null,
+      }
+    }
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      const riskLevel =
+        parsed.riskLevel === 'low' || parsed.riskLevel === 'medium' || parsed.riskLevel === 'high'
+          ? parsed.riskLevel
+          : null
+      const parsedRiskScore =
+        typeof parsed.riskScore === 'number'
+          ? parsed.riskScore
+          : Number.parseFloat(String(parsed.riskScore ?? ''))
+      const riskScore = Number.isFinite(parsedRiskScore) ? parsedRiskScore : null
+      return {
+        riskLevel,
+        riskScore,
+        riskReason: typeof parsed.riskReason === 'string' ? parsed.riskReason : '',
+        autonomyWithinWindow:
+          typeof parsed.autonomyWithinWindow === 'boolean' ? parsed.autonomyWithinWindow : null,
+        requiresApprovalByPolicy:
+          typeof parsed.requiresApprovalByPolicy === 'boolean'
+            ? parsed.requiresApprovalByPolicy
+            : null,
+      }
+    } catch {
+      return {
+        riskLevel: null as ApprovalRiskLevel | null,
+        riskScore: null as number | null,
+        riskReason: '',
+        autonomyWithinWindow: null as boolean | null,
+        requiresApprovalByPolicy: null as boolean | null,
+      }
     }
   }
 }

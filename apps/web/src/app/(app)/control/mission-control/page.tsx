@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, RefreshCw } from 'lucide-react'
+import { Activity, RefreshCw, Wifi, WifiOff } from 'lucide-react'
 import { sdk } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import type {
@@ -73,6 +73,9 @@ export default function MissionControlPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [error, setError] = useState('')
+  const [streamState, setStreamState] = useState<'offline' | 'connecting' | 'live' | 'error'>('offline')
+  const [streamError, setStreamError] = useState('')
+  const [lastHeartbeatAt, setLastHeartbeatAt] = useState('')
 
   const fetchLatest = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true)
@@ -100,12 +103,67 @@ export default function MissionControlPage() {
   }, [fetchLatest])
 
   useEffect(() => {
-    if (!isAutoRefresh) return
-    const id = window.setInterval(() => {
-      void fetchLatest(true)
-    }, 5000)
-    return () => window.clearInterval(id)
-  }, [fetchLatest, isAutoRefresh])
+    if (!isAutoRefresh) {
+      setStreamState('offline')
+      setStreamError('')
+      return
+    }
+
+    let cancelled = false
+    let reconnectTimer: number | null = null
+    let controller: AbortController | null = null
+
+    const connect = () => {
+      if (cancelled) return
+      controller = new AbortController()
+      setStreamState('connecting')
+      setStreamError('')
+      void sdk.missionControl
+        .streamEvents(
+          {
+            limit,
+            types: selectedTypes,
+            statuses: selectedStatuses,
+            source: sourceFilter.trim() || undefined,
+          },
+          (chunk) => {
+            if (cancelled) return
+            if (chunk.event === 'snapshot') {
+              setEvents(chunk.data.events)
+              setNextCursor(chunk.data.nextCursor)
+              setError('')
+              setStreamState('live')
+              return
+            }
+            if (chunk.event === 'event') {
+              setEvents((prev) => mergeEvents(prev, [chunk.data]))
+              setStreamState('live')
+              return
+            }
+            setLastHeartbeatAt(chunk.data.now)
+            setStreamState('live')
+          },
+          controller.signal,
+        )
+        .then(() => {
+          if (cancelled) return
+          reconnectTimer = window.setTimeout(connect, 1500)
+        })
+        .catch((err: any) => {
+          if (cancelled) return
+          setStreamState('error')
+          setStreamError(err?.message ?? 'Mission control stream disconnected')
+          reconnectTimer = window.setTimeout(connect, 4000)
+        })
+    }
+
+    connect()
+    return () => {
+      cancelled = true
+      controller?.abort()
+      if (reconnectTimer) window.clearTimeout(reconnectTimer)
+    }
+  }, [isAutoRefresh, limit, selectedStatuses, selectedTypes, sourceFilter])
 
   async function loadMore() {
     if (!nextCursor) return
@@ -146,6 +204,16 @@ export default function MissionControlPage() {
     ))
   }
 
+  const liveLabel =
+    streamState === 'live'
+      ? 'Live'
+      : streamState === 'connecting'
+        ? 'Connecting'
+        : streamState === 'error'
+          ? 'Reconnect'
+          : 'Paused'
+  const visibleError = error || (streamState === 'error' ? streamError : '')
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -156,6 +224,23 @@ export default function MissionControlPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <div
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
+              streamState === 'live'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : streamState === 'error'
+                  ? 'border-red-200 bg-red-50 text-red-700'
+                  : 'border-slate-200 bg-white text-slate-600'
+            }`}
+          >
+            {streamState === 'live' ? <Wifi size={13} /> : <WifiOff size={13} />}
+            {liveLabel}
+            {lastHeartbeatAt && streamState === 'live' && (
+              <span className="text-[11px] text-slate-500">
+                hb {formatRelative(lastHeartbeatAt)}
+              </span>
+            )}
+          </div>
           <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
             <input
               type="checkbox"
@@ -328,9 +413,9 @@ export default function MissionControlPage() {
         )}
       </section>
 
-      {error && (
+      {visibleError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+          {visibleError}
         </div>
       )}
     </div>

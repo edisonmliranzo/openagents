@@ -1,3 +1,5 @@
+import type { LLMProvider } from '../types/agent'
+
 export const API_VERSION = 'v1'
 export const API_BASE = `/api/${API_VERSION}`
 
@@ -53,6 +55,65 @@ export const LLM_MODEL_OPTIONS = {
   ],
   ollama: ['llama3.2', 'mistral', 'codellama', 'neural-chat', 'phi3', 'gemma', 'gemma3', 'gemma3:1b', 'minimax-m1:cloud', 'minimax-m2:cloud', 'minimax-m2.5:cloud'],
   minimax: ['MiniMax-M2', 'MiniMax-M2.5'],
+} as const
+
+export const LLM_PROVIDER_CAPABILITIES: Record<
+  LLMProvider,
+  {
+    label: string
+    bestFor: string
+    toolUse: 'strong' | 'good' | 'basic'
+    latency: 'fast' | 'balanced' | 'variable'
+    contextProfile: 'standard' | 'large' | 'local'
+    strengths: string[]
+    cautions: string[]
+  }
+> = {
+  anthropic: {
+    label: 'Anthropic',
+    bestFor: 'Long-form reasoning, coding, and reliable tool orchestration.',
+    toolUse: 'strong',
+    latency: 'balanced',
+    contextProfile: 'large',
+    strengths: ['strong instruction following', 'good code quality', 'stable multi-step tool use'],
+    cautions: ['higher latency than smaller models', 'requires external API key'],
+  },
+  openai: {
+    label: 'OpenAI',
+    bestFor: 'General-purpose assistant runs with strong tool calling and broad model coverage.',
+    toolUse: 'strong',
+    latency: 'balanced',
+    contextProfile: 'large',
+    strengths: ['broad model family', 'strong reasoning', 'good structured output support'],
+    cautions: ['quality varies by selected model tier', 'requires external API key'],
+  },
+  google: {
+    label: 'Google Gemini',
+    bestFor: 'Large-context tasks, search-heavy synthesis, and multimodal-friendly workflows.',
+    toolUse: 'good',
+    latency: 'balanced',
+    contextProfile: 'large',
+    strengths: ['large context windows', 'good retrieval-style prompting', 'strong value on flash models'],
+    cautions: ['tool behavior can vary more across model variants', 'requires external API key'],
+  },
+  ollama: {
+    label: 'Ollama',
+    bestFor: 'Private local runs, offline fallback, and cost-controlled development environments.',
+    toolUse: 'basic',
+    latency: 'variable',
+    contextProfile: 'local',
+    strengths: ['local execution', 'no per-token API cost', 'works as fallback without cloud keys'],
+    cautions: ['quality depends on installed local model', 'tool-heavy runs may be less reliable'],
+  },
+  minimax: {
+    label: 'MiniMax',
+    bestFor: 'Alternative cloud routing where you want another capable general model option.',
+    toolUse: 'good',
+    latency: 'fast',
+    contextProfile: 'standard',
+    strengths: ['competitive latency', 'simple model lineup', 'useful secondary provider'],
+    cautions: ['fewer tested paths in this codebase', 'requires external API key'],
+  },
 } as const
 
 export const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes

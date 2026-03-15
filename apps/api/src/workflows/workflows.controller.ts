@@ -1,6 +1,28 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common'
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
-import { IsArray, IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator'
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { WorkflowsService } from './workflows.service'
 import type {
@@ -40,7 +62,16 @@ class WorkflowStepDto {
   id?: string
 
   @IsString()
-  @IsIn(['agent_prompt', 'tool_call', 'delay', 'run_agent', 'run_tool', 'wait_approval', 'branch_condition'])
+  @IsIn([
+    'agent_prompt',
+    'tool_call',
+    'delay',
+    'run_agent',
+    'run_tool',
+    'wait_approval',
+    'branch_condition',
+    'set_state',
+  ])
   type!: string
 
   @IsOptional()
@@ -59,6 +90,10 @@ class WorkflowStepDto {
   @IsOptional()
   @IsObject()
   input?: Record<string, unknown>
+
+  @IsOptional()
+  @IsObject()
+  statePatch?: Record<string, unknown>
 
   @IsOptional()
   @IsInt()
@@ -82,6 +117,11 @@ class WorkflowStepDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(160)
+  outputKey?: string
+
+  @IsOptional()
+  @IsString()
   @MaxLength(80)
   approvalKey?: string
 
@@ -92,8 +132,13 @@ class WorkflowStepDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['last_output', 'trigger_kind', 'workflow_name'])
-  conditionSource?: 'last_output' | 'trigger_kind' | 'workflow_name'
+  @IsIn(['last_output', 'trigger_kind', 'workflow_name', 'run_input', 'state'])
+  conditionSource?: 'last_output' | 'trigger_kind' | 'workflow_name' | 'run_input' | 'state'
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  conditionPath?: string
 
   @IsOptional()
   @IsString()
@@ -233,6 +278,10 @@ export class WorkflowsController {
     return this.workflows.run(req.user.id, id, {
       triggerKind: 'webhook',
       webhookSecret: dto.webhookSecret,
+      idempotencyKey: dto.idempotencyKey,
+      approvedKeys: dto.approvedKeys,
+      sourceEvent: dto.sourceEvent,
+      input: dto.input,
     })
   }
 
@@ -241,5 +290,15 @@ export class WorkflowsController {
     const parsed = Number.parseInt(limit ?? '25', 10)
     const safe = Number.isFinite(parsed) ? parsed : 25
     return this.workflows.listRuns(req.user.id, id, safe)
+  }
+
+  @Post(':id/runs/:runId/rerun')
+  rerun(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('runId') runId: string,
+    @Body() dto: RunWorkflowDto,
+  ) {
+    return this.workflows.rerun(req.user.id, id, runId, dto)
   }
 }

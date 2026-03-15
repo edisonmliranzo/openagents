@@ -27,6 +27,11 @@ This document tracks parity work needed to align OpenAgents behavior with OpenCl
   - Daily notes `YYYY-MM-DD.md`
   - Chat logs `tg_<conversationId>.jsonl`
 - [x] Agent now performs multi-round tool loops (ReAct-style rounds, capped by `AGENT_MAX_TOOL_ROUNDS`).
+- [x] Mission Control now supports live SSE updates with run/tool/approval events.
+- [x] Approval UI now includes structured risk labels, policy/autonomy context, and input previews.
+- [x] Workflow runs now support rerun from saved input and persist resume cursors for restart recovery.
+- [x] Config UI now shows provider/model routing capability hints.
+- [x] Audit and memory UIs now expose drilldowns, review queue, and conflict governance.
 
 ## Next parity slices
 
@@ -44,21 +49,21 @@ This document tracks parity work needed to align OpenAgents behavior with OpenCl
 
 ### 3) Control-plane parity
 
-- [ ] Live event stream for approvals/tool runs across pages
-- [ ] Agent run timeline: thinking -> tool -> approval -> done/error
-- [ ] Rich audit details for tool inputs/outputs and actor identity
+- [x] Live event stream for approvals/tool runs across pages
+- [x] Agent run timeline: thinking -> tool -> approval -> done/error
+- [x] Rich audit details for tool inputs/outputs and actor identity
 
 ### 4) Reliability parity
 
-- [ ] Deterministic resume after API/worker restart
+- [x] Deterministic resume after API/worker restart (workflow runs + approved inline continuations)
 - [ ] Conversation state repair when run status and messages diverge
 - [ ] Backpressure + timeout policies per tool/provider
 
 ### 5) UX parity
 
-- [ ] Better approval cards (diff-style input preview + risk labels)
-- [ ] Manual re-run for failed tool actions
-- [ ] Per-provider model capability hints (tool-calling, context window, latency)
+- [x] Better approval cards (diff-style input preview + risk labels)
+- [x] Manual re-run for failed workflow runs
+- [x] Per-provider model capability hints (tool-calling, context window, latency)
 
 ## Implementation order
 

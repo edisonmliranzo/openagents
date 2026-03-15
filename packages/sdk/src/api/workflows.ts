@@ -27,6 +27,9 @@ export function createWorkflowsApi(client: OpenAgentsClient) {
     listRuns: (id: string, limit = 25) =>
       client.get<WorkflowRun[]>(`/api/v1/workflows/${id}/runs?limit=${limit}`),
 
+    rerun: (id: string, runId: string, input: RunWorkflowInput = {}) =>
+      client.post<WorkflowRun>(`/api/v1/workflows/${id}/runs/${runId}/rerun`, input),
+
     triggerWebhook: (id: string, webhookSecret: string) =>
       client.post<WorkflowRun>(`/api/v1/workflows/${id}/webhook`, { webhookSecret }),
   }

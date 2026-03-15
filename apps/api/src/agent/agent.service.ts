@@ -9,6 +9,7 @@ import { AuditService } from '../audit/audit.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { DataLineageService } from '../lineage/lineage.service'
 import { PromptGuardService } from '../tools/prompt-guard.service'
+import { MissionControlService } from '../mission-control/mission-control.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
   LLM_MODELS,
@@ -116,6 +117,7 @@ export class AgentService {
     private notifications: NotificationsService,
     private lineage: DataLineageService,
     private promptGuard: PromptGuardService,
+    private mission: MissionControlService,
   ) {}
 
   async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
@@ -129,6 +131,8 @@ export class AgentService {
     const run = await this.prisma.agentRun.create({
       data: { conversationId, status: 'thinking' },
     })
+    let activeProviderForRun: LLMProvider | null = null
+    let activeModelForRun: string | null = null
 
     try {
       // 3. Load user settings (provider, custom prompt)
@@ -223,6 +227,8 @@ export class AgentService {
       let activeUserApiKey = userApiKey
       let activeUserBaseUrl = userBaseUrl
       let activeModel = preferredModel
+      activeProviderForRun = activeProvider
+      activeModelForRun = activeModel ?? null
       const runMetrics: AgentRunMetrics = {
         provider,
         model: preferredModel ?? null,
@@ -251,6 +257,20 @@ export class AgentService {
         riskHigh: 0,
         toolCalls: [],
       }
+      void this.mission.publish({
+        userId,
+        type: 'run',
+        status: 'started',
+        source: 'agent.run',
+        runId: run.id,
+        conversationId,
+        payload: {
+          provider: activeProvider,
+          model: activeModel ?? null,
+          manusModeEnabled,
+          manusLiteEnabled: runMetrics.manusLiteEnabled,
+        },
+      })
       const completeWithProviderFallback = async (
         messages: Array<{ role: 'user' | 'assistant'; content: string }>,
       ) => {
@@ -290,6 +310,8 @@ export class AgentService {
           activeUserApiKey = undefined
           activeUserBaseUrl = ollamaBaseUrl
           activeModel = undefined
+          activeProviderForRun = activeProvider
+          activeModelForRun = activeModel ?? null
           emit('status', { status: 'thinking', provider: 'ollama', fallback: true })
           return this.llm.complete(
             messages,
@@ -397,6 +419,7 @@ export class AgentService {
                   riskScore: risk.score,
                   riskReason: risk.reason,
                   autonomyWithinWindow: autonomyStatus.withinWindow,
+                  requiresApprovalByPolicy: toolDef.requiresApproval,
                 }),
               },
             })
@@ -407,6 +430,9 @@ export class AgentService {
               userId,
               toolName: toolCall.name,
               toolInput: toolCall.input,
+              risk,
+              requiresApprovalByPolicy: toolDef.requiresApproval,
+              autonomyWithinWindow: autonomyStatus.withinWindow,
             })
             lineageApprovals.push(approval.id)
             lineageTools.push({
@@ -452,6 +478,18 @@ export class AgentService {
             data: { status: 'running_tool' },
           })
           emit('status', { status: 'running_tool', tool: toolCall.name })
+          void this.mission.publish({
+            userId,
+            type: 'tool_call',
+            status: 'started',
+            source: 'agent.run',
+            runId: run.id,
+            conversationId,
+            payload: {
+              toolName: toolCall.name,
+              round: toolRound,
+            },
+          })
 
           const toolExecution = await this.executeToolWithRetry({
             toolName: toolCall.name,
@@ -514,6 +552,20 @@ export class AgentService {
             result,
             attempts: toolExecution.attempts,
             recoveredByRetry: toolExecution.recoveredByRetry,
+          })
+          void this.mission.publish({
+            userId,
+            type: result.success ? 'tool_call' : 'failure',
+            status: result.success ? 'success' : 'failed',
+            source: 'agent.run',
+            runId: run.id,
+            conversationId,
+            payload: {
+              toolName: toolCall.name,
+              attempts: toolExecution.attempts,
+              recoveredByRetry: toolExecution.recoveredByRetry,
+              error: result.success ? null : (result.error ?? 'Tool execution failed'),
+            },
           })
           const externalContentPrefix = this.promptGuard.buildUntrustedContentPrefix(toolCall.name)
           const successResultContent = externalContentPrefix
@@ -627,8 +679,39 @@ export class AgentService {
 
       // 12. Audit log
       this.audit
-        .log(userId, 'agent_run', 'conversation', conversationId, { runId: run.id })
+        .log(userId, 'agent_run', 'conversation', conversationId, {
+          runId: run.id,
+          provider: activeProvider,
+          model: activeModel ?? null,
+          toolRounds: toolRound,
+          approvalsRequested: runMetrics.approvalsRequested,
+          autoApprovedLowRisk: runMetrics.autoApprovedLowRisk,
+          fallbackToOllama: runMetrics.fallbackToOllama,
+          inputTokens: runMetrics.inputTokens,
+          outputTokens: runMetrics.outputTokens,
+          tools: runMetrics.toolCalls.slice(0, 12).map((tool) => ({
+            name: tool.name,
+            status: tool.status,
+            attempts: tool.attempts ?? 1,
+            requiresApproval: tool.requiresApproval,
+          })),
+        })
         .catch((e) => this.logger.error('Audit log failed', e))
+      void this.mission.publish({
+        userId,
+        type: 'run',
+        status: 'success',
+        source: 'agent.run',
+        runId: run.id,
+        conversationId,
+        payload: {
+          provider: activeProvider,
+          model: activeModel ?? null,
+          toolRounds: toolRound,
+          approvalsRequested: runMetrics.approvalsRequested,
+          toolCalls: runMetrics.toolCalls.length,
+        },
+      })
 
       emit('status', { status: 'done' })
     } catch (err: any) {
@@ -640,6 +723,19 @@ export class AgentService {
           finishedAt: new Date(),
           error: err.message,
           metadata: JSON.stringify({ error: err.message }),
+        },
+      })
+      void this.mission.publish({
+        userId,
+        type: 'failure',
+        status: 'failed',
+        source: 'agent.run',
+        runId: run.id,
+        conversationId,
+        payload: {
+          provider: activeProviderForRun,
+          model: activeModelForRun,
+          error: err?.message ?? 'Agent run failed',
         },
       })
       throw err
