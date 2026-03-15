@@ -48,6 +48,9 @@ export class MissionControlController {
     @Req() req: any,
     @Res() res: Response,
     @Query('limit') limit?: string,
+    @Query('types') types?: string,
+    @Query('statuses') statuses?: string,
+    @Query('source') source?: string,
   ) {
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
@@ -60,10 +63,30 @@ export class MissionControlController {
 
     const parsedLimit = Number.parseInt(limit ?? '40', 10)
     const safeLimit = Number.isFinite(parsedLimit) ? parsedLimit : 40
-    const snapshot = await this.mission.listEvents(req.user.id, { limit: safeLimit })
+    const filters = {
+      limit: safeLimit,
+      types: parseListParam(types) as MissionControlEventType[],
+      statuses: parseListParam(statuses) as MissionControlEventStatus[],
+      source,
+    }
+    const matchesFilters = (event: {
+      type: MissionControlEventType
+      status: MissionControlEventStatus
+      source: string
+    }) => {
+      if (filters.types.length > 0 && !filters.types.includes(event.type)) return false
+      if (filters.statuses.length > 0 && !filters.statuses.includes(event.status)) return false
+      if (filters.source && !event.source.toLowerCase().includes(filters.source.trim().toLowerCase())) {
+        return false
+      }
+      return true
+    }
+
+    const snapshot = await this.mission.listEvents(req.user.id, filters)
     emit('snapshot', snapshot)
 
     const unsubscribe = this.mission.subscribe(req.user.id, (event) => {
+      if (!matchesFilters(event)) return
       emit('event', event)
     })
 

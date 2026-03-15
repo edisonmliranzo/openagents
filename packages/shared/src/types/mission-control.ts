@@ -41,3 +41,12 @@ export interface MissionControlListResult {
   events: MissionControlEvent[]
   nextCursor: string | null
 }
+
+export interface MissionControlHeartbeat {
+  now: string
+}
+
+export type MissionControlStreamChunk =
+  | { event: 'snapshot'; data: MissionControlListResult }
+  | { event: 'event'; data: MissionControlEvent }
+  | { event: 'heartbeat'; data: MissionControlHeartbeat }

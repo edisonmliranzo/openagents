@@ -35,7 +35,8 @@ export class OpenAgentsClient {
   private async fetchWithNetworkGuard(url: string, options: RequestInit) {
     try {
       return await fetch(url, options)
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') throw error
       throw new APIError(0, this.buildNetworkError(url, error))
     }
   }
@@ -166,22 +167,30 @@ export class OpenAgentsClient {
     return this.request<T>(path, { method: 'DELETE', ...(headers ? { headers } : {}) })
   }
 
-  /** Stream SSE from the agent endpoint */
-  stream(path: string, body: unknown, onChunk: (chunk: string) => void): Promise<void> {
+  private streamRequest(
+    method: 'GET' | 'POST',
+    path: string,
+    onChunk: (chunk: string) => void,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+    signal?: AbortSignal,
+  ): Promise<void> {
     return new Promise(async (resolve, reject) => {
       try {
         const startStreamRequest = () => {
           const url = `${this.baseUrl}${path}`
           const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
             Accept: 'text/event-stream',
+            ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+            ...(extraHeaders ?? {}),
           }
           if (this.accessToken) headers.Authorization = `Bearer ${this.accessToken}`
 
           return this.fetchWithNetworkGuard(url, {
-            method: 'POST',
+            method,
             headers,
-            body: JSON.stringify(body),
+            ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
+            ...(signal ? { signal } : {}),
           })
         }
 
@@ -277,10 +286,28 @@ export class OpenAgentsClient {
         flushBuffer(true)
         emitChunk()
         resolve()
-      } catch (error) {
+      } catch (error: any) {
+        if (error?.name === 'AbortError') {
+          resolve()
+          return
+        }
         reject(error)
       }
     })
+  }
+
+  /** Stream SSE from the agent endpoint */
+  stream(path: string, body: unknown, onChunk: (chunk: string) => void, signal?: AbortSignal): Promise<void> {
+    return this.streamRequest('POST', path, onChunk, body, undefined, signal)
+  }
+
+  streamGet(
+    path: string,
+    onChunk: (chunk: string) => void,
+    headers?: Record<string, string>,
+    signal?: AbortSignal,
+  ) {
+    return this.streamRequest('GET', path, onChunk, undefined, headers, signal)
   }
 }
 

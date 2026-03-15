@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { sdk } from '@/stores/auth'
-import type { MemoryEntry, MemoryFileSummary, MemoryType } from '@openagents/shared'
+import type {
+  MemoryConflict,
+  MemoryEntry,
+  MemoryFileSummary,
+  MemoryReviewItem,
+  MemoryType,
+} from '@openagents/shared'
 import { useUIStore } from '@/stores/ui'
 
 const TYPE_COLORS: Record<MemoryType, string> = {
@@ -14,6 +20,8 @@ const TYPE_COLORS: Record<MemoryType, string> = {
 export default function MemoryPage() {
   const [entries, setEntries] = useState<MemoryEntry[]>([])
   const [files, setFiles] = useState<MemoryFileSummary[]>([])
+  const [conflicts, setConflicts] = useState<MemoryConflict[]>([])
+  const [reviewQueue, setReviewQueue] = useState<MemoryReviewItem[]>([])
   const [selectedFile, setSelectedFile] = useState('')
   const [fileContent, setFileContent] = useState('')
   const [fileReadonly, setFileReadonly] = useState(true)
@@ -21,6 +29,8 @@ export default function MemoryPage() {
   const [isFileLoading, setIsFileLoading] = useState(false)
   const [isFileSaving, setIsFileSaving] = useState(false)
   const [isSyncingFiles, setIsSyncingFiles] = useState(false)
+  const [isCurating, setIsCurating] = useState(false)
+  const [busyConflictId, setBusyConflictId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const addToast = useUIStore((s) => s.addToast)
 
@@ -44,12 +54,16 @@ export default function MemoryPage() {
     setIsLoading(true)
     setError('')
     try {
-      const [memoryRows, fileRows] = await Promise.all([
+      const [memoryRows, fileRows, conflictRows, reviewRows] = await Promise.all([
         sdk.memory.list(),
         sdk.memory.listFiles(),
+        sdk.memory.listConflicts('open', 12),
+        sdk.memory.reviewQueue(12),
       ])
       setEntries(memoryRows)
       setFiles(fileRows)
+      setConflicts(conflictRows)
+      setReviewQueue(reviewRows)
     } catch (err: any) {
       const message = err?.message ?? 'Failed to load memory'
       setError(message)
@@ -122,6 +136,39 @@ export default function MemoryPage() {
     }
   }
 
+  async function handleCurate() {
+    setIsCurating(true)
+    setError('')
+    try {
+      await sdk.memory.curate()
+      await load()
+      addToast('success', 'Memory curation completed')
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to curate memory'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsCurating(false)
+    }
+  }
+
+  async function handleResolveConflict(id: string, status: 'resolved' | 'ignored') {
+    setBusyConflictId(id)
+    setError('')
+    try {
+      await sdk.memory.resolveConflict(id, status)
+      setConflicts((prev) => prev.filter((conflict) => conflict.id !== id))
+      setReviewQueue((prev) => prev.filter((item) => item.id !== id))
+      addToast('success', status === 'resolved' ? 'Conflict resolved' : 'Conflict ignored')
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to update conflict'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setBusyConflictId(null)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[1100px] space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -130,6 +177,14 @@ export default function MemoryPage() {
           <p className="mt-1 text-sm text-slate-500">Structured memory plus editable file-based memory documents.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleCurate()}
+            disabled={isCurating}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {isCurating ? 'Curating...' : 'Curate'}
+          </button>
           <button
             type="button"
             onClick={() => void handleSyncFiles()}
@@ -152,6 +207,110 @@ export default function MemoryPage() {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
+
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Memory Governance</h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Review stale items, low-confidence memory, and open conflicts before they shape future runs.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
+              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">
+                {reviewQueue.length} review item{reviewQueue.length === 1 ? '' : 's'}
+              </span>
+              <span className="rounded-full bg-red-100 px-2.5 py-1 text-red-700">
+                {conflicts.length} open conflict{conflicts.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-4 p-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-slate-900">Review Queue</h3>
+            {reviewQueue.length === 0 ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-xs text-slate-500">
+                No low-confidence or stale memory items need review.
+              </p>
+            ) : (
+              reviewQueue.map((item) => (
+                <div key={`${item.type}-${item.id}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+                      {item.type}
+                    </span>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                      {item.reason.replace('_', ' ')}
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      confidence {item.confidence.toFixed(2)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-700">{item.summary}</p>
+                  <p className="mt-1 text-[11px] text-slate-400">{new Date(item.updatedAt).toLocaleString()}</p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-slate-900">Open Conflicts</h3>
+            {conflicts.length === 0 ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-xs text-slate-500">
+                No unresolved memory conflicts.
+              </p>
+            ) : (
+              conflicts.map((conflict) => (
+                <div key={conflict.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                        {conflict.severity} severity
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        {conflict.entity}.{conflict.key}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      delta {conflict.confidenceDelta.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <div className="rounded-md bg-white px-3 py-2 text-xs text-slate-600">
+                      <p className="font-semibold text-slate-700">Existing</p>
+                      <p className="mt-1 break-words">{conflict.existingValue}</p>
+                    </div>
+                    <div className="rounded-md bg-white px-3 py-2 text-xs text-slate-600">
+                      <p className="font-semibold text-slate-700">Incoming</p>
+                      <p className="mt-1 break-words">{conflict.incomingValue}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleResolveConflict(conflict.id, 'resolved')}
+                      disabled={busyConflictId === conflict.id}
+                      className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                    >
+                      Keep latest
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleResolveConflict(conflict.id, 'ignored')}
+                      disabled={busyConflictId === conflict.id}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Ignore
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         {entries.length === 0 ? (

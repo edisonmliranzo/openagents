@@ -3,6 +3,7 @@ import type {
   MissionControlEventType,
   MissionControlEventStatus,
   MissionControlListResult,
+  MissionControlStreamChunk,
 } from '@openagents/shared'
 
 export interface ListMissionControlEventsInput {
@@ -28,5 +29,21 @@ export function createMissionControlApi(client: OpenAgentsClient) {
   return {
     listEvents: (input: ListMissionControlEventsInput = {}) =>
       client.get<MissionControlListResult>(`/api/v1/mission-control/events${buildQuery(input)}`),
+
+    streamEvents: (
+      input: ListMissionControlEventsInput = {},
+      onChunk: (chunk: MissionControlStreamChunk) => void,
+      signal?: AbortSignal,
+    ) => {
+      const suffix = buildQuery(input)
+      return client.streamGet(
+        `/api/v1/mission-control/events/stream${suffix}`,
+        (chunk) => {
+          onChunk(JSON.parse(chunk) as MissionControlStreamChunk)
+        },
+        undefined,
+        signal,
+      )
+    },
   }
 }

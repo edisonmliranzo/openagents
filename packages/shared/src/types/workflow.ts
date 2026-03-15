@@ -7,7 +7,14 @@ export type WorkflowStepType =
   | 'run_tool'
   | 'wait_approval'
   | 'branch_condition'
+  | 'set_state'
 export type WorkflowRunStatus = 'queued' | 'running' | 'waiting_approval' | 'done' | 'error'
+export type WorkflowBranchSource =
+  | 'last_output'
+  | 'trigger_kind'
+  | 'workflow_name'
+  | 'run_input'
+  | 'state'
 
 export interface WorkflowTrigger {
   kind: WorkflowTriggerKind
@@ -23,13 +30,16 @@ export interface WorkflowStep {
   prompt?: string
   toolName?: string
   input?: Record<string, unknown>
+  statePatch?: Record<string, unknown>
   delayMs?: number
   conversationId?: string
   retryAttempts?: number
   continueOnError?: boolean
+  outputKey?: string
   approvalKey?: string
   approvalReason?: string
-  conditionSource?: 'last_output' | 'trigger_kind' | 'workflow_name'
+  conditionSource?: WorkflowBranchSource
+  conditionPath?: string
   conditionOperator?: 'contains' | 'not_contains' | 'equals' | 'not_equals'
   conditionValue?: string
   ifTrueStepId?: string
@@ -60,6 +70,8 @@ export interface WorkflowStepRunResult {
   output: string | null
   error: string | null
   attemptCount?: number
+  stateWrites?: string[]
+  nextStepId?: string | null
 }
 
 export interface WorkflowRun {
@@ -73,6 +85,11 @@ export interface WorkflowRun {
   error: string | null
   idempotencyKey?: string
   sourceEvent?: string
+  input?: Record<string, unknown>
+  state?: Record<string, unknown>
+  rerunOfRunId?: string
+  resumeStepId?: string | null
+  lastOutput?: unknown
   stepResults: WorkflowStepRunResult[]
 }
 
