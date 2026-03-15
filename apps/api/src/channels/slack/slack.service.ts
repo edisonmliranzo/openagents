@@ -246,11 +246,19 @@ export class SlackService {
         userId: user.id,
         error: error?.message ?? 'Unknown error',
       })
+      await this.connectors.recordChannelActivity(user.id, 'slack', {
+        success: false,
+        error: error?.message ?? 'Unknown error',
+      }).catch(() => {})
       return {}
     }
 
     const outbound = assistantReply || 'Done.'
-    await this.sendMessage(channelId, outbound)
+    const delivered = await this.sendMessage(channelId, outbound)
+    await this.connectors.recordChannelActivity(user.id, 'slack', {
+      success: delivered,
+      ...(delivered ? {} : { error: 'Slack chat.postMessage failed.' }),
+    }).catch(() => {})
     this.bus.publish('run.event', {
       source: 'channels.slack',
       direction: 'outbound',
@@ -313,7 +321,7 @@ export class SlackService {
     const token = this.getBotToken()
     if (!token) {
       this.logger.warn('Slack bot token not set, skipping outbound message.')
-      return
+      return false
     }
     const resp = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
@@ -326,7 +334,9 @@ export class SlackService {
     if (!resp.ok) {
       const body = await resp.text()
       this.logger.error(`Slack chat.postMessage failed (${resp.status}): ${body}`)
+      return false
     }
+    return true
   }
 
   private extractPairingCode(text: string) {

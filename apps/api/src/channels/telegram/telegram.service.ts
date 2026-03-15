@@ -224,11 +224,19 @@ export class TelegramService {
         userId: user.id,
         error: error?.message ?? 'Unknown error',
       })
+      await this.connectors.recordChannelActivity(user.id, 'telegram', {
+        success: false,
+        error: error?.message ?? 'Unknown error',
+      }).catch(() => {})
       return
     }
 
     const outbound = assistantReply || 'Done.'
-    await this.sendMessage(chatId, outbound)
+    const delivered = await this.sendMessage(chatId, outbound)
+    await this.connectors.recordChannelActivity(user.id, 'telegram', {
+      success: delivered,
+      ...(delivered ? {} : { error: 'Telegram sendMessage failed.' }),
+    }).catch(() => {})
     this.bus.publish('run.event', {
       source: 'channels.telegram',
       direction: 'outbound',
@@ -293,7 +301,7 @@ export class TelegramService {
     const token = this.getBotToken()
     if (!token) {
       this.logger.warn('Telegram bot token not set, skipping outbound message.')
-      return
+      return false
     }
     const url = `https://api.telegram.org/bot${token}/sendMessage`
     const resp = await fetch(url, {
@@ -304,7 +312,9 @@ export class TelegramService {
     if (!resp.ok) {
       const body = await resp.text()
       this.logger.error(`Telegram sendMessage failed (${resp.status}): ${body}`)
+      return false
     }
+    return true
   }
 
   private extractPairingCode(text: string) {

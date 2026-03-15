@@ -4,6 +4,7 @@ import { sdk } from '@/stores/auth'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AllowWhatsAppDeviceInput,
+  ConnectorHealthEntry,
   DiscordChannelHealth,
   DiscordPairingSession,
   DiscordServerLink,
@@ -76,6 +77,23 @@ function timeUntil(isoDate: string) {
   return `${Math.floor(deltaHours / 24)}d`
 }
 
+function connectorStatusClass(status: ConnectorHealthEntry['status']) {
+  if (status === 'connected') return 'bg-emerald-100 text-emerald-700'
+  if (status === 'degraded') return 'bg-amber-100 text-amber-700'
+  return 'bg-red-100 text-red-700'
+}
+
+function connectorAlertClass(severity: ConnectorHealthEntry['alerts'][number]['severity']) {
+  if (severity === 'critical') return 'border-red-200 bg-red-50 text-red-700'
+  if (severity === 'warning') return 'border-amber-200 bg-amber-50 text-amber-700'
+  return 'border-sky-200 bg-sky-50 text-sky-700'
+}
+
+function formatLatency(latencyMs: number | null) {
+  if (latencyMs == null) return 'n/a'
+  return `${latencyMs}ms`
+}
+
 async function copyToClipboard(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
@@ -95,6 +113,8 @@ async function copyToClipboard(text: string) {
 
 export default function ChannelsPage() {
   const [tools, setTools] = useState<ConnectorTool[]>([])
+  const [connectorHealth, setConnectorHealth] = useState<ConnectorHealthEntry[]>([])
+  const [connectorSnapshotAt, setConnectorSnapshotAt] = useState<string | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const [latestNotification, setLatestNotification] = useState<Notification | null>(null)
 
@@ -132,6 +152,7 @@ export default function ChannelsPage() {
   const [discordPairings, setDiscordPairings] = useState<DiscordPairingSession[]>([])
   const [isCreatingDiscordPairing, setIsCreatingDiscordPairing] = useState(false)
   const [unlinkingDiscordServerId, setUnlinkingDiscordServerId] = useState<string | null>(null)
+  const [reconnectingConnectorId, setReconnectingConnectorId] = useState<string | null>(null)
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -142,6 +163,7 @@ export default function ChannelsPage() {
     try {
       const [
         toolList, approvals, notifications,
+        connectorSnapshot,
         health, devices, pairings,
         tgHealth, tgChats, tgPairings,
         slHealth, slWorkspaces, slPairings,
@@ -150,6 +172,7 @@ export default function ChannelsPage() {
         sdk.tools.list(),
         sdk.approvals.list('pending'),
         sdk.notifications.list(),
+        sdk.connectors.health(),
         sdk.channels.whatsappHealth(),
         sdk.channels.listWhatsAppDevices(),
         sdk.channels.listWhatsAppPairings(),
@@ -164,6 +187,8 @@ export default function ChannelsPage() {
         sdk.channels.listDiscordPairings(),
       ])
       setTools(toolList)
+      setConnectorHealth(connectorSnapshot.connectors)
+      setConnectorSnapshotAt(connectorSnapshot.generatedAt)
       setPendingApprovals(approvals.length)
       setLatestNotification(notifications[0] ?? null)
       setWhatsAppHealth(health)
@@ -204,6 +229,21 @@ export default function ChannelsPage() {
 
     return grouped
   }, [tools])
+
+  const connectedConnectorCount = useMemo(
+    () => connectorHealth.filter((connector) => connector.status === 'connected').length,
+    [connectorHealth],
+  )
+
+  const degradedConnectorCount = useMemo(
+    () => connectorHealth.filter((connector) => connector.status === 'degraded').length,
+    [connectorHealth],
+  )
+
+  const downConnectorCount = useMemo(
+    () => connectorHealth.filter((connector) => connector.status === 'down').length,
+    [connectorHealth],
+  )
 
   const activePairing = useMemo(
     () => whatsAppPairings.find((pairing) => pairing.status === 'pending') ?? whatsAppPairings[0] ?? null,
@@ -380,6 +420,19 @@ export default function ChannelsPage() {
     }
   }, [])
 
+  const handleReconnectConnector = useCallback(async (connectorId: string) => {
+    setReconnectingConnectorId(connectorId)
+    setError('')
+    try {
+      await sdk.connectors.reconnect(connectorId)
+      await loadData()
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to reconnect connector')
+    } finally {
+      setReconnectingConnectorId(null)
+    }
+  }, [loadData])
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -397,7 +450,7 @@ export default function ChannelsPage() {
         </button>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Registered Tools</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">{tools.length}</p>
@@ -417,6 +470,98 @@ export default function ChannelsPage() {
             {latestNotification ? `${latestNotification.type} - ${timeAgo(latestNotification.createdAt)}` : 'n/a'}
           </p>
         </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Connector Health</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">
+            {connectedConnectorCount}/{connectorHealth.length || 0}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            {degradedConnectorCount} degraded, {downConnectorCount} down
+          </p>
+        </article>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Connector Health</h2>
+            <p className="text-sm text-slate-500">
+              Unified status for OAuth tools and linked messaging channels, modeled after the OpenClaw-style control plane.
+            </p>
+          </div>
+          <p className="text-xs text-slate-500">
+            Snapshot {connectorSnapshotAt ? timeAgo(connectorSnapshotAt) : 'n/a'}
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          {connectorHealth.map((connector) => (
+            <article key={connector.connectorId} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold text-slate-900">{connector.displayName}</h3>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${connectorStatusClass(connector.status)}`}>
+                      {connector.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">id: <span className="font-mono">{connector.connectorId}</span></p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleReconnectConnector(connector.connectorId)}
+                  disabled={reconnectingConnectorId === connector.connectorId}
+                  className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {reconnectingConnectorId === connector.connectorId ? 'Refreshing...' : 'Reconnect'}
+                </button>
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Last Success</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{connector.lastSuccessAt ? timeAgo(connector.lastSuccessAt) : 'n/a'}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Last Failure</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{connector.lastFailureAt ? timeAgo(connector.lastFailureAt) : 'n/a'}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">P95 Latency</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{formatLatency(connector.p95LatencyMs)}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Failure Streak</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {connector.failureStreak} failures / {connector.rateLimitHits} rate limits
+                  </p>
+                </div>
+              </div>
+
+              {connector.lastError && (
+                <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {connector.lastError}
+                </p>
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {connector.alerts.length === 0 && (
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                    No active alerts
+                  </span>
+                )}
+                {connector.alerts.map((alert) => (
+                  <span
+                    key={`${connector.connectorId}-${alert.code}`}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${connectorAlertClass(alert.severity)}`}
+                  >
+                    {alert.message}
+                  </span>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">

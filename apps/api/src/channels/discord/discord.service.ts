@@ -319,10 +319,17 @@ export class DiscordService {
         userId: user.id,
         error: error?.message ?? 'Unknown error',
       })
+      await this.connectors.recordChannelActivity(user.id, 'discord', {
+        success: false,
+        error: error?.message ?? 'Unknown error',
+      }).catch(() => {})
       return 'I hit an internal error. Please try again in a moment.'
     }
 
     const outbound = assistantReply || 'Done.'
+    await this.connectors.recordChannelActivity(user.id, 'discord', {
+      success: true,
+    }).catch(() => {})
     this.bus.publish('run.event', {
       source: 'channels.discord',
       direction: 'outbound',
