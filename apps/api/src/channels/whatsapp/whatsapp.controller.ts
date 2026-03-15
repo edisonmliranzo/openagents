@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
-import { IsInt, IsOptional, Max, Min } from 'class-validator'
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator'
 import type { Response } from 'express'
 import { JwtAuthGuard } from '../../auth/guards/jwt.guard'
 import { WhatsAppService, type WhatsAppInboundPayload } from './whatsapp.service'
@@ -24,6 +24,17 @@ class CreatePairingDto {
   @Min(3)
   @Max(240)
   expiresInMinutes?: number
+}
+
+class AllowWhatsAppDeviceDto {
+  @IsString()
+  @MaxLength(64)
+  phone!: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  label?: string
 }
 
 @ApiTags('channels')
@@ -59,6 +70,13 @@ export class WhatsAppController {
   @Get('devices')
   listDevices(@Req() req: any) {
     return this.whatsapp.listDevices(req.user.id)
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('devices/allowlist')
+  allowDevice(@Req() req: any, @Body() dto: AllowWhatsAppDeviceDto) {
+    return this.whatsapp.allowDevice(req.user.id, dto)
   }
 
   @ApiBearerAuth()
