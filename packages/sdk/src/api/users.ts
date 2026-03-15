@@ -38,6 +38,15 @@ export function createUsersApi(client: OpenAgentsClient) {
     deleteLlmKey: (provider: string) =>
       client.delete<void>(`/api/v1/users/me/llm-keys/${provider}`),
 
+    listFallbackLlmKeys: (provider: string) =>
+      client.get<Array<{ id: string; label: string | null; priority: number; isActive: boolean; createdAt: string }>>(`/api/v1/users/me/llm-keys/${provider}/fallbacks`),
+
+    addFallbackLlmKey: (provider: string, apiKey: string, label?: string) =>
+      client.post<{ id: string; label: string | null; priority: number; isActive: boolean; createdAt: string }>(`/api/v1/users/me/llm-keys/${provider}/fallbacks`, { apiKey, label }),
+
+    removeFallbackLlmKey: (provider: string, id: string) =>
+      client.delete<void>(`/api/v1/users/me/llm-keys/${provider}/fallbacks/${id}`),
+
     listDomains: () =>
       client.get<UserDomain[]>('/api/v1/users/me/domains'),
 

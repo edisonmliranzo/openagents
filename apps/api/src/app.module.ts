@@ -16,6 +16,9 @@ import { NanobotModule } from './nanobot/nanobot.module'
 import { SystemModule } from './system/system.module'
 import { LabsModule } from './labs/labs.module'
 import { WhatsAppModule } from './channels/whatsapp/whatsapp.module'
+import { TelegramModule } from './channels/telegram/telegram.module'
+import { SlackModule } from './channels/slack/slack.module'
+import { DiscordModule } from './channels/discord/discord.module'
 import { PlatformModule } from './platform/platform.module'
 import { HealthModule } from './health/health.module'
 import { WorkflowsModule } from './workflows/workflows.module'
@@ -61,6 +64,9 @@ import { SkillRegistryModule } from './skill-registry/skill-registry.module'
     SystemModule,
     LabsModule,
     WhatsAppModule,
+    TelegramModule,
+    SlackModule,
+    DiscordModule,
     PlatformModule,
     HealthModule,
     WorkflowsModule,

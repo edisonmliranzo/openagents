@@ -275,6 +275,50 @@ export class UsersService {
     })
   }
 
+  /** Returns ordered fallback API keys for rotation/failover. Never expose directly via HTTP. */
+  async getFallbackLlmKeys(userId: string, provider: string): Promise<string[]> {
+    const normalizedProvider = this.normalizeProvider(provider)
+    const fallbacks = await this.prisma.llmApiKeyFallback.findMany({
+      where: { userId, provider: normalizedProvider, isActive: true },
+      orderBy: { priority: 'asc' },
+      select: { apiKey: true },
+    })
+    return fallbacks.map((f) => f.apiKey).filter(Boolean)
+  }
+
+  async listFallbackLlmKeys(userId: string, provider: string) {
+    const normalizedProvider = this.normalizeProvider(provider)
+    return this.prisma.llmApiKeyFallback.findMany({
+      where: { userId, provider: normalizedProvider },
+      orderBy: { priority: 'asc' },
+      select: { id: true, label: true, priority: true, isActive: true, createdAt: true, apiKey: true },
+    })
+  }
+
+  async addFallbackLlmKey(userId: string, provider: string, apiKey: string, label?: string) {
+    const normalizedProvider = this.normalizeProvider(provider)
+    const existing = await this.prisma.llmApiKeyFallback.findMany({
+      where: { userId, provider: normalizedProvider },
+      select: { priority: true },
+      orderBy: { priority: 'desc' },
+    })
+    const nextPriority = existing.length > 0 ? (existing[0]?.priority ?? 0) + 10 : 10
+    return this.prisma.llmApiKeyFallback.create({
+      data: { userId, provider: normalizedProvider, apiKey, label: label ?? null, priority: nextPriority },
+    })
+  }
+
+  async removeFallbackLlmKey(userId: string, fallbackId: string) {
+    const existing = await this.prisma.llmApiKeyFallback.findUnique({
+      where: { id: fallbackId },
+      select: { userId: true },
+    })
+    if (!existing || existing.userId !== userId) {
+      throw new BadRequestException('Fallback key not found.')
+    }
+    await this.prisma.llmApiKeyFallback.delete({ where: { id: fallbackId } })
+  }
+
   private normalizeProvider(provider: string): LLMProvider {
     const normalized = provider.trim().toLowerCase()
     if (!SUPPORTED_LLM_PROVIDERS.includes(normalized as LLMProvider)) {

@@ -247,6 +247,11 @@ export default function ConfigPage() {
   const [customSystemPrompt, setCustomSystemPrompt] = useState('')
   const [cards, setCards] = useState<Record<Provider, ProviderCardState>>({ ...DEFAULTS })
   const [existingKeys, setExistingKeys] = useState<LlmApiKey[]>([])
+  const [fallbackKeys, setFallbackKeys] = useState<Record<string, Array<{ id: string; label: string | null; priority: number; isActive: boolean; createdAt: string }>>>({})
+  const [newFallbackKey, setNewFallbackKey] = useState<Record<string, string>>({})
+  const [newFallbackLabel, setNewFallbackLabel] = useState<Record<string, string>>({})
+  const [isAddingFallback, setIsAddingFallback] = useState<Record<string, boolean>>({})
+  const [removingFallbackId, setRemovingFallbackId] = useState<string | null>(null)
   const [domains, setDomains] = useState<UserDomain[]>([])
   const [domainDrafts, setDomainDrafts] = useState<Record<string, DomainDraft>>({})
   const [newDomain, setNewDomain] = useState('')
@@ -302,12 +307,20 @@ export default function ConfigPage() {
     setError('')
     setStatus('')
     try {
-      const [profile, settings, keys, domainList] = await Promise.all([
+      const [profile, settings, keys, domainList, ...fallbackResults] = await Promise.all([
         sdk.users.getProfile(),
         sdk.users.getSettings(),
         sdk.users.getLlmKeys(),
         sdk.users.listDomains(),
+        ...(['anthropic', 'openai', 'google', 'minimax'] as const).map((p) =>
+          sdk.users.listFallbackLlmKeys(p).then((list) => ({ provider: p, list })).catch(() => ({ provider: p, list: [] as Array<{ id: string; label: string | null; priority: number; isActive: boolean; createdAt: string }> })),
+        ),
       ])
+      const nextFallbackKeys: Record<string, Array<{ id: string; label: string | null; priority: number; isActive: boolean; createdAt: string }>> = {}
+      for (const { provider, list } of fallbackResults as Array<{ provider: string; list: Array<{ id: string; label: string | null; priority: number; isActive: boolean; createdAt: string }> }>) {
+        nextFallbackKeys[provider] = list
+      }
+      setFallbackKeys(nextFallbackKeys)
       const preferredProvider = isProvider(settings.preferredProvider)
         ? settings.preferredProvider
         : 'anthropic'
@@ -633,6 +646,37 @@ export default function ConfigPage() {
       setExistingKeys(keys)
     } catch (err: any) {
       setError(err?.message ?? 'Failed to remove key')
+    }
+  }
+
+  async function handleAddFallbackKey(provider: Provider) {
+    const key = (newFallbackKey[provider] ?? '').trim()
+    if (!key) return
+    setIsAddingFallback((prev) => ({ ...prev, [provider]: true }))
+    setError('')
+    try {
+      const label = (newFallbackLabel[provider] ?? '').trim() || undefined
+      const created = await sdk.users.addFallbackLlmKey(provider, key, label)
+      setFallbackKeys((prev) => ({ ...prev, [provider]: [...(prev[provider] ?? []), created] }))
+      setNewFallbackKey((prev) => ({ ...prev, [provider]: '' }))
+      setNewFallbackLabel((prev) => ({ ...prev, [provider]: '' }))
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to add fallback key')
+    } finally {
+      setIsAddingFallback((prev) => ({ ...prev, [provider]: false }))
+    }
+  }
+
+  async function handleRemoveFallbackKey(provider: Provider, id: string) {
+    setRemovingFallbackId(id)
+    setError('')
+    try {
+      await sdk.users.removeFallbackLlmKey(provider, id)
+      setFallbackKeys((prev) => ({ ...prev, [provider]: (prev[provider] ?? []).filter((k) => k.id !== id) }))
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to remove fallback key')
+    } finally {
+      setRemovingFallbackId(null)
     }
   }
 
@@ -1104,6 +1148,80 @@ export default function ConfigPage() {
           )
         })}
       </div>
+      {/* Fallback / Rotation Keys */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">API Key Rotation &amp; Failover</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Add backup keys for each provider. When the primary key hits a rate-limit (429) or auth error (401), the next key is tried automatically.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {(['anthropic', 'openai', 'google', 'minimax'] as const).map((provider) => {
+            const meta = PROVIDER_META[provider]
+            const providerFallbacks = fallbackKeys[provider] ?? []
+            return (
+              <div key={provider} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center gap-2">
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br ${meta.gradient} text-white`}>
+                    {meta.icon}
+                  </div>
+                  <p className="text-sm font-semibold text-slate-800">{meta.label}</p>
+                  <span className="ml-auto rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                    {providerFallbacks.length} backup{providerFallbacks.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+
+                <div className="mt-3 space-y-1.5">
+                  {providerFallbacks.map((fb, idx) => (
+                    <div key={fb.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs">
+                      <span className="shrink-0 font-mono text-slate-400">#{idx + 1}</span>
+                      <span className="flex-1 truncate text-slate-700">{fb.label || `Backup key ${idx + 1}`}</span>
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveFallbackKey(provider, fb.id)}
+                        disabled={removingFallbackId === fb.id}
+                        className="shrink-0 text-red-400 hover:text-red-600 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 space-y-1.5">
+                  <input
+                    type="password"
+                    value={newFallbackKey[provider] ?? ''}
+                    onChange={(e) => setNewFallbackKey((prev) => ({ ...prev, [provider]: e.target.value }))}
+                    placeholder="sk-..."
+                    className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none focus:border-rose-200 focus:ring-1 focus:ring-rose-100"
+                  />
+                  <input
+                    type="text"
+                    value={newFallbackLabel[provider] ?? ''}
+                    onChange={(e) => setNewFallbackLabel((prev) => ({ ...prev, [provider]: e.target.value }))}
+                    placeholder="Label (optional)"
+                    className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none focus:border-rose-200 focus:ring-1 focus:ring-rose-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleAddFallbackKey(provider)}
+                    disabled={isAddingFallback[provider] || !(newFallbackKey[provider] ?? '').trim()}
+                    className={`flex h-8 w-full items-center justify-center gap-1 rounded-lg bg-gradient-to-br ${meta.gradient} text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {isAddingFallback[provider] ? 'Adding...' : 'Add Backup Key'}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
       {/* Domains */}
       <section className="relative overflow-hidden rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-5 shadow-sm">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(14,165,233,0.1),transparent_60%)]" />

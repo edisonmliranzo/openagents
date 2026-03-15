@@ -98,6 +98,7 @@ export class LLMService {
     userApiKey?: string,
     userBaseUrl?: string,
     model?: string,
+    fallbackApiKeys?: string[],
   ): Promise<LLMResponse> {
     const requestedProvider = String(provider ?? this.defaultProvider).trim().toLowerCase()
     const p = this.isSupportedProvider(requestedProvider)
@@ -105,8 +106,15 @@ export class LLMService {
       : this.defaultProvider
 
     if (p === 'anthropic') {
-      const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', userApiKey) })
-      return this.completeAnthropic(messages, tools, systemPrompt, client, model)
+      return this.completeWithKeyRotation(
+        (key) => {
+          const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', key) })
+          return this.completeAnthropic(messages, tools, systemPrompt, client, model)
+        },
+        p,
+        userApiKey,
+        fallbackApiKeys,
+      )
     }
 
     if (p === 'ollama') {
@@ -114,9 +122,57 @@ export class LLMService {
       return this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient, model, userBaseUrl)
     }
 
-    // openai-compatible providers (openai, google gemini)
-    const client = this.createOpenAICompatibleClient(p, userApiKey, userBaseUrl)
-    return this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default)
+    // openai-compatible providers (openai, google gemini, minimax)
+    return this.completeWithKeyRotation(
+      (key) => {
+        const client = this.createOpenAICompatibleClient(p, key, userBaseUrl)
+        return this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default)
+      },
+      p,
+      userApiKey,
+      fallbackApiKeys,
+    )
+  }
+
+  private async completeWithKeyRotation(
+    fn: (key: string | undefined) => Promise<LLMResponse>,
+    provider: Exclude<LLMProvider, 'ollama'>,
+    primaryKey?: string,
+    fallbackKeys?: string[],
+  ): Promise<LLMResponse> {
+    // Build candidate list: primary key first, then fallbacks, then env key
+    const candidates: Array<string | undefined> = [primaryKey, ...(fallbackKeys ?? [])]
+    const dedupedCandidates = [...new Set(candidates)]
+
+    let lastError: unknown
+    for (const key of dedupedCandidates) {
+      try {
+        return await fn(key)
+      } catch (err: any) {
+        const isKeyError = this.isApiKeyError(err)
+        const isRateLimitError = this.isRateLimitError(err)
+        if (!isKeyError && !isRateLimitError) throw err // non-auth/rate errors bubble up immediately
+        lastError = err
+        const keyLabel = key ? `key ...${key.slice(-4)}` : 'env key'
+        const reason = isRateLimitError ? 'rate-limited' : 'auth error'
+        this.logger.warn(`${PROVIDER_LABELS[provider]} ${keyLabel} failed (${reason}), trying next key if available.`)
+      }
+    }
+    throw lastError
+  }
+
+  private isApiKeyError(err: unknown): boolean {
+    const msg = (err as any)?.message ?? ''
+    const status = (err as any)?.status ?? (err as any)?.statusCode ?? 0
+    return status === 401 || status === 403
+      || msg.toLowerCase().includes('api key')
+      || msg.toLowerCase().includes('authentication')
+      || msg.toLowerCase().includes('unauthorized')
+  }
+
+  private isRateLimitError(err: unknown): boolean {
+    const status = (err as any)?.status ?? (err as any)?.statusCode ?? 0
+    return status === 429
   }
 
   async listOllamaModels(baseUrl?: string): Promise<string[]> {
