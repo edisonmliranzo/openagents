@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { randomBytes } from 'node:crypto'
 import {
+  type AllowWhatsAppDeviceInput,
   type CreateWhatsAppPairingInput,
   type WhatsAppChannelHealth,
   type WhatsAppDeviceLink,
@@ -25,7 +26,7 @@ export interface WhatsAppInboundPayload {
 interface ConversationRoute {
   conversationId: string
   userId: string
-  source: 'linked-device' | 'default-route'
+  source: 'paired-device' | 'allowlisted-sender' | 'legacy-default-route'
 }
 
 interface TwilioConfig {
@@ -58,11 +59,14 @@ export class WhatsAppService {
     const twilio = this.getTwilioConfig()
     const defaultUserId = this.getDefaultUserId()
     const webhookTokenEnabled = Boolean((process.env.WHATSAPP_WEBHOOK_TOKEN ?? '').trim())
+    const legacyDefaultRouteEnabled = this.legacyDefaultRouteEnabled()
     return {
       configured: Boolean(twilio),
       twilioConfigured: Boolean(twilio),
-      defaultRouteConfigured: Boolean(defaultUserId),
+      defaultRouteConfigured: Boolean(defaultUserId && legacyDefaultRouteEnabled),
       webhookTokenEnabled,
+      allowlistEnforced: !legacyDefaultRouteEnabled,
+      legacyDefaultRouteEnabled,
     }
   }
 
@@ -71,16 +75,105 @@ export class WhatsAppService {
       where: { userId },
       orderBy: [{ updatedAt: 'desc' }, { linkedAt: 'desc' }],
     })
+    const pairedPhones = await this.findPairedPhones(userId, devices.map((device) => device.phone))
 
     return devices.map((device) => ({
       id: device.id,
       phone: device.phone,
       label: device.label,
+      source: pairedPhones.has(device.phone) ? 'paired' : 'allowlisted',
       linkedAt: device.linkedAt.toISOString(),
       updatedAt: device.updatedAt.toISOString(),
       lastSeenAt: device.lastSeenAt ? device.lastSeenAt.toISOString() : null,
       lastConversationId: device.lastConversationId ?? null,
     }))
+  }
+
+  async allowDevice(userId: string, input: AllowWhatsAppDeviceInput): Promise<WhatsAppDeviceLink> {
+    const phone = this.requireNormalizedAddress(input.phone)
+    const label = this.optionalText(input.label)?.slice(0, 80) ?? null
+    const now = new Date()
+
+    const existing = await this.prisma.whatsAppDevice.findUnique({
+      where: { phone },
+      select: {
+        id: true,
+        userId: true,
+        phone: true,
+        label: true,
+        linkedAt: true,
+        lastSeenAt: true,
+        lastConversationId: true,
+        updatedAt: true,
+      },
+    })
+
+    let device: {
+      id: string
+      phone: string
+      label: string | null
+      linkedAt: Date
+      lastSeenAt: Date | null
+      lastConversationId: string | null
+      updatedAt: Date
+    }
+    if (existing) {
+      device = await this.prisma.whatsAppDevice.update({
+        where: { id: existing.id },
+        data: {
+          userId,
+          label,
+          ...(existing.userId === userId ? {} : { linkedAt: now }),
+        },
+        select: {
+          id: true,
+          phone: true,
+          label: true,
+          linkedAt: true,
+          lastSeenAt: true,
+          lastConversationId: true,
+          updatedAt: true,
+        },
+      })
+    } else {
+      device = await this.prisma.whatsAppDevice.create({
+        data: {
+          userId,
+          phone,
+          label,
+          linkedAt: now,
+        },
+        select: {
+          id: true,
+          phone: true,
+          label: true,
+          linkedAt: true,
+          lastSeenAt: true,
+          lastConversationId: true,
+          updatedAt: true,
+        },
+      })
+    }
+
+    this.bus.publish('run.event', {
+      source: 'channels.whatsapp',
+      action: 'allowlist.updated',
+      userId,
+      phone,
+      deviceId: device.id,
+      label,
+    })
+
+    return {
+      id: device.id,
+      phone: device.phone,
+      label: device.label,
+      source: 'allowlisted',
+      linkedAt: device.linkedAt.toISOString(),
+      updatedAt: device.updatedAt.toISOString(),
+      lastSeenAt: device.lastSeenAt ? device.lastSeenAt.toISOString() : null,
+      lastConversationId: device.lastConversationId ?? null,
+    }
   }
 
   async unlinkDevice(userId: string, deviceId: string) {
@@ -179,7 +272,7 @@ export class WhatsAppService {
     if (!route) {
       await this.sendMessage(
         from,
-        'This phone is not linked yet. Open Channels > WhatsApp in OpenAgents and generate a pairing QR/link.',
+        'This sender is not authorized yet. Pair this phone or add it to the WhatsApp allowlist in Channels > WhatsApp.',
       )
       return
     }
@@ -334,10 +427,24 @@ export class WhatsAppService {
   ): Promise<ConversationRoute | null> {
     const linkedDevice = await this.prisma.whatsAppDevice.findUnique({
       where: { phone: from },
-      select: { id: true, userId: true },
+      select: { id: true, userId: true, phone: true },
     })
-    const defaultUserId = this.getDefaultUserId()
-    const routeUserId = linkedDevice?.userId ?? defaultUserId
+    let routeUserId = linkedDevice?.userId ?? null
+    let routeSource: ConversationRoute['source'] | null = null
+
+    if (linkedDevice) {
+      routeSource = await this.isPhoneBackedByPairing(linkedDevice.userId, linkedDevice.phone)
+        ? 'paired-device'
+        : 'allowlisted-sender'
+    }
+
+    if (!routeUserId && this.legacyDefaultRouteEnabled()) {
+      routeUserId = this.getDefaultUserId()
+      if (routeUserId) {
+        routeSource = 'legacy-default-route'
+      }
+    }
+
     if (!routeUserId) {
       return null
     }
@@ -390,7 +497,7 @@ export class WhatsAppService {
     return {
       conversationId,
       userId: user.id,
-      source: linkedDevice ? 'linked-device' : 'default-route',
+      source: routeSource ?? 'legacy-default-route',
     }
   }
 
@@ -507,9 +614,53 @@ export class WhatsAppService {
     return userId || null
   }
 
+  private legacyDefaultRouteEnabled() {
+    const raw = (process.env.WHATSAPP_LEGACY_DEFAULT_ROUTE ?? '').trim().toLowerCase()
+    return raw === 'true' || raw === '1' || raw === 'yes'
+  }
+
   private getPairingCommandPrefix() {
     const prefix = (process.env.WHATSAPP_PAIR_COMMAND ?? '').trim()
     return prefix || 'link'
+  }
+
+  private requireNormalizedAddress(value: string) {
+    const normalized = this.normalizeAddress(value)
+    if (!normalized) {
+      throw new BadRequestException('A WhatsApp phone or address is required.')
+    }
+    return normalized
+  }
+
+  private optionalText(value: unknown) {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    return trimmed || null
+  }
+
+  private async findPairedPhones(userId: string, phones: string[]) {
+    if (phones.length === 0) return new Set<string>()
+    const pairings = await this.prisma.whatsAppPairing.findMany({
+      where: {
+        userId,
+        status: 'linked',
+        phone: { in: phones },
+      },
+      select: { phone: true },
+    })
+    return new Set(pairings.flatMap((pairing) => (pairing.phone ? [pairing.phone] : [])))
+  }
+
+  private async isPhoneBackedByPairing(userId: string, phone: string) {
+    const pairing = await this.prisma.whatsAppPairing.findFirst({
+      where: {
+        userId,
+        status: 'linked',
+        phone,
+      },
+      select: { id: true },
+    })
+    return Boolean(pairing)
   }
 
   private toPairingSession(
