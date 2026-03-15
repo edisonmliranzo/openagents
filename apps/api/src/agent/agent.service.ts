@@ -199,6 +199,9 @@ export class AgentService {
       const userLlmKey = await this.users.getRawLlmKey(userId, provider)
       const userApiKey = userLlmKey?.isActive ? (userLlmKey.apiKey ?? undefined) : undefined
       const userBaseUrl = userLlmKey?.isActive ? (userLlmKey.baseUrl ?? undefined) : undefined
+      const fallbackApiKeys = provider !== 'ollama'
+        ? await this.users.getFallbackLlmKeys(userId, provider).catch(() => [])
+        : []
 
       const maxToolRounds = this.readToolLoopSetting(
         'AGENT_MAX_TOOL_ROUNDS',
@@ -267,6 +270,7 @@ export class AgentService {
             activeUserApiKey,
             activeUserBaseUrl,
             activeModel,
+            activeProvider !== 'ollama' ? fallbackApiKeys : undefined,
           )
         } catch (error: any) {
           const shouldFallbackToOllama =

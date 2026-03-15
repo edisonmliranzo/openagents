@@ -25,6 +25,11 @@ class UpsertLlmKeyDto {
   @IsBoolean() @IsOptional() isActive?: boolean
 }
 
+class AddFallbackLlmKeyDto {
+  @IsString() apiKey!: string
+  @IsString() @IsOptional() label?: string
+}
+
 class CreateUserDomainDto {
   @IsString() domain!: string
   @IsString() @IsOptional() @IsIn(['manual', 'cloudflare', 'caddy', 'nginx']) provider?: string
@@ -86,6 +91,26 @@ export class UsersController {
   @Delete('me/llm-keys/:provider')
   deleteLlmKey(@Param('provider') provider: string, @Req() req: any) {
     return this.users.deleteLlmKey(req.user.id, provider)
+  }
+
+  // Fallback LLM keys (multi-key rotation / failover)
+  @Get('me/llm-keys/:provider/fallbacks')
+  listFallbackLlmKeys(@Param('provider') provider: string, @Req() req: any) {
+    return this.users.listFallbackLlmKeys(req.user.id, provider)
+  }
+
+  @Post('me/llm-keys/:provider/fallbacks')
+  addFallbackLlmKey(
+    @Param('provider') provider: string,
+    @Body() dto: AddFallbackLlmKeyDto,
+    @Req() req: any,
+  ) {
+    return this.users.addFallbackLlmKey(req.user.id, provider, dto.apiKey, dto.label)
+  }
+
+  @Delete('me/llm-keys/:provider/fallbacks/:id')
+  removeFallbackLlmKey(@Param('id') id: string, @Req() req: any) {
+    return this.users.removeFallbackLlmKey(req.user.id, id)
   }
 
   // Domains

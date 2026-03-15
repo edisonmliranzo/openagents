@@ -37,11 +37,18 @@ model User {
   auditLogs      AuditLog[]
   notifications  Notification[]
   cronJobs       CronJob[]
-  llmApiKeys     LlmApiKey[]
+  llmApiKeys       LlmApiKey[]
+  llmKeyFallbacks  LlmApiKeyFallback[]
   whatsAppDevices  WhatsAppDevice[]
   whatsAppPairings WhatsAppPairing[]
-  subagentRuns   SubagentRun[]
-  delegationEdges DelegationEdge[]
+  telegramChats    TelegramChat[]
+  telegramPairings TelegramPairing[]
+  slackWorkspaces  SlackWorkspace[]
+  slackPairings    SlackPairing[]
+  discordServers   DiscordServer[]
+  discordPairings  DiscordPairing[]
+  subagentRuns     SubagentRun[]
+  delegationEdges  DelegationEdge[]
 }
 
 model RefreshToken {
@@ -532,6 +539,133 @@ model WhatsAppPairing {
   consumedMessageSid String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+}
+
+// ─── LLM API Key Fallbacks (for multi-key rotation / failover) ────────────────
+
+model LlmApiKeyFallback {
+  id        String    @id @default(cuid())
+  userId    String
+  provider  String    // 'anthropic' | 'openai' | 'google' | 'minimax'
+  apiKey    String
+  label     String?   // e.g. "Backup 1", "Team key"
+  priority  Int       @default(10) // lower = tried first (primary LlmApiKey is 0)
+  isActive  Boolean   @default(true)
+  failedAt  DateTime?
+  failCount Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, provider, priority])
+}
+
+// ─── Telegram ─────────────────────────────────────────────────────────────────
+
+model TelegramChat {
+  id                 String    @id @default(cuid())
+  userId             String
+  chatId             String    @unique
+  label              String?
+  linkedAt           DateTime  @default(now())
+  lastSeenAt         DateTime?
+  lastConversationId String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}
+
+model TelegramPairing {
+  id        String    @id @default(cuid())
+  userId    String
+  code      String    @unique
+  command   String
+  status    String    @default("pending") // pending | linked | expired | canceled
+  chatId    String?
+  expiresAt DateTime
+  linkedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+}
+
+// ─── Slack ────────────────────────────────────────────────────────────────────
+
+model SlackWorkspace {
+  id                 String    @id @default(cuid())
+  userId             String
+  teamId             String    @unique
+  teamName           String?
+  channelId          String?
+  linkedAt           DateTime  @default(now())
+  lastSeenAt         DateTime?
+  lastConversationId String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}
+
+model SlackPairing {
+  id        String    @id @default(cuid())
+  userId    String
+  code      String    @unique
+  command   String
+  status    String    @default("pending") // pending | linked | expired | canceled
+  teamId    String?
+  expiresAt DateTime
+  linkedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+}
+
+// ─── Discord ──────────────────────────────────────────────────────────────────
+
+model DiscordServer {
+  id                 String    @id @default(cuid())
+  userId             String
+  guildId            String    @unique
+  guildName          String?
+  channelId          String?
+  linkedAt           DateTime  @default(now())
+  lastSeenAt         DateTime?
+  lastConversationId String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}
+
+model DiscordPairing {
+  id        String    @id @default(cuid())
+  userId    String
+  code      String    @unique
+  command   String
+  status    String    @default("pending") // pending | linked | expired | canceled
+  guildId   String?
+  expiresAt DateTime
+  linkedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
