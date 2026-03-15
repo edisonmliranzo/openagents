@@ -40,7 +40,7 @@ This document tracks parity work needed to align OpenAgents behavior with OpenCl
 
 - [ ] Gmail search + draft via Google OAuth tokens
 - [ ] Calendar availability + event creation via Google OAuth tokens
-- [ ] Connector health status in dashboard
+- [x] Connector health status in dashboard
 
 ### 3) Control-plane parity
 

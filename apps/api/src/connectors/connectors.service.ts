@@ -10,7 +10,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service'
 
 const TOKEN_EXPIRY_WARNING_HOURS = 72
-const WHATSAPP_RECENT_WINDOW_HOURS = 24
+const CHANNEL_ACTIVITY_RECENT_WINDOW_HOURS = 24
 const MAX_LATENCY_MS = 120_000
 
 const CONNECTOR_CATALOG = {
@@ -26,9 +26,45 @@ const CONNECTOR_CATALOG = {
     displayName: 'WhatsApp',
     toolNames: [],
   },
+  telegram: {
+    displayName: 'Telegram',
+    toolNames: [],
+  },
+  slack: {
+    displayName: 'Slack',
+    toolNames: [],
+  },
+  discord: {
+    displayName: 'Discord',
+    toolNames: [],
+  },
 } as const
 
 type KnownConnectorId = keyof typeof CONNECTOR_CATALOG
+
+interface ConnectedToolRecord {
+  status: string
+  connectedAt: Date
+  updatedAt: Date
+  tool: { name: string }
+}
+
+interface LinkedChannelRecord {
+  linkedAt: Date
+  lastSeenAt: Date | null
+}
+
+interface ConnectorHealthRowRecord {
+  status: string
+  lastSuccessAt: Date | null
+  lastFailureAt: Date | null
+  lastError: string | null
+  tokenExpiresAt: Date | null
+  p95LatencyMs: number | null
+  rateLimitHits: number
+  failureStreak: number
+  updatedAt: Date
+}
 
 @Injectable()
 export class ConnectorsService {
@@ -39,7 +75,7 @@ export class ConnectorsService {
 
   async listHealth(userId: string): Promise<ConnectorHealthSnapshot> {
     const connectorIds = Object.keys(CONNECTOR_CATALOG) as KnownConnectorId[]
-    const [rows, connectedTools, devices] = await Promise.all([
+    const [rows, connectedTools, devices, telegramChats, slackWorkspaces, discordServers] = await Promise.all([
       this.prisma.connectorHealth.findMany({
         where: { userId, connectorId: { in: connectorIds } },
       }),
@@ -60,7 +96,22 @@ export class ConnectorsService {
       }),
       this.prisma.whatsAppDevice.findMany({
         where: { userId },
-        orderBy: { lastSeenAt: 'desc' },
+        orderBy: [{ lastSeenAt: 'desc' }, { linkedAt: 'desc' }],
+        select: { lastSeenAt: true, linkedAt: true },
+      }),
+      this.prisma.telegramChat.findMany({
+        where: { userId },
+        orderBy: [{ lastSeenAt: 'desc' }, { linkedAt: 'desc' }],
+        select: { lastSeenAt: true, linkedAt: true },
+      }),
+      this.prisma.slackWorkspace.findMany({
+        where: { userId },
+        orderBy: [{ lastSeenAt: 'desc' }, { linkedAt: 'desc' }],
+        select: { lastSeenAt: true, linkedAt: true },
+      }),
+      this.prisma.discordServer.findMany({
+        where: { userId },
+        orderBy: [{ lastSeenAt: 'desc' }, { linkedAt: 'desc' }],
         select: { lastSeenAt: true, linkedAt: true },
       }),
     ])
@@ -72,6 +123,9 @@ export class ConnectorsService {
         row: rowByConnector.get(connectorId) ?? null,
         connectedTools,
         devices,
+        telegramChats,
+        slackWorkspaces,
+        discordServers,
       }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName))
 
@@ -218,8 +272,19 @@ export class ConnectorsService {
       error?: string
     },
   ) {
+    await this.recordChannelActivity(userId, 'whatsapp', input)
+  }
+
+  async recordChannelActivity(
+    userId: string,
+    connectorId: KnownConnectorId,
+    input: {
+      success: boolean
+      error?: string
+    },
+  ) {
     await this.report(userId, {
-      connectorId: 'whatsapp',
+      connectorId,
       success: input.success,
       error: input.error,
     })
@@ -227,31 +292,23 @@ export class ConnectorsService {
 
   private toConnectorEntry(input: {
     connectorId: KnownConnectorId
-    row: {
-      status: string
-      lastSuccessAt: Date | null
-      lastFailureAt: Date | null
-      lastError: string | null
-      tokenExpiresAt: Date | null
-      p95LatencyMs: number | null
-      rateLimitHits: number
-      failureStreak: number
-      updatedAt: Date
-    } | null
-    connectedTools: Array<{
-      status: string
-      connectedAt: Date
-      updatedAt: Date
-      tool: { name: string }
-    }>
-    devices: Array<{
-      lastSeenAt: Date | null
-      linkedAt: Date
-    }>
+    row: ConnectorHealthRowRecord | null
+    connectedTools: ConnectedToolRecord[]
+    devices: LinkedChannelRecord[]
+    telegramChats: LinkedChannelRecord[]
+    slackWorkspaces: LinkedChannelRecord[]
+    discordServers: LinkedChannelRecord[]
   }): ConnectorHealthEntry {
     const { connectorId, row } = input
     const catalog = CONNECTOR_CATALOG[connectorId]
-    const inferred = this.inferConnectorStateFromLocalData(connectorId, input.connectedTools, input.devices)
+    const inferred = this.inferConnectorStateFromLocalData({
+      connectorId,
+      connectedTools: input.connectedTools,
+      devices: input.devices,
+      telegramChats: input.telegramChats,
+      slackWorkspaces: input.slackWorkspaces,
+      discordServers: input.discordServers,
+    })
 
     const status = this.computeStatus({
       baseStatus: this.parseStatus(row?.status) ?? inferred.status,
@@ -287,47 +344,30 @@ export class ConnectorsService {
     }
   }
 
-  private inferConnectorStateFromLocalData(
-    connectorId: KnownConnectorId,
-    connectedTools: Array<{
-      status: string
-      connectedAt: Date
-      updatedAt: Date
-      tool: { name: string }
-    }>,
-    devices: Array<{
-      lastSeenAt: Date | null
-      linkedAt: Date
-    }>,
-  ) {
+  private inferConnectorStateFromLocalData(input: {
+    connectorId: KnownConnectorId
+    connectedTools: ConnectedToolRecord[]
+    devices: LinkedChannelRecord[]
+    telegramChats: LinkedChannelRecord[]
+    slackWorkspaces: LinkedChannelRecord[]
+    discordServers: LinkedChannelRecord[]
+  }) {
+    const { connectorId, connectedTools, devices, telegramChats, slackWorkspaces, discordServers } = input
     const now = new Date()
     if (connectorId === 'whatsapp') {
-      if (devices.length === 0) {
-        return {
-          status: 'down' as const,
-          lastSuccessAt: null,
-          lastFailureAt: null,
-          failureStreak: 0,
-          rateLimitHits: 0,
-          lastError: null,
-          updatedAt: now,
-        }
-      }
+      return this.inferLinkedChannelState('WhatsApp', devices, now)
+    }
 
-      const recent = devices.find((device) => {
-        if (!device.lastSeenAt) return false
-        return now.getTime() - device.lastSeenAt.getTime() <= WHATSAPP_RECENT_WINDOW_HOURS * 60 * 60 * 1000
-      })
-      const latestSeen = devices.find((device) => device.lastSeenAt)?.lastSeenAt ?? null
-      return {
-        status: recent ? ('connected' as const) : ('degraded' as const),
-        lastSuccessAt: latestSeen,
-        lastFailureAt: null,
-        failureStreak: 0,
-        rateLimitHits: 0,
-        lastError: recent ? null : 'No WhatsApp activity in the recent window.',
-        updatedAt: latestSeen ?? devices[0].linkedAt,
-      }
+    if (connectorId === 'telegram') {
+      return this.inferLinkedChannelState('Telegram', telegramChats, now)
+    }
+
+    if (connectorId === 'slack') {
+      return this.inferLinkedChannelState('Slack', slackWorkspaces, now)
+    }
+
+    if (connectorId === 'discord') {
+      return this.inferLinkedChannelState('Discord', discordServers, now)
     }
 
     const toolNames = new Set<string>([...CONNECTOR_CATALOG[connectorId].toolNames])
@@ -359,6 +399,43 @@ export class ConnectorsService {
       updatedAt: relevant
         .map((row) => row.updatedAt)
         .sort((a, b) => b.getTime() - a.getTime())[0] ?? now,
+    }
+  }
+
+  private inferLinkedChannelState(label: string, records: LinkedChannelRecord[], now: Date) {
+    if (records.length === 0) {
+      return {
+        status: 'down' as const,
+        lastSuccessAt: null,
+        lastFailureAt: null,
+        failureStreak: 0,
+        rateLimitHits: 0,
+        lastError: `No linked ${label.toLowerCase()} routes.`,
+        updatedAt: now,
+      }
+    }
+
+    const latestSeen = records
+      .map((record) => record.lastSeenAt)
+      .filter((value): value is Date => Boolean(value))
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? null
+
+    const latestLinkedAt = records
+      .map((record) => record.linkedAt)
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? now
+
+    const recent = latestSeen
+      ? now.getTime() - latestSeen.getTime() <= CHANNEL_ACTIVITY_RECENT_WINDOW_HOURS * 60 * 60 * 1000
+      : false
+
+    return {
+      status: recent ? ('connected' as const) : ('degraded' as const),
+      lastSuccessAt: latestSeen,
+      lastFailureAt: null,
+      failureStreak: 0,
+      rateLimitHits: 0,
+      lastError: recent ? null : `No ${label} activity in the recent window.`,
+      updatedAt: latestSeen ?? latestLinkedAt,
     }
   }
 
@@ -462,7 +539,7 @@ export class ConnectorsService {
 
   private normalizeConnectorId(raw: string): KnownConnectorId {
     const value = raw.trim().toLowerCase()
-    if (value === 'google_gmail' || value === 'google_calendar' || value === 'whatsapp') return value
+    if (value in CONNECTOR_CATALOG) return value as KnownConnectorId
     throw new BadRequestException(`Unsupported connector id: ${raw}`)
   }
 
