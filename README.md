@@ -2,6 +2,12 @@
 
 OpenAgents is a local-first AI agent platform with a modern web control plane, tool-calling runtime, approvals, memory files, and multi-channel operations.
 
+## Product Docs
+
+- [MVP Feature Pack](docs/mvp-feature-pack.md)
+- [OpenClaw Parity Roadmap](docs/openclaw-parity.md)
+- [Product Expansion Roadmap](docs/product-expansion-roadmap.md)
+
 ## Highlights
 
 - OpenAgent control runtime (`/agent/openagent`) for skills, sessions, persona, and runtime actions.
