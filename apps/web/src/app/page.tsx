@@ -298,6 +298,10 @@ export default function RootPage() {
                   </div>
                 ))}
               </pre>
+
+              <p className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-100">
+                Access example: {activeQuickStart.accessExample}
+              </p>
             </div>
           </article>
 

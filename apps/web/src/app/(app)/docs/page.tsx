@@ -208,6 +208,9 @@ export default function DocsPage() {
               <pre className="mt-3 overflow-auto rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
                 {platform.localCommands.map((line) => `${platform.shellPrefix} ${line}`).join('\n')}
               </pre>
+              <p className="mt-3 text-xs font-medium text-slate-600">
+                Access example: {platform.accessExample}
+              </p>
             </article>
           ))}
         </div>

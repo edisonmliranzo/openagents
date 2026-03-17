@@ -6,6 +6,7 @@ export interface OpenAgentsQuickStartConfig {
   shellPrefix: string
   localCommands: string[]
   runtimeNote: string
+  accessExample: string
 }
 
 export const OPENAGENTS_REPO_URL = 'https://github.com/edisonmliranzo/openagents.git'
@@ -50,6 +51,8 @@ export const OPENAGENTS_UBUNTU_SERVER_INSTALL_LINES = [
   'pnpm prod:build',
   'pnpm prod:up',
   'pnpm prod:check:ollama',
+  '',
+  'Access: http://YOUR_UBUNTU_IP/login if nginx proxies to OpenAgents, or http://YOUR_UBUNTU_IP:3000/login if you expose the web container directly.',
 ]
 
 export const OPENAGENTS_UBUNTU_SERVER_INSTALL_GUIDE =
@@ -74,6 +77,7 @@ export const OPENAGENTS_LOCAL_QUICK_START: Record<
       'pnpm dev',
     ],
     runtimeNote: 'PowerShell with Node.js 20+, pnpm 9+, Git, and Docker Desktop running.',
+    accessExample: 'Open http://localhost:3000/login after startup.',
   },
   macos: {
     label: 'macOS',
@@ -89,6 +93,7 @@ export const OPENAGENTS_LOCAL_QUICK_START: Record<
       'pnpm dev',
     ],
     runtimeNote: 'Homebrew with Node.js 20+, pnpm 9+, Git, and Docker Desktop running.',
+    accessExample: 'Open http://localhost:3000/login after startup.',
   },
   ubuntu: {
     label: 'Ubuntu',
@@ -109,6 +114,7 @@ export const OPENAGENTS_LOCAL_QUICK_START: Record<
       'pnpm dev',
     ],
     runtimeNote: 'Ubuntu 22.04+ with Node.js 20+, pnpm 9+, Git, and Docker Engine running.',
+    accessExample: 'Open http://YOUR_UBUNTU_IP:3000/login or your configured domain after startup.',
   },
 }
 
@@ -123,19 +129,14 @@ function renderPromptGuide(title: string, lines: string[]) {
   return [`${title}:`, ...lines].join('\n')
 }
 
+function renderQuickStartGuide(title: string, config: OpenAgentsQuickStartConfig) {
+  return renderPromptGuide(title, [...config.localCommands, `Access: ${config.accessExample}`])
+}
+
 const OPENAGENTS_LOCAL_INSTALL_PROMPT_GUIDE = [
-  renderPromptGuide(
-    'Windows local quick start',
-    OPENAGENTS_LOCAL_QUICK_START.windows.localCommands,
-  ),
-  renderPromptGuide(
-    'macOS local quick start',
-    OPENAGENTS_LOCAL_QUICK_START.macos.localCommands,
-  ),
-  renderPromptGuide(
-    'Ubuntu local quick start',
-    OPENAGENTS_LOCAL_QUICK_START.ubuntu.localCommands,
-  ),
+  renderQuickStartGuide('Windows local quick start', OPENAGENTS_LOCAL_QUICK_START.windows),
+  renderQuickStartGuide('macOS local quick start', OPENAGENTS_LOCAL_QUICK_START.macos),
+  renderQuickStartGuide('Ubuntu local quick start', OPENAGENTS_LOCAL_QUICK_START.ubuntu),
 ].join('\n\n')
 
 export function classifyOpenAgentsInstallIntent(message: string): OpenAgentsInstallIntent {

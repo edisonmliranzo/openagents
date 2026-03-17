@@ -114,6 +114,16 @@ function requireNode20() {
   }
 }
 
+function localAccessExample() {
+  if (process.platform === "win32") {
+    return "http://localhost:3000/login";
+  }
+  if (process.platform === "darwin") {
+    return "http://localhost:3000/login";
+  }
+  return "http://<your-ubuntu-ip>:3000/login";
+}
+
 try {
   heading("Validate runtime");
   requireNode20();
@@ -164,6 +174,7 @@ try {
 
   console.log("\nSetup complete.");
   console.log("Run \"pnpm dev\" to start the apps.");
+  console.log(`Access example after startup: ${localAccessExample()}`);
   console.log("For production-like Docker stack, run \"pnpm prod:up\".");
 } catch (error) {
   console.error("\nSetup failed.");
