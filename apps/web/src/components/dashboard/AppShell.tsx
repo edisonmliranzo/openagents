@@ -42,28 +42,28 @@ interface NavGroup {
 
 const BASE_NAV_GROUPS: NavGroup[] = [
   {
-    title: 'Agent',
+    title: 'Assistant',
     items: [
-      { label: 'OpenAgents', href: '/agent/openagent', icon: Activity },
+      { label: 'Assistant Core', href: '/agent/openagent', icon: Activity },
       { label: 'Skills', href: '/agent/skills', icon: Brain },
       { label: 'Marketplace', href: '/agent/marketplace', icon: BookOpen },
     ],
   },
   {
-    title: 'Workspace',
+    title: 'Work',
     items: [
-      { label: 'Chat', href: '/chat', icon: MessageSquare },
-      { label: 'Approvals', href: '/approvals', icon: ShieldCheck },
-      { label: 'Memory', href: '/memory', icon: Brain },
-      { label: 'Sessions', href: '/sessions', icon: Terminal },
+      { label: 'Tasks', href: '/chat', icon: MessageSquare },
+      { label: 'Actions', href: '/approvals', icon: ShieldCheck },
+      { label: 'Knowledge', href: '/memory', icon: Brain },
+      { label: 'Runs', href: '/sessions', icon: Terminal },
     ],
   },
   {
-    title: 'Settings',
+    title: 'Control',
     items: [
-      { label: 'Config', href: '/settings/config', icon: Settings2 },
-      { label: 'Audit Log', href: '/audit', icon: FileText },
-      { label: 'Logs', href: '/settings/logs', icon: ScrollText },
+      { label: 'Settings', href: '/settings/config', icon: Settings2 },
+      { label: 'Audit', href: '/audit', icon: FileText },
+      { label: 'System Logs', href: '/settings/logs', icon: ScrollText },
     ],
   },
   {
@@ -393,7 +393,7 @@ export function AppShell({ children }: AppShellProps) {
                       {activeRouteLabel}
                     </p>
                     <p className="truncate text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-                      OpenAgents workspace
+                      Personal AI assistant workspace
                     </p>
                   </div>
                 </div>

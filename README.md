@@ -1,6 +1,8 @@
 # OpenAgents
 
-OpenAgents is a local-first AI agent platform with a modern web control plane, tool-calling runtime, approvals, memory files, and multi-channel operations.
+OpenAgents is a free self-hosted personal AI assistant for any digital task.
+
+It can answer questions, research the web, break a goal into steps, write content, create files, run tools, and take approval-gated actions from one workspace.
 
 ## Product Docs
 
@@ -10,24 +12,17 @@ OpenAgents is a local-first AI agent platform with a modern web control plane, t
 
 ## Highlights
 
-- OpenAgent control runtime (`/agent/openagent`) for skills, sessions, persona, and runtime actions.
-- Live chat workspace with approvals, code-aware responses, and copy-code UX.
-- Voice chat controls (browser speech-to-text + spoken replies).
-- File-based memory model (`SOUL.md`, `USER.md`, `MEMORY.md`, `HEARTBEAT.md`, `cron.json`).
-- Browser capture ingest endpoint + extension scaffold for selected web content.
-- Tool execution loop with ReAct-style calls and approval gates.
+- Chat-first assistant workspace for questions, multi-step tasks, approvals, and finished outputs.
+- Web research with citations plus deliverables such as reports, notes, drafts, and simple HTML pages.
+- Tool execution loop with approval gates, dry-run previews, and background worker processing.
+- File-based memory model (`SOUL.md`, `USER.md`, `MEMORY.md`, `HEARTBEAT.md`, `cron.json`) plus local knowledge source sync.
+- Workflow runs with branch/compare support for replaying and evaluating alternative outputs.
+- Conversation repair and lineage graph endpoints for auditability, provenance, and stuck-run recovery.
+- Gmail and Calendar connectors for search, drafting, availability checks, and event creation.
 - Native MCP stdio server support with auto-discovered external tools.
-- Parallel specialist delegation for complex nanobot runs.
-- Signed marketplace packs, orchestration run state, and scheduled autonomy windows.
-- Platform control features:
-  - templates marketplace
-  - fleet health snapshot
-  - eval suites (Ollama benchmarking)
-  - billing/cost dashboard
-  - subscription plans and quotas
-  - omnichannel inbox
-- WhatsApp channel support with pairing/link flow and webhook ingestion.
-- LLM provider switching (Anthropic / OpenAI / Google Gemini / MiniMax / Ollama local) with per-user model selection, live model discovery, and graceful tool-fallback for models that don't support function calling.
+- Web and mobile surfaces for chat, approvals, channels, workflows, memory, and operational review.
+- Self-hosted deployment flow for local development and Ubuntu VPS installs.
+- LLM provider switching (Anthropic / OpenAI / Google Gemini / MiniMax / Ollama local) with per-user model selection, live model discovery, and graceful tool fallback.
 
 ## Tech stack
 
@@ -45,13 +40,15 @@ OpenAgents is a local-first AI agent platform with a modern web control plane, t
 
 ### 1. Prerequisites
 
+- Git
 - Node.js 20+
-- pnpm 9+
-- Docker Desktop (Windows/macOS) or Docker Engine + Compose plugin (Ubuntu)
+- pnpm 9+ via Corepack
+- Docker Desktop running (Windows/macOS) or Docker Engine + Compose plugin running (Ubuntu)
 
 Windows (PowerShell as Administrator):
 
 ```powershell
+winget install Git.Git
 winget install OpenJS.NodeJS.LTS
 winget install Docker.DockerDesktop
 corepack enable
@@ -61,7 +58,7 @@ corepack prepare pnpm@9.0.0 --activate
 macOS (Homebrew):
 
 ```bash
-brew install node@20
+brew install git node@20
 brew install --cask docker
 corepack enable
 corepack prepare pnpm@9.0.0 --activate
@@ -71,29 +68,35 @@ Ubuntu 22.04+:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y curl ca-certificates gnupg
+sudo apt-get install -y git curl ca-certificates gnupg
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs docker.io docker-compose-plugin
+sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER"
 newgrp docker
 corepack enable
 corepack prepare pnpm@9.0.0 --activate
 ```
 
-### 2. One-command setup
+### 2. Clone and bootstrap
 
 ```bash
-node scripts/setup.mjs
+git clone https://github.com/edisonmliranzo/openagents.git
+cd openagents
+pnpm setup
 ```
 
-This command:
+`pnpm setup`:
 
 - installs workspace dependencies
 - creates env files from examples if missing
 - starts local Postgres/Redis with Docker (if available)
 - runs Prisma generate + migrate
 
-If pnpm is already available, you can run `pnpm setup` instead.
+If you cannot or do not want to start Docker for local Postgres/Redis:
+
+- `pnpm setup:skip-docker`
+- `pnpm setup:skip-migrate`
 
 Useful variants:
 
@@ -153,100 +156,36 @@ Local URLs:
 - API: `http://localhost:3001`
 - API docs: `http://localhost:3001/docs`
 
-## Install and update commands (Windows / macOS / Ubuntu)
+### 5. Update an existing local install
 
-### Windows (PowerShell)
-
-Install + first run:
+Windows (PowerShell):
 
 ```powershell
-winget install OpenJS.NodeJS.LTS
-winget install Docker.DockerDesktop
-corepack enable
-corepack prepare pnpm@9.0.0 --activate
-git clone https://github.com/edisonmliranzo/openagents.git
-cd openagents
-pnpm install
-pnpm --filter @openagents/api run db:generate
-pnpm --filter @openagents/api run db:migrate
-pnpm prod:up
-pnpm prod:ps
+cd C:\path\to\openagents
+git pull --ff-only origin main
+pnpm setup
+pnpm dev
 ```
 
-Update existing install:
-
-```powershell
-cd C:\Users\edins\githubrepo\openagents
-git pull origin main
-pnpm install --frozen-lockfile
-pnpm --filter @openagents/api run db:migrate
-pnpm prod:build
-pnpm prod:up
-pnpm prod:ps
-```
-
-### macOS (Terminal)
-
-Install + first run:
+macOS (Terminal):
 
 ```bash
-brew install node@20
-brew install --cask docker
-corepack enable
-corepack prepare pnpm@9.0.0 --activate
-git clone https://github.com/edisonmliranzo/openagents.git
-cd openagents
-pnpm install
-pnpm --filter @openagents/api run db:generate
-pnpm --filter @openagents/api run db:migrate
-pnpm prod:up
-pnpm prod:ps
+cd ~/path/to/openagents
+git pull --ff-only origin main
+pnpm setup
+pnpm dev
 ```
 
-Update existing install:
+Ubuntu:
 
 ```bash
-cd ~/githubrepo/openagents
-git pull origin main
-pnpm install --frozen-lockfile
-pnpm --filter @openagents/api run db:migrate
-pnpm prod:build
-pnpm prod:up
-pnpm prod:ps
+cd ~/path/to/openagents
+git pull --ff-only origin main
+pnpm setup
+pnpm dev
 ```
 
-### Ubuntu (local or server path)
-
-Install + first run:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y git curl ca-certificates gnupg
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs docker.io docker-compose-plugin
-sudo systemctl enable --now docker
-corepack enable
-corepack prepare pnpm@9.0.0 --activate
-git clone https://github.com/edisonmliranzo/openagents.git
-cd openagents
-pnpm install
-pnpm --filter @openagents/api run db:generate
-pnpm --filter @openagents/api run db:migrate
-pnpm prod:up
-pnpm prod:ps
-```
-
-Update existing install:
-
-```bash
-cd /opt/openagents
-git pull origin main
-pnpm install --frozen-lockfile
-pnpm --filter @openagents/api run db:migrate
-pnpm prod:build
-pnpm prod:up
-pnpm prod:ps
-```
+For Ubuntu production/VPS installs, use the dedicated Docker deployment flow below.
 
 ## Production deployment (latest method)
 
@@ -275,7 +214,7 @@ if [ ! -d openagents/.git ]; then
   git clone https://github.com/edisonmliranzo/openagents.git
 fi
 cd /opt/openagents
-git pull origin main
+git pull --ff-only origin main
 ```
 
 ### 2. Create and configure `infra/docker/.env.prod`
@@ -339,7 +278,7 @@ Health checks:
 
 ```bash
 cd /opt/openagents
-git pull origin main
+git pull --ff-only origin main
 pnpm install --frozen-lockfile
 pnpm prod:build
 pnpm prod:up

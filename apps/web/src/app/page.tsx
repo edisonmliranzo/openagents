@@ -1,11 +1,20 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowRight, CheckCircle2, Cloud, Laptop2, Sparkles } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import {
+  ArrowRight,
+  CheckCircle2,
+  Files,
+  Globe,
+  type LucideIcon,
+  ShieldCheck,
+  Sparkles,
+  Wrench,
+} from 'lucide-react'
 import {
   OPENAGENTS_LOCAL_QUICK_START,
+  OPENAGENTS_REPO_WEB_URL,
   type OpenAgentsLocalQuickStartPlatform,
 } from '@openagents/shared'
 import styles from './landing.module.css'
@@ -13,137 +22,65 @@ import { useAuthStore } from '@/stores/auth'
 
 type Platform = OpenAgentsLocalQuickStartPlatform
 
-const QUICK_START = OPENAGENTS_LOCAL_QUICK_START
-
-const CLOUD_STEPS = [
-  'Sign in and activate OpenAgents Cloud Pro.',
-  'Choose your workspace region and team size.',
-  'Connect providers or use local Ollama fallback.',
-  'Deploy your first agent workflow in minutes.',
-]
-
-const FEATURE_CARDS = [
-  {
-    title: 'Local-First Runtime',
-    detail: 'Run on your machine with full data control and instant debugging.',
-  },
-  {
-    title: 'Gateway Chat Control',
-    detail: 'Operate sessions, approvals, and actions from one dashboard.',
-  },
-  {
-    title: 'Cloud Sync',
-    detail: 'Scale to hosted workspaces when you need shared uptime.',
-  },
-  {
-    title: 'Tool Integrations',
-    detail: 'Wire email, calendar, web fetch, notes, and custom actions.',
-  },
-]
-
-const DEPLOY_MODES = [
-  {
-    title: 'Local Runtime',
-    detail: 'Fast iteration on your laptop with Docker-backed Postgres/Redis and optional Ollama fallback.',
-    action: 'Best for solo development',
-  },
-  {
-    title: 'Self-Hosted Team',
-    detail: 'Deploy API + web behind your own network controls with custom secrets.',
-    action: 'Best for internal operations',
-  },
-  {
-    title: 'OpenAgents Cloud Pro',
-    detail: 'Use managed uptime, shared workspaces, and guided rollout controls.',
-    action: 'Best for fast team onboarding',
-  },
-]
-
-const INTEGRATIONS = [
-  'WhatsApp',
-  'Telegram',
-  'Discord',
-  'Slack',
-  'Gmail',
-  'Calendar',
-  'Web Fetch',
-  'Notes',
-  'Custom APIs',
-  'Soul.md',
-]
-
-const OPENAGENT_STACK = [
-  'openagent/agent',
-  'openagent/skills',
-  'openagent/channels',
-  'openagent/bus',
-  'openagent/cron',
-  'openagent/heartbeat',
-  'openagent/providers',
-  'openagent/session',
-  'openagent/config',
-  'openagent/cli',
-]
-
-function isCreatorUser(user: { role?: string | null; email?: string | null }) {
-  const role = (user.role ?? '').toLowerCase()
-  return role === 'owner' || role === 'admin'
+interface FeatureCard {
+  title: string
+  detail: string
+  icon: LucideIcon
 }
 
+const FEATURE_CARDS: FeatureCard[] = [
+  {
+    title: 'Research + Sources',
+    detail: 'Search the web, read pages, and turn findings into grounded answers and summaries.',
+    icon: Globe,
+  },
+  {
+    title: 'Plans + Execution',
+    detail: 'Break goals into steps, run tools, and keep approvals in the loop for risky actions.',
+    icon: Sparkles,
+  },
+  {
+    title: 'Files + Deliverables',
+    detail: 'Create notes, reports, drafts, and simple web outputs instead of stopping at chat.',
+    icon: Files,
+  },
+  {
+    title: 'Tools + Connectors',
+    detail: 'Extend the assistant with workflows, MCP tools, Gmail, Calendar, and internal APIs.',
+    icon: Wrench,
+  },
+]
+
+const ASSISTANT_EXAMPLES = [
+  'Research the best CRM options for a 10-person sales team and write a recommendation memo.',
+  "Summarize today's AI news and draft a LinkedIn post with source links.",
+  'Plan my week from my tasks and calendar constraints.',
+  'Draft a reply to this email thread and save it as a draft.',
+  'Create a landing page for my product idea.',
+]
+
+const SELF_HOST_BENEFITS = [
+  'Free and self-hosted by default',
+  'Bring your own model and API keys',
+  'Approvals for risky actions',
+  'Memory, history, workflows, and connectors',
+]
+
+const DELIVERABLES = [
+  'Research brief',
+  'Recommendation memo',
+  'Email draft',
+  'Task plan',
+  'Markdown notes',
+  'Simple HTML page',
+]
+
 export default function RootPage() {
-  const router = useRouter()
-  const hydrated = useAuthStore((state) => state.hydrated)
   const accessToken = useAuthStore((state) => state.accessToken)
-  const user = useAuthStore((state) => state.user)
-  const syncUser = useAuthStore((state) => state.syncUser)
-  const clearAuth = useAuthStore((state) => state.clear)
   const [platform, setPlatform] = useState<Platform>('windows')
-  const [profileSyncState, setProfileSyncState] = useState<'idle' | 'inflight' | 'done'>('idle')
-  const hasNavigatedRef = useRef(false)
-  const activeQuickStart = useMemo(() => QUICK_START[platform], [platform])
-
-  useEffect(() => {
-    if (!hydrated || hasNavigatedRef.current) return
-
-    if (!accessToken) {
-      hasNavigatedRef.current = true
-      router.replace('/login')
-      return
-    }
-
-    if (!user) {
-      if (profileSyncState === 'idle' && typeof syncUser === 'function') {
-        setProfileSyncState('inflight')
-        void syncUser().finally(() => {
-          setProfileSyncState('done')
-        })
-        return
-      }
-
-      if (profileSyncState === 'done') {
-        clearAuth()
-        hasNavigatedRef.current = true
-        router.replace('/login')
-      }
-
-      return
-    }
-
-    if (!isCreatorUser(user)) {
-      hasNavigatedRef.current = true
-      router.replace('/chat')
-    }
-  }, [accessToken, clearAuth, hydrated, profileSyncState, router, syncUser, user])
-
-  if (!hydrated || !accessToken || (!user && profileSyncState !== 'done')) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[var(--background)]">
-        <p className="text-sm font-medium text-[var(--muted)]">Loading...</p>
-      </main>
-    )
-  }
-
-  if (!user || !isCreatorUser(user)) return null
+  const activeQuickStart = useMemo(() => OPENAGENTS_LOCAL_QUICK_START[platform], [platform])
+  const appHref = accessToken ? '/chat' : '/login'
+  const appLabel = accessToken ? 'Open Assistant' : 'Login'
 
   return (
     <main className={styles.page}>
@@ -159,115 +96,174 @@ export default function RootPage() {
             </div>
             <div>
               <p className="text-sm font-semibold tracking-wide text-white">OpenAgents</p>
-              <p className="text-xs text-slate-400">Local + Cloud Agent Platform</p>
+              <p className="text-xs text-slate-400">Free Self-Hosted Personal AI Assistant</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <a
-              href="https://soul.md/"
+              href={OPENAGENTS_REPO_WEB_URL}
               target="_blank"
               rel="noreferrer noopener"
               className="inline-flex h-10 items-center rounded-xl border border-cyan-300/35 bg-cyan-400/10 px-4 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/20"
             >
-              Soul.md
+              GitHub
             </a>
             <Link
-              href="/login"
-              className="inline-flex h-10 items-center rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:border-white/30 hover:bg-white/10"
+              href={appHref}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:border-white/30 hover:bg-white/10"
             >
-              Login
-            </Link>
-            <Link
-              href="/chat"
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-orange-400 px-4 text-sm font-semibold text-white shadow-glow-red transition hover:brightness-110"
-            >
-              Launch Dashboard
+              {appLabel}
               <ArrowRight size={15} />
             </Link>
           </div>
         </header>
 
-        <section className="mt-10 grid items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
+        <section className="mt-10 grid items-center gap-10 lg:grid-cols-[1.12fr_0.88fr]">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-rose-400/35 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-rose-200">
-              <Sparkles size={13} />
-              OpenAgents Cloud + Local Runtime
+              <ShieldCheck size={13} />
+              Free + Self-Hosted + Tool-Enabled
             </div>
 
             <h1 className="mt-5 text-4xl font-semibold leading-tight text-white sm:text-5xl lg:text-6xl">
-              Build AI agents that run
+              Your personal AI assistant
               <span className="bg-gradient-to-r from-rose-300 to-orange-200 bg-clip-text text-transparent">
                 {' '}
-                where you want.
+                for any task.
               </span>
             </h1>
 
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
-              OpenAgents gives you a modern gateway dashboard, local-first execution, and a hosted
-              Cloud option when you need shared uptime. Start on your laptop in minutes, then scale
-              your team with one click.
+              Self-host OpenAgents to research, plan, write, browse, create files, and take
+              action with approvals, memory, workflows, and connectors.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Link
                 href="#quick-start"
-                className="inline-flex h-11 items-center gap-2 rounded-xl border border-cyan-300/35 bg-cyan-400/10 px-5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-orange-400 px-5 text-sm font-semibold text-white shadow-glow-red transition hover:brightness-110"
               >
-                Quick Start
+                Self-Host Free
                 <ArrowRight size={15} />
               </Link>
               <Link
-                href="/login"
+                href={appHref}
                 className="inline-flex h-11 items-center rounded-xl border border-white/15 bg-white/5 px-5 text-sm font-semibold text-white transition hover:border-white/30 hover:bg-white/10"
               >
-                Sign In to Continue
+                {appLabel}
               </Link>
+            </div>
+
+            <div className="mt-8 grid gap-3 sm:grid-cols-2">
+              {SELF_HOST_BENEFITS.map((item) => (
+                <div
+                  key={item}
+                  className="rounded-xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-slate-200 backdrop-blur-sm"
+                >
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-300" />
+                    <span>{item}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
           <div className={styles.scene} aria-hidden>
             <div className={styles.orbitRing} />
             <div className={styles.sphere} />
+
             <div className={styles.objectCardPrimary}>
-              <p className="text-xs uppercase tracking-[0.14em] text-cyan-200">Gateway Status</p>
-              <p className="mt-2 text-lg font-semibold text-white">Live Sessions + Approvals</p>
+              <p className="text-xs uppercase tracking-[0.14em] text-cyan-200">Task Flow</p>
+              <p className="mt-2 text-lg font-semibold text-white">
+                Goal {'->'} plan {'->'} tool calls
+              </p>
               <p className="mt-3 text-sm text-slate-300">
-                Monitor active runs, route tool calls, and take action in real time.
+                Give the assistant a goal and let it break the work into steps before it acts.
               </p>
             </div>
+
             <div className={styles.objectCardSecondary}>
-              <p className="text-xs uppercase tracking-[0.14em] text-rose-200">Cloud Pro</p>
-              <p className="mt-2 text-lg font-semibold text-white">$9.99/month</p>
+              <p className="text-xs uppercase tracking-[0.14em] text-rose-200">Approvals</p>
+              <p className="mt-2 text-lg font-semibold text-white">Human-in-the-loop</p>
               <p className="mt-3 text-sm text-slate-300">
-                Hosted workspace, team access, and priority updates.
+                Review risky actions before they run and keep an audit trail of what happened.
               </p>
             </div>
+
             <div className={styles.objectCardTertiary}>
-              <Laptop2 size={15} className="text-cyan-200" />
-              <p className="text-sm text-slate-200">
-                Local mode stays available for development and offline work.
+              <p className="text-xs uppercase tracking-[0.14em] text-emerald-200">Deliverable</p>
+              <p className="mt-2 text-sm text-slate-200">
+                Reports, drafts, notes, plans, and simple web pages.
               </p>
             </div>
           </div>
+        </section>
+
+        <section className="mt-12 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <article className={styles.panel}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-semibold text-white">Example prompts</h2>
+                <p className="mt-1 text-sm text-slate-300">
+                  Start with one goal. OpenAgents handles the research, planning, and output.
+                </p>
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300">
+                One assistant, many tasks
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3">
+              {ASSISTANT_EXAMPLES.map((example, index) => (
+                <div
+                  key={example}
+                  className="rounded-xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-slate-200"
+                >
+                  <span className="mr-3 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-cyan-100">
+                    {index + 1}
+                  </span>
+                  {example}
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className={styles.panel}>
+            <h2 className="text-2xl font-semibold text-white">What you get</h2>
+            <ul className="mt-5 space-y-3">
+              {[
+                'Chat + execution in one workspace',
+                'Web research with citations',
+                'Files, notes, workflows, and connectors',
+                'Memory, history, and repairable runs',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2 text-sm text-slate-200">
+                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-300" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
         </section>
 
         <section id="quick-start" className="mt-14 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
           <article className={styles.panel}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-semibold text-white">Quick Start</h2>
+                <h2 className="text-2xl font-semibold text-white">Quick start</h2>
                 <p className="mt-1 text-sm text-slate-300">
                   Run OpenAgents locally on Windows, macOS, or Ubuntu.
                 </p>
               </div>
               <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300">
-                Local install guide
+                Free self-hosted install
               </div>
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              {(Object.keys(QUICK_START) as Platform[]).map((key) => {
+              {(Object.keys(OPENAGENTS_LOCAL_QUICK_START) as Platform[]).map((key) => {
                 const active = key === platform
                 return (
                   <button
@@ -280,7 +276,7 @@ export default function RootPage() {
                         : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
                     }`}
                   >
-                    {QUICK_START[key].label}
+                    {OPENAGENTS_LOCAL_QUICK_START[key].label}
                   </button>
                 )
               })}
@@ -293,6 +289,7 @@ export default function RootPage() {
                 </p>
                 <p className="text-xs text-slate-400">{activeQuickStart.runtimeNote}</p>
               </div>
+
               <pre className="space-y-2 overflow-x-auto text-sm text-slate-100">
                 {activeQuickStart.localCommands.map((line) => (
                   <div key={line} className="whitespace-pre">
@@ -305,77 +302,64 @@ export default function RootPage() {
           </article>
 
           <article className={styles.panel}>
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/40 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-cyan-100">
-              <Cloud size={13} />
-              OpenAgents Cloud
-            </div>
-
-            <h3 className="mt-4 text-2xl font-semibold text-white">Pro Plan</h3>
-            <p className="mt-1 text-slate-300">
-              <span className="text-4xl font-semibold text-white">$9.99</span>
-              <span className="ml-1 text-sm">per month</span>
-            </p>
-            <p className="mt-4 text-sm leading-relaxed text-slate-300">
-              Use our hosted infrastructure for always-on agents, shared workspaces, and managed
-              operations.
+            <h3 className="text-2xl font-semibold text-white">Run your own assistant</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-300">
+              Bring your own keys, run it on your machine or VPS, and keep the stack under your
+              control.
             </p>
 
             <ul className="mt-5 space-y-3">
-              {CLOUD_STEPS.map((step) => (
-                <li key={step} className="flex items-start gap-2 text-sm text-slate-200">
+              {[
+                'Research, plan, write, and take action',
+                'Use approvals before risky tool calls',
+                'Extend with custom tools and MCP servers',
+                'Keep your data, memory, and workflows in your own environment',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2 text-sm text-slate-200">
                   <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-300" />
-                  <span>{step}</span>
+                  <span>{item}</span>
                 </li>
               ))}
             </ul>
 
-            <Link
-              href="/login?plan=cloud-pro"
-              className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 text-sm font-semibold text-white transition hover:brightness-110"
+            <a
+              href={`${OPENAGENTS_REPO_WEB_URL}/blob/main/README.md`}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/35 bg-cyan-400/10 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
             >
-              Start Cloud Pro
+              Read Self-Host Docs
               <ArrowRight size={15} />
-            </Link>
+            </a>
           </article>
         </section>
 
         <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {FEATURE_CARDS.map((item) => (
-            <article
-              key={item.title}
-              className="rounded-2xl border border-white/10 bg-slate-950/55 p-5 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-rose-300/35 hover:bg-slate-950/70"
-            >
-              <h4 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-200">
-                {item.title}
-              </h4>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.detail}</p>
-            </article>
-          ))}
+          {FEATURE_CARDS.map((item) => {
+            const Icon = item.icon
+            return (
+              <article
+                key={item.title}
+                className="rounded-2xl border border-white/10 bg-slate-950/55 p-5 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-rose-300/35 hover:bg-slate-950/70"
+              >
+                <Icon size={16} className="text-cyan-200" />
+                <h3 className="mt-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-200">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.detail}</p>
+              </article>
+            )
+          })}
         </section>
 
-        <section className="mt-8 grid gap-4 lg:grid-cols-3">
-          {DEPLOY_MODES.map((mode) => (
-            <article
-              key={mode.title}
-              className="rounded-2xl border border-white/10 bg-slate-950/55 p-5 backdrop-blur-sm transition hover:border-cyan-300/35 hover:bg-slate-950/70"
-            >
-              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-200">
-                {mode.title}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">{mode.detail}</p>
-              <p className="mt-3 text-xs font-semibold text-cyan-300">{mode.action}</p>
-            </article>
-          ))}
-        </section>
-
-        <section className="mt-8 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="mt-8 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <article className={styles.panel}>
-            <h3 className="text-xl font-semibold text-white">Works with your existing stack</h3>
+            <h3 className="text-xl font-semibold text-white">Deliverables</h3>
             <p className="mt-1 text-sm text-slate-300">
-              Connect channels, data sources, and tools without re-building your workflow graph.
+              OpenAgents should return finished work, not just chat text.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {INTEGRATIONS.map((item) => (
+              {DELIVERABLES.map((item) => (
                 <span
                   key={item}
                   className="rounded-full border border-white/12 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200"
@@ -387,39 +371,57 @@ export default function RootPage() {
           </article>
 
           <article className={styles.panel}>
-            <h3 className="text-xl font-semibold text-white">OpenAgent Starter Stack</h3>
+            <h3 className="text-xl font-semibold text-white">Built for real work</h3>
             <p className="mt-1 text-sm text-slate-300">
-              The runtime architecture is already scaffolded and ready for extensions.
+              OpenAgents combines answer-engine behavior with tool execution so it can move from a
+              question to a result inside one assistant.
             </p>
-            <ul className="mt-3 space-y-1">
-              {OPENAGENT_STACK.map((entry) => (
-                <li key={entry} className="font-mono text-xs text-cyan-200">
-                  {entry}
-                </li>
-              ))}
-            </ul>
-            <Link
-              href="/agent/openagent"
-              className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg border border-cyan-300/35 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
-            >
-              Open OpenAgent Control
-              <ArrowRight size={14} />
-            </Link>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-slate-950/55 p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-rose-200">Research</p>
+                <p className="mt-2 text-sm text-slate-200">
+                  Cite sources, compare pages, and generate reports from web findings.
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-slate-950/55 p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-cyan-200">Execution</p>
+                <p className="mt-2 text-sm text-slate-200">
+                  Use workflows, connectors, and tools to produce drafts, files, and actions.
+                </p>
+              </div>
+            </div>
           </article>
         </section>
 
-        <section className="mt-7 rounded-2xl border border-cyan-300/20 bg-cyan-400/5 px-5 py-4 backdrop-blur-sm">
-          <p className="text-sm text-cyan-50">
-            Explore our ecosystem partner:{' '}
-            <a
-              href="https://soul.md/"
-              target="_blank"
-              rel="noreferrer noopener"
-              className="font-semibold text-cyan-300 underline decoration-cyan-500/60 underline-offset-2 hover:text-cyan-200"
-            >
-              soul.md
-            </a>
-          </p>
+        <section className="mt-10 rounded-2xl border border-cyan-300/20 bg-cyan-400/5 px-5 py-5 backdrop-blur-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">
+                Final CTA
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">Run your own assistant</h2>
+              <p className="mt-1 text-sm text-cyan-50/85">
+                Start free, self-host it where you want, and keep extending it as your assistant
+                grows.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="#quick-start"
+                className="inline-flex h-11 items-center rounded-xl border border-cyan-300/35 bg-cyan-400/10 px-5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+              >
+                Install OpenAgents
+              </Link>
+              <Link
+                href={appHref}
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-orange-400 px-5 text-sm font-semibold text-white shadow-glow-red transition hover:brightness-110"
+              >
+                {appLabel}
+                <ArrowRight size={15} />
+              </Link>
+            </div>
+          </div>
         </section>
       </div>
     </main>

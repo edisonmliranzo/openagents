@@ -1,220 +1,171 @@
-'use client'
-
 import {
+  OPENAGENTS_LOCAL_QUICK_START,
   OPENAGENTS_REPO_WEB_URL,
   OPENAGENTS_UBUNTU_SERVER_INSTALL_GUIDE,
 } from '@openagents/shared'
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const REPO_BASE = OPENAGENTS_REPO_WEB_URL
-const FEATURE_FOCUS = [
+
+const CAPABILITY_CARDS = [
   {
-    title: 'Memory / Brain',
-    summary: 'Persistent memory entries plus editable core memory files and sync operations.',
+    title: 'Chat + Tasks',
+    summary: 'The main assistant workspace for questions, multi-step task execution, and deliverables.',
+    uiHref: '/chat',
+    apiHref: `${API_ORIGIN}/api/v1/conversations`,
+    implHref: `${REPO_BASE}/blob/main/apps/api/src/conversations/conversations.service.ts`,
+  },
+  {
+    title: 'Approvals',
+    summary: 'Human-in-the-loop controls for risky actions, tool calls, and operational handoffs.',
+    uiHref: '/approvals',
+    apiHref: `${API_ORIGIN}/api/v1/approvals`,
+    implHref: `${REPO_BASE}/blob/main/apps/api/src/approvals/approvals.service.ts`,
+  },
+  {
+    title: 'Memory + Sources',
+    summary: 'Persistent memory files plus local knowledge sources that can be synced into the assistant.',
     uiHref: '/memory',
-    apiHref: `${API_ORIGIN}/api/v1/memory`,
+    apiHref: `${API_ORIGIN}/api/v1/memory/sources`,
     implHref: `${REPO_BASE}/blob/main/apps/api/src/memory/memory.service.ts`,
   },
   {
-    title: 'Persona',
-    summary: 'Profile-driven style, boundaries, and turn-by-turn personality updates.',
-    uiHref: '/agent/nanobot',
-    apiHref: `${API_ORIGIN}/api/v1/nanobot/persona/profiles`,
-    implHref: `${REPO_BASE}/blob/main/apps/api/src/nanobot/agent/nanobot-personality.service.ts`,
-  },
-  {
-    title: 'Thinking',
-    summary: 'Session thinking-level controls and agent loop reasoning/execution transitions.',
-    uiHref: '/sessions',
-    apiHref: `${API_ORIGIN}/api/v1/sessions`,
-    implHref: `${REPO_BASE}/blob/main/apps/api/src/nanobot/agent/nanobot-loop.service.ts`,
-  },
-  {
-    title: 'Agentic Heartbeat',
-    summary: 'Runtime liveness tick flow and autonomy/cron diagnostic triggers.',
-    uiHref: '/agent/nanobot',
-    apiHref: `${API_ORIGIN}/api/v1/nanobot/heartbeat`,
-    implHref: `${REPO_BASE}/blob/main/apps/api/src/nanobot/heartbeat/nanobot-heartbeat.service.ts`,
-  },
-  {
-    title: 'Autonomy Windows',
-    summary: 'Time-window policy controls that gate autonomous tool execution.',
-    uiHref: '/agent/nanobot',
-    apiHref: `${API_ORIGIN}/api/v1/nanobot/autonomy/windows`,
-    implHref: `${REPO_BASE}/blob/main/apps/api/src/memory/memory.service.ts`,
-  },
-  {
-    title: 'Trust Scoring',
-    summary: 'Composite trust snapshot across autonomy, memory, tools, safety, and costs.',
-    uiHref: '/agent/trust',
-    apiHref: `${API_ORIGIN}/api/v1/nanobot/trust`,
-    implHref: `${REPO_BASE}/blob/main/apps/api/src/nanobot/trust/nanobot-trust.service.ts`,
-  },
-  {
-    title: 'Skills Registry',
-    summary: 'Built-in and custom skill registry for agent capability routing.',
-    uiHref: '/agent/skills',
-    apiHref: `${API_ORIGIN}/api/v1/nanobot/skills`,
-    implHref: `${REPO_BASE}/blob/main/apps/api/src/nanobot/agent/nanobot-skills.registry.ts`,
-  },
-  {
-    title: 'Workflow Automation',
-    summary: 'CRUD and run orchestration for reusable multi-step workflows.',
+    title: 'Workflows',
+    summary: 'Reusable workflow runs, branching, and result comparison for repeated work.',
     uiHref: '/control/workflows',
     apiHref: `${API_ORIGIN}/api/v1/workflows`,
     implHref: `${REPO_BASE}/blob/main/apps/api/src/workflows/workflows.service.ts`,
   },
   {
-    title: 'Operator Handoffs',
-    summary: 'Escalation flow with claim/reply/resolve lifecycle and context carryover.',
-    uiHref: '/control/handoffs',
-    apiHref: `${API_ORIGIN}/api/v1/handoffs`,
-    implHref: `${REPO_BASE}/blob/main/apps/api/src/handoffs/handoffs.service.ts`,
+    title: 'Channels + Connectors',
+    summary: 'Channel linking plus Gmail and Calendar connection setup for real actions.',
+    uiHref: '/control/channels',
+    apiHref: `${API_ORIGIN}/api/v1/connectors`,
+    implHref: `${REPO_BASE}/blob/main/apps/api/src/connectors/connectors.service.ts`,
   },
   {
-    title: 'Lineage Trace',
-    summary: 'Traceability for memory files, approvals, tool calls, and message provenance.',
+    title: 'Lineage + Repair',
+    summary: 'Trace conversation state, inspect provenance, and repair runs that got stuck or diverged.',
     uiHref: '/control/lineage',
     apiHref: `${API_ORIGIN}/api/v1/lineage/recent`,
     implHref: `${REPO_BASE}/blob/main/apps/api/src/lineage/lineage.service.ts`,
   },
 ]
 
-const DOC_LINKS = [
+const API_SURFACES = [
   {
-    title: 'OpenAgents Repository',
-    href: REPO_BASE,
-    description: 'Primary source code for dashboard, API, worker, and SDK.',
+    title: 'Dry-run tool execution',
+    endpoint: `${API_ORIGIN}/api/v1/tools/dry-run`,
+    summary: 'Preview likely tool side effects before the assistant commits to the action.',
   },
   {
-    title: 'OpenAgents README',
-    href: `${REPO_BASE}/blob/main/README.md`,
-    description: 'Project setup, architecture, and operational commands.',
+    title: 'Conversation repair',
+    endpoint: `${API_ORIGIN}/api/v1/conversations/:id/repair`,
+    summary: 'Inspect and repair waiting approvals, stale messages, and orphaned runs.',
   },
   {
-    title: 'Dashboard Overview',
-    href: '/control/overview',
-    description: 'Main operations view for control-plane monitoring.',
+    title: 'Workflow branch run',
+    endpoint: `${API_ORIGIN}/api/v1/workflows/:id/runs/branch`,
+    summary: 'Replay an existing workflow run with different model, prompt, or input choices.',
   },
   {
-    title: 'Chat Workspace',
-    href: '/chat',
-    description: 'Primary conversation runtime for sessions, approvals, and tool calls.',
+    title: 'Workflow compare',
+    endpoint: `${API_ORIGIN}/api/v1/workflows/:id/runs/compare`,
+    summary: 'Compare workflow outputs, tool usage, and run metrics side-by-side.',
   },
   {
-    title: 'OpenAgent Runtime UI',
-    href: '/agent/openagent',
-    description: 'Runtime control surface for agent behavior and state.',
+    title: 'Conversation lineage graph',
+    endpoint: `${API_ORIGIN}/api/v1/lineage/conversation/:conversationId/graph`,
+    summary: 'Return message, approval, tool, and memory provenance for a conversation.',
   },
   {
-    title: 'Memory / Brain Workspace',
-    href: '/memory',
-    description: 'Long-term memory entries plus editable memory files (SOUL, USER, MEMORY, HEARTBEAT).',
-  },
-  {
-    title: 'Persona Controls',
-    href: '/agent/nanobot',
-    description: 'Persona profile, boundaries, and behavior tuning for agent runtime.',
-  },
-  {
-    title: 'Thinking Controls',
-    href: '/sessions',
-    description: 'Session-level thinking mode controls and model behavior overrides.',
-  },
-  {
-    title: 'Agentic Heartbeat + Autonomy',
-    href: '/agent/nanobot',
-    description: 'Heartbeat triggers, cron diagnostics, and autonomy window scheduling.',
-  },
-  {
-    title: 'Settings Config UI',
-    href: '/settings/config',
-    description: 'Provider keys, model selection, and runtime configuration.',
-  },
-  {
-    title: 'API Swagger Docs',
-    href: `${API_ORIGIN}/docs`,
-    description: 'Live API reference for implementation and integration.',
-  },
-  {
-    title: 'API Health Endpoint',
-    href: `${API_ORIGIN}/api/v1/health`,
-    description: 'Health check for service availability and deployments.',
-  },
-  {
-    title: 'Memory Implementation (API)',
-    href: `${REPO_BASE}/blob/main/apps/api/src/memory/memory.service.ts`,
-    description: 'Core memory extraction, file sync, autonomy state, and persistence logic.',
-  },
-  {
-    title: 'Persona Implementation (API)',
-    href: `${REPO_BASE}/blob/main/apps/api/src/nanobot/agent/nanobot-personality.service.ts`,
-    description: 'Persona profile state, prompt appendix generation, and behavioral updates.',
-  },
-  {
-    title: 'Thinking / Agentic Loop (API)',
-    href: `${REPO_BASE}/blob/main/apps/api/src/nanobot/agent/nanobot-loop.service.ts`,
-    description: 'Agent loop orchestration, thinking transitions, and tool execution flow.',
-  },
-  {
-    title: 'Heartbeat Implementation (API)',
-    href: `${REPO_BASE}/blob/main/apps/api/src/nanobot/heartbeat/nanobot-heartbeat.service.ts`,
-    description: 'Heartbeat tick emitter and runtime liveness signaling.',
-  },
-  {
-    title: 'MVP Feature Pack Spec',
-    href: `${REPO_BASE}/blob/main/docs/mvp-feature-pack.md`,
-    description: 'Implementation details for orchestration, marketplace, voice, and capture.',
-  },
-  {
-    title: 'OpenClaw Parity Plan',
-    href: `${REPO_BASE}/blob/main/docs/openclaw-parity.md`,
-    description: 'Parity status and tracked implementation gaps.',
+    title: 'Local knowledge sources',
+    endpoint: `${API_ORIGIN}/api/v1/memory/sources`,
+    summary: 'Register, sync, and remove local folders or files used as assistant knowledge inputs.',
   },
 ]
 
-const LATEST_INSTALL_GUIDE = OPENAGENTS_UBUNTU_SERVER_INSTALL_GUIDE
-
-const BYBIT_DEMO_GUIDE = `# Bybit demo tools (optional)
-# infra/docker/.env.prod
-BYBIT_BASE_URL=https://api-demo.bybit.com
-BYBIT_PUBLIC_BASE_URL=https://api.bybit.com
-BYBIT_API_KEY=your_demo_key
-BYBIT_API_SECRET=your_demo_secret
-BYBIT_DEMO_ONLY=true
-BYBIT_RECV_WINDOW=5000
-
-# rebuild + restart
-cd /opt/openagents
-pnpm prod:build
-pnpm prod:up
-
-# then install marketplace pack:
-# /agent/marketplace -> Bybit Demo Ops`
+const PRODUCT_DOCS = [
+  {
+    title: 'Repository',
+    href: REPO_BASE,
+    description: 'Source code for the web app, API, worker, SDK, and shared types.',
+  },
+  {
+    title: 'README',
+    href: `${REPO_BASE}/blob/main/README.md`,
+    description: 'Setup, self-hosting commands, and top-level product overview.',
+  },
+  {
+    title: 'MVP Feature Pack',
+    href: `${REPO_BASE}/blob/main/docs/mvp-feature-pack.md`,
+    description: 'Implementation notes for the current assistant feature set.',
+  },
+  {
+    title: 'Product Expansion Roadmap',
+    href: `${REPO_BASE}/blob/main/docs/product-expansion-roadmap.md`,
+    description: 'Longer-horizon ideas beyond the current self-hosted MVP.',
+  },
+  {
+    title: 'OpenClaw Parity',
+    href: `${REPO_BASE}/blob/main/docs/openclaw-parity.md`,
+    description: 'Parity tracking against adjacent agent capabilities.',
+  },
+  {
+    title: 'API Swagger',
+    href: `${API_ORIGIN}/docs`,
+    description: 'Live API reference exposed by the running backend.',
+  },
+]
 
 export default function DocsPage() {
   return (
     <div className="mx-auto max-w-[1100px] space-y-5">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Docs</h1>
-        <p className="mt-1 text-sm text-slate-500">Reference links for memory/brain, persona, thinking, and agentic heartbeat operations + implementation.</p>
+        <p className="mt-1 max-w-3xl text-sm text-slate-500">
+          OpenAgents is a free self-hosted personal AI assistant for real work. Use this page as
+          the logged-in documentation hub for product surfaces, new APIs, and deployment references.
+        </p>
       </header>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Feature Focus</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">What OpenAgents does</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              It can answer questions, plan tasks, browse the web, create files, run tools, and
+              take approval-gated actions.
+            </p>
+          </div>
+          <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+            Personal assistant + execution runtime
+          </div>
+        </div>
+
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {FEATURE_FOCUS.map((feature) => (
+          {CAPABILITY_CARDS.map((feature) => (
             <article key={feature.title} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-semibold text-slate-800">{feature.title}</p>
               <p className="mt-1 text-xs text-slate-500">{feature.summary}</p>
               <div className="mt-3 space-y-1 text-xs">
-                <a href={feature.uiHref} target="_blank" rel="noreferrer" className="block font-mono text-slate-700 hover:text-red-600">
+                <a href={feature.uiHref} className="block font-mono text-slate-700 hover:text-red-600">
                   UI: {feature.uiHref}
                 </a>
-                <a href={feature.apiHref} target="_blank" rel="noreferrer" className="block font-mono text-slate-700 hover:text-red-600">
+                <a
+                  href={feature.apiHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block font-mono text-slate-700 hover:text-red-600"
+                >
                   API: {feature.apiHref}
                 </a>
-                <a href={feature.implHref} target="_blank" rel="noreferrer" className="block font-mono text-slate-700 hover:text-red-600">
+                <a
+                  href={feature.implHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block font-mono text-slate-700 hover:text-red-600"
+                >
                   Impl: {feature.implHref}
                 </a>
               </div>
@@ -224,9 +175,58 @@ export default function DocsPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Documentation Links</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Key API surfaces</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          These endpoints expose the newer planning, repair, lineage, and knowledge-management
+          capabilities.
+        </p>
         <div className="mt-4 space-y-3">
-          {DOC_LINKS.map((link) => (
+          {API_SURFACES.map((entry) => (
+            <article key={entry.endpoint} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-semibold text-slate-800">{entry.title}</p>
+              <p className="mt-1 text-xs text-slate-500">{entry.summary}</p>
+              <code className="mt-2 block overflow-x-auto rounded-md bg-slate-900 px-3 py-2 text-[11px] text-slate-100">
+                {entry.endpoint}
+              </code>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Local install</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Canonical local development setup for Windows, macOS, and Ubuntu. Each flow uses
+          `pnpm setup` to install dependencies, create env files, start local infrastructure, and
+          run Prisma.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {Object.values(OPENAGENTS_LOCAL_QUICK_START).map((platform) => (
+            <article key={platform.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-semibold text-slate-800">{platform.label}</p>
+              <p className="mt-1 text-xs text-slate-500">{platform.runtimeNote}</p>
+              <pre className="mt-3 overflow-auto rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
+                {platform.localCommands.map((line) => `${platform.shellPrefix} ${line}`).join('\n')}
+              </pre>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Self-host quick start</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Canonical Ubuntu VPS deployment flow for the free self-hosted install.
+        </p>
+        <pre className="mt-3 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
+{OPENAGENTS_UBUNTU_SERVER_INSTALL_GUIDE}
+        </pre>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">References</h2>
+        <div className="mt-4 space-y-3">
+          {PRODUCT_DOCS.map((link) => (
             <a
               key={link.href}
               href={link.href}
@@ -240,35 +240,6 @@ export default function DocsPage() {
             </a>
           ))}
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Latest Installation Method</h2>
-        <p className="mt-1 text-sm text-slate-500">Canonical VPS deployment flow (same as README production method).</p>
-        <pre className="mt-3 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
-{LATEST_INSTALL_GUIDE}
-        </pre>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Bybit Demo Setup</h2>
-        <p className="mt-1 text-sm text-slate-500">Enable approval-gated Bybit demo futures tools for OpenAgent.</p>
-        <pre className="mt-3 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
-{BYBIT_DEMO_GUIDE}
-        </pre>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">CLI Quick Commands</h2>
-        <pre className="mt-3 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
-{`pnpm install
-pnpm --filter @openagents/api run db:migrate
-pnpm --filter @openagents/api run dev
-pnpm --filter @openagents/web run dev
-pnpm prod:build
-pnpm prod:up
-pnpm prod:check:ollama`}
-        </pre>
       </section>
     </div>
   )

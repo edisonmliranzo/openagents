@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'OpenAgents',
-  description: 'OpenAgents local + cloud platform for AI agents and gateway control',
+  description: 'Free self-hosted personal AI assistant for research, planning, writing, tool use, and real work.',
 }
 
 export const viewport: Viewport = {

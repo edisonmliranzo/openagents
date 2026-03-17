@@ -103,19 +103,19 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
               </div>
               <div>
                 <p className="text-[30px] font-semibold tracking-tight text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                  What can OpenAgents do for you?
+                  What do you want your assistant to do?
                 </p>
                 <p className="mx-auto mt-2 max-w-[580px] text-sm text-[var(--muted)] dark:text-[var(--muted)]">
-                  OpenAgents workspace with approvals, tool execution, and deep research.
+                  Research, plan, write, browse, create files, and take action with approvals.
                 </p>
               </div>
 
               <div className="flex flex-wrap justify-center gap-2.5">
                 {[
-                  'Research the latest competitor pricing and summarize risks.',
-                  'Draft a launch plan for a new AI automation service.',
-                  'Review my current workflow and suggest performance wins.',
-                  'Write a customer support macro set for common requests.',
+                  'Plan my week from my tasks and calendar constraints.',
+                  'Research the top competitors in my market and summarize the differences.',
+                  'Draft a reply to this email and turn it into a clean response.',
+                  'Create a launch checklist for my next product release.',
                 ].map((prompt) => (
                   <button
                     key={prompt}
@@ -132,9 +132,9 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
               <p className="text-xs text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
                 {gatewayConnected
                   ? activeConversationId
-                    ? 'Choose a prompt above or ask directly below.'
-                    : 'Create a new session to begin.'
-                  : 'Connect to the gateway to begin.'}
+                    ? 'Pick a task above or type your own below.'
+                    : 'Create a task to begin.'
+                  : 'Reconnect the assistant runtime to begin.'}
               </p>
             </div>
           </div>
@@ -192,7 +192,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
       <div className="relative border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:px-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-1 px-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
           <p>Enter to send, Shift+Enter for a new line</p>
-          <p>{isStreaming ? 'OpenAgents is responding...' : 'Ready'}</p>
+          <p>{isStreaming ? 'Assistant is working...' : 'Assistant ready'}</p>
         </div>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
           <div className="flex w-full items-end gap-2 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 shadow-sm sm:flex-1">
@@ -205,8 +205,8 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
               rows={1}
               placeholder={
                 gatewayConnected
-                  ? 'Ask OpenAgents anything...'
-                  : 'Connect to the gateway to start chatting...'
+                  ? 'Ask your assistant to research, write, plan, or act...'
+                  : 'Reconnect the assistant runtime to start...'
               }
               className="max-h-44 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-[var(--tone-strong)] outline-none placeholder:text-[var(--tone-soft)] disabled:cursor-not-allowed disabled:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"
             />
@@ -228,7 +228,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
               className="oa-soft-button inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
             >
               <PlusCircle size={14} />
-              New chat
+              New task
             </button>
           </div>
         </div>
