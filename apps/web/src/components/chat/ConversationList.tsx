@@ -25,7 +25,7 @@ export function ConversationList() {
     const q = query.trim().toLowerCase()
     if (!q) return conversations
     return conversations.filter((c) =>
-      (c.title ?? 'Untitled conversation').toLowerCase().includes(q),
+      (c.title ?? 'Untitled task').toLowerCase().includes(q),
     )
   }, [conversations, query])
 
@@ -34,19 +34,19 @@ export function ConversationList() {
       <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3.5">
         <div>
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] dark:text-[var(--muted)]">
-            Chats
+            Tasks
           </h2>
           <p className="mt-0.5 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
-            {filtered.length} conversations
+            {filtered.length} tasks
           </p>
         </div>
         <button
           onClick={() => void createConversation()}
-          title="New conversation"
+          title="New task"
           className="oa-soft-button inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
         >
           <MessageSquarePlus size={14} />
-          New
+          New task
         </button>
       </div>
 
@@ -59,7 +59,7 @@ export function ConversationList() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search chats..."
+            placeholder="Search tasks..."
             className="w-full bg-transparent text-[12px] text-[var(--tone-default)] placeholder:text-[var(--tone-soft)] outline-none dark:text-[var(--tone-inverse)] dark:placeholder:text-[var(--tone-soft)]"
           />
         </div>
@@ -73,7 +73,7 @@ export function ConversationList() {
               className="text-[var(--tone-soft)] dark:text-[var(--tone-soft)]"
             />
             <p className="text-[11px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-              {query ? 'No matching conversations' : 'No conversations yet'}
+              {query ? 'No matching tasks' : 'No tasks yet'}
             </p>
           </div>
         )}
@@ -110,7 +110,7 @@ export function ConversationList() {
                       : 'text-[var(--tone-default)] group-hover:text-[var(--tone-strong)] dark:text-[var(--tone-inverse)] dark:group-hover:text-[var(--tone-inverse)]',
                   )}
                 >
-                  {c.title ?? 'Untitled conversation'}
+                  {c.title ?? 'Untitled task'}
                 </p>
                 {/* @ts-ignore updatedAt may exist */}
                 {c.updatedAt && (

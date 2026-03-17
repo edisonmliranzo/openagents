@@ -59,10 +59,10 @@ export function AgentAvatarPanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)] dark:text-[var(--muted)]">
-              AI Avatar
+              Assistant status
             </p>
             <p className="mt-1 text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-              Companion interface
+              Execution console
             </p>
           </div>
 
@@ -82,7 +82,7 @@ export function AgentAvatarPanel({
         </div>
 
         <p className="mt-2 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-          Robotic presence synced to chat activity, shaped for a future voice-first agent mode.
+          Live readout of context, tool activity, and response-loop state for the current task.
         </p>
       </div>
 
@@ -170,7 +170,7 @@ export function AgentAvatarPanel({
             Last cue
           </p>
           <p className="mt-2 text-sm text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-            {latestUserMessage ? compactText(latestUserMessage, 120) : 'Waiting for your first prompt.'}
+            {latestUserMessage ? compactText(latestUserMessage, 120) : 'Waiting for the first task.'}
           </p>
         </section>
 

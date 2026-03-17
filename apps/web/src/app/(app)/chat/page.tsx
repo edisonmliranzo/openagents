@@ -94,7 +94,7 @@ export default function ChatPage() {
   )
 
   const gatewayConnected = gatewayStatus === 'connected'
-  const statusText = gatewayConnected ? 'Gateway online' : gatewayMessage || 'Gateway offline'
+  const statusText = gatewayConnected ? 'Assistant online' : gatewayMessage || 'Assistant offline'
   const hasPendingApprovals = pendingApprovals.length > 0
 
   return (
@@ -108,10 +108,10 @@ export default function ChatPage() {
               </div>
               <div className="min-w-0">
                 <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)] dark:text-[var(--muted)]">
-                  OpenAgents Chat
+                  Personal Assistant
                 </p>
                 <p className="truncate text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                  {activeConversation?.title ?? 'New conversation'}
+                  {activeConversation?.title ?? 'Start a task'}
                 </p>
               </div>
             </div>
