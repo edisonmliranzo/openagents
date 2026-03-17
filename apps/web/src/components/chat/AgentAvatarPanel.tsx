@@ -1,6 +1,7 @@
 'use client'
 
 import clsx from 'clsx'
+import type { CSSProperties } from 'react'
 import type { Message } from '@openagents/shared'
 import { Activity, BrainCircuit, Mic, Sparkles, Volume2 } from 'lucide-react'
 
@@ -24,6 +25,23 @@ function formatStatusLabel(status: string | null | undefined) {
   if (!normalized) return null
   return normalized
 }
+
+const AVATAR_NEURAL_NODES = [
+  { x: '50%', y: '14%', size: '6px', delay: '0s' },
+  { x: '33%', y: '20%', size: '5px', delay: '0.2s' },
+  { x: '67%', y: '21%', size: '5px', delay: '0.45s' },
+  { x: '24%', y: '31%', size: '4px', delay: '0.65s' },
+  { x: '76%', y: '31%', size: '4px', delay: '0.3s' },
+  { x: '38%', y: '37%', size: '5px', delay: '0.1s' },
+  { x: '62%', y: '37%', size: '5px', delay: '0.55s' },
+  { x: '50%', y: '46%', size: '6px', delay: '0.8s' },
+  { x: '34%', y: '56%', size: '4px', delay: '0.25s' },
+  { x: '66%', y: '56%', size: '4px', delay: '0.7s' },
+  { x: '42%', y: '66%', size: '5px', delay: '0.4s' },
+  { x: '58%', y: '66%', size: '5px', delay: '0.9s' },
+  { x: '29%', y: '80%', size: '4px', delay: '0.15s' },
+  { x: '71%', y: '80%', size: '4px', delay: '0.5s' },
+]
 
 export function AgentAvatarPanel({
   gatewayConnected,
@@ -108,20 +126,43 @@ export function AgentAvatarPanel({
           />
 
           <div className="oa-avatar-core-shell">
-            <div className={clsx('oa-avatar-core', !gatewayConnected && 'oa-avatar-core--offline')}>
-              <div className="oa-avatar-face">
-                <div className="oa-avatar-brow" />
-                <div className="flex items-center justify-center gap-3">
-                  <span className="oa-avatar-eye" />
-                  <span className="oa-avatar-eye" />
+            <div className="oa-avatar-pedestal" />
+
+            <div className={clsx('oa-avatar-bust', !gatewayConnected && 'oa-avatar-bust--offline')}>
+              <div className="oa-avatar-shoulders">
+                <div className="oa-avatar-shoulder-mesh" />
+              </div>
+
+              <div className="oa-avatar-neck" />
+
+              <div className={clsx('oa-avatar-head', !gatewayConnected && 'oa-avatar-head--offline')}>
+                <div className="oa-avatar-head-sheen" />
+                <div className="oa-avatar-head-mesh" />
+                <div className="oa-avatar-face-map" />
+                <div className="oa-avatar-brow-line" />
+
+                <div className="oa-avatar-eye-track">
+                  <span className="oa-avatar-eye-node" />
+                  <span className="oa-avatar-eye-node" />
                 </div>
-                <div className="oa-avatar-mouth">
-                  <span className="oa-avatar-eq-bar" />
-                  <span className="oa-avatar-eq-bar" />
-                  <span className="oa-avatar-eq-bar" />
-                  <span className="oa-avatar-eq-bar" />
-                  <span className="oa-avatar-eq-bar" />
-                </div>
+
+                <div className="oa-avatar-nose-line" />
+                <div className="oa-avatar-mouth-line" />
+
+                {AVATAR_NEURAL_NODES.map((node, index) => (
+                  <span
+                    key={`${node.x}-${node.y}-${index}`}
+                    className="oa-avatar-neural-dot"
+                    style={
+                      {
+                        '--x': node.x,
+                        '--y': node.y,
+                        '--size': node.size,
+                        '--delay': node.delay,
+                      } as CSSProperties
+                    }
+                  />
+                ))}
               </div>
             </div>
           </div>
