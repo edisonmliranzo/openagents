@@ -152,6 +152,8 @@ POSTGRES_HOST_PORT=55432 REDIS_HOST_PORT=56379 docker compose -f infra/docker/do
 
 Local URLs:
 
+- Windows/macOS access example: `http://localhost:3000/login`
+- Ubuntu access example: `http://<your-ubuntu-ip>:3000/login`
 - Web: `http://localhost:3000`
 - API: `http://localhost:3001`
 - API docs: `http://localhost:3001/docs`
@@ -270,6 +272,7 @@ pnpm prod:check:ollama
 
 Health checks:
 
+- Ubuntu VPS access example: `http://YOUR_UBUNTU_IP/login` with nginx proxy, or `http://YOUR_UBUNTU_IP:3000/login` when exposing the web container directly
 - API health: `http://localhost:<API_HOST_PORT>/api/v1/health`
 - Web login page: `http://localhost:<WEB_HOST_PORT>/login`
 - API docs: `http://localhost:<API_HOST_PORT>/docs`
