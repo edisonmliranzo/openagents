@@ -26,21 +26,21 @@ function formatStatusLabel(status: string | null | undefined) {
   return normalized
 }
 
-const AVATAR_NEURAL_NODES = [
-  { x: '50%', y: '14%', size: '6px', delay: '0s' },
-  { x: '33%', y: '20%', size: '5px', delay: '0.2s' },
-  { x: '67%', y: '21%', size: '5px', delay: '0.45s' },
-  { x: '24%', y: '31%', size: '4px', delay: '0.65s' },
-  { x: '76%', y: '31%', size: '4px', delay: '0.3s' },
-  { x: '38%', y: '37%', size: '5px', delay: '0.1s' },
-  { x: '62%', y: '37%', size: '5px', delay: '0.55s' },
-  { x: '50%', y: '46%', size: '6px', delay: '0.8s' },
-  { x: '34%', y: '56%', size: '4px', delay: '0.25s' },
-  { x: '66%', y: '56%', size: '4px', delay: '0.7s' },
-  { x: '42%', y: '66%', size: '5px', delay: '0.4s' },
-  { x: '58%', y: '66%', size: '5px', delay: '0.9s' },
-  { x: '29%', y: '80%', size: '4px', delay: '0.15s' },
-  { x: '71%', y: '80%', size: '4px', delay: '0.5s' },
+const ORB_RIBBONS = [
+  { rotation: '-18deg', width: '84%', height: '20%', delay: '0s', tone: 'cyan' },
+  { rotation: '24deg', width: '80%', height: '24%', delay: '0.25s', tone: 'violet' },
+  { rotation: '72deg', width: '86%', height: '18%', delay: '0.4s', tone: 'pink' },
+  { rotation: '126deg', width: '74%', height: '22%', delay: '0.15s', tone: 'mint' },
+  { rotation: '162deg', width: '82%', height: '18%', delay: '0.32s', tone: 'cyan' },
+]
+
+const ORB_PARTICLES = [
+  { x: '18%', y: '28%', size: '4px', delay: '0.2s' },
+  { x: '79%', y: '22%', size: '5px', delay: '0.5s' },
+  { x: '84%', y: '54%', size: '3px', delay: '0.8s' },
+  { x: '22%', y: '72%', size: '4px', delay: '0.1s' },
+  { x: '70%', y: '78%', size: '5px', delay: '0.65s' },
+  { x: '50%', y: '12%', size: '4px', delay: '0.35s' },
 ]
 
 export function AgentAvatarPanel({
@@ -125,45 +125,59 @@ export function AgentAvatarPanel({
             )}
           />
 
-          <div className="oa-avatar-core-shell">
-            <div className="oa-avatar-pedestal" />
+          <div
+            className={clsx(
+              'oa-avatar-orb-shell',
+              isStreaming && 'oa-avatar-orb-shell--active',
+              !gatewayConnected && 'oa-avatar-orb-shell--offline',
+            )}
+          >
+            <div className="oa-avatar-orb-core">
+              <div className="oa-avatar-orb-haze oa-avatar-orb-haze--cyan" />
+              <div className="oa-avatar-orb-haze oa-avatar-orb-haze--violet" />
+              <div className="oa-avatar-orb-haze oa-avatar-orb-haze--pink" />
 
-            <div className={clsx('oa-avatar-bust', !gatewayConnected && 'oa-avatar-bust--offline')}>
-              <div className="oa-avatar-shoulders">
-                <div className="oa-avatar-shoulder-mesh" />
-              </div>
-
-              <div className="oa-avatar-neck" />
-
-              <div className={clsx('oa-avatar-head', !gatewayConnected && 'oa-avatar-head--offline')}>
-                <div className="oa-avatar-head-sheen" />
-                <div className="oa-avatar-head-mesh" />
-                <div className="oa-avatar-face-map" />
-                <div className="oa-avatar-brow-line" />
-
-                <div className="oa-avatar-eye-track">
-                  <span className="oa-avatar-eye-node" />
-                  <span className="oa-avatar-eye-node" />
-                </div>
-
-                <div className="oa-avatar-nose-line" />
-                <div className="oa-avatar-mouth-line" />
-
-                {AVATAR_NEURAL_NODES.map((node, index) => (
+              {ORB_RIBBONS.map((ribbon, index) => (
+                <div
+                  key={`${ribbon.rotation}-${index}`}
+                  className="oa-avatar-orb-layer"
+                  style={
+                    {
+                      '--rotation': ribbon.rotation,
+                      '--delay': ribbon.delay,
+                    } as CSSProperties
+                  }
+                >
                   <span
-                    key={`${node.x}-${node.y}-${index}`}
-                    className="oa-avatar-neural-dot"
+                    className={clsx('oa-avatar-orb-ribbon', `oa-avatar-orb-ribbon--${ribbon.tone}`)}
                     style={
                       {
-                        '--x': node.x,
-                        '--y': node.y,
-                        '--size': node.size,
-                        '--delay': node.delay,
+                        '--w': ribbon.width,
+                        '--h': ribbon.height,
                       } as CSSProperties
                     }
                   />
-                ))}
-              </div>
+                </div>
+              ))}
+
+              {ORB_PARTICLES.map((particle, index) => (
+                <span
+                  key={`${particle.x}-${particle.y}-${index}`}
+                  className="oa-avatar-orb-particle"
+                  style={
+                    {
+                      '--x': particle.x,
+                      '--y': particle.y,
+                      '--size': particle.size,
+                      '--delay': particle.delay,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+
+              <div className="oa-avatar-orb-sheen" />
+              <div className="oa-avatar-orb-center" />
+              <div className="oa-avatar-orb-core-glow" />
             </div>
           </div>
 
