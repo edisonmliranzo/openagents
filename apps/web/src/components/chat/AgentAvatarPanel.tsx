@@ -3,7 +3,7 @@
 import clsx from 'clsx'
 import type { CSSProperties } from 'react'
 import type { Message } from '@openagents/shared'
-import { Activity, BrainCircuit, Mic, Sparkles, Volume2 } from 'lucide-react'
+import { Activity, Sparkles } from 'lucide-react'
 
 interface AgentAvatarPanelProps {
   gatewayConnected: boolean
@@ -179,44 +179,6 @@ export function AgentAvatarPanel({
               <div className="oa-avatar-orb-center" />
               <div className="oa-avatar-orb-core-glow" />
             </div>
-          </div>
-
-          <div className="absolute inset-x-4 bottom-4 grid grid-cols-3 gap-2">
-            {[
-              {
-                icon: Mic,
-                label: 'Voice',
-                value: gatewayConnected ? (isStreaming ? 'hot mic' : 'armed') : 'offline',
-              },
-              {
-                icon: BrainCircuit,
-                label: 'Context',
-                value: messages.length > 0 ? 'loaded' : 'blank',
-              },
-              {
-                icon: Volume2,
-                label: 'Output',
-                value: latestAgentMessage ? 'primed' : 'silent',
-              },
-            ].map((item) => {
-              const Icon = item.icon
-              return (
-                <div
-                  key={item.label}
-                  className="rounded-2xl border border-[var(--border)] bg-[rgba(255,255,255,0.42)] px-2.5 py-2 backdrop-blur-sm dark:bg-[rgba(16,9,15,0.34)]"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Icon size={12} className="text-[var(--accent)]" />
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--muted)] dark:text-[var(--muted)]">
-                      {item.label}
-                    </p>
-                  </div>
-                  <p className="mt-1 text-xs font-medium text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                    {item.value}
-                  </p>
-                </div>
-              )
-            })}
           </div>
         </div>
 
