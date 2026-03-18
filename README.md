@@ -260,16 +260,16 @@ BYBIT_RECV_WINDOW=5000
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm prod:build
-pnpm prod:up
+pnpm prod:deploy
 ```
 
 ### 4. Verify
 
 ```bash
 pnpm prod:ps
-pnpm prod:check:ollama
 ```
+
+Run `pnpm prod:check:ollama` only if you actually use Ollama on the host.
 
 Health checks:
 
@@ -284,9 +284,7 @@ Health checks:
 cd /opt/openagents
 git pull --ff-only origin main
 pnpm install --frozen-lockfile
-pnpm prod:build
-pnpm prod:up
-pnpm prod:check:ollama
+pnpm prod:deploy
 ```
 
 ### 6. Restart after reboot (easy path)
@@ -344,8 +342,7 @@ Windows/macOS:
 
 ```bash
 cd /opt/openagents
-pnpm prod:build
-pnpm prod:up
+pnpm prod:deploy
 ```
 
 3. In the dashboard, install marketplace pack `Bybit Demo Ops` from `/agent/marketplace`.
@@ -806,8 +803,8 @@ infra/
 pnpm type-check
 pnpm --filter @openagents/api run build
 pnpm --filter @openagents/web run build
-pnpm prod:build
-pnpm prod:up
+pnpm prod:deploy
+# optional when using Ollama on the host:
 pnpm prod:check:ollama
 ```
 

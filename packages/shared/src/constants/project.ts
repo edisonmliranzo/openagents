@@ -48,9 +48,8 @@ export const OPENAGENTS_UBUNTU_SERVER_INSTALL_LINES = [
   '# edit infra/docker/.env.prod and set real secrets',
   '',
   'pnpm install --frozen-lockfile',
-  'pnpm prod:build',
-  'pnpm prod:up',
-  'pnpm prod:check:ollama',
+  'pnpm prod:deploy',
+  '# only if you use Ollama on the host: pnpm prod:check:ollama',
   '',
   'Access: http://YOUR_UBUNTU_IP/login if nginx proxies to OpenAgents, or http://YOUR_UBUNTU_IP:3000/login if you expose the web container directly.',
 ]
