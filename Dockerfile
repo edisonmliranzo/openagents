@@ -29,7 +29,8 @@ RUN pnpm --filter @openagents/shared run build \
 
 FROM base AS api-build
 RUN pnpm --filter @openagents/api run db:generate \
-  && pnpm --filter @openagents/api run build
+  && pnpm --filter @openagents/api run build \
+  && pnpm --filter @openagents/api --prod deploy /prod/api
 
 FROM node:20-bookworm-slim AS api-runtime
 ENV PNPM_HOME=/pnpm
@@ -43,11 +44,11 @@ RUN apt-get update \
 
 RUN corepack enable
 
-COPY --from=api-build /app /app
+COPY --from=api-build /prod/api /app
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "(pnpm --filter @openagents/api exec prisma migrate deploy || pnpm --filter @openagents/api exec prisma db push) && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "(pnpm exec prisma migrate deploy || pnpm exec prisma db push) && node dist/main.js"]
 
 FROM base AS web-build
 ARG NEXT_PUBLIC_API_URL=http://localhost:3000
@@ -56,7 +57,8 @@ ARG NEXT_PUBLIC_OLLAMA_BASE_URL=http://localhost:11434
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV OPENAGENTS_INTERNAL_API_URL=$OPENAGENTS_INTERNAL_API_URL
 ENV NEXT_PUBLIC_OLLAMA_BASE_URL=$NEXT_PUBLIC_OLLAMA_BASE_URL
-RUN pnpm --filter @openagents/web run build
+RUN pnpm --filter @openagents/web run build \
+  && pnpm --filter @openagents/web --prod deploy /prod/web
 
 FROM node:20-bookworm-slim AS web-runtime
 ENV PNPM_HOME=/pnpm
@@ -70,14 +72,15 @@ RUN apt-get update \
 
 RUN corepack enable
 
-COPY --from=web-build /app /app
+COPY --from=web-build /prod/web /app
 
 EXPOSE 3000
 
-CMD ["pnpm", "--filter", "@openagents/web", "run", "start"]
+CMD ["pnpm", "run", "start"]
 
 FROM base AS worker-build
-RUN pnpm --filter @openagents/worker run build
+RUN pnpm --filter @openagents/worker run build \
+  && pnpm --filter @openagents/worker --prod deploy /prod/worker
 
 FROM node:20-bookworm-slim AS worker-runtime
 ENV PNPM_HOME=/pnpm
@@ -91,6 +94,6 @@ RUN apt-get update \
 
 RUN corepack enable
 
-COPY --from=worker-build /app /app
+COPY --from=worker-build /prod/worker /app
 
-CMD ["node", "apps/worker/dist/index.js"]
+CMD ["node", "dist/index.js"]
