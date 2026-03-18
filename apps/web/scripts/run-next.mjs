@@ -20,6 +20,9 @@ const apiPort = `${process.env.API_PORT ?? '3001'}`.trim() || '3001'
 const webHost = `${process.env.WEB_HOST ?? '0.0.0.0'}`.trim() || '0.0.0.0'
 const explicitApiUrl = `${process.env.NEXT_PUBLIC_API_URL ?? ''}`.trim()
 const apiUrl = explicitApiUrl || `http://localhost:${apiPort}`
+const internalApiUrl =
+  `${process.env.OPENAGENTS_INTERNAL_API_URL ?? `http://127.0.0.1:${apiPort}`}`.trim() ||
+  `http://127.0.0.1:${apiPort}`
 
 const normalizeBase = (value) => value.replace(/\/+$/, '')
 const publicLoginUrl = (() => {
@@ -52,7 +55,8 @@ function getLanLoginUrls(port) {
 }
 
 console.log(`[openagents:web] mode=${mode} host=${webHost} port=${webPort}`)
-console.log(`[openagents:web] api=${apiUrl}`)
+console.log(`[openagents:web] api(public)=${apiUrl}`)
+console.log(`[openagents:web] api(proxy-target)=${internalApiUrl}`)
 console.log(`[openagents:web] login(local): http://localhost:${webPort}/login`)
 
 for (const url of getLanLoginUrls(webPort)) {
@@ -73,6 +77,7 @@ const nextBin = require.resolve('next/dist/bin/next')
 const env = {
   ...process.env,
   NEXT_PUBLIC_API_URL: apiUrl,
+  OPENAGENTS_INTERNAL_API_URL: internalApiUrl,
 }
 
 const result = spawnSync(

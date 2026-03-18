@@ -50,9 +50,11 @@ EXPOSE 3001
 CMD ["sh", "-c", "(pnpm --filter @openagents/api exec prisma migrate deploy || pnpm --filter @openagents/api exec prisma db push) && node apps/api/dist/main.js"]
 
 FROM base AS web-build
-ARG NEXT_PUBLIC_API_URL=http://localhost:3001
+ARG NEXT_PUBLIC_API_URL=http://localhost:3000
+ARG OPENAGENTS_INTERNAL_API_URL=http://127.0.0.1:3001
 ARG NEXT_PUBLIC_OLLAMA_BASE_URL=http://localhost:11434
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV OPENAGENTS_INTERNAL_API_URL=$OPENAGENTS_INTERNAL_API_URL
 ENV NEXT_PUBLIC_OLLAMA_BASE_URL=$NEXT_PUBLIC_OLLAMA_BASE_URL
 RUN pnpm --filter @openagents/web run build
 

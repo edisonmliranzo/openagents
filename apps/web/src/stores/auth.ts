@@ -5,45 +5,15 @@ import type { User } from '@openagents/shared'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:3001'
 
-function isLoopbackHost(hostname: string) {
-  const normalized = hostname.trim().toLowerCase()
-  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1'
-}
-
 function resolveApiBaseUrl() {
   const configured = (process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL).trim()
   if (!configured) return DEFAULT_API_BASE_URL
   if (typeof window === 'undefined') return configured
 
-  let parsed: URL
-  try {
-    parsed = new URL(configured)
-  } catch {
-    return configured
-  }
-
-  const pageHost = window.location.hostname
-  const pageProtocol = window.location.protocol
-  const pageOrigin = window.location.origin
-
-  if (!isLoopbackHost(parsed.hostname) || isLoopbackHost(pageHost)) {
-    return parsed.origin
-  }
-
-  // Browser cannot reach server-side localhost from remote clients.
-  // Keep the API port, but use the current host.
-  parsed.hostname = pageHost
-
-  // Avoid mixed-content blocks when app is served via HTTPS.
-  if (pageProtocol === 'https:' && parsed.protocol === 'http:') {
-    if (parsed.port) {
-      parsed.protocol = 'https:'
-    } else {
-      return pageOrigin
-    }
-  }
-
-  return parsed.origin
+  // Always use the current web origin in the browser.
+  // Next.js proxies /api requests to the real backend, which avoids
+  // first-run CORS and remote-host base URL issues for new installs.
+  return window.location.origin
 }
 
 const sdk = createSDK({

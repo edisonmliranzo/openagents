@@ -69,12 +69,14 @@ services:
       dockerfile: Dockerfile
       target: web-runtime
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+        OPENAGENTS_INTERNAL_API_URL: ${OPENAGENTS_INTERNAL_API_URL:-http://api:3001}
         NEXT_PUBLIC_OLLAMA_BASE_URL: ${NEXT_PUBLIC_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+      OPENAGENTS_INTERNAL_API_URL: ${OPENAGENTS_INTERNAL_API_URL:-http://api:3001}
       NEXT_PUBLIC_OLLAMA_BASE_URL: ${NEXT_PUBLIC_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     depends_on:
       api:

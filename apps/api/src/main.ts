@@ -2,7 +2,34 @@ import { NestFactory } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import type { Request, Response, NextFunction } from 'express'
+import { networkInterfaces } from 'node:os'
 import { AppModule } from './app.module'
+
+function toOrigin(value: string) {
+  const normalized = value.trim()
+  if (!normalized) return ''
+
+  try {
+    return new URL(normalized).origin
+  } catch {
+    return ''
+  }
+}
+
+function getLanOrigins(port: string) {
+  const origins = new Set<string>()
+  const interfaces = networkInterfaces()
+
+  for (const entries of Object.values(interfaces)) {
+    if (!entries) continue
+    for (const entry of entries) {
+      if (entry.family !== 'IPv4' || entry.internal) continue
+      origins.add(`http://${entry.address}:${port}`)
+    }
+  }
+
+  return [...origins]
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
@@ -26,14 +53,22 @@ async function bootstrap() {
   const defaults = [`http://localhost:${defaultWebPort}`, `http://127.0.0.1:${defaultWebPort}`]
   const explicitOrigins = (process.env.FRONTEND_URLS ?? '')
     .split(',')
-    .map((value) => value.trim())
+    .map((value) => toOrigin(value))
     .filter(Boolean)
 
-  const legacyOrigin = (process.env.FRONTEND_URL ?? '').trim()
-  const fallbackOrigins = isProduction ? [] : [...new Set([...(legacyOrigin ? [legacyOrigin] : []), ...defaults])]
+  const legacyOrigin = toOrigin(process.env.FRONTEND_URL ?? '')
+  const publicBaseOrigin = toOrigin(process.env.PUBLIC_BASE_URL ?? '')
+  const publicLoginOrigin = toOrigin(process.env.PUBLIC_LOGIN_URL ?? '')
+  const devOrigins = isProduction ? [] : [...defaults, ...getLanOrigins(defaultWebPort)]
+  const fallbackOrigins = [
+    ...(legacyOrigin ? [legacyOrigin] : []),
+    ...(publicBaseOrigin ? [publicBaseOrigin] : []),
+    ...(publicLoginOrigin ? [publicLoginOrigin] : []),
+    ...devOrigins,
+  ]
   const frontendOrigins = explicitOrigins.length > 0
-    ? [...new Set(explicitOrigins)]
-    : fallbackOrigins
+    ? [...new Set([...explicitOrigins, ...fallbackOrigins])]
+    : [...new Set(fallbackOrigins)]
 
   if (isProduction && frontendOrigins.length === 0) {
     throw new Error('CORS is not configured. Set FRONTEND_URLS (or FRONTEND_URL) in production.')
