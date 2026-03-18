@@ -115,8 +115,9 @@ Optional: custom dev ports (useful when other projects already use 3000/3001):
 WEB_PORT=4300 API_PORT=4301 pnpm dev
 ```
 
-By default, web API URL is auto-derived from `API_PORT` (`NEXT_PUBLIC_API_URL=http://localhost:<API_PORT>`).
-If you set `NEXT_PUBLIC_API_URL` manually in `apps/web/.env.local`, that value takes precedence.
+By default, the web server proxies `/api/*` to `http://127.0.0.1:<API_PORT>`.
+Browser API requests proxy through the web app on the same origin, so remote clients can use the web URL directly without exposing the API port in the browser.
+`NEXT_PUBLIC_API_URL` is now only an optional public/docs override, and `OPENAGENTS_INTERNAL_API_URL` is the optional Next.js proxy target.
 Each web start prints login URLs (`localhost`, LAN IPs, and optional public URL).
 
 On Ubuntu, make these defaults persistent:
@@ -232,7 +233,7 @@ Set real secrets and ports in `infra/docker/.env.prod`:
 - `ENCRYPTION_KEY`
 - provider keys if used (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
 - `WEB_HOST_PORT`, `API_HOST_PORT`, `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT` (if defaults conflict)
-- `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`
+- `FRONTEND_URL`, optional `NEXT_PUBLIC_API_URL`, optional `OPENAGENTS_INTERNAL_API_URL`
 - creator bootstrap email(s): `CREATOR_EMAIL` or `CREATOR_EMAILS`
 
 For Ollama on host + API in Docker, use:
@@ -436,7 +437,6 @@ Environment=NODE_ENV=development
 Environment=WEB_HOST=0.0.0.0
 Environment=WEB_PORT=4300
 Environment=API_PORT=4301
-Environment=NEXT_PUBLIC_API_URL=http://localhost:4301
 Environment=PUBLIC_LOGIN_URL=https://your-domain/login
 ExecStart=/usr/bin/env pnpm dev
 Restart=always
@@ -818,7 +818,8 @@ pnpm prod:check:ollama
   - hard refresh browser (`Ctrl+Shift+R`)
 - If login says "Failed to reach API":
   - confirm API is running on your configured port (default `http://localhost:3001`)
-  - if you manually set `NEXT_PUBLIC_API_URL` in `apps/web/.env.local`, make sure it matches `API_PORT`
+  - confirm the web dev server is running, since browser requests now proxy through the web app
+  - if you manually set `OPENAGENTS_INTERNAL_API_URL`, make sure it points to a backend reachable from the web process
 - If Ollama says "No local models found" on server:
   - set `OLLAMA_BASE_URL` to an endpoint reachable by the API process/container
   - in Docker, use `OLLAMA_BASE_URL=http://host.docker.internal:11434`
