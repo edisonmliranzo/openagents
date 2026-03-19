@@ -89,6 +89,9 @@ importers:
       playwright:
         specifier: ^1.52.0
         version: 1.58.2
+      prisma:
+        specifier: ^5.0.0
+        version: 5.22.0
       reflect-metadata:
         specifier: ^0.2.0
         version: 0.2.2
@@ -120,9 +123,6 @@ importers:
       '@types/passport-local':
         specifier: ^1.0.0
         version: 1.0.38
-      prisma:
-        specifier: ^5.0.0
-        version: 5.22.0
       ts-node:
         specifier: ^10.0.0
         version: 10.9.2(@types/node@20.19.33)(typescript@5.9.3)
@@ -1043,7 +1043,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {'0': node >=0.10.0}
+    engines: {node: '>=0.10.0'}
 
   '@expo/cli@0.18.31':
     resolution: {integrity: sha512-v9llw9fT3Uv+TCM6Xllo54t672CuYtinEQZ2LPJ2EJsCwuTc4Cd2gXQaouuIVD21VoeGQnr5JtJuWbF97sBKzQ==}

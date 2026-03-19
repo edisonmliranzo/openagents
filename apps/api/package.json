@@ -25,6 +25,7 @@
     "@nestjs/swagger": "^7.0.0",
     "@openagents/shared": "workspace:*",
     "@prisma/client": "^5.0.0",
+    "prisma": "^5.0.0",
     "bcrypt": "^5.0.0",
     "bull": "^4.0.0",
     "class-transformer": "^0.5.0",
@@ -47,7 +48,6 @@
     "@types/node": "^20.0.0",
     "@types/passport-jwt": "^4.0.0",
     "@types/passport-local": "^1.0.0",
-    "prisma": "^5.0.0",
     "ts-node": "^10.0.0",
     "typescript": "^5.4.0"
   }
