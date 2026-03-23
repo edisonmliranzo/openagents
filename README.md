@@ -9,6 +9,7 @@ It can answer questions, research the web, break a goal into steps, write conten
 - [MVP Feature Pack](docs/mvp-feature-pack.md)
 - [OpenClaw Parity Roadmap](docs/openclaw-parity.md)
 - [Product Expansion Roadmap](docs/product-expansion-roadmap.md)
+- [Expansion Delivery Plan](docs/expansion-delivery-plan.md)
 
 ## Highlights
 
