@@ -11,6 +11,7 @@ import type {
 
 export function createConnectorsApi(client: OpenAgentsClient) {
   return {
+    list: () => client.get<ConnectorConnection[]>('/api/v1/connectors'),
     health: () => client.get<ConnectorHealthSnapshot>('/api/v1/connectors/health'),
 
     reconnect: (connectorId: string) =>
