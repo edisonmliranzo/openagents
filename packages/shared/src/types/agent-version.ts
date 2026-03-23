@@ -66,6 +66,8 @@ export interface AgentVersionDiffEntry {
   path: string
   oldValue: unknown
   newValue: unknown
+  before?: unknown
+  after?: unknown
   changeType: 'added' | 'removed' | 'modified'
 }
 
