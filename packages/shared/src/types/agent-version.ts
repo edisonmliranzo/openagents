@@ -5,7 +5,7 @@ export interface AgentTemplate {
   name: string
   description: string
   version: string
-  config: AgentConfig
+  config: AgentTemplateConfig
   parentTemplateId?: string
   tags: string[]
   isPublished: boolean
@@ -13,7 +13,7 @@ export interface AgentTemplate {
   updatedAt: string
 }
 
-export interface AgentConfig {
+export interface AgentTemplateConfig {
   systemPrompt: string
   model: string
   provider: string
@@ -59,4 +59,32 @@ export interface TemplateComparison {
   diff: AgentTemplateDiff
   warnings: string[]
   compatibilityScore: number
+}
+
+// Web app compatibility exports
+export interface AgentVersionDiffEntry {
+  path: string
+  oldValue: unknown
+  newValue: unknown
+  changeType: 'added' | 'removed' | 'modified'
+}
+
+export interface AgentVersionSnapshot {
+  id: string
+  version: string
+  config: AgentTemplateConfig
+  createdAt: string
+  label?: string
+  note?: string
+  settings: {
+    preferredProvider?: string
+    preferredModel?: string
+    customSystemPrompt?: string
+  }
+  runtimeConfig: {
+    enabled?: boolean
+    shadowMode?: boolean
+    maxLoopSteps?: number
+    runtimeLabel?: string
+  }
 }
