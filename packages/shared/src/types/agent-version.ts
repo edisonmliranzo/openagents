@@ -1,90 +1,8 @@
-// Agent template and version control types
-export interface AgentTemplate {
-  id: string
-  userId: string
-  name: string
-  description: string
-  version: string
-  config: AgentTemplateConfig
-  parentTemplateId?: string
-  tags: string[]
-  isPublished: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export interface AgentTemplateConfig {
-  systemPrompt: string
-  model: string
-  provider: string
-  tools: string[]
-  autonomyLevel: 'low' | 'medium' | 'high' | 'full'
-  maxToolRounds: number
-  timeoutMs: number
-  retryAttempts: number
-  memoryFiles: string[]
-  customSettings?: Record<string, unknown>
-}
-
-export interface AgentTemplateDiff {
-  id: string
-  baseVersion: string
-  targetVersion: string
-  changes: ConfigChange[]
-  createdAt: string
-}
-
-export interface ConfigChange {
-  path: string
-  oldValue: unknown
-  newValue: unknown
-  changeType: 'added' | 'removed' | 'modified'
-}
-
-export interface TemplateBranch {
-  id: string
-  templateId: string
-  name: string
-  description?: string
-  baseVersion: string
-  currentVersion: string
-  status: 'active' | 'merged' | 'archived'
-  createdAt: string
-  updatedAt: string
-}
-
-export interface TemplateComparison {
-  baseTemplate: AgentTemplate
-  targetTemplate: AgentTemplate
-  diff: AgentTemplateDiff
-  warnings: string[]
-  compatibilityScore: number
-}
-
-// SDK exports
-export type AgentVersionDiffResult = AgentVersionDiffEntry[]
-
-export interface CreateAgentVersionInput {
-  version: string
-  label?: string
-  note?: string
-  config: AgentTemplateConfig
-}
-
-// Web app compatibility exports
-export interface AgentVersionDiffEntry {
-  path: string
-  oldValue: string
-  newValue: string
-  before?: string
-  after?: string
-  changeType: 'added' | 'removed' | 'modified'
-}
-
+// Agent version types for agent versioning
 export interface AgentVersionSnapshot {
   id: string
   version: string
-  config: AgentTemplateConfig
+  config: Record<string, unknown>
   createdAt: string
   label?: string
   note?: string
@@ -103,7 +21,18 @@ export interface AgentVersionSnapshot {
     id: string
     name: string
     title: string
+    description: string
     enabled: boolean
     tools: string[]
+    promptAppendix?: string
   }>
+}
+
+export interface AgentVersionDiffEntry {
+  path: string
+  oldValue: string
+  newValue: string
+  before?: string
+  after?: string
+  changeType: 'added' | 'removed' | 'modified'
 }
