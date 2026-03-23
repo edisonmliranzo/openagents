@@ -61,13 +61,23 @@ export interface TemplateComparison {
   compatibilityScore: number
 }
 
+// SDK exports
+export type AgentVersionDiffResult = AgentVersionDiffEntry[]
+
+export interface CreateAgentVersionInput {
+  version: string
+  label?: string
+  note?: string
+  config: AgentTemplateConfig
+}
+
 // Web app compatibility exports
 export interface AgentVersionDiffEntry {
   path: string
-  oldValue: unknown
-  newValue: unknown
-  before?: unknown
-  after?: unknown
+  oldValue: string
+  newValue: string
+  before?: string
+  after?: string
   changeType: 'added' | 'removed' | 'modified'
 }
 
