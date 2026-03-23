@@ -285,6 +285,42 @@ export default function OverviewPage() {
         icon: CheckCircle2,
         tone: 'slate' as const,
       },
+      {
+        title: 'Dry-Run Preview',
+        description: 'Preflight tools before a live action writes outside the workspace.',
+        href: '/control/dry-run',
+        metric: 'Simulate tool plans',
+        detail: `${formatNumber(state.pendingApprovals)} pending approvals can be previewed before execution`,
+        icon: Terminal,
+        tone: 'amber' as const,
+      },
+      {
+        title: 'Operator Inbox',
+        description: 'One screen for approvals, handoffs, and active intervention work.',
+        href: '/control/operator',
+        metric: `${formatNumber(state.pendingApprovals)} pending approvals`,
+        detail: `${formatNumber(unreadNotifications)} unread notifications`,
+        icon: ShieldAlert,
+        tone: 'rose' as const,
+      },
+      {
+        title: 'Memory Provenance',
+        description: 'Inspect lineage graphs, memory conflicts, and source freshness.',
+        href: '/control/provenance',
+        metric: `${formatNumber(state.auditLogs.length)} recent audit events`,
+        detail: 'Trace how memory files, tools, and external inputs shaped outputs',
+        icon: Brain,
+        tone: 'indigo' as const,
+      },
+      {
+        title: 'Watcher Workflows',
+        description: 'Run automations from schedules, webhooks, and inbox events.',
+        href: '/control/watchers',
+        metric: `${formatNumber(sessionsUpdatedToday)} sessions active today`,
+        detail: 'Create trigger-driven workflows without opening the raw workflow editor',
+        icon: Bell,
+        tone: 'emerald' as const,
+      },
       ]
     },
     [
@@ -298,6 +334,10 @@ export default function OverviewPage() {
       state.autonomyReason,
       state.trustScore,
       thinkingSessions,
+      state.pendingApprovals,
+      state.auditLogs.length,
+      unreadNotifications,
+      sessionsUpdatedToday,
     ],
   )
 

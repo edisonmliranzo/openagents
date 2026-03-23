@@ -61,6 +61,11 @@ const BASE_NAV_GROUPS: NavGroup[] = [
   {
     title: 'Control',
     items: [
+      { label: 'Ops Overview', href: '/control/overview', icon: Activity },
+      { label: 'Dry Run', href: '/control/dry-run', icon: Terminal },
+      { label: 'Operator Inbox', href: '/control/operator', icon: ShieldCheck },
+      { label: 'Provenance', href: '/control/provenance', icon: Brain },
+      { label: 'Watchers', href: '/control/watchers', icon: Bell },
       { label: 'Settings', href: '/settings/config', icon: Settings2 },
       { label: 'Audit', href: '/audit', icon: FileText },
       { label: 'System Logs', href: '/settings/logs', icon: ScrollText },
