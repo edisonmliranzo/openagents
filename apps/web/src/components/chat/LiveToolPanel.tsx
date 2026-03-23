@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo } from 'react'
 import type { Message } from '@openagents/shared'
 import {
@@ -9,8 +10,13 @@ import {
   Link2,
   MonitorSmartphone,
   SearchCheck,
+  ShieldCheck,
+  Sparkles,
+  TimerReset,
+  Workflow,
 } from 'lucide-react'
 import { useChatStore, type ChatToolStreamEvent } from '@/stores/chat'
+import { getAssistantModeDefinition, type AssistantMode } from './assistantModes'
 
 interface ToolRecord {
   tool: string
@@ -44,6 +50,16 @@ interface DeepResearchRun {
   citations: DeepResearchCitation[]
   fetchedPages: number
   createdAt: string
+}
+
+interface LiveToolPanelProps {
+  assistantMode: AssistantMode
+}
+
+interface NextStep {
+  title: string
+  detail: string
+  href: string
 }
 
 function safeParseJson<T>(value: string | null | undefined): T | null {
@@ -103,6 +119,16 @@ function clip(value: string, max: number) {
 function shortSessionId(value: string) {
   if (value.length <= 12) return value
   return `${value.slice(0, 6)}...${value.slice(-4)}`
+}
+
+function timeAgo(iso: string) {
+  const deltaMs = Date.now() - new Date(iso).getTime()
+  const deltaMin = Math.max(0, Math.floor(deltaMs / 60000))
+  if (deltaMin < 1) return 'just now'
+  if (deltaMin < 60) return `${deltaMin}m ago`
+  const deltaHours = Math.floor(deltaMin / 60)
+  if (deltaHours < 24) return `${deltaHours}h ago`
+  return `${Math.floor(deltaHours / 24)}d ago`
 }
 
 function buildComputerSessions(records: ToolRecord[]) {
@@ -209,9 +235,128 @@ function buildDeepResearchRuns(records: ToolRecord[]) {
   return runs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4)
 }
 
-export function LiveToolPanel() {
-  const { messages, streamToolEvents, activeConversationId, runStatus, isStreaming } =
-    useChatStore()
+function statusBadgeClass(status: string | null) {
+  if (!status) return 'bg-[var(--surface-muted)] text-[var(--tone-default)]'
+  if (status === 'done' || status === 'ready') return 'bg-emerald-100 text-emerald-700'
+  if (status === 'error') return 'bg-rose-100 text-rose-700'
+  if (status.includes('approval')) return 'bg-amber-100 text-amber-700'
+  return 'bg-cyan-100 text-cyan-700'
+}
+
+function buildNextSteps({
+  assistantMode,
+  pendingApprovals,
+  activeHandoffStatus,
+  learnedSkillId,
+}: {
+  assistantMode: AssistantMode
+  pendingApprovals: number
+  activeHandoffStatus: string | null
+  learnedSkillId: string | null
+}): NextStep[] {
+  const items: NextStep[] = []
+
+  if (pendingApprovals > 0) {
+    items.push({
+      title: 'Review approvals',
+      detail: `${pendingApprovals} tool actions are waiting on a human decision.`,
+      href: '/approvals',
+    })
+  }
+
+  if (activeHandoffStatus) {
+    items.push({
+      title: 'Open operator inbox',
+      detail: `This thread is currently in ${activeHandoffStatus} handoff mode.`,
+      href: '/control/operator',
+    })
+  }
+
+  if (assistantMode === 'plan') {
+    items.push({
+      title: 'Preview execution',
+      detail: 'Use dry-run to test a tool plan before switching this thread into execution.',
+      href: '/control/dry-run',
+    })
+  }
+
+  if (assistantMode === 'execute') {
+    items.push({
+      title: 'Keep the loop tight',
+      detail: 'Operator inbox and dry-run are the fastest safety rails for execution-heavy threads.',
+      href: '/control/operator',
+    })
+  }
+
+  if (assistantMode === 'autopilot') {
+    items.push({
+      title: 'Promote to watcher',
+      detail: 'Turn repeated work into a schedule, webhook, or inbox-triggered automation.',
+      href: '/control/watchers',
+    })
+  }
+
+  if (learnedSkillId) {
+    items.push({
+      title: 'Inspect learned skill',
+      detail: `The assistant inferred ${learnedSkillId}. Review it and decide if it should become a reusable pattern.`,
+      href: '/agent/skills',
+    })
+  }
+
+  if (items.length === 0) {
+    items.push({
+      title: 'Stage the next action',
+      detail: 'Start with dry-run if you want a safer preview before the assistant acts.',
+      href: '/control/dry-run',
+    })
+    items.push({
+      title: 'Build a watcher',
+      detail: 'If this work repeats, convert it into a reusable automation loop.',
+      href: '/control/watchers',
+    })
+  }
+
+  return items.slice(0, 4)
+}
+
+function SummaryCard({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string
+  detail: string
+}) {
+  return (
+    <article className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] dark:text-[var(--muted)]">
+        {label}
+      </p>
+      <p className="mt-2 text-xl font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+        {value}
+      </p>
+      <p className="mt-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">{detail}</p>
+    </article>
+  )
+}
+
+export function LiveToolPanel({ assistantMode }: LiveToolPanelProps) {
+  const {
+    messages,
+    streamToolEvents,
+    activeConversationId,
+    runStatus,
+    isStreaming,
+    pendingApprovals,
+    activeHandoff,
+    learnedSkill,
+  } = useChatStore()
+  const assistantModeDefinition = useMemo(
+    () => getAssistantModeDefinition(assistantMode),
+    [assistantMode],
+  )
 
   const records = useMemo(() => {
     const merged = [
@@ -223,25 +368,174 @@ export function LiveToolPanel() {
 
   const computerSessions = useMemo(() => buildComputerSessions(records), [records])
   const researchRuns = useMemo(() => buildDeepResearchRuns(records), [records])
+  const recentRecords = useMemo(() => [...records].slice(-6).reverse(), [records])
+  const activeHandoffStatus =
+    activeHandoff && (activeHandoff.status === 'open' || activeHandoff.status === 'claimed')
+      ? activeHandoff.status
+      : null
+  const nextSteps = useMemo(
+    () =>
+      buildNextSteps({
+        assistantMode,
+        pendingApprovals: pendingApprovals.length,
+        activeHandoffStatus,
+        learnedSkillId: learnedSkill?.skillId ?? null,
+      }),
+    [assistantMode, pendingApprovals.length, activeHandoffStatus, learnedSkill?.skillId],
+  )
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
       <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-            Live Tool Runtime
+            Assistant Cockpit
           </p>
-          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)] dark:text-[var(--muted)]">
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusBadgeClass(
+              runStatus ?? (isStreaming ? 'running' : 'ready'),
+            )}`}
+          >
             <Activity size={10} />
-            {runStatus ?? (isStreaming ? 'running' : 'idle')}
+            {runStatus ?? (isStreaming ? 'running' : 'ready')}
           </span>
         </div>
         <p className="mt-1 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-          Computer sessions and deep research citations update while tools execute.
+          Assistant posture, next actions, and execution telemetry for the active thread.
         </p>
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+        <section className="grid gap-2 md:grid-cols-2">
+          <SummaryCard
+            label="Mode"
+            value={assistantModeDefinition.label}
+            detail={assistantModeDefinition.caption}
+          />
+          <SummaryCard
+            label="Approvals"
+            value={String(pendingApprovals.length)}
+            detail="Actions waiting on a human decision"
+          />
+          <SummaryCard
+            label="Handoff"
+            value={activeHandoffStatus ?? 'none'}
+            detail={
+              activeHandoffStatus ? 'Human operator is attached to this thread' : 'Agent owns the thread'
+            }
+          />
+          <SummaryCard
+            label="Tool events"
+            value={String(records.length)}
+            detail="Runtime events captured in this conversation"
+          />
+        </section>
+
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Sparkles size={14} className="text-indigo-500" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+              Next Best Actions
+            </p>
+          </div>
+          <div className="mt-3 space-y-2">
+            {nextSteps.map((step) => (
+              <Link
+                key={`${step.title}-${step.href}`}
+                href={step.href}
+                className="block rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 transition hover:bg-[var(--surface)]"
+              >
+                <p className="text-xs font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+                  {step.title}
+                </p>
+                <p className="mt-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+                  {step.detail}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <TimerReset size={14} className="text-cyan-500" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+              Execution Feed
+            </p>
+          </div>
+          <div className="mt-2 space-y-2">
+            {recentRecords.length === 0 && (
+              <p className="text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                No tool executions captured yet in this conversation.
+              </p>
+            )}
+            {recentRecords.map((record, index) => (
+              <article
+                key={`${record.tool}-${record.createdAt}-${index}`}
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-2.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+                    {record.tool}
+                  </p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      record.success
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-rose-100 text-rose-700'
+                    }`}
+                  >
+                    {record.success ? 'success' : 'issue'}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+                  {timeAgo(record.createdAt)}
+                </p>
+                {record.error && (
+                  <p className="mt-1 text-[11px] text-rose-700 dark:text-rose-300">
+                    {clip(record.error, 160)}
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={14} className="text-amber-500" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+              Operator Rails
+            </p>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <Link
+              href="/approvals"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface)] dark:text-[var(--tone-inverse)]"
+            >
+              Open approvals
+            </Link>
+            <Link
+              href="/control/operator"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface)] dark:text-[var(--tone-inverse)]"
+            >
+              Open operator inbox
+            </Link>
+            <Link
+              href="/control/dry-run"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface)] dark:text-[var(--tone-inverse)]"
+            >
+              Preview with dry-run
+            </Link>
+            <Link
+              href="/control/watchers"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface)] dark:text-[var(--tone-inverse)]"
+            >
+              Open watchers
+            </Link>
+          </div>
+        </section>
+
         <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
           <div className="flex items-center gap-2">
             <MonitorSmartphone size={14} className="text-blue-500" />
@@ -368,6 +662,21 @@ export function LiveToolPanel() {
                 </div>
               </article>
             ))}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Workflow size={14} className="text-violet-500" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+              Assistant Context
+            </p>
+          </div>
+          <div className="mt-2 space-y-2 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+            <p>Mode: {assistantModeDefinition.label}</p>
+            <p>Conversation: {activeConversationId ?? 'none selected'}</p>
+            {learnedSkill && <p>Learned skill: {learnedSkill.skillId}</p>}
+            {records.length > 0 && <p>Latest tool event: {timeAgo(records[records.length - 1].createdAt)}</p>}
           </div>
         </section>
       </div>

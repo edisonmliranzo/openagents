@@ -34,19 +34,19 @@ export function ConversationList() {
       <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3.5">
         <div>
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] dark:text-[var(--muted)]">
-            Tasks
+            Threads
           </h2>
           <p className="mt-0.5 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
-            {filtered.length} tasks
+            {filtered.length} threads
           </p>
         </div>
         <button
           onClick={() => void createConversation()}
-          title="New task"
+          title="New thread"
           className="oa-soft-button inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
         >
           <MessageSquarePlus size={14} />
-          New task
+          New thread
         </button>
       </div>
 
@@ -59,7 +59,7 @@ export function ConversationList() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tasks..."
+            placeholder="Search threads..."
             className="w-full bg-transparent text-[12px] text-[var(--tone-default)] placeholder:text-[var(--tone-soft)] outline-none dark:text-[var(--tone-inverse)] dark:placeholder:text-[var(--tone-soft)]"
           />
         </div>
@@ -73,7 +73,7 @@ export function ConversationList() {
               className="text-[var(--tone-soft)] dark:text-[var(--tone-soft)]"
             />
             <p className="text-[11px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-              {query ? 'No matching tasks' : 'No tasks yet'}
+              {query ? 'No matching threads' : 'No threads yet'}
             </p>
           </div>
         )}

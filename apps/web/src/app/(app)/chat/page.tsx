@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
+import {
+  ASSISTANT_MODE_STORAGE_KEY,
+  getAssistantModeDefinition,
+  isAssistantMode,
+  type AssistantMode,
+} from '@/components/chat/assistantModes'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { ConversationList } from '@/components/chat/ConversationList'
 import { LiveToolPanel } from '@/components/chat/LiveToolPanel'
@@ -24,6 +30,7 @@ export default function ChatPage() {
   const autoCreatedRef = useRef(false)
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('chat')
   const [showToolsPanel, setShowToolsPanel] = useState(false)
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>('assist')
   const {
     conversations,
     conversationsLoaded,
@@ -88,9 +95,32 @@ export default function ChatPage() {
     }
   }, [activeConversationId])
 
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(ASSISTANT_MODE_STORAGE_KEY)
+      if (stored && isAssistantMode(stored)) {
+        setAssistantMode(stored)
+      }
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ASSISTANT_MODE_STORAGE_KEY, assistantMode)
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [assistantMode])
+
   const activeConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
     [conversations, activeConversationId],
+  )
+  const assistantModeDefinition = useMemo(
+    () => getAssistantModeDefinition(assistantMode),
+    [assistantMode],
   )
 
   const gatewayConnected = gatewayStatus === 'connected'
@@ -111,7 +141,7 @@ export default function ChatPage() {
                   Personal Assistant
                 </p>
                 <p className="truncate text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                  {activeConversation?.title ?? 'Start a task'}
+                  {activeConversation?.title ?? 'Start a thread'}
                 </p>
               </div>
             </div>
@@ -130,6 +160,10 @@ export default function ChatPage() {
                 {statusText}
               </span>
 
+              <div className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+                {assistantModeDefinition.label} mode
+              </div>
+
               <div className="hidden rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-medium text-[var(--muted)] dark:text-[var(--muted)] sm:block">
                 {shortId(activeConversationId)}
               </div>
@@ -142,17 +176,17 @@ export default function ChatPage() {
                     ? 'border border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--tone-strong)] shadow-sm'
                     : 'oa-soft-button text-[var(--tone-muted)]'
                 }`}
-                title={showToolsPanel ? 'Hide tool runtime panel' : 'Show tool runtime panel'}
+                title={showToolsPanel ? 'Hide assistant cockpit' : 'Show assistant cockpit'}
               >
                 <PanelRight size={12} />
-                {showToolsPanel ? 'Hide tools' : 'Show tools'}
+                {showToolsPanel ? 'Hide cockpit' : 'Show cockpit'}
               </button>
 
               <button
                 type="button"
                 onClick={() => void loadConversations()}
                 className="oa-soft-button inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
-                title="Refresh sessions"
+                title="Refresh threads"
               >
                 <RefreshCw size={12} />
                 Refresh
@@ -185,7 +219,7 @@ export default function ChatPage() {
                   : 'text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-slate-100'
               }`}
             >
-              Sessions
+              Threads
             </button>
             <button
               type="button"
@@ -207,7 +241,7 @@ export default function ChatPage() {
                   : 'text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-slate-100'
               }`}
             >
-              Tools
+              Cockpit
             </button>
           </div>
         </header>
@@ -234,6 +268,8 @@ export default function ChatPage() {
 
             <div className="min-h-0 flex-1">
               <ChatWindow
+                assistantMode={assistantMode}
+                onAssistantModeChange={setAssistantMode}
                 gatewayConnected={gatewayConnected}
                 onNewSession={async () => {
                   await createConversation()
@@ -244,7 +280,7 @@ export default function ChatPage() {
 
           {showToolsPanel && (
             <aside className="oa-card-elevated min-h-0 overflow-hidden rounded-2xl">
-              <LiveToolPanel />
+              <LiveToolPanel assistantMode={assistantMode} />
             </aside>
           )}
         </div>
@@ -272,6 +308,8 @@ export default function ChatPage() {
 
               <div className="min-h-0 flex-1">
                 <ChatWindow
+                  assistantMode={assistantMode}
+                  onAssistantModeChange={setAssistantMode}
                   gatewayConnected={gatewayConnected}
                   onNewSession={async () => {
                     await createConversation()
@@ -284,7 +322,7 @@ export default function ChatPage() {
 
           {mobilePanel === 'tools' && (
             <section className="oa-card-elevated min-h-0 flex-1 overflow-hidden rounded-2xl">
-              <LiveToolPanel />
+              <LiveToolPanel assistantMode={assistantMode} />
             </section>
           )}
         </div>

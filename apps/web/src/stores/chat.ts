@@ -109,7 +109,7 @@ interface ChatState {
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
   createConversation: () => Promise<string>
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (content: string, options?: { displayContent?: string }) => Promise<void>
   approveAction: (approvalId: string) => Promise<void>
   denyAction: (approvalId: string) => Promise<void>
   refreshActiveHandoff: () => Promise<void>
@@ -201,7 +201,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  async sendMessage(content) {
+  async sendMessage(content, options) {
     const { activeConversationId, activeHandoff } = get()
     if (!activeConversationId) {
       set({ lastError: 'No active conversation selected.' })
@@ -212,12 +212,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return
     }
 
+    const userVisibleContent = options?.displayContent?.trim() || content.trim()
+
     // Optimistically add user message
     const tempId = `temp-${Date.now()}`
     set((s) => ({
       messages: [
         ...s.messages,
-        { id: tempId, conversationId: activeConversationId, role: 'user', content, status: 'done', createdAt: new Date().toISOString() } as Message,
+        {
+          id: tempId,
+          conversationId: activeConversationId,
+          role: 'user',
+          content: userVisibleContent,
+          status: 'done',
+          createdAt: new Date().toISOString(),
+        } as Message,
       ],
       streamToolEvents: [],
       runStatus: 'thinking',
