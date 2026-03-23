@@ -29,6 +29,7 @@ import type {
   CreateWorkflowInput,
   RunWorkflowInput,
   UpdateWorkflowInput,
+  WorkflowBranchRunInput,
   WorkflowTriggerKind,
 } from '@openagents/shared'
 
@@ -236,6 +237,12 @@ class RunWorkflowDto implements RunWorkflowInput {
   input?: Record<string, unknown>
 }
 
+class BranchWorkflowRunDto extends RunWorkflowDto implements WorkflowBranchRunInput {
+  @IsString()
+  @MaxLength(120)
+  sourceRunId!: string
+}
+
 @ApiTags('workflows')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -300,5 +307,20 @@ export class WorkflowsController {
     @Body() dto: RunWorkflowDto,
   ) {
     return this.workflows.rerun(req.user.id, id, runId, dto)
+  }
+
+  @Post(':id/runs/branch')
+  branchRun(@Req() req: any, @Param('id') id: string, @Body() dto: BranchWorkflowRunDto) {
+    return this.workflows.branchRun(req.user.id, id, dto)
+  }
+
+  @Get(':id/runs/compare')
+  compareRuns(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Query('leftRunId') leftRunId: string,
+    @Query('rightRunId') rightRunId: string,
+  ) {
+    return this.workflows.compareRuns(req.user.id, id, leftRunId, rightRunId)
   }
 }

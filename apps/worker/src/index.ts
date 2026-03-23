@@ -10,18 +10,20 @@ import {
   type ApprovalJobData,
   type CiHealerJobData,
   type ExtractionJobData,
+  type ToolRunJobData,
   type WorkflowRunJobData,
 } from '@openagents/shared'
 import { processApprovalJob } from './processors/approval.processor'
 import { processExtractionJob } from './processors/extraction.processor'
 import { processCiHealerJob } from './processors/ci-healer.processor'
 import { processWorkflowJob } from './processors/workflow.processor'
+import { processToolRunJob } from './processors/tool-run.processor'
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379'
 
 export const approvalQueue = new Bull<ApprovalJobData>(QUEUE_NAMES.approvals, redisUrl)
 export const approvalDeadLetterQueue = new Bull<ApprovalDeadLetterJobData>(QUEUE_NAMES.approvalsDeadLetter, redisUrl)
-export const toolRunQueue = new Bull(QUEUE_NAMES.toolRuns, redisUrl)
+export const toolRunQueue = new Bull<ToolRunJobData>(QUEUE_NAMES.toolRuns, redisUrl)
 export const extractionQueue = new Bull<ExtractionJobData>(QUEUE_NAMES.extractionJobs, redisUrl)
 export const ciHealerQueue = new Bull<CiHealerJobData>(QUEUE_NAMES.ciHealer, redisUrl)
 export const workflowQueue = new Bull<WorkflowRunJobData>(QUEUE_NAMES.workflowRuns, redisUrl)
@@ -66,10 +68,7 @@ approvalQueue.on('failed', async (job, error) => {
   }
 })
 
-toolRunQueue.process(async (job) => {
-  console.log('[worker] tool-run job received', job.data)
-  // TODO: execute tool and push result back via webhook/SSE
-})
+toolRunQueue.process(processToolRunJob)
 
 console.log('[worker] started, listening on queues: approvals, approvals-dead-letter, tool-runs')
 console.log('[worker] additional queues: extraction-jobs, ci-healer, workflow-runs')

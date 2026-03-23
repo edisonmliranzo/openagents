@@ -53,6 +53,9 @@ export default function ChatScreen() {
         keyboardVerticalOffset={80}
       >
         <View style={styles.topBar}>
+          <TouchableOpacity style={styles.topButton} onPress={() => router.push('/ops')}>
+            <Text style={styles.topButtonText}>Ops</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.topButton} onPress={() => router.push('/channels')}>
             <Text style={styles.topButtonText}>Channels</Text>
           </TouchableOpacity>

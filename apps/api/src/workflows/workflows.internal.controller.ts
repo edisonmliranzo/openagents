@@ -1,6 +1,6 @@
 import { Body, Controller, Headers, Post, UnauthorizedException } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
+import { IsArray, IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator'
 import type { WorkflowTriggerKind } from '@openagents/shared'
 import { WorkflowsService } from './workflows.service'
 
@@ -29,6 +29,15 @@ class ProcessWorkflowRunDto {
   @IsString()
   @MaxLength(200)
   sourceEvent?: string
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  approvedKeys?: string[]
+
+  @IsOptional()
+  @IsObject()
+  input?: Record<string, unknown>
 }
 
 @ApiTags('workflows')
@@ -37,10 +46,7 @@ export class WorkflowsInternalController {
   constructor(private readonly workflows: WorkflowsService) {}
 
   @Post('process')
-  process(
-    @Body() dto: ProcessWorkflowRunDto,
-    @Headers('x-workflow-worker-token') token?: string,
-  ) {
+  process(@Body() dto: ProcessWorkflowRunDto, @Headers('x-workflow-worker-token') token?: string) {
     this.assertToken(token)
     return this.workflows.processQueuedRun(dto)
   }

@@ -39,3 +39,23 @@ export interface CreateDataLineageInput {
   externalSources?: string[]
   notes?: string[]
 }
+
+export interface LineageGraphNode {
+  id: string
+  kind: 'message' | 'tool' | 'approval' | 'memory_file' | 'external_source' | 'note'
+  label: string
+  metadata?: Record<string, unknown>
+}
+
+export interface LineageGraphEdge {
+  from: string
+  to: string
+  label: string
+}
+
+export interface ConversationLineageGraph {
+  conversationId: string
+  nodes: LineageGraphNode[]
+  edges: LineageGraphEdge[]
+  generatedAt: string
+}

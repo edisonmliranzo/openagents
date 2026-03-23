@@ -12,6 +12,7 @@ import { NanobotLoopService } from '../../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../../nanobot/config/nanobot-config.service'
 import { NanobotBusService } from '../../nanobot/bus/nanobot-bus.service'
 import { ConnectorsService } from '../../connectors/connectors.service'
+import { ChannelCommandsService } from '../channel-commands.service'
 
 export interface TelegramUpdate {
   update_id: number
@@ -39,6 +40,7 @@ export class TelegramService {
     private nanobotConfig: NanobotConfigService,
     private bus: NanobotBusService,
     private connectors: ConnectorsService,
+    private channelCommands: ChannelCommandsService,
   ) {}
 
   health(): TelegramChannelHealth {
@@ -168,6 +170,7 @@ export class TelegramService {
     const user = await this.prisma.user.findUnique({ where: { id: chat.userId }, select: { id: true } })
     if (!user) return
 
+    const titleHint = this.buildChatTitle(message)
     const sessionLabel = `telegram:${chatId}`
     const existing = await this.prisma.conversation.findFirst({
       where: { sessionLabel, userId: user.id },
@@ -175,11 +178,39 @@ export class TelegramService {
       select: { id: true },
     })
 
-    let conversationId = existing?.id
+    let conversationId = existing?.id ?? null
+    const commandResult = await this.channelCommands.maybeHandleTextCommand(text, {
+      userId: user.id,
+      sessionLabel,
+      channelLabel: 'Telegram',
+      titleHint,
+      conversationId,
+    })
+    if (commandResult) {
+      await this.prisma.telegramChat.update({
+        where: { id: chat.id },
+        data: { lastSeenAt: new Date(), lastConversationId: commandResult.conversationId ?? undefined },
+      }).catch(() => {})
+
+      const delivered = await this.sendMessage(chatId, commandResult.reply)
+      await this.connectors.recordChannelActivity(user.id, 'telegram', {
+        success: delivered,
+        ...(delivered ? {} : { error: 'Telegram sendMessage failed.' }),
+      }).catch(() => {})
+      this.bus.publish('run.event', {
+        source: 'channels.telegram',
+        direction: 'command',
+        command: commandResult.command,
+        chatId,
+        conversationId: commandResult.conversationId,
+        userId: user.id,
+      })
+      return
+    }
+
     if (!conversationId) {
-      const title = this.buildChatTitle(message)
       const conversation = await this.prisma.conversation.create({
-        data: { userId: user.id, title: title.slice(0, 80), sessionLabel },
+        data: { userId: user.id, title: titleHint.slice(0, 80), sessionLabel },
         select: { id: true },
       })
       conversationId = conversation.id

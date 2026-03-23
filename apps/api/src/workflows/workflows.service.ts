@@ -19,6 +19,9 @@ import type {
   CreateWorkflowInput,
   RunWorkflowInput,
   UpdateWorkflowInput,
+  WorkflowBranchRunInput,
+  WorkflowRunComparison,
+  WorkflowRunComparisonMetric,
   WorkflowBranchSource,
   WorkflowDefinition,
   WorkflowRun,
@@ -143,6 +146,8 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       updatedAt: now,
       lastRunAt: null,
       nextRunAt: (input.enabled ?? true) ? this.computeNextRunAt(trigger, new Date()) : null,
+      ...(input.budgetUsd != null ? { budgetUsd: Math.max(0, Number(input.budgetUsd)) } : {}),
+      ...(input.webhookOutbox?.url ? { webhookOutbox: input.webhookOutbox } : {}),
     }
 
     workflows.push(workflow)
@@ -239,6 +244,124 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
     return tagged
   }
 
+  async branchRun(userId: string, workflowId: string, input: WorkflowBranchRunInput) {
+    await this.ensureLoaded(userId)
+    const previous = this.findRunById(userId, input.sourceRunId)
+    if (!previous || previous.workflowId !== workflowId) {
+      throw new NotFoundException(`Workflow run "${input.sourceRunId}" not found.`)
+    }
+
+    return this.rerun(userId, workflowId, input.sourceRunId, {
+      ...input,
+      sourceEvent: input.sourceEvent ?? `branch:${input.sourceRunId}`,
+      input: {
+        ...this.cloneRecord(previous.input ?? {}),
+        ...(this.asRecord(input.input) ?? {}),
+      },
+    })
+  }
+
+  /**
+   * Fire all connector_event workflows for a user that match the given event.
+   * Called by channel integrations when an external event arrives.
+   */
+  async fireConnectorEvent(
+    userId: string,
+    connectorId: string,
+    eventName: string,
+    payload: Record<string, unknown> = {},
+  ) {
+    await this.ensureLoaded(userId)
+    const workflows = [...(this.workflowsByUser.get(userId) ?? [])]
+    const matched = workflows.filter((workflow) => {
+      if (!workflow.enabled) return false
+      if (workflow.trigger.kind !== 'connector_event') return false
+      if (workflow.trigger.connectorId !== connectorId) return false
+      if (workflow.trigger.eventName && workflow.trigger.eventName !== eventName) return false
+      const filter = workflow.trigger.eventFilter
+      if (filter && Object.keys(filter).length > 0) {
+        for (const [key, expected] of Object.entries(filter)) {
+          const actual = String(payload[key] ?? '')
+          if (!actual.includes(expected)) return false
+        }
+      }
+      return true
+    })
+
+    const fired: string[] = []
+    for (const workflow of matched) {
+      if (this.runningWorkflowIds.has(workflow.id)) continue
+      try {
+        const idempotencyKey = `${connectorId}:${eventName}:${Date.now()}:${workflow.id}`
+        await this.run(userId, workflow.id, {
+          triggerKind: 'connector_event',
+          idempotencyKey,
+          sourceEvent: `${connectorId}:${eventName}`,
+          input: payload,
+        })
+        fired.push(workflow.id)
+      } catch (error: any) {
+        this.logger.warn(
+          `connector_event workflow ${workflow.id} failed: ${this.safeError(error)}`,
+        )
+      }
+    }
+    return { fired, matchedCount: matched.length }
+  }
+
+  async compareRuns(
+    userId: string,
+    workflowId: string,
+    leftRunId: string,
+    rightRunId: string,
+  ): Promise<WorkflowRunComparison> {
+    await this.getWorkflow(userId, workflowId)
+    await this.ensureLoaded(userId)
+    const left = this.findRunById(userId, leftRunId)
+    const right = this.findRunById(userId, rightRunId)
+    if (!left || left.workflowId !== workflowId) {
+      throw new NotFoundException(`Workflow run "${leftRunId}" not found.`)
+    }
+    if (!right || right.workflowId !== workflowId) {
+      throw new NotFoundException(`Workflow run "${rightRunId}" not found.`)
+    }
+
+    const metrics: WorkflowRunComparisonMetric[] = [
+      { label: 'status', left: left.status, right: right.status },
+      { label: 'duration_ms', left: String(this.durationMs(left)), right: String(this.durationMs(right)) },
+      { label: 'step_count', left: String(left.stepResults.length), right: String(right.stepResults.length) },
+      {
+        label: 'failed_steps',
+        left: String(left.stepResults.filter((step) => step.status === 'error').length),
+        right: String(right.stepResults.filter((step) => step.status === 'error').length),
+      },
+    ]
+
+    const allStepIds = new Set<string>([
+      ...left.stepResults.map((step) => step.stepId),
+      ...right.stepResults.map((step) => step.stepId),
+    ])
+    const changedStepIds = [...allStepIds].filter((stepId) => {
+      const leftStep = left.stepResults.find((step) => step.stepId === stepId)
+      const rightStep = right.stepResults.find((step) => step.stepId === stepId)
+      if (!leftStep || !rightStep) return true
+      return leftStep.status !== rightStep.status
+        || (leftStep.output ?? '') !== (rightStep.output ?? '')
+        || (leftStep.error ?? '') !== (rightStep.error ?? '')
+    })
+
+    return {
+      workflowId,
+      leftRunId,
+      rightRunId,
+      metrics,
+      changedStepIds,
+      leftStatus: left.status,
+      rightStatus: right.status,
+      generatedAt: new Date().toISOString(),
+    }
+  }
+
   async run(userId: string, workflowId: string, input: RunWorkflowInput = {}) {
     const triggerKind = this.sanitizeTriggerKind(input.triggerKind ?? 'manual')
     const workflow = await this.getWorkflow(userId, workflowId)
@@ -268,6 +391,10 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
 
     if (triggerKind === 'inbox_event' && workflow.trigger.kind !== 'inbox_event') {
       throw new BadRequestException('Workflow trigger kind does not allow inbox_event runs.')
+    }
+
+    if (triggerKind === 'connector_event' && workflow.trigger.kind !== 'connector_event') {
+      throw new BadRequestException('Workflow trigger kind does not allow connector_event runs.')
     }
 
     if (this.workflowQueue && this.processingMode === 'queue') {
@@ -538,10 +665,24 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
 
     let stepPointer = run.resumeStepId ? (stepIndexById.get(run.resumeStepId) ?? 0) : 0
     let branchHops = 0
+    // Cost budget tracking (rough estimate: $0.003 per agent_prompt step)
+    const COST_PER_AGENT_STEP_USD = 0.003
+    let accumulatedCostUsd = existingRun?.accumulatedCostUsd ?? 0
+    run.accumulatedCostUsd = accumulatedCostUsd
 
     while (stepPointer < workflow.steps.length) {
       if (branchHops > MAX_BRANCH_HOPS) {
         runError = 'Workflow exceeded branch hop limit.'
+        break
+      }
+
+      // Cost budget hard-stop
+      if (
+        workflow.budgetUsd != null &&
+        accumulatedCostUsd >= workflow.budgetUsd
+      ) {
+        runError = `Budget exhausted: $${accumulatedCostUsd.toFixed(4)} reached limit of $${workflow.budgetUsd}.`
+        run.budgetExhausted = true
         break
       }
       branchHops += 1
@@ -708,6 +849,13 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       stepResult.nextStepId = workflow.steps[nextPointer]?.id ?? null
       run.stepResults.push(stepResult)
 
+      // Accumulate cost estimate for agent steps
+      const normalizedType = this.normalizeExecutionStepType(step.type)
+      if (normalizedType === 'agent_prompt') {
+        accumulatedCostUsd += COST_PER_AGENT_STEP_USD
+        run.accumulatedCostUsd = accumulatedCostUsd
+      }
+
       if (stepResult.status === 'error') {
         if (step.continueOnError) {
           lastStepOutput = stepResult.error ?? ''
@@ -780,7 +928,48 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
         error: run.error,
       },
     })
+
+    // Webhook outbox: fire-and-forget POST on terminal run status
+    if (
+      workflow.webhookOutbox?.url &&
+      (run.status === 'done' || run.status === 'error')
+    ) {
+      void this.fireWebhookOutbox(workflow, run)
+    }
+
     return run
+  }
+
+  private async fireWebhookOutbox(workflow: WorkflowDefinition, run: WorkflowRun) {
+    const outbox = workflow.webhookOutbox!
+    const payload = {
+      event: 'workflow.run.completed',
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      runId: run.id,
+      status: run.status,
+      triggerKind: run.triggerKind,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      error: run.error ?? null,
+      stepCount: run.stepResults.length,
+      ...(outbox.includeOutput ? { lastOutput: run.lastOutput ?? null } : {}),
+    }
+
+    const body = JSON.stringify(payload)
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+
+    if (outbox.secret) {
+      const { createHmac } = await import('node:crypto')
+      const sig = createHmac('sha256', outbox.secret).update(body).digest('hex')
+      headers['X-OpenAgents-Signature'] = `sha256=${sig}`
+    }
+
+    try {
+      await fetch(outbox.url, { method: 'POST', headers, body, signal: AbortSignal.timeout(10_000) })
+    } catch (err) {
+      this.logger.warn(`Webhook outbox POST failed for workflow ${workflow.id}: ${String(err)}`)
+    }
   }
 
   private async tickScheduledWorkflows() {
@@ -936,6 +1125,13 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
 
   private findRunById(userId: string, runId: string) {
     return (this.runsByUser.get(userId) ?? []).find((run) => run.id === runId) ?? null
+  }
+
+  private durationMs(run: WorkflowRun) {
+    const started = new Date(run.startedAt).getTime()
+    const finished = new Date(run.finishedAt ?? run.startedAt).getTime()
+    if (!Number.isFinite(started) || !Number.isFinite(finished)) return 0
+    return Math.max(0, finished - started)
   }
 
   private async dispatchWorkflowRun(data: WorkflowRunJobData) {

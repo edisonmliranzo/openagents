@@ -10,9 +10,14 @@ import { CronTool } from './connectors/cron.tool'
 import { BybitTool } from './connectors/bybit.tool'
 import { DeepResearchTool } from './connectors/deep-research.tool'
 import { ComputerUseTool } from './connectors/computer-use.tool'
-import type { ToolResult } from '@openagents/shared'
+import { GithubTool } from './connectors/github.tool'
+import { NotionTool } from './connectors/notion.tool'
+import { LinearTool } from './connectors/linear.tool'
+import { JiraTool } from './connectors/jira.tool'
+import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
 import { ConnectorsService } from '../connectors/connectors.service'
 import { McpService } from './mcp.service'
+import { PolicyService } from '../policy/policy.service'
 
 export interface ToolDefinition {
   name: string
@@ -32,6 +37,7 @@ export class ToolsService {
   constructor(
     private prisma: PrismaService,
     private connectors: ConnectorsService,
+    private policy: PolicyService,
     private gmail: GmailTool,
     private calendar: CalendarTool,
     private webFetch: WebFetchTool,
@@ -42,6 +48,10 @@ export class ToolsService {
     private bybit: BybitTool,
     private deepResearch: DeepResearchTool,
     private computerUse: ComputerUseTool,
+    private github: GithubTool,
+    private notion: NotionTool,
+    private linear: LinearTool,
+    private jira: JiraTool,
     private mcp: McpService,
   ) {
     this.registry = new Map([
@@ -67,6 +77,27 @@ export class ToolsService {
       ['computer_click_link', { def: this.withBuiltinSource(this.computerUse.clickDef), execute: this.computerUse.click.bind(this.computerUse) }],
       ['computer_snapshot', { def: this.withBuiltinSource(this.computerUse.snapshotDef), execute: this.computerUse.snapshot.bind(this.computerUse) }],
       ['computer_session_end', { def: this.withBuiltinSource(this.computerUse.endSessionDef), execute: this.computerUse.end.bind(this.computerUse) }],
+      // GitHub
+      ['github_create_issue', { def: this.withBuiltinSource(this.github.createIssueDef), execute: (i: any) => this.github.createIssue(i) }],
+      ['github_list_prs',     { def: this.withBuiltinSource(this.github.listPRsDef),     execute: (i: any) => this.github.listPRs(i) }],
+      ['github_add_comment',  { def: this.withBuiltinSource(this.github.addCommentDef),  execute: (i: any) => this.github.addComment(i) }],
+      ['github_get_file',     { def: this.withBuiltinSource(this.github.getFileDef),     execute: (i: any) => this.github.getFile(i) }],
+      ['github_create_pr',    { def: this.withBuiltinSource(this.github.createPRDef),    execute: (i: any) => this.github.createPR(i) }],
+      // Notion
+      ['notion_read_page',      { def: this.withBuiltinSource(this.notion.readPageDef),      execute: (i: any) => this.notion.readPage(i) }],
+      ['notion_create_page',    { def: this.withBuiltinSource(this.notion.createPageDef),    execute: (i: any) => this.notion.createPage(i) }],
+      ['notion_query_database', { def: this.withBuiltinSource(this.notion.queryDatabaseDef), execute: (i: any) => this.notion.queryDatabase(i) }],
+      // Linear
+      ['linear_create_issue',  { def: this.withBuiltinSource(this.linear.createIssueDef),  execute: (i: any) => this.linear.createIssue(i) }],
+      ['linear_update_status', { def: this.withBuiltinSource(this.linear.updateStatusDef), execute: (i: any) => this.linear.updateStatus(i) }],
+      ['linear_list_issues',   { def: this.withBuiltinSource(this.linear.listIssuesDef),   execute: (i: any) => this.linear.listIssues(i) }],
+      ['linear_add_comment',   { def: this.withBuiltinSource(this.linear.addCommentDef),   execute: (i: any) => this.linear.addComment(i) }],
+      // Jira
+      ['jira_create_issue',     { def: this.withBuiltinSource(this.jira.createIssueDef),     execute: (i: any) => this.jira.createIssue(i) }],
+      ['jira_transition_issue', { def: this.withBuiltinSource(this.jira.transitionIssueDef), execute: (i: any) => this.jira.transitionIssue(i) }],
+      ['jira_search_issues',    { def: this.withBuiltinSource(this.jira.searchIssuesDef),    execute: (i: any) => this.jira.searchIssues(i) }],
+      ['jira_add_comment',      { def: this.withBuiltinSource(this.jira.addCommentDef),      execute: (i: any) => this.jira.addComment(i) }],
+      ['jira_list_transitions', { def: this.withBuiltinSource(this.jira.listTransitionsDef), execute: (i: any) => this.jira.listTransitions(i) }],
     ])
   }
 
@@ -110,9 +141,112 @@ export class ToolsService {
     return [...builtinTools, ...mcpTools]
   }
 
+  async dryRun(userId: string, toolName: string, input: Record<string, unknown> = {}): Promise<ToolDryRunResult> {
+    const definition = await this.resolveDefinition(toolName)
+    const connectorId = this.inferConnectorId(toolName)
+    const connectorSnapshot = connectorId
+      ? await this.connectors.listHealth(userId).catch(() => null)
+      : null
+    const connectorEntry = connectorId
+      ? connectorSnapshot?.connectors.find((entry) => entry.connectorId === connectorId) ?? null
+      : null
+    const predictedScope = this.inferScope(toolName)
+    const reversible = !/(delete|remove|revoke|shutdown|terminate|wipe|create_event|draft_reply|place_demo_order)/i.test(toolName)
+    const sideEffects = this.inferSideEffects(toolName)
+    const risk = this.policy.evaluate({
+      action: definition.description,
+      toolName,
+      scope: predictedScope,
+      reversible,
+      estimatedCostUsd: this.estimateCost(toolName, input),
+      sensitivity: connectorId ? 'internal' : 'public',
+      metadata: {
+        inputKeys: Object.keys(input).slice(0, 12),
+      },
+    })
+
+    const warnings: string[] = []
+    if (definition.requiresApproval) {
+      warnings.push('Tool requires approval before live execution.')
+    }
+    if (connectorId && (!connectorEntry || connectorEntry.status === 'down')) {
+      warnings.push('Connector is not ready for live execution.')
+    }
+    if (connectorEntry?.status === 'degraded') {
+      warnings.push('Connector is degraded; live execution may fail or be delayed.')
+    }
+    if (!reversible) {
+      warnings.push('Tool may mutate external state.')
+    }
+
+    return {
+      toolName,
+      requiresApproval: definition.requiresApproval,
+      ready: !connectorId || (connectorEntry?.status === 'connected' || connectorEntry?.status === 'degraded'),
+      connectorId,
+      connectorStatus: connectorEntry?.status ?? (connectorId ? 'down' : 'unknown'),
+      predictedScope,
+      reversible,
+      estimatedCostUsd: this.estimateCost(toolName, input),
+      sideEffects,
+      warnings,
+      risk,
+      previewGeneratedAt: new Date().toISOString(),
+    }
+  }
+
   private isRateLimitError(message: string | undefined | null) {
     if (!message) return false
     return /rate\s*limit|too many requests|429/i.test(message)
+  }
+
+  private async resolveDefinition(toolName: string): Promise<ToolDefinition> {
+    const builtin = this.registry.get(toolName)?.def
+    if (builtin) return builtin
+    const mcpTools = await this.mcp.listToolDefinitions()
+    const found = mcpTools.find((tool) => tool.name === toolName)
+    if (!found) {
+      throw new Error(`Unknown tool: ${toolName}`)
+    }
+    return found
+  }
+
+  private inferConnectorId(toolName: string) {
+    const value = toolName.trim().toLowerCase()
+    if (value.startsWith('gmail_')) return 'google_gmail'
+    if (value.startsWith('calendar_')) return 'google_calendar'
+    if (value.startsWith('web_')) return null
+    if (value.startsWith('notes_')) return null
+    return null
+  }
+
+  private inferScope(toolName: string) {
+    const value = toolName.trim().toLowerCase()
+    if (/(create|draft|send|remove|delete|place_demo_order)/i.test(value)) return 'external_write' as const
+    if (/(web_|gmail_|calendar_|bybit_get_|deep_research|computer_)/i.test(value)) return 'external_read' as const
+    if (/(cron_add|cron_remove)/i.test(value)) return 'system_mutation' as const
+    return 'local' as const
+  }
+
+  private inferSideEffects(toolName: string) {
+    const value = toolName.trim().toLowerCase()
+    const effects: string[] = []
+    if (value.startsWith('gmail_')) effects.push('Reads or drafts Gmail content')
+    if (value.startsWith('calendar_')) effects.push('Reads or updates Google Calendar data')
+    if (value.startsWith('web_')) effects.push('Fetches external web content')
+    if (value.startsWith('notes_')) effects.push('Reads or writes local note state')
+    if (value.startsWith('computer_')) effects.push('Creates browser automation side effects')
+    if (effects.length === 0) effects.push('Tool-specific side effects depend on runtime inputs')
+    return effects
+  }
+
+  private estimateCost(toolName: string, input: Record<string, unknown>) {
+    const value = toolName.trim().toLowerCase()
+    if (value === 'deep_research') return 0.25
+    if (value.startsWith('computer_')) return 0.1
+    if (value.startsWith('web_')) return 0.01
+    if (value.includes('bybit')) return 0.02
+    return Object.keys(input).length > 8 ? 0.02 : 0
   }
 
   private withBuiltinSource(def: ToolDefinition): ToolDefinition {

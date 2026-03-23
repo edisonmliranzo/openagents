@@ -13,6 +13,7 @@ import { NanobotLoopService } from '../../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../../nanobot/config/nanobot-config.service'
 import { NanobotBusService } from '../../nanobot/bus/nanobot-bus.service'
 import { ConnectorsService } from '../../connectors/connectors.service'
+import { ChannelCommandsService } from '../channel-commands.service'
 
 export interface WhatsAppInboundPayload {
   Body?: string
@@ -53,6 +54,7 @@ export class WhatsAppService {
     private nanobotConfig: NanobotConfigService,
     private bus: NanobotBusService,
     private connectors: ConnectorsService,
+    private channelCommands: ChannelCommandsService,
   ) {}
 
   health(): WhatsAppChannelHealth {
@@ -274,6 +276,44 @@ export class WhatsAppService {
         from,
         'This sender is not authorized yet. Pair this phone or add it to the WhatsApp allowlist in Channels > WhatsApp.',
       )
+      return
+    }
+
+    const profileName = this.readString(payload, ['ProfileName', 'profileName'])
+    const phoneLabel = from.replace(/^whatsapp:/i, '')
+    const titleHint = profileName
+      ? `WhatsApp ${profileName}`
+      : `WhatsApp ${phoneLabel}`
+    const commandResult = await this.channelCommands.maybeHandleTextCommand(userMessage, {
+      userId: route.userId,
+      sessionLabel: this.toSessionLabel(from),
+      channelLabel: 'WhatsApp',
+      titleHint,
+      conversationId: route.conversationId,
+    })
+    if (commandResult) {
+      await this.prisma.whatsAppDevice.updateMany({
+        where: { userId: route.userId, phone: from },
+        data: {
+          lastSeenAt: new Date(),
+          lastConversationId: commandResult.conversationId ?? undefined,
+        },
+      }).catch(() => {})
+
+      const delivered = await this.sendMessage(from, commandResult.reply)
+      await this.connectors.recordWhatsAppActivity(route.userId, {
+        success: delivered,
+        ...(delivered ? {} : { error: 'Twilio send failed.' }),
+      }).catch(() => {})
+      this.bus.publish('run.event', {
+        source: 'channels.whatsapp',
+        direction: 'command',
+        command: commandResult.command,
+        from,
+        messageSid,
+        conversationId: commandResult.conversationId,
+        userId: route.userId,
+      })
       return
     }
 
@@ -505,7 +545,7 @@ export class WhatsAppService {
     const twilio = this.getTwilioConfig()
     if (!twilio) {
       this.logger.warn('Twilio is not configured, skipping WhatsApp outbound message.')
-      return
+      return false
     }
 
     const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${twilio.accountSid}/Messages.json`
@@ -528,7 +568,10 @@ export class WhatsAppService {
     if (!response.ok) {
       const text = await response.text()
       this.logger.error(`Twilio send failed (${response.status}): ${text}`)
+      return false
     }
+
+    return true
   }
 
   private async expireStalePairings() {

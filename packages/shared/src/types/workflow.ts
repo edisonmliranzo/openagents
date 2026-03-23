@@ -1,4 +1,4 @@
-export type WorkflowTriggerKind = 'manual' | 'schedule' | 'webhook' | 'inbox_event'
+export type WorkflowTriggerKind = 'manual' | 'schedule' | 'webhook' | 'inbox_event' | 'connector_event'
 export type WorkflowStepType =
   | 'agent_prompt'
   | 'tool_call'
@@ -21,6 +21,15 @@ export interface WorkflowTrigger {
   everyMinutes?: number
   webhookSecret?: string
   eventName?: string
+  // connector_event trigger
+  connectorId?: string   // e.g. 'gmail' | 'slack' | 'calendar'
+  eventFilter?: Record<string, string>  // e.g. { from: 'boss@example.com' }
+}
+
+export interface WorkflowWebhookOutbox {
+  url: string
+  secret?: string       // HMAC-SHA256 signature header value
+  includeOutput?: boolean
 }
 
 export interface WorkflowStep {
@@ -59,6 +68,10 @@ export interface WorkflowDefinition {
   updatedAt: string
   lastRunAt: string | null
   nextRunAt: string | null
+  // Wave 11: cost budget — hard-stop if accumulated spend exceeds this
+  budgetUsd?: number
+  // Wave 13: webhook outbox — POST on run completion
+  webhookOutbox?: WorkflowWebhookOutbox
 }
 
 export interface WorkflowStepRunResult {
@@ -91,6 +104,8 @@ export interface WorkflowRun {
   resumeStepId?: string | null
   lastOutput?: unknown
   stepResults: WorkflowStepRunResult[]
+  accumulatedCostUsd?: number
+  budgetExhausted?: boolean
 }
 
 export interface CreateWorkflowInput {
@@ -99,6 +114,8 @@ export interface CreateWorkflowInput {
   enabled?: boolean
   trigger: WorkflowTrigger
   steps: WorkflowStep[]
+  budgetUsd?: number
+  webhookOutbox?: WorkflowWebhookOutbox
 }
 
 export interface UpdateWorkflowInput {
@@ -107,6 +124,8 @@ export interface UpdateWorkflowInput {
   enabled?: boolean
   trigger?: WorkflowTrigger
   steps?: WorkflowStep[]
+  budgetUsd?: number
+  webhookOutbox?: WorkflowWebhookOutbox | null
 }
 
 export interface RunWorkflowInput {
@@ -116,4 +135,25 @@ export interface RunWorkflowInput {
   approvedKeys?: string[]
   sourceEvent?: string
   input?: Record<string, unknown>
+}
+
+export interface WorkflowBranchRunInput extends RunWorkflowInput {
+  sourceRunId: string
+}
+
+export interface WorkflowRunComparisonMetric {
+  label: string
+  left: string
+  right: string
+}
+
+export interface WorkflowRunComparison {
+  workflowId: string
+  leftRunId: string
+  rightRunId: string
+  metrics: WorkflowRunComparisonMetric[]
+  changedStepIds: string[]
+  leftStatus: WorkflowRunStatus
+  rightStatus: WorkflowRunStatus
+  generatedAt: string
 }

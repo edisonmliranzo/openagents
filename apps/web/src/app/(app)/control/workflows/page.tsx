@@ -8,6 +8,7 @@ import type {
   UpdateWorkflowInput,
   WorkflowDefinition,
   WorkflowRun,
+  WorkflowRunComparison,
 } from '@openagents/shared'
 
 interface WorkflowPreset {
@@ -327,6 +328,10 @@ export default function WorkflowsPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [rerunningRunId, setRerunningRunId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [diffLeftRunId, setDiffLeftRunId] = useState<string | null>(null)
+  const [diffRightRunId, setDiffRightRunId] = useState<string | null>(null)
+  const [diffResult, setDiffResult] = useState<WorkflowRunComparison | null>(null)
+  const [isDiffing, setIsDiffing] = useState(false)
 
   const selectedWorkflow = useMemo(
     () => workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null,
@@ -500,6 +505,27 @@ export default function WorkflowsPage() {
       addToast('error', message)
     } finally {
       setRerunningRunId(null)
+    }
+  }
+
+  async function handleCompareRuns() {
+    if (!selectedWorkflowId || !diffLeftRunId || !diffRightRunId) return
+    if (diffLeftRunId === diffRightRunId) {
+      setError('Select two different runs to compare.')
+      return
+    }
+    setIsDiffing(true)
+    setDiffResult(null)
+    setError('')
+    try {
+      const comparison = await sdk.workflows.compareRuns(selectedWorkflowId, diffLeftRunId, diffRightRunId)
+      setDiffResult(comparison)
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to compare runs'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsDiffing(false)
     }
   }
 
@@ -773,6 +799,111 @@ export default function WorkflowsPage() {
           })}
         </div>
       </section>
+
+      {/* Workflow Diff Viewer */}
+      {runs.length >= 2 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Run Diff Viewer</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Compare two runs side-by-side to identify what changed between executions.
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                Left Run
+              </label>
+              <select
+                value={diffLeftRunId ?? ''}
+                onChange={(e) => setDiffLeftRunId(e.target.value || null)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500"
+              >
+                <option value="">Select run…</option>
+                {runs.map((run) => (
+                  <option key={run.id} value={run.id}>
+                    {run.id.slice(0, 8)} — {run.status} — {run.startedAt.slice(0, 16)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                Right Run
+              </label>
+              <select
+                value={diffRightRunId ?? ''}
+                onChange={(e) => setDiffRightRunId(e.target.value || null)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500"
+              >
+                <option value="">Select run…</option>
+                {runs.map((run) => (
+                  <option key={run.id} value={run.id}>
+                    {run.id.slice(0, 8)} — {run.status} — {run.startedAt.slice(0, 16)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCompareRuns()}
+              disabled={!diffLeftRunId || !diffRightRunId || isDiffing}
+              className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600 disabled:opacity-50"
+            >
+              {isDiffing ? 'Comparing…' : 'Compare Runs'}
+            </button>
+          </div>
+
+          {diffResult && (
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {diffResult.metrics.map((metric) => (
+                  <div key={metric.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      {metric.label.replaceAll('_', ' ')}
+                    </p>
+                    <div className="mt-1.5 flex items-center gap-2 text-sm">
+                      <span className={`font-mono ${metric.left !== metric.right ? 'text-rose-600' : 'text-slate-700'}`}>
+                        {metric.left}
+                      </span>
+                      <span className="text-slate-400">→</span>
+                      <span className={`font-mono ${metric.left !== metric.right ? 'text-emerald-600' : 'text-slate-700'}`}>
+                        {metric.right}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {diffResult.changedStepIds.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                    Changed Steps ({diffResult.changedStepIds.length})
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {diffResult.changedStepIds.map((stepId) => (
+                      <span
+                        key={stepId}
+                        className="rounded-full bg-amber-100 px-2 py-0.5 font-mono text-[11px] text-amber-800"
+                      >
+                        {stepId}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {diffResult.changedStepIds.length === 0 && (
+                <p className="text-sm text-emerald-700 font-medium">
+                  No step-level differences detected between these runs.
+                </p>
+              )}
+
+              <p className="text-[11px] text-slate-400">
+                Generated {diffResult.generatedAt.slice(0, 16)} · Left: {diffResult.leftStatus} · Right: {diffResult.rightStatus}
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

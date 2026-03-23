@@ -56,6 +56,11 @@ export class ConversationsController {
     return this.conversations.messages(id, req.user.id)
   }
 
+  @Get(':id/repair')
+  inspectRepair(@Param('id') id: string, @Req() req: any) {
+    return this.conversations.inspectRepair(id, req.user.id)
+  }
+
   @Post(':id/chat')
   async chat(
     @Param('id') conversationId: string,
@@ -104,5 +109,10 @@ export class ConversationsController {
   @Delete(':id')
   delete(@Param('id') id: string, @Req() req: any) {
     return this.conversations.delete(id, req.user.id)
+  }
+
+  @Post(':id/repair')
+  repair(@Param('id') id: string, @Req() req: any) {
+    return this.conversations.repairState(id, req.user.id)
   }
 }

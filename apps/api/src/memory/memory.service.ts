@@ -1,10 +1,14 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit, OnModuleDestroy } from '@nestjs/common'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import type {
   BrowserCaptureInput,
   BrowserCaptureResult,
+  CreateLocalKnowledgeSourceInput,
+  LocalKnowledgeSource,
+  LocalKnowledgeSyncResult,
   MemoryConflict,
   MemoryEvent,
   MemoryEventKind,
@@ -30,6 +34,7 @@ const MAX_DAILY_NOTE_DAYS = 30
 const MAX_CONVERSATION_EXPORTS = 20
 const MAX_MESSAGES_PER_CONVERSATION_EXPORT = 500
 const AUTONOMY_FILE = 'AUTONOMY.json'
+const LOCAL_SOURCES_FILE = 'SOURCES.json'
 const DEFAULT_AUTONOMY_TIMEZONE = 'UTC'
 const MEMORY_CURATION_WINDOW_HOURS = 24
 const MEMORY_RETENTION_DAYS = 45
@@ -39,6 +44,9 @@ const MAX_TIERED_MEMORY_RESULTS = 30
 const MEMORY_DECAY_DAYS = 30
 const LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.45
 const STALE_REVIEW_DAYS = 21
+const DEFAULT_LOCAL_KNOWLEDGE_MAX_FILES = 50
+const MAX_LOCAL_KNOWLEDGE_FILES = 150
+const DEFAULT_LOCAL_KNOWLEDGE_GLOBS = ['*.md', '*.txt', '*.json', '*.ts', '*.tsx', '*.js', '*.py']
 const MEMORY_EVENT_KINDS = new Set<MemoryEventKind>([
   'conversation',
   'workflow',
@@ -71,14 +79,93 @@ interface CuratedPoint {
   weight: number
 }
 
+interface LocalKnowledgeSourceStore {
+  version: number
+  sources: LocalKnowledgeSource[]
+}
+
+const DECAY_WORKER_INTERVAL_MS = 6 * 60 * 60 * 1000 // every 6 hours
+const DECAY_PRUNE_THRESHOLD = 0.04 // remove facts with effective confidence below this
+
 @Injectable()
-export class MemoryService {
+export class MemoryService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MemoryService.name)
   private readonly curationStateByUser = new Map<string, NanobotMemoryCurationStatus>()
+  private decayTimer?: NodeJS.Timeout
 
   constructor(
     private prisma: PrismaService,
   ) {}
+
+  onModuleInit() {
+    this.decayTimer = setInterval(() => {
+      void this.runDecayCycle()
+    }, DECAY_WORKER_INTERVAL_MS)
+    this.decayTimer.unref()
+  }
+
+  onModuleDestroy() {
+    if (this.decayTimer) {
+      clearInterval(this.decayTimer)
+      this.decayTimer = undefined
+    }
+  }
+
+  /**
+   * Decay worker: materialize confidence decay for all memory facts.
+   * - Updates `confidence` in DB to the effective (decayed) value
+   * - Flags facts below LOW_CONFIDENCE_REVIEW_THRESHOLD as needing review
+   * - Prunes facts with effective confidence below DECAY_PRUNE_THRESHOLD
+   */
+  async runDecayCycle(): Promise<{ updated: number; pruned: number }> {
+    try {
+      const staleDate = new Date(Date.now() - STALE_REVIEW_DAYS * 24 * 60 * 60 * 1000)
+      const rows = await this.prisma.memoryFact.findMany({
+        where: { updatedAt: { lt: staleDate } },
+        select: {
+          id: true,
+          confidence: true,
+          updatedAt: true,
+          reinforcedAt: true,
+          freshUntil: true,
+        },
+        take: 2000,
+      })
+
+      const toDelete: string[] = []
+      const toUpdate: Array<{ id: string; confidence: number }> = []
+
+      for (const row of rows) {
+        const effective = this.effectiveConfidence(
+          row.confidence,
+          row.updatedAt,
+          row.reinforcedAt,
+          row.freshUntil,
+        )
+        if (effective < DECAY_PRUNE_THRESHOLD) {
+          toDelete.push(row.id)
+        } else if (Math.abs(effective - row.confidence) > 0.01) {
+          toUpdate.push({ id: row.id, confidence: effective })
+        }
+      }
+
+      await this.prisma.memoryFact.deleteMany({ where: { id: { in: toDelete } } }).catch(() => null)
+      for (const { id, confidence } of toUpdate) {
+        await this.prisma.memoryFact.update({ where: { id }, data: { confidence } }).catch(() => null)
+      }
+
+      const pruned = toDelete.length
+      const updated = toUpdate.length
+
+      if (updated > 0 || pruned > 0) {
+        this.logger.log(`Memory decay cycle: updated=${updated}, pruned=${pruned}`)
+      }
+      return { updated, pruned }
+    } catch (err: any) {
+      this.logger.warn(`Memory decay cycle failed: ${err?.message ?? String(err)}`)
+      return { updated: 0, pruned: 0 }
+    }
+  }
 
   async getForUser(userId: string) {
     const rows = await this.prisma.memory.findMany({
@@ -429,6 +516,87 @@ export class MemoryService {
     return items
       .sort((a, b) => a.confidence - b.confidence || b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, safeLimit)
+  }
+
+  async listSources(userId: string): Promise<LocalKnowledgeSource[]> {
+    const store = await this.readLocalKnowledgeSources(userId)
+    return [...store.sources].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }
+
+  async createSource(userId: string, input: CreateLocalKnowledgeSourceInput): Promise<LocalKnowledgeSource> {
+    const store = await this.readLocalKnowledgeSources(userId)
+    const source = this.sanitizeLocalKnowledgeSource(userId, input)
+    store.sources = [
+      ...store.sources.filter((candidate) => candidate.path !== source.path),
+      source,
+    ]
+    await this.writeLocalKnowledgeSources(userId, store)
+    return source
+  }
+
+  async deleteSource(userId: string, sourceId: string) {
+    const store = await this.readLocalKnowledgeSources(userId)
+    store.sources = store.sources.filter((source) => source.id !== sourceId)
+    await this.writeLocalKnowledgeSources(userId, store)
+    return { ok: true as const }
+  }
+
+  async syncSource(userId: string, sourceId: string): Promise<LocalKnowledgeSyncResult> {
+    const store = await this.readLocalKnowledgeSources(userId)
+    const source = store.sources.find((candidate) => candidate.id === sourceId)
+    if (!source) {
+      throw new NotFoundException(`Knowledge source "${sourceId}" not found.`)
+    }
+
+    const syncWarnings: string[] = []
+    let syncedFiles = 0
+    let createdEvents = 0
+
+    try {
+      const files = await this.collectKnowledgeFiles(source.path, source.kind, source.maxFiles)
+      syncedFiles = files.length
+      for (const filePath of files) {
+        const content = await fs.readFile(filePath, 'utf8').catch(() => '')
+        const clipped = content.trim().slice(0, 4_000)
+        if (!clipped) continue
+        const relative = path.relative(source.path, filePath) || path.basename(filePath)
+        await this.writeEvent(userId, {
+          kind: 'note',
+          summary: `Knowledge sync: ${relative}`,
+          payload: {
+            sourceId: source.id,
+            sourceKind: source.kind,
+            filePath,
+            excerpt: clipped,
+          },
+          sourceRef: filePath,
+          tags: ['knowledge-sync', source.kind],
+          piiRedacted: false,
+          confidence: 0.75,
+        })
+        createdEvents += 1
+      }
+      source.status = 'active'
+      source.lastError = null
+    } catch (error: any) {
+      source.status = 'error'
+      const lastError = error?.message ?? 'Knowledge sync failed.'
+      source.lastError = lastError
+      syncWarnings.push(lastError)
+    }
+
+    const syncedAt = new Date().toISOString()
+    source.lastSyncedAt = syncedAt
+    source.updatedAt = syncedAt
+    await this.writeLocalKnowledgeSources(userId, store)
+
+    return {
+      source,
+      syncedFiles,
+      createdEvents,
+      warnings: syncWarnings,
+      syncedAt,
+    }
   }
 
   async listFiles(userId: string): Promise<MemoryFileMeta[]> {
@@ -1035,6 +1203,131 @@ export class MemoryService {
     return userDir
   }
 
+  private async readLocalKnowledgeSources(userId: string): Promise<LocalKnowledgeSourceStore> {
+    const userDir = await this.ensureUserDir(userId)
+    const fullPath = path.join(userDir, LOCAL_SOURCES_FILE)
+    try {
+      const raw = await fs.readFile(fullPath, 'utf8')
+      const parsed = JSON.parse(raw) as Partial<LocalKnowledgeSourceStore>
+      const sources = Array.isArray(parsed.sources) ? parsed.sources : []
+      return {
+        version: 1,
+        sources: sources
+          .filter((source) => source && typeof source === 'object')
+          .map((source) => this.normalizeStoredLocalKnowledgeSource(userId, source as LocalKnowledgeSource))
+          .filter((source): source is LocalKnowledgeSource => Boolean(source)),
+      }
+    } catch {
+      return { version: 1, sources: [] }
+    }
+  }
+
+  private async writeLocalKnowledgeSources(userId: string, store: LocalKnowledgeSourceStore) {
+    const userDir = await this.ensureUserDir(userId)
+    const fullPath = path.join(userDir, LOCAL_SOURCES_FILE)
+    await fs.writeFile(fullPath, JSON.stringify(store, null, 2), 'utf8')
+  }
+
+  private sanitizeLocalKnowledgeSource(userId: string, input: CreateLocalKnowledgeSourceInput): LocalKnowledgeSource {
+    const normalizedPath = path.resolve((input.path ?? '').trim())
+    if (!normalizedPath) {
+      throw new BadRequestException('Knowledge source path is required.')
+    }
+
+    const kind = this.normalizeLocalKnowledgeKind(input.kind, normalizedPath)
+    const now = new Date().toISOString()
+    return {
+      id: randomUUID(),
+      userId,
+      path: normalizedPath,
+      kind,
+      includeGlobs: this.normalizeKnowledgeGlobs(input.includeGlobs),
+      maxFiles: this.normalizeMaxKnowledgeFiles(input.maxFiles),
+      status: 'active',
+      lastSyncedAt: null,
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+  }
+
+  private normalizeStoredLocalKnowledgeSource(userId: string, source: LocalKnowledgeSource) {
+    const normalizedPath = this.optionalText(source.path)
+    if (!normalizedPath) return null
+    const kind = this.normalizeLocalKnowledgeKind(source.kind, normalizedPath)
+    const createdAt = this.normalizeIso(source.createdAt) ?? new Date().toISOString()
+    const updatedAt = this.normalizeIso(source.updatedAt) ?? createdAt
+    return {
+      id: this.optionalText(source.id) ?? randomUUID(),
+      userId,
+      path: path.resolve(normalizedPath),
+      kind,
+      includeGlobs: this.normalizeKnowledgeGlobs(source.includeGlobs),
+      maxFiles: this.normalizeMaxKnowledgeFiles(source.maxFiles),
+      status: source.status === 'error' ? 'error' : 'active',
+      lastSyncedAt: this.normalizeIso(source.lastSyncedAt),
+      lastError: this.optionalText(source.lastError),
+      createdAt,
+      updatedAt,
+    } satisfies LocalKnowledgeSource
+  }
+
+  private normalizeLocalKnowledgeKind(raw: unknown, targetPath: string): LocalKnowledgeSource['kind'] {
+    if (raw === 'file' || raw === 'folder' || raw === 'repo') return raw
+    const basename = path.basename(targetPath).toLowerCase()
+    if (basename === '.git') return 'repo'
+    if (targetPath.endsWith('.git')) return 'repo'
+    if (path.extname(targetPath)) return 'file'
+    return 'folder'
+  }
+
+  private normalizeKnowledgeGlobs(raw: unknown) {
+    if (!Array.isArray(raw)) return [...DEFAULT_LOCAL_KNOWLEDGE_GLOBS]
+    const values = raw
+      .map((entry) => this.optionalText(entry))
+      .filter((entry): entry is string => Boolean(entry))
+      .slice(0, 20)
+    return values.length > 0 ? values : [...DEFAULT_LOCAL_KNOWLEDGE_GLOBS]
+  }
+
+  private normalizeMaxKnowledgeFiles(raw: unknown) {
+    const parsed = Number.parseInt(`${raw ?? ''}`, 10)
+    if (!Number.isFinite(parsed)) return DEFAULT_LOCAL_KNOWLEDGE_MAX_FILES
+    return Math.max(1, Math.min(parsed, MAX_LOCAL_KNOWLEDGE_FILES))
+  }
+
+  private async collectKnowledgeFiles(targetPath: string, kind: LocalKnowledgeSource['kind'], maxFiles: number) {
+    const stats = await fs.stat(targetPath)
+    if (kind === 'file') {
+      return stats.isFile() ? [targetPath] : []
+    }
+
+    const files: string[] = []
+    const queue = [targetPath]
+    while (queue.length > 0 && files.length < maxFiles) {
+      const current = queue.shift()!
+      const entries = await fs.readdir(current, { withFileTypes: true }).catch(() => [])
+      for (const entry of entries) {
+        if (files.length >= maxFiles) break
+        if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.next' || entry.name === 'dist') {
+          continue
+        }
+        const fullPath = path.join(current, entry.name)
+        if (entry.isDirectory()) {
+          queue.push(fullPath)
+          continue
+        }
+        if (!entry.isFile()) continue
+        const extension = path.extname(entry.name).toLowerCase()
+        if (!['.md', '.txt', '.json', '.ts', '.tsx', '.js', '.jsx', '.py', '.yml', '.yaml'].includes(extension)) {
+          continue
+        }
+        files.push(fullPath)
+      }
+    }
+    return files
+  }
+
   private async writeCoreFileIfMissing(userDir: string, fileName: (typeof CORE_MEMORY_FILES)[number], content: string) {
     const fullPath = path.join(userDir, fileName)
     try {
@@ -1485,5 +1778,12 @@ export class MemoryService {
     if (typeof value !== 'string') return null
     const trimmed = value.trim()
     return trimmed || null
+  }
+
+  private normalizeIso(value: unknown) {
+    const raw = this.optionalText(value)
+    if (!raw) return null
+    const date = new Date(raw)
+    return Number.isFinite(date.getTime()) ? date.toISOString() : null
   }
 }

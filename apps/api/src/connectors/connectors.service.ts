@@ -1,17 +1,23 @@
 import { BadRequestException, Injectable } from '@nestjs/common'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import type {
+  ConnectorConnection,
+  ConnectorConnectionResult,
   ConnectorHealthAlert,
   ConnectorHealthEntry,
   ConnectorHealthSnapshot,
   ConnectorStatus,
   ReconnectConnectorResult,
   RecordConnectorHealthInput,
+  SaveConnectorConnectionInput,
 } from '@openagents/shared'
 import { PrismaService } from '../prisma/prisma.service'
 
 const TOKEN_EXPIRY_WARNING_HOURS = 72
 const CHANNEL_ACTIVITY_RECENT_WINDOW_HOURS = 24
 const MAX_LATENCY_MS = 120_000
+const GOOGLE_TOKEN_REFRESH_WINDOW_MS = 60_000
+const ENCRYPTION_ALGORITHM = 'aes-256-gcm'
 
 const CONNECTOR_CATALOG = {
   google_gmail: {
@@ -41,12 +47,48 @@ const CONNECTOR_CATALOG = {
 } as const
 
 type KnownConnectorId = keyof typeof CONNECTOR_CATALOG
+type GoogleConnectorId = Extract<KnownConnectorId, 'google_gmail' | 'google_calendar'>
+
+interface ConnectorToolSeed {
+  displayName: string
+  description: string
+  category: 'email' | 'calendar'
+  requiresApproval: boolean
+}
+
+const CONNECTOR_TOOL_SEEDS: Record<string, ConnectorToolSeed> = {
+  gmail_search: {
+    displayName: 'Gmail Search',
+    description: 'Search Gmail messages.',
+    category: 'email',
+    requiresApproval: false,
+  },
+  gmail_draft_reply: {
+    displayName: 'Gmail Draft Reply',
+    description: 'Create a Gmail draft reply.',
+    category: 'email',
+    requiresApproval: true,
+  },
+  calendar_get_availability: {
+    displayName: 'Calendar Availability',
+    description: 'Get availability from Google Calendar.',
+    category: 'calendar',
+    requiresApproval: false,
+  },
+  calendar_create_event: {
+    displayName: 'Calendar Create Event',
+    description: 'Create an event in Google Calendar.',
+    category: 'calendar',
+    requiresApproval: true,
+  },
+}
 
 interface ConnectedToolRecord {
   status: string
   connectedAt: Date
   updatedAt: Date
   tool: { name: string }
+  encryptedTokens?: string | null
 }
 
 interface LinkedChannelRecord {
@@ -64,6 +106,16 @@ interface ConnectorHealthRowRecord {
   rateLimitHits: number
   failureStreak: number
   updatedAt: Date
+}
+
+interface StoredConnectorTokens {
+  accessToken: string
+  refreshToken?: string
+  tokenExpiresAt?: string
+  scopes: string[]
+  accountEmail?: string
+  connectedAt: string
+  updatedAt: string
 }
 
 @Injectable()
@@ -137,6 +189,12 @@ export class ConnectorsService {
 
   async reconnect(userId: string, connectorId: string): Promise<ReconnectConnectorResult> {
     const normalized = this.normalizeConnectorId(connectorId)
+    if (this.isGoogleConnector(normalized)) {
+      const connection = await this.getConnection(userId, normalized)
+      if (!connection.connected) {
+        throw new BadRequestException(`Connector "${normalized}" has no saved credentials.`)
+      }
+    }
     const now = new Date()
 
     await this.prisma.connectorHealth.upsert({
@@ -171,6 +229,158 @@ export class ConnectorsService {
       connector,
       reconnectedAt: now.toISOString(),
     }
+  }
+
+  async getConnection(userId: string, connectorId: string): Promise<ConnectorConnection> {
+    const normalized = this.normalizeConnectorId(connectorId)
+    const toolNames = [...CONNECTOR_CATALOG[normalized].toolNames]
+
+    if (!this.isGoogleConnector(normalized)) {
+      return {
+        connectorId: normalized,
+        connected: false,
+        accountEmail: null,
+        scopes: [],
+        tokenExpiresAt: null,
+        connectedAt: null,
+        updatedAt: null,
+        toolNames,
+      }
+    }
+
+    const connected = await this.prisma.connectedTool.findFirst({
+      where: {
+        userId,
+        tool: {
+          name: {
+            in: toolNames,
+          },
+        },
+      },
+      include: {
+        tool: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    })
+
+    const payload = this.parseStoredTokens(connected?.encryptedTokens ?? null)
+    return {
+      connectorId: normalized,
+      connected: Boolean(payload?.accessToken),
+      accountEmail: payload?.accountEmail ?? null,
+      scopes: payload?.scopes ?? [],
+      tokenExpiresAt: payload?.tokenExpiresAt ?? null,
+      connectedAt: payload?.connectedAt ?? connected?.connectedAt?.toISOString() ?? null,
+      updatedAt: payload?.updatedAt ?? connected?.updatedAt?.toISOString() ?? null,
+      toolNames,
+    }
+  }
+
+  async saveConnection(
+    userId: string,
+    connectorId: string,
+    input: SaveConnectorConnectionInput,
+  ): Promise<ConnectorConnectionResult> {
+    const normalized = this.normalizeConnectorId(connectorId)
+    if (!this.isGoogleConnector(normalized)) {
+      throw new BadRequestException(`Manual credential storage is not supported for "${normalized}".`)
+    }
+
+    const accessToken = (input.accessToken ?? '').trim()
+    if (!accessToken) {
+      throw new BadRequestException('Access token is required.')
+    }
+
+    const nowIso = new Date().toISOString()
+    const payload: StoredConnectorTokens = {
+      accessToken,
+      ...(this.optionalText(input.refreshToken) ? { refreshToken: this.optionalText(input.refreshToken)! } : {}),
+      ...(this.normalizeIso(input.tokenExpiresAt) ? { tokenExpiresAt: this.normalizeIso(input.tokenExpiresAt)! } : {}),
+      scopes: this.normalizeScopes(input.scopes),
+      ...(this.optionalText(input.accountEmail) ? { accountEmail: this.optionalText(input.accountEmail)! } : {}),
+      connectedAt: nowIso,
+      updatedAt: nowIso,
+    }
+
+    await this.ensureConnectorTools(userId, normalized, payload)
+    const connector = await this.report(userId, {
+      connectorId: normalized,
+      success: true,
+      tokenExpiresAt: payload.tokenExpiresAt,
+      metadata: {
+        scopes: payload.scopes,
+        accountEmail: payload.accountEmail ?? null,
+      },
+    })
+
+    return {
+      connector,
+      connection: await this.getConnection(userId, normalized),
+    }
+  }
+
+  async deleteConnection(userId: string, connectorId: string) {
+    const normalized = this.normalizeConnectorId(connectorId)
+    if (!this.isGoogleConnector(normalized)) {
+      throw new BadRequestException(`Connector "${normalized}" does not support stored credentials.`)
+    }
+
+    await this.prisma.connectedTool.deleteMany({
+      where: {
+          userId,
+          tool: {
+            name: {
+              in: [...CONNECTOR_CATALOG[normalized].toolNames],
+            },
+          },
+        },
+    })
+
+    await this.prisma.connectorHealth.upsert({
+      where: {
+        userId_connectorId: {
+          userId,
+          connectorId: normalized,
+        },
+      },
+      update: {
+        status: 'down',
+        lastError: 'Connector credentials removed.',
+        failureStreak: 0,
+        tokenExpiresAt: null,
+      },
+      create: {
+        userId,
+        connectorId: normalized,
+        status: 'down',
+        lastError: 'Connector credentials removed.',
+        failureStreak: 0,
+      },
+    })
+
+    return { ok: true as const }
+  }
+
+  async fetchGoogle(userId: string, connectorId: string, url: string, init: RequestInit = {}) {
+    const normalized = this.normalizeConnectorId(connectorId)
+    if (!this.isGoogleConnector(normalized)) {
+      throw new BadRequestException(`Connector "${normalized}" is not a Google connector.`)
+    }
+
+    const response = await this.performGoogleFetch(userId, normalized, url, init, true)
+    if (!response.ok) {
+      const body = await this.safeReadBody(response)
+      throw new BadRequestException(
+        `Google API request failed (${response.status}): ${body.slice(0, 300) || response.statusText}`,
+      )
+    }
+    return response
   }
 
   async report(userId: string, input: RecordConnectorHealthInput): Promise<ConnectorHealthEntry> {
@@ -530,6 +740,322 @@ export class ConnectorsService {
     if (tokenExpiringSoon && input.baseStatus === 'connected') return 'degraded'
 
     return input.baseStatus
+  }
+
+  private isGoogleConnector(connectorId: KnownConnectorId): connectorId is GoogleConnectorId {
+    return connectorId === 'google_gmail' || connectorId === 'google_calendar'
+  }
+
+  private normalizeScopes(scopes: string[] | undefined) {
+    if (!Array.isArray(scopes)) return []
+    const values = new Set<string>()
+    for (const scope of scopes) {
+      const normalized = this.optionalText(scope)
+      if (!normalized) continue
+      values.add(normalized)
+      if (values.size >= 40) break
+    }
+    return [...values]
+  }
+
+  private normalizeIso(value: string | undefined) {
+    const parsed = this.parseIso(value)
+    return parsed ? parsed.toISOString() : null
+  }
+
+  private async ensureConnectorTools(
+    userId: string,
+    connectorId: GoogleConnectorId,
+    payload: StoredConnectorTokens,
+  ) {
+    const encryptedTokens = this.encryptTokens(payload)
+    for (const toolName of CONNECTOR_CATALOG[connectorId].toolNames) {
+      const seed = CONNECTOR_TOOL_SEEDS[toolName]
+      const tool = await this.prisma.tool.upsert({
+        where: { name: toolName },
+        update: {
+          displayName: seed.displayName,
+          description: seed.description,
+          category: seed.category,
+          requiresApproval: seed.requiresApproval,
+          inputSchema: '{}',
+        },
+        create: {
+          name: toolName,
+          displayName: seed.displayName,
+          description: seed.description,
+          category: seed.category,
+          requiresApproval: seed.requiresApproval,
+          inputSchema: '{}',
+        },
+      })
+
+      await this.prisma.connectedTool.upsert({
+        where: {
+          userId_toolId: {
+            userId,
+            toolId: tool.id,
+          },
+        },
+        update: {
+          status: 'connected',
+          encryptedTokens,
+        },
+        create: {
+          userId,
+          toolId: tool.id,
+          status: 'connected',
+          encryptedTokens,
+        },
+      })
+    }
+  }
+
+  private async loadStoredTokens(userId: string, connectorId: GoogleConnectorId) {
+    const record = await this.prisma.connectedTool.findFirst({
+      where: {
+        userId,
+        tool: {
+          name: {
+            in: [...CONNECTOR_CATALOG[connectorId].toolNames],
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    })
+    return this.parseStoredTokens(record?.encryptedTokens ?? null)
+  }
+
+  private async persistStoredTokens(
+    userId: string,
+    connectorId: GoogleConnectorId,
+    payload: StoredConnectorTokens,
+  ) {
+    await this.ensureConnectorTools(userId, connectorId, {
+      ...payload,
+      updatedAt: new Date().toISOString(),
+    })
+    await this.prisma.connectorHealth.updateMany({
+      where: {
+        userId,
+        connectorId,
+      },
+      data: {
+        tokenExpiresAt: this.parseIso(payload.tokenExpiresAt),
+      },
+    })
+  }
+
+  private async getValidGoogleAccessToken(userId: string, connectorId: GoogleConnectorId) {
+    const stored = await this.loadStoredTokens(userId, connectorId)
+    if (!stored?.accessToken) {
+      throw new BadRequestException(`Connector "${connectorId}" is not connected.`)
+    }
+
+    const expiresAt = this.parseIso(stored.tokenExpiresAt)
+    const expiringSoon = expiresAt
+      ? (expiresAt.getTime() - Date.now()) <= GOOGLE_TOKEN_REFRESH_WINDOW_MS
+      : false
+    if (!expiringSoon) {
+      return stored.accessToken
+    }
+
+    if (!stored.refreshToken) {
+      throw new BadRequestException(`Connector "${connectorId}" token expired and no refresh token is available.`)
+    }
+
+    const refreshed = await this.refreshGoogleAccessToken(userId, connectorId, stored)
+    return refreshed.accessToken
+  }
+
+  private async performGoogleFetch(
+    userId: string,
+    connectorId: GoogleConnectorId,
+    url: string,
+    init: RequestInit,
+    retryOnUnauthorized: boolean,
+  ): Promise<Response> {
+    const accessToken = await this.getValidGoogleAccessToken(userId, connectorId)
+    const headers = new Headers(init.headers ?? {})
+    headers.set('Authorization', `Bearer ${accessToken}`)
+
+    const response = await fetch(url, {
+      ...init,
+      headers,
+    })
+
+    if (response.status !== 401 || !retryOnUnauthorized) {
+      return response
+    }
+
+    const stored = await this.loadStoredTokens(userId, connectorId)
+    if (!stored?.refreshToken) {
+      return response
+    }
+
+    await this.refreshGoogleAccessToken(userId, connectorId, stored)
+    return this.performGoogleFetch(userId, connectorId, url, init, false)
+  }
+
+  private async refreshGoogleAccessToken(
+    userId: string,
+    connectorId: GoogleConnectorId,
+    stored: StoredConnectorTokens,
+  ) {
+    const clientId = this.optionalText(process.env.GOOGLE_CLIENT_ID)
+    const clientSecret = this.optionalText(process.env.GOOGLE_CLIENT_SECRET)
+    if (!clientId || !clientSecret) {
+      throw new BadRequestException('Google refresh requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.')
+    }
+    if (!stored.refreshToken) {
+      throw new BadRequestException(`Connector "${connectorId}" has no refresh token.`)
+    }
+
+    const body = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: stored.refreshToken,
+      grant_type: 'refresh_token',
+    })
+
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    })
+
+    if (!response.ok) {
+      const errorBody = await this.safeReadBody(response)
+      throw new BadRequestException(
+        `Google token refresh failed (${response.status}): ${errorBody.slice(0, 300)}`,
+      )
+    }
+
+    const payload = await response.json() as {
+      access_token?: string
+      expires_in?: number
+      scope?: string
+    }
+    const accessToken = this.optionalText(payload.access_token)
+    if (!accessToken) {
+      throw new BadRequestException('Google token refresh returned no access token.')
+    }
+
+    const next: StoredConnectorTokens = {
+      ...stored,
+      accessToken,
+      updatedAt: new Date().toISOString(),
+      ...(typeof payload.expires_in === 'number'
+        ? { tokenExpiresAt: new Date(Date.now() + payload.expires_in * 1000).toISOString() }
+        : {}),
+      ...(this.optionalText(payload.scope)
+        ? { scopes: this.normalizeScopes(payload.scope!.split(/\s+/)) }
+        : {}),
+    }
+    await this.persistStoredTokens(userId, connectorId, next)
+    return next
+  }
+
+  private encryptTokens(payload: StoredConnectorTokens) {
+    const key = this.resolveEncryptionKey()
+    const iv = randomBytes(12)
+    const cipher = createCipheriv(ENCRYPTION_ALGORITHM, key, iv)
+    const plaintext = JSON.stringify(payload)
+    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+    const authTag = cipher.getAuthTag()
+    return JSON.stringify({
+      v: 1,
+      iv: iv.toString('base64'),
+      tag: authTag.toString('base64'),
+      data: encrypted.toString('base64'),
+    })
+  }
+
+  private parseStoredTokens(raw: string | null | undefined): StoredConnectorTokens | null {
+    const value = this.optionalText(raw)
+    if (!value) return null
+    try {
+      const parsed = JSON.parse(value) as { v?: number; iv?: string; tag?: string; data?: string }
+      if (parsed && typeof parsed.iv === 'string' && typeof parsed.tag === 'string' && typeof parsed.data === 'string') {
+        const decrypted = this.decryptTokens({
+          iv: parsed.iv,
+          tag: parsed.tag,
+          data: parsed.data,
+        })
+        if (decrypted) return decrypted
+      }
+    } catch {
+      // Fall through to legacy plain JSON parse.
+    }
+
+    try {
+      const parsed = JSON.parse(value) as Partial<StoredConnectorTokens>
+      if (!parsed || typeof parsed !== 'object') return null
+      const accessToken = this.optionalText(parsed.accessToken)
+      if (!accessToken) return null
+      return {
+        accessToken,
+        ...(this.optionalText(parsed.refreshToken) ? { refreshToken: this.optionalText(parsed.refreshToken)! } : {}),
+        ...(this.normalizeIso(parsed.tokenExpiresAt) ? { tokenExpiresAt: this.normalizeIso(parsed.tokenExpiresAt)! } : {}),
+        scopes: this.normalizeScopes(parsed.scopes),
+        ...(this.optionalText(parsed.accountEmail) ? { accountEmail: this.optionalText(parsed.accountEmail)! } : {}),
+        connectedAt: this.normalizeIso(parsed.connectedAt) ?? new Date().toISOString(),
+        updatedAt: this.normalizeIso(parsed.updatedAt) ?? new Date().toISOString(),
+      }
+    } catch {
+      return null
+    }
+  }
+
+  private decryptTokens(payload: { iv: string; tag: string; data: string }) {
+    try {
+      const key = this.resolveEncryptionKey()
+      const decipher = createDecipheriv(
+        ENCRYPTION_ALGORITHM,
+        key,
+        Buffer.from(payload.iv, 'base64'),
+      )
+      decipher.setAuthTag(Buffer.from(payload.tag, 'base64'))
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(payload.data, 'base64')),
+        decipher.final(),
+      ]).toString('utf8')
+      const parsed = JSON.parse(decrypted) as Partial<StoredConnectorTokens>
+      const accessToken = this.optionalText(parsed.accessToken)
+      if (!accessToken) return null
+      return {
+        accessToken,
+        ...(this.optionalText(parsed.refreshToken) ? { refreshToken: this.optionalText(parsed.refreshToken)! } : {}),
+        ...(this.normalizeIso(parsed.tokenExpiresAt) ? { tokenExpiresAt: this.normalizeIso(parsed.tokenExpiresAt)! } : {}),
+        scopes: this.normalizeScopes(parsed.scopes),
+        ...(this.optionalText(parsed.accountEmail) ? { accountEmail: this.optionalText(parsed.accountEmail)! } : {}),
+        connectedAt: this.normalizeIso(parsed.connectedAt) ?? new Date().toISOString(),
+        updatedAt: this.normalizeIso(parsed.updatedAt) ?? new Date().toISOString(),
+      }
+    } catch {
+      return null
+    }
+  }
+
+  private resolveEncryptionKey() {
+    const raw = this.optionalText(process.env.ENCRYPTION_KEY) ?? 'openagents-local-dev-key'
+    const normalizedHex = raw.replace(/^0x/i, '')
+    if (/^[0-9a-f]{64}$/i.test(normalizedHex)) {
+      return Buffer.from(normalizedHex, 'hex')
+    }
+    return createHash('sha256').update(raw).digest()
+  }
+
+  private async safeReadBody(response: Response) {
+    try {
+      return await response.text()
+    } catch {
+      return ''
+    }
   }
 
   private parseStatus(value: string | null | undefined): ConnectorStatus | null {

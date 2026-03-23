@@ -3,6 +3,8 @@ import type {
   CreateWorkflowInput,
   RunWorkflowInput,
   UpdateWorkflowInput,
+  WorkflowBranchRunInput,
+  WorkflowRunComparison,
   WorkflowDefinition,
   WorkflowRun,
 } from '@openagents/shared'
@@ -29,6 +31,14 @@ export function createWorkflowsApi(client: OpenAgentsClient) {
 
     rerun: (id: string, runId: string, input: RunWorkflowInput = {}) =>
       client.post<WorkflowRun>(`/api/v1/workflows/${id}/runs/${runId}/rerun`, input),
+
+    branchRun: (id: string, input: WorkflowBranchRunInput) =>
+      client.post<WorkflowRun>(`/api/v1/workflows/${id}/runs/branch`, input),
+
+    compareRuns: (id: string, leftRunId: string, rightRunId: string) =>
+      client.get<WorkflowRunComparison>(
+        `/api/v1/workflows/${id}/runs/compare?leftRunId=${encodeURIComponent(leftRunId)}&rightRunId=${encodeURIComponent(rightRunId)}`,
+      ),
 
     triggerWebhook: (id: string, webhookSecret: string) =>
       client.post<WorkflowRun>(`/api/v1/workflows/${id}/webhook`, { webhookSecret }),

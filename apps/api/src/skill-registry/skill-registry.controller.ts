@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
@@ -18,6 +18,20 @@ import type {
 } from '@openagents/shared'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { SkillRegistryService } from './skill-registry.service'
+
+function parseOptionalBoolean(raw: string | undefined) {
+  if (typeof raw !== 'string') return undefined
+  const normalized = raw.trim().toLowerCase()
+  if (normalized === 'true' || normalized === '1') return true
+  if (normalized === 'false' || normalized === '0') return false
+  return undefined
+}
+
+function parseOptionalLimit(raw: string | undefined) {
+  if (typeof raw !== 'string') return undefined
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
 
 class SkillManifestDto {
   @IsString()
@@ -126,6 +140,24 @@ export class SkillRegistryController {
     return this.registry.list(req.user.id)
   }
 
+  @Get('public')
+  listPublic(
+    @Req() req: any,
+    @Query('q') q?: string,
+    @Query('tool') tool?: string,
+    @Query('tag') tag?: string,
+    @Query('featured') featured?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.registry.listPublic(req.user.id, {
+      q,
+      tool,
+      tag,
+      featured: parseOptionalBoolean(featured),
+      limit: parseOptionalLimit(limit),
+    })
+  }
+
   @Get(':skillId')
   get(@Req() req: any, @Param('skillId') skillId: string) {
     return this.registry.get(req.user.id, skillId)
@@ -134,6 +166,11 @@ export class SkillRegistryController {
   @Post('publish')
   publish(@Req() req: any, @Body() dto: PublishSkillVersionDto) {
     return this.registry.publish(req.user.id, dto)
+  }
+
+  @Post('public/:catalogId/install')
+  installPublic(@Req() req: any, @Param('catalogId') catalogId: string, @Body() dto: InstallSkillVersionDto) {
+    return this.registry.installPublic(req.user.id, catalogId, dto)
   }
 
   @Post(':skillId/install')

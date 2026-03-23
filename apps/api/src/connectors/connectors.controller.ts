@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
-import { IsBoolean, IsNumber, IsObject, IsOptional, IsString, Max, Min } from 'class-validator'
+import { IsArray, IsBoolean, IsNumber, IsObject, IsOptional, IsString, Max, Min } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { ConnectorsService } from './connectors.service'
 
@@ -34,6 +34,28 @@ class ReportConnectorHealthDto {
   metadata?: Record<string, unknown>
 }
 
+class SaveConnectorConnectionDto {
+  @IsString()
+  accessToken!: string
+
+  @IsOptional()
+  @IsString()
+  refreshToken?: string
+
+  @IsOptional()
+  @IsString()
+  tokenExpiresAt?: string
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  scopes?: string[]
+
+  @IsOptional()
+  @IsString()
+  accountEmail?: string
+}
+
 @ApiTags('connectors')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -51,8 +73,27 @@ export class ConnectorsController {
     return this.connectors.reconnect(req.user.id, connectorId)
   }
 
+  @Get(':connectorId/connection')
+  getConnection(@Req() req: any, @Param('connectorId') connectorId: string) {
+    return this.connectors.getConnection(req.user.id, connectorId)
+  }
+
   @Post('health/report')
   report(@Req() req: any, @Body() dto: ReportConnectorHealthDto) {
     return this.connectors.report(req.user.id, dto)
+  }
+
+  @Put(':connectorId/connection')
+  saveConnection(
+    @Req() req: any,
+    @Param('connectorId') connectorId: string,
+    @Body() dto: SaveConnectorConnectionDto,
+  ) {
+    return this.connectors.saveConnection(req.user.id, connectorId, dto)
+  }
+
+  @Delete(':connectorId/connection')
+  deleteConnection(@Req() req: any, @Param('connectorId') connectorId: string) {
+    return this.connectors.deleteConnection(req.user.id, connectorId)
   }
 }

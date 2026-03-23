@@ -13,6 +13,7 @@ import { NanobotLoopService } from '../../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../../nanobot/config/nanobot-config.service'
 import { NanobotBusService } from '../../nanobot/bus/nanobot-bus.service'
 import { ConnectorsService } from '../../connectors/connectors.service'
+import { ChannelCommandsService } from '../channel-commands.service'
 
 // Discord interaction types
 export const DISCORD_PING = 1
@@ -48,6 +49,7 @@ export class DiscordService {
     private nanobotConfig: NanobotConfigService,
     private bus: NanobotBusService,
     private connectors: ConnectorsService,
+    private channelCommands: ChannelCommandsService,
   ) {}
 
   health(): DiscordChannelHealth {
@@ -178,6 +180,54 @@ export class DiscordService {
       if (linked === 'expired') return this.ephemeralReply('Pairing code expired. Generate a new one from Channels > Discord.')
       if (linked === 'not_found') return this.ephemeralReply('Pairing code not found or already used.')
       return this.ephemeralReply('Server linked! You can now use /ask to chat with your OpenAgents assistant.')
+    }
+
+    if (commandName === 'help') {
+      return this.ephemeralReply(this.channelCommands.buildHelpReply('Discord'))
+    }
+
+    if (commandName === 'new' || commandName === 'status' || commandName === 'models' || commandName === 'memory') {
+      const effectiveGuildId = guildId ?? channelId
+      const server = await this.prisma.discordServer.findUnique({
+        where: { guildId: effectiveGuildId },
+        select: { id: true, userId: true, lastConversationId: true },
+      })
+      if (!server) {
+        return this.ephemeralReply('This server is not linked yet. Use /link OA-XXXXXX with a code from Channels > Discord.')
+      }
+
+      const commandResult = await this.channelCommands.handleNamedCommand(commandName, {
+        userId: server.userId,
+        sessionLabel: `discord:${effectiveGuildId}:${channelId}`,
+        channelLabel: 'Discord',
+        titleHint: `Discord ${effectiveGuildId}`,
+        conversationId: server.lastConversationId,
+      })
+      if (!commandResult) {
+        return this.ephemeralReply('Unknown command.')
+      }
+
+      await this.prisma.discordServer.update({
+        where: { id: server.id },
+        data: {
+          lastSeenAt: new Date(),
+          lastConversationId: commandResult.conversationId ?? undefined,
+          channelId,
+        },
+      }).catch(() => {})
+      await this.connectors.recordChannelActivity(server.userId, 'discord', {
+        success: true,
+      }).catch(() => {})
+      this.bus.publish('run.event', {
+        source: 'channels.discord',
+        direction: 'command',
+        command: commandResult.command,
+        guildId: effectiveGuildId,
+        channelId,
+        conversationId: commandResult.conversationId,
+        userId: server.userId,
+      })
+      return this.ephemeralReply(commandResult.reply)
     }
 
     // /ask or /chat — forward message to agent

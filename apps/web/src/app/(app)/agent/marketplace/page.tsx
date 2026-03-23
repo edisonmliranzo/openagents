@@ -3,26 +3,33 @@
 import { useCallback, useEffect, useState } from 'react'
 import { sdk } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
-import type { NanobotMarketplacePack } from '@openagents/shared'
+import type { NanobotMarketplacePack, PublicSkillCatalogEntry } from '@openagents/shared'
 
 export default function MarketplacePage() {
   const addToast = useUIStore((state) => state.addToast)
   const [packs, setPacks] = useState<NanobotMarketplacePack[]>([])
+  const [publicSkills, setPublicSkills] = useState<PublicSkillCatalogEntry[]>([])
   const [exportName, setExportName] = useState('my-skill-pack')
   const [exportDescription, setExportDescription] = useState('')
   const [includeOnlyEnabled, setIncludeOnlyEnabled] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [publicQuery, setPublicQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (query = '') => {
     setIsLoading(true)
     setError('')
     try {
-      const list = await sdk.nanobot.listMarketplacePacks()
-      setPacks(list)
+      const [packList, catalogList] = await Promise.all([
+        sdk.nanobot.listMarketplacePacks(),
+        sdk.skillRegistry.listPublic(query ? { q: query } : {}),
+      ])
+      setPacks(packList)
+      setPublicSkills(catalogList)
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to load marketplace packs')
+      setError(err?.message ?? 'Failed to load marketplace data')
     } finally {
       setIsLoading(false)
     }
@@ -37,11 +44,32 @@ export default function MarketplacePage() {
     setError('')
     try {
       const result = await sdk.nanobot.installMarketplacePack(packId)
-      await load()
+      await load(publicQuery)
       addToast('success', `Installed ${result.installedSkills.length} skills from ${packId}`)
     } catch (err: any) {
       setError(err?.message ?? 'Failed to install pack')
       addToast('error', err?.message ?? 'Failed to install pack')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleSearch() {
+    const nextQuery = searchQuery.trim()
+    setPublicQuery(nextQuery)
+    await load(nextQuery)
+  }
+
+  async function handleInstallPublic(skill: PublicSkillCatalogEntry) {
+    setIsSaving(true)
+    setError('')
+    try {
+      const result = await sdk.skillRegistry.installPublic(skill.catalogId)
+      await load(publicQuery)
+      addToast('success', `Installed ${result.title} v${result.installedVersion ?? skill.latestVersion.version}`)
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to install public skill')
+      addToast('error', err?.message ?? 'Failed to install public skill')
     } finally {
       setIsSaving(false)
     }
@@ -74,17 +102,125 @@ export default function MarketplacePage() {
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Capability Marketplace</h1>
-          <p className="mt-1 text-sm text-slate-500">Install curated skill packs and export your own packs for reuse.</p>
+          <p className="mt-1 text-sm text-slate-500">Search public skills, install curated packs, and export your own packs for reuse.</p>
         </div>
         <button
           type="button"
-          onClick={() => void load()}
+          onClick={() => void load(publicQuery)}
           disabled={isLoading}
           className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
         >
           {isLoading ? 'Refreshing...' : 'Refresh'}
         </button>
       </header>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Public Skills</h2>
+            <p className="mt-1 text-sm text-slate-500">Install individual skills from the shared OpenAgents catalog.</p>
+          </div>
+          <form
+            className="flex w-full max-w-xl flex-wrap gap-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void handleSearch()
+            }}
+          >
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by title, tag, tool, or workflow"
+              className="h-10 min-w-[260px] flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-rose-200 focus:ring-2 focus:ring-rose-100"
+            />
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="h-10 rounded-lg bg-slate-900 px-4 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              Search
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {publicSkills.map((skill) => (
+            <article key={skill.catalogId} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{skill.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{skill.publisher}</p>
+                </div>
+                <div className="flex flex-wrap justify-end gap-1">
+                  {skill.featured && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                      featured
+                    </span>
+                  )}
+                  {skill.installedVersion && (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      installed v{skill.installedVersion}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-600">{skill.description}</p>
+              <p className="mt-2 text-[11px] text-slate-500">
+                v{skill.latestVersion.version} - {skill.downloads.toLocaleString()} installs
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">tools: {skill.latestVersion.manifest.tools.join(', ')}</p>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {skill.tags.map((tag) => (
+                  <span key={tag} className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-600">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              {skill.missingTools.length > 0 && (
+                <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
+                  Missing tools: {skill.missingTools.join(', ')}
+                </p>
+              )}
+              {!skill.installable && skill.missingTools.length === 0 && (
+                <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
+                  This skill is not installable on the current API version.
+                </p>
+              )}
+              <div className="mt-3 flex items-center justify-between gap-3">
+                {skill.sourceUrl ? (
+                  <a
+                    href={skill.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-medium text-slate-500 hover:text-slate-700"
+                  >
+                    Source
+                  </a>
+                ) : (
+                  <span className="text-[11px] text-slate-400">{publicQuery ? `query: ${publicQuery}` : 'catalog'}</span>
+                )}
+                <button
+                  type="button"
+                  disabled={isSaving || !skill.installable}
+                  onClick={() => void handleInstallPublic(skill)}
+                  className="rounded-lg bg-rose-500 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-600 disabled:opacity-50"
+                >
+                  {skill.installedVersion ? 'Reinstall skill' : 'Install skill'}
+                </button>
+              </div>
+            </article>
+          ))}
+          {publicSkills.length === 0 && (
+            <p className="text-sm text-slate-500">
+              {isLoading
+                ? 'Loading public skills...'
+                : publicQuery
+                  ? 'No public skills matched that search.'
+                  : 'No public skills available.'}
+            </p>
+          )}
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Curated Packs</h2>
@@ -138,13 +274,13 @@ export default function MarketplacePage() {
         <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
           <input
             value={exportName}
-            onChange={(e) => setExportName(e.target.value)}
+            onChange={(event) => setExportName(event.target.value)}
             placeholder="Pack name"
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-rose-200 focus:ring-2 focus:ring-rose-100"
           />
           <input
             value={exportDescription}
-            onChange={(e) => setExportDescription(e.target.value)}
+            onChange={(event) => setExportDescription(event.target.value)}
             placeholder="Description (optional)"
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-rose-200 focus:ring-2 focus:ring-rose-100"
           />
@@ -162,7 +298,7 @@ export default function MarketplacePage() {
           <input
             type="checkbox"
             checked={includeOnlyEnabled}
-            onChange={(e) => setIncludeOnlyEnabled(e.target.checked)}
+            onChange={(event) => setIncludeOnlyEnabled(event.target.checked)}
             className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-200"
           />
           Include only enabled skills
@@ -177,4 +313,3 @@ export default function MarketplacePage() {
     </div>
   )
 }
-

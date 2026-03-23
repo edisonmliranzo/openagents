@@ -4,7 +4,39 @@ import clsx from 'clsx'
 import { useCallback, useMemo, useState } from 'react'
 import { sdk } from '@/stores/auth'
 import type { DataLineageRecord, Message } from '@openagents/shared'
-import { Copy } from 'lucide-react'
+import { Brain, ChevronDown, ChevronRight, Copy } from 'lucide-react'
+
+// Strip <thinking>…</thinking> blocks out of visible content and return them separately.
+function extractThinkingBlocks(raw: string): { thinking: string[]; visible: string } {
+  const thinking: string[] = []
+  const visible = raw.replace(/<thinking>([\s\S]*?)<\/thinking>/gi, (_, block: string) => {
+    thinking.push(block.trim())
+    return ''
+  }).trim()
+  return { thinking, visible }
+}
+
+function ThinkingBlock({ content }: { content: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="my-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-semibold text-[var(--muted)] transition hover:text-[var(--tone-default)] dark:hover:text-[var(--tone-inverse)]"
+      >
+        <Brain size={12} className="shrink-0" />
+        <span className="flex-1">Thinking</span>
+        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+      </button>
+      {open && (
+        <pre className="border-t border-[var(--border)] px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+          {content}
+        </pre>
+      )}
+    </div>
+  )
+}
 
 function formatClock(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -130,7 +162,11 @@ async function copyToClipboard(text: string) {
 
 export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === 'user'
-  const blocks = useMemo(() => parseMessageBlocks(message.content ?? ''), [message.content])
+  const { thinking, visible } = useMemo(
+    () => extractThinkingBlocks(message.content ?? ''),
+    [message.content],
+  )
+  const blocks = useMemo(() => parseMessageBlocks(visible), [visible])
   const codeBlocks = useMemo(
     () => blocks.filter((block) => block.type === 'code').map((block) => block.content),
     [blocks],
@@ -238,8 +274,12 @@ export function MessageBubble({ message }: { message: Message }) {
           </div>
         </div>
 
+        {thinking.map((block, idx) => (
+          <ThinkingBlock key={`thinking-${idx}`} content={block} />
+        ))}
+
         <div className="space-y-1">
-          {message.content ? (
+          {visible ? (
             blocks.map((block, idx) => {
               if (block.type === 'text') {
                 if (!block.content.trim()) return <div key={`line-empty-${idx}`} className="h-2" />

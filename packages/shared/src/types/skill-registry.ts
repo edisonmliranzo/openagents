@@ -32,6 +32,31 @@ export interface SkillRegistryEntry {
   createdAt: string
 }
 
+export interface PublicSkillCatalogEntry {
+  catalogId: string
+  skillId: string
+  title: string
+  description: string
+  publisher: string
+  tags: string[]
+  featured: boolean
+  downloads: number
+  latestVersion: SkillRegistryVersion
+  installedVersion: string | null
+  installable: boolean
+  missingTools: string[]
+  sourceUrl?: string
+  updatedAt: string
+}
+
+export interface SearchPublicSkillsInput {
+  q?: string
+  tool?: string
+  tag?: string
+  featured?: boolean
+  limit?: number
+}
+
 export interface PublishSkillVersionInput {
   skill: SkillManifest
   version: string

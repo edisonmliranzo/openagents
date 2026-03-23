@@ -3,11 +3,23 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
+  ConversationLineageGraph,
   CreateDataLineageInput,
   DataLineageRecord,
+  LineageGraphEdge,
+  LineageGraphNode,
   LineageToolInfluence,
   LineageToolStatus,
 } from '@openagents/shared'
+
+export interface AnomalyAlert {
+  toolName: string
+  recentCount: number
+  avgPerSession: number
+  ratio: number
+  severity: 'low' | 'medium' | 'high'
+  detectedAt: string
+}
 
 const LINEAGE_FILE = 'LINEAGE.json'
 const STORE_VERSION = 1
@@ -77,6 +89,148 @@ export class DataLineageService {
     const record = await this.getByMessage(userId, messageId)
     if (!record) throw new NotFoundException(`Lineage for message "${messageId}" not found.`)
     return record
+  }
+
+  /**
+   * Anomaly detection: compare recent tool call rate to baseline.
+   * Returns an alert if any tool is called ≥ 3x the user's per-session average.
+   */
+  async detectAnomalies(userId: string): Promise<{ alerts: AnomalyAlert[] }> {
+    await this.ensureLoaded(userId)
+    const records = [...(this.recordsByUser.get(userId) ?? [])]
+    if (records.length < 5) return { alerts: [] }
+
+    const toolCountsBySession = new Map<string, Map<string, number>>()
+    const oneHourAgo = Date.now() - 60 * 60 * 1000
+    const recentCounts = new Map<string, number>()
+
+    for (const record of records) {
+      const sessionKey = record.runId ?? record.conversationId
+      if (!toolCountsBySession.has(sessionKey)) {
+        toolCountsBySession.set(sessionKey, new Map())
+      }
+      const sessionCounts = toolCountsBySession.get(sessionKey)!
+      const ts = new Date(record.createdAt).getTime()
+      for (const tool of record.tools) {
+        sessionCounts.set(tool.toolName, (sessionCounts.get(tool.toolName) ?? 0) + 1)
+        if (ts >= oneHourAgo) {
+          recentCounts.set(tool.toolName, (recentCounts.get(tool.toolName) ?? 0) + 1)
+        }
+      }
+    }
+
+    const toolTotals = new Map<string, { total: number; sessions: number }>()
+    for (const sessionCounts of toolCountsBySession.values()) {
+      for (const [toolName, count] of sessionCounts) {
+        const existing = toolTotals.get(toolName) ?? { total: 0, sessions: 0 }
+        toolTotals.set(toolName, { total: existing.total + count, sessions: existing.sessions + 1 })
+      }
+    }
+
+    const alerts: AnomalyAlert[] = []
+    for (const [toolName, recentCount] of recentCounts) {
+      const stats = toolTotals.get(toolName)
+      if (!stats || stats.sessions < 3) continue
+      const avgPerSession = stats.total / stats.sessions
+      if (avgPerSession < 1) continue
+      const ratio = recentCount / avgPerSession
+      if (ratio >= 3) {
+        alerts.push({
+          toolName,
+          recentCount,
+          avgPerSession: Math.round(avgPerSession * 10) / 10,
+          ratio: Math.round(ratio * 10) / 10,
+          severity: ratio >= 10 ? 'high' : ratio >= 5 ? 'medium' : 'low',
+          detectedAt: new Date().toISOString(),
+        })
+      }
+    }
+
+    return { alerts }
+  }
+
+  async buildConversationGraph(userId: string, conversationId: string, limit = 80): Promise<ConversationLineageGraph> {
+    const records = await this.listConversation(userId, conversationId, limit)
+    const nodes: LineageGraphNode[] = []
+    const edges: LineageGraphEdge[] = []
+    const seenNodes = new Set<string>()
+    const seenEdges = new Set<string>()
+
+    const pushNode = (node: LineageGraphNode) => {
+      if (seenNodes.has(node.id)) return
+      seenNodes.add(node.id)
+      nodes.push(node)
+    }
+
+    const pushEdge = (edge: LineageGraphEdge) => {
+      const key = `${edge.from}:${edge.to}:${edge.label}`
+      if (seenEdges.has(key)) return
+      seenEdges.add(key)
+      edges.push(edge)
+    }
+
+    for (const record of records) {
+      const messageNodeId = `message:${record.messageId}`
+      pushNode({
+        id: messageNodeId,
+        kind: 'message',
+        label: record.messageId,
+        metadata: {
+          source: record.source,
+          createdAt: record.createdAt,
+          runId: record.runId ?? null,
+        },
+      })
+
+      for (const file of record.memoryFiles) {
+        const nodeId = `memory_file:${file}`
+        pushNode({ id: nodeId, kind: 'memory_file', label: file })
+        pushEdge({ from: messageNodeId, to: nodeId, label: 'used_memory_file' })
+      }
+
+      for (const approvalId of record.approvals) {
+        const nodeId = `approval:${approvalId}`
+        pushNode({ id: nodeId, kind: 'approval', label: approvalId })
+        pushEdge({ from: messageNodeId, to: nodeId, label: 'linked_approval' })
+      }
+
+      for (const note of record.notes) {
+        const nodeId = `note:${record.messageId}:${note}`
+        pushNode({ id: nodeId, kind: 'note', label: note })
+        pushEdge({ from: messageNodeId, to: nodeId, label: 'annotation' })
+      }
+
+      for (const external of record.externalSources) {
+        const nodeId = `external:${external}`
+        pushNode({ id: nodeId, kind: 'external_source', label: external })
+        pushEdge({ from: messageNodeId, to: nodeId, label: 'referenced_external_source' })
+      }
+
+      for (const tool of record.tools) {
+        const nodeId = `tool:${record.messageId}:${tool.toolName}`
+        pushNode({
+          id: nodeId,
+          kind: 'tool',
+          label: tool.toolName,
+          metadata: {
+            status: tool.status,
+            requiresApproval: tool.requiresApproval,
+            approvalId: tool.approvalId ?? null,
+          },
+        })
+        pushEdge({ from: messageNodeId, to: nodeId, label: 'invoked_tool' })
+        if (tool.approvalId) {
+          pushEdge({ from: nodeId, to: `approval:${tool.approvalId}`, label: 'gated_by' })
+        }
+      }
+    }
+
+    return {
+      conversationId,
+      nodes,
+      edges,
+      generatedAt: new Date().toISOString(),
+    }
   }
 
   extractExternalSources(value: unknown): string[] {

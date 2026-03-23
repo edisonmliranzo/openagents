@@ -3,9 +3,11 @@ import { createHmac } from 'node:crypto'
 import type {
   InstallSkillVersionInput,
   PinSkillVersionInput,
+  PublicSkillCatalogEntry,
   PublishSkillVersionInput,
   PublishSkillVersionResult,
   RollbackSkillVersionInput,
+  SearchPublicSkillsInput,
   SkillCompatibility,
   SkillManifest,
   SkillRegistryEntry as SkillRegistryEntryDto,
@@ -26,6 +28,151 @@ interface StoredSkillVersion {
   signature: string
   publishedAt: string
 }
+
+interface PublicCatalogDefinition {
+  catalogId: string
+  publisher: string
+  tags: string[]
+  featured: boolean
+  downloads: number
+  sourceUrl?: string
+  version: string
+  changelog: string
+  manifest: SkillManifest
+  compatibility?: SkillCompatibility
+  publishedAt: string
+}
+
+const PUBLIC_SKILL_CATALOG: PublicCatalogDefinition[] = [
+  {
+    catalogId: 'research-briefing',
+    publisher: 'OpenAgents Catalog',
+    tags: ['research', 'analysis', 'briefing'],
+    featured: true,
+    downloads: 1840,
+    sourceUrl: 'https://github.com/HKUDS/nanobot',
+    version: '1.0.0',
+    changelog: 'Initial public catalog release for research synthesis and citation-ready briefings.',
+    manifest: {
+      id: 'catalog-research-briefing',
+      title: 'Research Briefing',
+      description: 'Search, fetch, and summarize public sources into a concise, citation-ready briefing.',
+      tools: ['web_search', 'web_fetch', 'deep_research', 'notes_create', 'notes_list'],
+      promptAppendix: 'Prioritize current sources, extract verifiable facts, and separate evidence from inference.',
+    },
+    compatibility: {
+      minApiVersion: '1.0.0',
+      requiredTools: ['web_search', 'web_fetch', 'deep_research', 'notes_create'],
+    },
+    publishedAt: '2026-02-16T00:00:00.000Z',
+  },
+  {
+    catalogId: 'bug-triage',
+    publisher: 'OpenAgents Catalog',
+    tags: ['engineering', 'debugging', 'triage'],
+    featured: true,
+    downloads: 1530,
+    sourceUrl: 'https://github.com/HKUDS/nanobot',
+    version: '1.0.0',
+    changelog: 'Initial public catalog release for issue triage and patch planning.',
+    manifest: {
+      id: 'catalog-bug-triage',
+      title: 'Bug Triage',
+      description: 'Turn vague bug reports into actionable triage notes, hypotheses, and next checks.',
+      tools: ['web_fetch', 'notes_create', 'notes_list'],
+      promptAppendix: 'Ask for reproduction context, isolate likely root causes, and propose the smallest validating check first.',
+    },
+    compatibility: {
+      minApiVersion: '1.0.0',
+      requiredTools: ['web_fetch', 'notes_create'],
+    },
+    publishedAt: '2026-02-18T00:00:00.000Z',
+  },
+  {
+    catalogId: 'incident-commander',
+    publisher: 'OpenAgents Catalog',
+    tags: ['ops', 'incident', 'sre'],
+    featured: true,
+    downloads: 1275,
+    version: '1.0.0',
+    changelog: 'Initial public catalog release for incident response coordination.',
+    manifest: {
+      id: 'catalog-incident-commander',
+      title: 'Incident Commander',
+      description: 'Structure production incidents into timeline, blast radius, mitigations, and follow-up actions.',
+      tools: ['web_fetch', 'notes_create', 'notes_list'],
+      promptAppendix: 'Use a calm incident-command style, capture time-stamped facts, and clearly separate mitigation from root cause.',
+    },
+    compatibility: {
+      minApiVersion: '1.0.0',
+      requiredTools: ['web_fetch', 'notes_create'],
+    },
+    publishedAt: '2026-02-20T00:00:00.000Z',
+  },
+  {
+    catalogId: 'release-readiness',
+    publisher: 'OpenAgents Catalog',
+    tags: ['engineering', 'release', 'qa'],
+    featured: false,
+    downloads: 890,
+    version: '1.0.0',
+    changelog: 'Initial public catalog release for release checklist and rollback prep.',
+    manifest: {
+      id: 'catalog-release-readiness',
+      title: 'Release Readiness',
+      description: 'Generate a pragmatic release checklist with rollback guidance and verification gates.',
+      tools: ['notes_create', 'notes_list', 'cron_add'],
+      promptAppendix: 'Prefer concrete launch gates, rollback triggers, owner assignments, and post-release verification steps.',
+    },
+    compatibility: {
+      minApiVersion: '1.0.0',
+      requiredTools: ['notes_create', 'cron_add'],
+    },
+    publishedAt: '2026-02-21T00:00:00.000Z',
+  },
+  {
+    catalogId: 'content-researcher',
+    publisher: 'OpenAgents Catalog',
+    tags: ['content', 'social', 'research'],
+    featured: false,
+    downloads: 1040,
+    version: '1.0.0',
+    changelog: 'Initial public catalog release for content idea research and script planning.',
+    manifest: {
+      id: 'catalog-content-researcher',
+      title: 'Content Researcher',
+      description: 'Research content angles, gather examples, and produce structured briefs for short-form content.',
+      tools: ['web_search', 'deep_research', 'notes_create', 'notes_list'],
+      promptAppendix: 'Focus on audience fit, hook quality, and repeatable content angles instead of generic inspiration.',
+    },
+    compatibility: {
+      minApiVersion: '1.0.0',
+      requiredTools: ['web_search', 'deep_research', 'notes_create'],
+    },
+    publishedAt: '2026-02-22T00:00:00.000Z',
+  },
+  {
+    catalogId: 'market-watch',
+    publisher: 'OpenAgents Catalog',
+    tags: ['finance', 'markets', 'monitoring'],
+    featured: false,
+    downloads: 760,
+    version: '1.0.0',
+    changelog: 'Initial public catalog release for market monitoring and scheduled briefings.',
+    manifest: {
+      id: 'catalog-market-watch',
+      title: 'Market Watch',
+      description: 'Track market context, summarize changes, and prepare recurring watchlist updates.',
+      tools: ['web_search', 'web_fetch', 'deep_research', 'get_current_time', 'notes_create', 'cron_add'],
+      promptAppendix: 'Highlight price-moving events, watchlist updates, and uncertainty. Avoid unsupported trading claims.',
+    },
+    compatibility: {
+      minApiVersion: '1.0.0',
+      requiredTools: ['web_search', 'web_fetch', 'deep_research', 'cron_add'],
+    },
+    publishedAt: '2026-02-24T00:00:00.000Z',
+  },
+]
 
 @Injectable()
 export class SkillRegistryService {
@@ -67,6 +214,81 @@ export class SkillRegistryService {
     })
     if (!row) throw new NotFoundException(`Skill "${normalizedSkillId}" is not in the registry.`)
     return this.toEntry(row)
+  }
+
+  async listPublic(userId: string, input: SearchPublicSkillsInput = {}): Promise<PublicSkillCatalogEntry[]> {
+    const query = this.optionalText(input.q)?.toLowerCase() ?? null
+    const toolFilter = this.optionalText(input.tool)?.toLowerCase() ?? null
+    const tagFilter = this.optionalText(input.tag)?.toLowerCase() ?? null
+    const featuredFilter = typeof input.featured === 'boolean' ? input.featured : undefined
+    const limit = this.normalizeCatalogLimit(input.limit)
+    const skillIds = PUBLIC_SKILL_CATALOG.map((skill) => skill.manifest.id)
+
+    const [installedRows, toolDefinitions] = await Promise.all([
+      this.prisma.skillRegistryEntry.findMany({
+        where: {
+          userId,
+          skillId: { in: skillIds },
+        },
+        select: {
+          skillId: true,
+          installedVersion: true,
+          updatedAt: true,
+        },
+      }),
+      this.tools.getAllDefinitions(),
+    ])
+
+    const installedBySkillId = new Map(installedRows.map((row) => [row.skillId, row]))
+    const knownTools = new Set(toolDefinitions.map((tool) => tool.name))
+
+    const results = PUBLIC_SKILL_CATALOG
+      .map((definition) => {
+        const latestVersion = this.buildCatalogVersionDto(definition)
+        const installed = installedBySkillId.get(definition.manifest.id)
+        const missingTools = this.collectMissingCatalogTools(definition, knownTools)
+        const entry: PublicSkillCatalogEntry = {
+          catalogId: definition.catalogId,
+          skillId: definition.manifest.id,
+          title: definition.manifest.title,
+          description: definition.manifest.description,
+          publisher: definition.publisher,
+          tags: definition.tags,
+          featured: definition.featured,
+          downloads: definition.downloads,
+          latestVersion,
+          installedVersion: installed?.installedVersion ?? null,
+          installable: this.isCatalogDefinitionInstallable(definition, missingTools),
+          missingTools,
+          ...(definition.sourceUrl ? { sourceUrl: definition.sourceUrl } : {}),
+          updatedAt: installed?.updatedAt.toISOString() ?? latestVersion.publishedAt,
+        }
+        return entry
+      })
+      .filter((entry) => {
+        if (featuredFilter !== undefined && entry.featured !== featuredFilter) return false
+        if (toolFilter && !entry.latestVersion.manifest.tools.some((tool) => tool.toLowerCase() === toolFilter)) {
+          return false
+        }
+        if (tagFilter && !entry.tags.some((tag) => tag.toLowerCase() === tagFilter)) return false
+        if (!query) return true
+
+        const haystack = [
+          entry.title,
+          entry.description,
+          entry.publisher,
+          ...entry.tags,
+          ...entry.latestVersion.manifest.tools,
+        ].join(' ').toLowerCase()
+        return haystack.includes(query)
+      })
+      .sort((left, right) => {
+        if (left.featured !== right.featured) return left.featured ? -1 : 1
+        if (left.downloads !== right.downloads) return right.downloads - left.downloads
+        return left.title.localeCompare(right.title)
+      })
+
+    return results.slice(0, limit)
   }
 
   async publish(userId: string, input: PublishSkillVersionInput): Promise<PublishSkillVersionResult> {
@@ -179,6 +401,28 @@ export class SkillRegistryService {
     })
 
     return this.get(userId, entry.skillId)
+  }
+
+  async installPublic(
+    userId: string,
+    catalogId: string,
+    input: InstallSkillVersionInput = {},
+  ): Promise<SkillRegistryEntryDto> {
+    const definition = this.requirePublicCatalogDefinition(catalogId)
+    const requestedVersion = input.version ? this.normalizeVersion(input.version) : null
+    if (requestedVersion && requestedVersion !== definition.version) {
+      throw new NotFoundException(
+        `Catalog skill "${definition.catalogId}" does not publish version "${requestedVersion}".`,
+      )
+    }
+
+    const entry = await this.upsertPublicCatalogEntry(userId, definition)
+    await this.ensureCatalogVersion(entry.id, definition)
+
+    return this.install(userId, entry.skillId, {
+      ...input,
+      version: definition.version,
+    })
   }
 
   async rollback(
@@ -324,6 +568,124 @@ export class SkillRegistryService {
     }
   }
 
+  private requirePublicCatalogDefinition(catalogId: string) {
+    const normalizedCatalogId = this.normalizeSkillId(catalogId)
+    const match = PUBLIC_SKILL_CATALOG.find((entry) => entry.catalogId === normalizedCatalogId)
+    if (!match) {
+      throw new NotFoundException(`Public catalog skill "${normalizedCatalogId}" was not found.`)
+    }
+    return match
+  }
+
+  private async upsertPublicCatalogEntry(userId: string, definition: PublicCatalogDefinition) {
+    const manifest = this.sanitizeManifest(definition.manifest)
+    return this.prisma.skillRegistryEntry.upsert({
+      where: {
+        userId_skillId: {
+          userId,
+          skillId: manifest.id,
+        },
+      },
+      update: {
+        title: manifest.title,
+        description: manifest.description,
+      },
+      create: {
+        userId,
+        skillId: manifest.id,
+        title: manifest.title,
+        description: manifest.description,
+        pinnedAgents: '{}',
+      },
+      select: {
+        id: true,
+        skillId: true,
+      },
+    })
+  }
+
+  private async ensureCatalogVersion(entryId: string, definition: PublicCatalogDefinition) {
+    const version = this.buildCatalogVersion(definition)
+    await this.prisma.skillRegistryVersion.upsert({
+      where: {
+        entryId_version: {
+          entryId,
+          version: version.version,
+        },
+      },
+      update: {
+        changelog: version.changelog,
+        manifestJson: this.safeSerialize(version.manifest),
+        compatibilityJson: version.compatibility ? this.safeSerialize(version.compatibility) : null,
+        signature: version.signature,
+        publishedAt: new Date(version.publishedAt),
+      },
+      create: {
+        entryId,
+        version: version.version,
+        changelog: version.changelog,
+        manifestJson: this.safeSerialize(version.manifest),
+        compatibilityJson: version.compatibility ? this.safeSerialize(version.compatibility) : null,
+        signature: version.signature,
+        publishedAt: new Date(version.publishedAt),
+      },
+    })
+  }
+
+  private buildCatalogVersion(definition: PublicCatalogDefinition): StoredSkillVersion {
+    const manifest = this.sanitizeManifest(definition.manifest)
+    const version = this.normalizeVersion(definition.version)
+    const changelog = this.normalizeChangelog(definition.changelog)
+    const compatibility = this.sanitizeCompatibility(definition.compatibility)
+    if (compatibility) {
+      this.assertCompatibilityReferences(compatibility)
+    }
+
+    return {
+      version,
+      changelog,
+      manifest,
+      compatibility,
+      signature: this.signVersion({
+        skillId: manifest.id,
+        version,
+        changelog,
+        manifest,
+        compatibility,
+        publishedAt: definition.publishedAt,
+      }),
+      publishedAt: definition.publishedAt,
+    }
+  }
+
+  private buildCatalogVersionDto(definition: PublicCatalogDefinition): SkillRegistryVersionDto {
+    return this.buildCatalogVersion(definition)
+  }
+
+  private collectMissingCatalogTools(definition: PublicCatalogDefinition, knownTools: Set<string>) {
+    const required = new Set(definition.manifest.tools)
+    const compatibility = this.sanitizeCompatibility(definition.compatibility)
+    for (const tool of compatibility?.requiredTools ?? []) {
+      required.add(tool)
+    }
+    return [...required].filter((tool) => !knownTools.has(tool)).sort((left, right) => left.localeCompare(right))
+  }
+
+  private isCatalogDefinitionInstallable(definition: PublicCatalogDefinition, missingTools: string[]) {
+    if (missingTools.length > 0) return false
+
+    const compatibility = this.sanitizeCompatibility(definition.compatibility)
+    if (!compatibility) return true
+
+    if (compatibility.minApiVersion && this.compareSemver(this.apiSemver, compatibility.minApiVersion) < 0) {
+      return false
+    }
+    if (compatibility.maxApiVersion && this.compareSemver(this.apiSemver, compatibility.maxApiVersion) > 0) {
+      return false
+    }
+    return true
+  }
+
   private assertCompatibilityReferences(compatibility: SkillCompatibility | null) {
     if (!compatibility) return
     if (compatibility.minApiVersion && !SEMVER_PATTERN.test(compatibility.minApiVersion)) {
@@ -401,6 +763,11 @@ export class SkillRegistryService {
       throw new BadRequestException(`Invalid semantic version: "${raw}".`)
     }
     return value
+  }
+
+  private normalizeCatalogLimit(raw: number | undefined) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return 24
+    return Math.max(1, Math.min(Math.trunc(raw), 100))
   }
 
   private normalizeSkillId(raw: string) {

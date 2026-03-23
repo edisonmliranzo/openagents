@@ -9,6 +9,7 @@ It can answer questions, research the web, break a goal into steps, write conten
 - [MVP Feature Pack](docs/mvp-feature-pack.md)
 - [OpenClaw Parity Roadmap](docs/openclaw-parity.md)
 - [Product Expansion Roadmap](docs/product-expansion-roadmap.md)
+- [Expansion Delivery Plan](docs/expansion-delivery-plan.md)
 
 ## Highlights
 
@@ -759,6 +760,21 @@ pnpm ml:api
 ```
 
 Full guide: `ml/README.md`.
+
+### Messaging channel commands
+
+Linked messaging channels now support Deer Flow–style control commands in addition to normal chat.
+
+- Supported on linked Telegram, Slack, Discord, and WhatsApp sessions.
+- Messages without a leading slash still route to the assistant as normal chat.
+- Available commands:
+  - `/new` starts a fresh thread for the current channel session
+  - `/status` shows the current thread id, last activity timestamp, and active runtime
+  - `/models` shows the current provider/model plus quick model options
+  - `/memory` shows a short memory snapshot (files, recent facts, and knowledge sources)
+  - `/help` prints the command list
+
+On Discord, these are handled as slash commands alongside the existing `/link` and `/ask` flow.
 
 ### WhatsApp channel (Twilio)
 
