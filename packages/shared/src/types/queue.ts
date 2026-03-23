@@ -32,7 +32,7 @@ export interface WorkflowRunJobData {
   userId: string
   workflowId: string
   runId: string
-  triggerKind: 'manual' | 'schedule' | 'webhook' | 'inbox_event'
+  triggerKind: 'manual' | 'schedule' | 'webhook' | 'inbox_event' | 'connector_event'
   idempotencyKey?: string
   sourceEvent?: string
   approvedKeys?: string[]
