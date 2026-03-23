@@ -11,7 +11,7 @@ export function createAgentVersionsApi(client: OpenAgentsClient) {
 
     get: (id: string) => client.get<AgentVersionSnapshot>(`/api/v1/agent-versions/${id}`),
 
-    create: (input: CreateAgentVersionInput = {}) =>
+    create: (input: CreateAgentVersionInput) =>
       client.post<AgentVersionSnapshot>('/api/v1/agent-versions', input),
 
     diff: (fromId: string, toId: string) =>
