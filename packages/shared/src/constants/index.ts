@@ -64,6 +64,7 @@ export const LLM_MODEL_OPTIONS = {
     'gemma3:1b',
     'nemotron',
     'nemotron-mini',
+    'huihui_ai/kimi-k2',
     'kimi-k2:1t-cloud',
     'kimi-k2.5:cloud',
     'minimax-m1:cloud',
