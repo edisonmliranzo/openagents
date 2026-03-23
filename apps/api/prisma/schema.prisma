@@ -49,6 +49,13 @@ model User {
   discordPairings  DiscordPairing[]
   subagentRuns     SubagentRun[]
   delegationEdges  DelegationEdge[]
+  webhooks         Webhook[]
+  webhookDeliveries WebhookDelivery[]
+  metricLogs       MetricLog[]
+  budgetLimits     BudgetLimit[]
+  conversationSummaries ConversationSummary[]
+  conversationHighlights ConversationHighlight[]
+  actionItems      ActionItem[]
 }
 
 model RefreshToken {
@@ -670,4 +677,151 @@ model DiscordPairing {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, createdAt])
+}
+
+// ─── Webhooks ─────────────────────────────────────────────────────────────────
+
+model Webhook {
+  id        String   @id @default(cuid())
+  userId    String
+  url       String
+  events    String   // JSON array string - WebhookEventType[]
+  secret    String?
+  enabled   Boolean  @default(true)
+  headers   String?  // JSON string for custom headers
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@unique([userId, url])
+  @@index([userId, enabled])
+}
+
+model WebhookDelivery {
+  id              String   @id @default(cuid())
+  webhookId       String
+  userId          String
+  event           String   // WebhookEventType
+  payload         String   // JSON string - WebhookPayload
+  status          String   @default("pending") // pending | success | failed | retrying
+  attempts        Int      @default(0)
+  lastAttemptAt   DateTime?
+  responseStatus  Int?
+  responseBody    String?
+  error           String?
+  createdAt       DateTime @default(now())
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, status])
+  @@index([webhookId, createdAt])
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
+
+// ─── Metrics & Analytics ──────────────────────────────────────────────────────
+
+model MetricLog {
+  id              String   @id @default(cuid())
+  userId          String
+  metricType      String   // agent_run | tool_call | approval | conversation
+  action          String   // started | completed | failed | approved | denied
+  provider        String?  // anthropic | openai | google | minimax | ollama
+  model           String?
+  durationMs      Int?
+  tokensUsed      Int?
+  costUsd         Float?
+  conversationId   String?
+  toolName        String?
+  metadata        String?  // JSON string
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, metricType, createdAt])
+  @@index([userId, createdAt])
+  @@index([metricType, createdAt])
+}
+
+model BudgetLimit {
+  id            String   @id @default(cuid())
+  userId        String
+  budgetType    String   // daily | weekly | monthly | total
+  limitUsd      Float
+  alertAtUsd   Float?   // Send warning at this threshold
+  currentSpentUsd Float  @default(0)
+  periodStart   DateTime
+  periodEnd     DateTime
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, budgetType])
+  @@index([userId, periodStart])
+}
+
+// ─── Conversation Summarization ─────────────────────────────────────────────────
+
+model ConversationSummary {
+  id              String   @id @default(cuid())
+  conversationId   String
+  userId          String
+  summary         String
+  keyTopics       String   @default("[]") // JSON array
+  type            String   @default("auto") // auto | manual
+  summaryType     String   @default("full") // full | recent | delta
+  tokensUsed      Int?
+  model           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  highlights ConversationHighlight[]
+
+  @@index([userId, conversationId])
+  @@index([conversationId, createdAt])
+}
+
+model ConversationHighlight {
+  id              String   @id @default(cuid())
+  summaryId       String
+  messageId       String
+  userId          String
+  type            String   // key_point | decision | question | insight | action
+  content         String
+  importance      String   @default("medium") // low | medium | high
+  startIndex     Int?
+  endIndex       Int?
+  createdAt       DateTime @default(now())
+
+  summary ConversationSummary @relation(fields: [summaryId], references: [id], onDelete: Cascade)
+  user   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actionItem ActionItem?
+
+  @@index([userId, createdAt])
+  @@index([summaryId, type])
+}
+
+model ActionItem {
+  id              String   @id @default(cuid())
+  userId          String
+  highlightId     String?  @unique
+  description     String
+  assignee        String?
+  dueDate         DateTime?
+  status          String   @default("pending") // pending | completed | deferred
+  sourceMessageId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  highlight ConversationHighlight? @relation(fields: [highlightId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([userId, dueDate])
 }
