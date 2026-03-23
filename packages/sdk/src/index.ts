@@ -19,14 +19,12 @@ export { createPlatformApi } from './api/platform'
 export { createWorkflowsApi } from './api/workflows'
 export { createMissionControlApi } from './api/mission-control'
 export { createPlaybooksApi } from './api/playbooks'
-export { createAgentVersionsApi } from './api/agent-versions'
 export { createHandoffsApi } from './api/handoffs'
 export { createSkillReputationApi } from './api/skill-reputation'
 export { createLineageApi } from './api/lineage'
 export { createPolicyApi } from './api/policy'
 export { createExtractionApi } from './api/extraction'
 export { createCiHealerApi } from './api/ci-healer'
-export { createConnectorsApi } from './api/connectors'
 export { createSkillRegistryApi } from './api/skill-registry'
 
 import { OpenAgentsClient } from './client'
@@ -49,14 +47,12 @@ import { createPlatformApi } from './api/platform'
 import { createWorkflowsApi } from './api/workflows'
 import { createMissionControlApi } from './api/mission-control'
 import { createPlaybooksApi } from './api/playbooks'
-import { createAgentVersionsApi } from './api/agent-versions'
 import { createHandoffsApi } from './api/handoffs'
 import { createSkillReputationApi } from './api/skill-reputation'
 import { createLineageApi } from './api/lineage'
 import { createPolicyApi } from './api/policy'
 import { createExtractionApi } from './api/extraction'
 import { createCiHealerApi } from './api/ci-healer'
-import { createConnectorsApi } from './api/connectors'
 import { createSkillRegistryApi } from './api/skill-registry'
 import type { SDKConfig } from './client'
 
@@ -84,14 +80,12 @@ export function createSDK(config: SDKConfig) {
     workflows: createWorkflowsApi(client),
     missionControl: createMissionControlApi(client),
     playbooks: createPlaybooksApi(client),
-    agentVersions: createAgentVersionsApi(client),
     handoffs: createHandoffsApi(client),
     skillReputation: createSkillReputationApi(client),
     lineage: createLineageApi(client),
     policy: createPolicyApi(client),
     extraction: createExtractionApi(client),
     ciHealer: createCiHealerApi(client),
-    connectors: createConnectorsApi(client),
     skillRegistry: createSkillRegistryApi(client),
   }
 }
