@@ -33,6 +33,9 @@ import { ExtractionModule } from './extraction/extraction.module'
 import { CiHealerModule } from './ci-healer/ci-healer.module'
 import { ConnectorsModule } from './connectors/connectors.module'
 import { SkillRegistryModule } from './skill-registry/skill-registry.module'
+import { WebhooksModule } from './webhooks/webhooks.module'
+import { MetricsModule } from './metrics/metrics.module'
+import { TriggersModule } from './triggers/triggers.module'
 
 @Module({
   imports: [
@@ -72,6 +75,9 @@ import { SkillRegistryModule } from './skill-registry/skill-registry.module'
     WorkflowsModule,
     PlaybooksModule,
     AgentVersionsModule,
+    WebhooksModule,
+    MetricsModule,
+    TriggersModule,
   ],
 })
 export class AppModule {}
