@@ -1,15 +1,60 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/chat'
+import {
+  ASSISTANT_MODE_DEFINITIONS,
+  buildAssistantModePrompt,
+  getAssistantModeDefinition,
+  type AssistantMode,
+} from './assistantModes'
 import { AgentAvatarPanel } from './AgentAvatarPanel'
 import { MessageBubble } from './MessageBubble'
-import { ArrowUp, BrainCircuit, PlusCircle, Sparkles } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowUp,
+  BrainCircuit,
+  PlusCircle,
+  Rocket,
+  Sparkles,
+  Workflow,
+} from 'lucide-react'
 
 interface ChatWindowProps {
+  assistantMode: AssistantMode
+  onAssistantModeChange: (mode: AssistantMode) => void
   gatewayConnected: boolean
   onNewSession: () => Promise<void> | void
 }
+
+interface QuickAction {
+  label: string
+  seed: string
+  mode: AssistantMode
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
+  {
+    label: 'Draft first',
+    mode: 'plan',
+    seed: 'Draft the best first version of this and wait for approval before any external action.',
+  },
+  {
+    label: 'Run it',
+    mode: 'execute',
+    seed: 'Complete this request and use available tools whenever they materially help.',
+  },
+  {
+    label: 'Schedule it',
+    mode: 'autopilot',
+    seed: 'Turn this into a reusable scheduled workflow with a clear trigger and operating summary.',
+  },
+  {
+    label: 'Watch it',
+    mode: 'autopilot',
+    seed: 'Monitor this and tell me when it changes or needs intervention.',
+  },
+]
 
 function formatIntentLabel(intent: string | undefined) {
   if (!intent) return null
@@ -21,15 +66,42 @@ function formatIntentLabel(intent: string | undefined) {
   return normalized
 }
 
-export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) {
-  const { messages, sendMessage, isStreaming, activeConversationId, learnedSkill, runStatus } =
-    useChatStore()
+function modeCardClass(active: boolean) {
+  if (active) return 'border-indigo-300 bg-indigo-50 shadow-sm'
+  return 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]'
+}
+
+export function ChatWindow({
+  assistantMode,
+  onAssistantModeChange,
+  gatewayConnected,
+  onNewSession,
+}: ChatWindowProps) {
+  const {
+    messages,
+    sendMessage,
+    isStreaming,
+    activeConversationId,
+    learnedSkill,
+    runStatus,
+    pendingApprovals,
+    activeHandoff,
+    escalateToHuman,
+  } = useChatStore()
   const [input, setInput] = useState('')
   const [showAvatarPanel, setShowAvatarPanel] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const contentLayoutRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const learnedIntentLabel = formatIntentLabel(learnedSkill?.intent)
+  const assistantModeDefinition = useMemo(
+    () => getAssistantModeDefinition(assistantMode),
+    [assistantMode],
+  )
+  const activeHandoffStatus =
+    activeHandoff && (activeHandoff.status === 'open' || activeHandoff.status === 'claimed')
+      ? activeHandoff.status
+      : null
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -61,16 +133,39 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
     return () => observer.disconnect()
   }, [])
 
-  async function handleSend() {
-    const text = input.trim()
-    if (!text || isStreaming || !gatewayConnected) return
+  function focusComposer() {
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }
+
+  async function dispatchMessage(rawText: string) {
+    const displayContent = rawText.trim()
+    if (!displayContent || isStreaming || !gatewayConnected) return
     setInput('')
-    await sendMessage(text)
+    const content = buildAssistantModePrompt(assistantMode, displayContent)
+    await sendMessage(content, { displayContent })
+  }
+
+  async function handleSend() {
+    await dispatchMessage(input)
   }
 
   async function handleQuickPrompt(prompt: string) {
-    if (isStreaming || !gatewayConnected) return
-    await sendMessage(prompt)
+    await dispatchMessage(prompt)
+  }
+
+  async function handleEscalate() {
+    if (!activeConversationId || isStreaming || activeHandoffStatus) return
+    await escalateToHuman(`Operator requested from ${assistantModeDefinition.label.toLowerCase()} mode.`)
+  }
+
+  function handleQuickAction(action: QuickAction) {
+    if (action.mode !== assistantMode) {
+      onAssistantModeChange(action.mode)
+    }
+    setInput((current) =>
+      current.trim() ? `${current.trim()}\n\n${action.seed}` : action.seed,
+    )
+    focusComposer()
   }
 
   function handleKey(e: React.KeyboardEvent) {
@@ -88,35 +183,49 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
           : 'relative min-h-0 h-full'
       }
     >
-      <div
-        className={
-          showAvatarPanel
-            ? 'h-full overflow-y-auto bg-gradient-to-b from-[var(--surface)] via-[var(--surface)] to-[var(--surface-muted)] px-3 py-3 sm:px-5'
-            : 'h-full overflow-y-auto bg-gradient-to-b from-[var(--surface)] via-[var(--surface)] to-[var(--surface-muted)] px-3 py-3 sm:px-5'
-        }
-      >
+      <div className="h-full overflow-y-auto bg-gradient-to-b from-[var(--surface)] via-[var(--surface)] to-[var(--surface-muted)] px-3 py-3 sm:px-5">
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center py-6">
-            <div className="w-full max-w-[720px] space-y-6 text-center">
+            <div className="w-full max-w-[820px] space-y-6 text-center">
               <div className="oa-brand-badge mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-white">
                 <Sparkles size={17} />
               </div>
+
               <div>
                 <p className="text-[30px] font-semibold tracking-tight text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                  What do you want your assistant to do?
+                  Tell the assistant the outcome you want.
                 </p>
-                <p className="mx-auto mt-2 max-w-[580px] text-sm text-[var(--muted)] dark:text-[var(--muted)]">
-                  Research, plan, write, browse, create files, and take action with approvals.
+                <p className="mx-auto mt-2 max-w-[620px] text-sm text-[var(--muted)] dark:text-[var(--muted)]">
+                  In `Execute` and `Autopilot`, it will do real work. In `Plan`, it will think first
+                  and hold execution until the path is clear.
                 </p>
               </div>
 
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {ASSISTANT_MODE_DEFINITIONS.map((definition) => (
+                  <button
+                    key={definition.id}
+                    type="button"
+                    onClick={() => onAssistantModeChange(definition.id)}
+                    className={`rounded-2xl border p-4 text-left transition ${modeCardClass(
+                      assistantMode === definition.id,
+                    )}`}
+                  >
+                    <p className="text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                      {definition.label}
+                    </p>
+                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                      {definition.caption}
+                    </p>
+                    <p className="mt-2 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                      {definition.description}
+                    </p>
+                  </button>
+                ))}
+              </div>
+
               <div className="flex flex-wrap justify-center gap-2.5">
-                {[
-                  'Plan my week from my tasks and calendar constraints.',
-                  'Research the top competitors in my market and summarize the differences.',
-                  'Draft a reply to this email and turn it into a clean response.',
-                  'Create a launch checklist for my next product release.',
-                ].map((prompt) => (
+                {assistantModeDefinition.starterPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
@@ -132,7 +241,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
               <p className="text-xs text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
                 {gatewayConnected
                   ? activeConversationId
-                    ? 'Pick a task above or type your own below.'
+                    ? `${assistantModeDefinition.label} mode is active. Pick a starter or type your own request below.`
                     : 'Create a task to begin.'
                   : 'Reconnect the assistant runtime to begin.'}
               </p>
@@ -169,6 +278,64 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
         </div>
       )}
 
+      <div className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] dark:text-[var(--muted)]">
+              Assistant posture
+            </p>
+            <p className="mt-1 text-sm font-medium text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+              {assistantModeDefinition.description}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+              {assistantModeDefinition.label} mode
+            </span>
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+              {runStatus ?? (isStreaming ? 'running' : 'ready')}
+            </span>
+            {pendingApprovals.length > 0 && (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                {pendingApprovals.length} approvals waiting
+              </span>
+            )}
+            {activeHandoffStatus && (
+              <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                human handoff {activeHandoffStatus}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {ASSISTANT_MODE_DEFINITIONS.map((definition) => (
+            <button
+              key={definition.id}
+              type="button"
+              onClick={() => onAssistantModeChange(definition.id)}
+              className={`rounded-2xl border px-3 py-3 text-left transition ${modeCardClass(
+                assistantMode === definition.id,
+              )}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                  {definition.label}
+                </p>
+                {assistantMode === definition.id && <Rocket size={14} className="text-indigo-500" />}
+              </div>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                {definition.caption}
+              </p>
+              <p className="mt-2 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                {definition.description}
+              </p>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div
         ref={contentLayoutRef}
         className={
@@ -190,10 +357,43 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
       </div>
 
       <div className="relative border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:px-4">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-1 px-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
-          <p>Enter to send, Shift+Enter for a new line</p>
-          <p>{isStreaming ? 'Assistant is working...' : 'Assistant ready'}</p>
+        <div className="mb-3 flex flex-wrap gap-2 px-1">
+          {QUICK_ACTIONS.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              onClick={() => handleQuickAction(action)}
+              className="oa-soft-button rounded-full px-3 py-1.5 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
+            >
+              {action.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => void handleEscalate()}
+            disabled={!activeConversationId || Boolean(activeHandoffStatus) || isStreaming}
+            className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <AlertTriangle size={12} />
+              Need human
+            </span>
+          </button>
         </div>
+
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-1 px-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+          <p>
+            {assistantModeDefinition.label} mode. Enter to send, Shift+Enter for a new line.
+          </p>
+          <p>
+            {isStreaming
+              ? 'Assistant is working...'
+              : activeHandoffStatus
+                ? `Waiting on a human operator (${activeHandoffStatus}).`
+                : 'Assistant ready'}
+          </p>
+        </div>
+
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
           <div className="flex w-full items-end gap-2 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 shadow-sm sm:flex-1">
             <textarea
@@ -201,11 +401,13 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKey}
-              disabled={!gatewayConnected || isStreaming}
+              disabled={!gatewayConnected || isStreaming || Boolean(activeHandoffStatus)}
               rows={1}
               placeholder={
                 gatewayConnected
-                  ? 'Ask your assistant to research, write, plan, or act...'
+                  ? activeHandoffStatus
+                    ? 'This conversation is in human handoff mode.'
+                    : assistantModeDefinition.placeholder
                   : 'Reconnect the assistant runtime to start...'
               }
               className="max-h-44 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-[var(--tone-strong)] outline-none placeholder:text-[var(--tone-soft)] disabled:cursor-not-allowed disabled:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"
@@ -213,7 +415,7 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
             <button
               type="button"
               onClick={() => void handleSend()}
-              disabled={!input.trim() || !gatewayConnected || isStreaming}
+              disabled={!input.trim() || !gatewayConnected || isStreaming || Boolean(activeHandoffStatus)}
               className="oa-accent-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-35"
               aria-label="Send message"
             >
@@ -228,7 +430,19 @@ export function ChatWindow({ gatewayConnected, onNewSession }: ChatWindowProps) 
               className="oa-soft-button inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
             >
               <PlusCircle size={14} />
-              New task
+              New thread
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onAssistantModeChange('autopilot')
+                setInput('Build a reusable workflow or watcher for this task and tell me how it should run.')
+                focusComposer()
+              }}
+              className="oa-soft-button inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
+            >
+              <Workflow size={14} />
+              Build workflow
             </button>
           </div>
         </div>
