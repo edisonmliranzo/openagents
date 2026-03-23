@@ -24,8 +24,6 @@ export interface ChannelCommandResult {
 const SUPPORTED_COMMANDS = new Set<ChannelCommandName>(['new', 'status', 'models', 'memory', 'help'])
 const MAX_MODEL_ITEMS = 6
 const MAX_MEMORY_FACTS = 3
-const MAX_MEMORY_SOURCES = 3
-
 @Injectable()
 export class ChannelCommandsService {
   constructor(
@@ -160,25 +158,18 @@ export class ChannelCommandsService {
   }
 
   private async handleMemory(context: ChannelCommandContext): Promise<ChannelCommandResult> {
-    const [files, facts, sources] = await Promise.all([
+    const [files, facts] = await Promise.all([
       this.memory.listFiles(context.userId),
       this.memory.listFacts(context.userId, undefined, MAX_MEMORY_FACTS),
-      this.memory.listSources(context.userId),
     ])
 
-    const fileNames = files.map((file) => file.name).slice(0, 6)
+    const fileNames = files.map((file: { name: string }) => file.name).slice(0, 6)
     const factSummary = facts.length > 0
       ? facts
         .slice(0, MAX_MEMORY_FACTS)
-        .map((fact) => `${fact.entity}.${fact.key}: ${this.truncate(fact.value, 72)}`)
+        .map((fact: { entity: string; key: string; value: string }) => `${fact.entity}.${fact.key}: ${this.truncate(fact.value, 72)}`)
         .join(' | ')
       : 'No structured facts saved yet.'
-    const sourceSummary = sources.length > 0
-      ? sources
-        .slice(0, MAX_MEMORY_SOURCES)
-        .map((source) => this.basename(source.path))
-        .join(', ')
-      : 'None'
 
     return {
       command: 'memory',
@@ -187,7 +178,6 @@ export class ChannelCommandsService {
         'Memory snapshot',
         `Files: ${fileNames.length > 0 ? fileNames.join(', ') : 'none'}`,
         `Facts: ${factSummary}`,
-        `Sources: ${sourceSummary}`,
         'Open the Memory page for full editing and review.',
       ].join('\n'),
     }
