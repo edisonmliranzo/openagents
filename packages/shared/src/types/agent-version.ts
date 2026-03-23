@@ -87,9 +87,10 @@ export interface AgentVersionSnapshot {
     maxLoopSteps?: number
     runtimeLabel?: string
   }
-  skills?: Array<{
+  skills: Array<{
     id: string
     name: string
+    title: string
     enabled: boolean
   }>
 }
