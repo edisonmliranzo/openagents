@@ -11,14 +11,20 @@ import { CronTool } from './connectors/cron.tool'
 import { BybitTool } from './connectors/bybit.tool'
 import { DeepResearchTool } from './connectors/deep-research.tool'
 import { ComputerUseTool } from './connectors/computer-use.tool'
+import { GithubTool } from './connectors/github.tool'
+import { NotionTool } from './connectors/notion.tool'
+import { LinearTool } from './connectors/linear.tool'
+import { JiraTool } from './connectors/jira.tool'
 import { CronModule } from '../cron/cron.module'
 import { ConnectorsModule } from '../connectors/connectors.module'
 import { McpService } from './mcp.service'
 import { PromptGuardService } from './prompt-guard.service'
 import { OutboundGuardService } from './outbound-guard.service'
+import { PolicyModule } from '../policy/policy.module'
+import { ToolsInternalController } from './tools.internal.controller'
 
 @Module({
-  imports: [CronModule, ConnectorsModule],
+  imports: [CronModule, ConnectorsModule, PolicyModule],
   providers: [
     ToolsService,
     GmailTool,
@@ -31,11 +37,15 @@ import { OutboundGuardService } from './outbound-guard.service'
     BybitTool,
     DeepResearchTool,
     ComputerUseTool,
+    GithubTool,
+    NotionTool,
+    LinearTool,
+    JiraTool,
     McpService,
     PromptGuardService,
     OutboundGuardService,
   ],
-  controllers: [ToolsController],
+  controllers: [ToolsController, ToolsInternalController],
   exports: [ToolsService, PromptGuardService, OutboundGuardService],
 })
 export class ToolsModule {}

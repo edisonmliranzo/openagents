@@ -10,6 +10,9 @@ import {
 } from './assistantModes'
 import { AgentAvatarPanel } from './AgentAvatarPanel'
 import { MessageBubble } from './MessageBubble'
+import { SlashCommandPalette, expandSlashCommand } from './SlashCommandPalette'
+import { PinnedContext, buildPinnedContextBlock, type PinnedItem } from './PinnedContext'
+import { ResponsePresets } from './ResponsePresets'
 import {
   AlertTriangle,
   ArrowUp,
@@ -90,6 +93,8 @@ export function ChatWindow({
   } = useChatStore()
   const [input, setInput] = useState('')
   const [showAvatarPanel, setShowAvatarPanel] = useState(false)
+  const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([])
+  const [slashQuery, setSlashQuery] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const contentLayoutRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -140,8 +145,12 @@ export function ChatWindow({
   async function dispatchMessage(rawText: string) {
     const displayContent = rawText.trim()
     if (!displayContent || isStreaming || !gatewayConnected) return
+    setSlashQuery(null)
     setInput('')
-    const content = buildAssistantModePrompt(assistantMode, displayContent)
+    const expanded = expandSlashCommand(displayContent)
+    const pinned = buildPinnedContextBlock(pinnedItems)
+    const withPinned = expanded + pinned
+    const content = buildAssistantModePrompt(assistantMode, withPinned)
     await sendMessage(content, { displayContent })
   }
 
@@ -168,11 +177,40 @@ export function ChatWindow({
     focusComposer()
   }
 
+  function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value
+    setInput(val)
+    // Detect slash command: starts with / and no space yet (still typing command name)
+    const slashMatch = val.match(/^(\/[a-z]*)$/)
+    if (slashMatch) {
+      setSlashQuery(slashMatch[1])
+    } else {
+      setSlashQuery(null)
+    }
+  }
+
   function handleKey(e: React.KeyboardEvent) {
+    // When palette is open, arrow/enter/escape are handled by the palette itself
+    if (slashQuery !== null && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
+      return
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       void handleSend()
     }
+  }
+
+  function handlePresetApply(template: string) {
+    setInput((current) => current.trim() ? `${current.trim()}\n\n${template}` : template)
+    focusComposer()
+  }
+
+  function handleAddPin(item: Omit<PinnedItem, 'id'>) {
+    setPinnedItems((prev) => [...prev, { ...item, id: `pin-${Date.now()}` }])
+  }
+
+  function handleRemovePin(id: string) {
+    setPinnedItems((prev) => prev.filter((p) => p.id !== id))
   }
 
   const messageViewport = (
@@ -356,6 +394,12 @@ export function ChatWindow({
         )}
       </div>
 
+      <PinnedContext
+        items={pinnedItems}
+        onRemove={handleRemovePin}
+        onAdd={handleAddPin}
+      />
+
       <div className="relative border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:px-4">
         <div className="mb-3 flex flex-wrap gap-2 px-1">
           {QUICK_ACTIONS.map((action) => (
@@ -368,6 +412,7 @@ export function ChatWindow({
               {action.label}
             </button>
           ))}
+          <ResponsePresets onApply={handlePresetApply} />
           <button
             type="button"
             onClick={() => void handleEscalate()}
@@ -383,7 +428,7 @@ export function ChatWindow({
 
         <div className="mb-2 flex flex-wrap items-center justify-between gap-1 px-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
           <p>
-            {assistantModeDefinition.label} mode. Enter to send, Shift+Enter for a new line.
+            {assistantModeDefinition.label} mode. Type <kbd className="rounded border border-[var(--border)] px-1">/</kbd> for commands. Enter to send.
           </p>
           <p>
             {isStreaming
@@ -395,11 +440,22 @@ export function ChatWindow({
         </div>
 
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
-          <div className="flex w-full items-end gap-2 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 shadow-sm sm:flex-1">
+          <div className="relative flex w-full items-end gap-2 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 shadow-sm sm:flex-1">
+            {slashQuery !== null && (
+              <SlashCommandPalette
+                query={slashQuery}
+                onSelect={(cmd) => {
+                  setInput(cmd.template)
+                  setSlashQuery(null)
+                  focusComposer()
+                }}
+                onClose={() => setSlashQuery(null)}
+              />
+            )}
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKey}
               disabled={!gatewayConnected || isStreaming || Boolean(activeHandoffStatus)}
               rows={1}
@@ -407,7 +463,7 @@ export function ChatWindow({
                 gatewayConnected
                   ? activeHandoffStatus
                     ? 'This conversation is in human handoff mode.'
-                    : assistantModeDefinition.placeholder
+                    : `${assistantModeDefinition.placeholder} (type / for commands)`
                   : 'Reconnect the assistant runtime to start...'
               }
               className="max-h-44 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-[var(--tone-strong)] outline-none placeholder:text-[var(--tone-soft)] disabled:cursor-not-allowed disabled:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"

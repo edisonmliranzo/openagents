@@ -13,6 +13,7 @@ import { NanobotLoopService } from '../../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../../nanobot/config/nanobot-config.service'
 import { NanobotBusService } from '../../nanobot/bus/nanobot-bus.service'
 import { ConnectorsService } from '../../connectors/connectors.service'
+import { ChannelCommandsService } from '../channel-commands.service'
 
 export interface SlackEventPayload {
   type: string
@@ -45,6 +46,7 @@ export class SlackService {
     private nanobotConfig: NanobotConfigService,
     private bus: NanobotBusService,
     private connectors: ConnectorsService,
+    private channelCommands: ChannelCommandsService,
   ) {}
 
   health(): SlackChannelHealth {
@@ -186,18 +188,53 @@ export class SlackService {
     if (!user) return {}
 
     const sessionLabel = `slack:${teamId}:${channelId}`
+    const titleHint = `Slack #${channelId}`
     const existing = await this.prisma.conversation.findFirst({
       where: { sessionLabel, userId: user.id },
       orderBy: { updatedAt: 'desc' },
       select: { id: true },
     })
 
-    let conversationId = existing?.id
+    let conversationId = existing?.id ?? null
+    const commandResult = await this.channelCommands.maybeHandleTextCommand(text, {
+      userId: user.id,
+      sessionLabel,
+      channelLabel: 'Slack',
+      titleHint,
+      conversationId,
+    })
+    if (commandResult) {
+      await this.prisma.slackWorkspace.update({
+        where: { id: workspace.id },
+        data: {
+          lastSeenAt: new Date(),
+          lastConversationId: commandResult.conversationId ?? undefined,
+          channelId,
+        },
+      }).catch(() => {})
+
+      const delivered = await this.sendMessage(channelId, commandResult.reply)
+      await this.connectors.recordChannelActivity(user.id, 'slack', {
+        success: delivered,
+        ...(delivered ? {} : { error: 'Slack chat.postMessage failed.' }),
+      }).catch(() => {})
+      this.bus.publish('run.event', {
+        source: 'channels.slack',
+        direction: 'command',
+        command: commandResult.command,
+        teamId,
+        channelId,
+        conversationId: commandResult.conversationId,
+        userId: user.id,
+      })
+      return {}
+    }
+
     if (!conversationId) {
       const conversation = await this.prisma.conversation.create({
         data: {
           userId: user.id,
-          title: `Slack #${channelId}`.slice(0, 80),
+          title: titleHint.slice(0, 80),
           sessionLabel,
         },
         select: { id: true },

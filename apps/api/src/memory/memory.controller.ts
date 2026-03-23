@@ -163,6 +163,26 @@ class BrowserCaptureDto {
   conversationId?: string
 }
 
+class CreateLocalKnowledgeSourceDto {
+  @IsString()
+  path!: string
+
+  @IsOptional()
+  @IsIn(['file', 'folder', 'repo'])
+  kind?: 'file' | 'folder' | 'repo'
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  includeGlobs?: string[]
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(150)
+  maxFiles?: number
+}
+
 @ApiTags('memory')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -228,6 +248,26 @@ export class MemoryController {
     return this.memory.curateNightly(req.user.id, 'manual')
   }
 
+  @Get('sources')
+  listSources(@Req() req: any) {
+    return this.memory.listSources(req.user.id)
+  }
+
+  @Post('sources')
+  createSource(@Req() req: any, @Body() dto: CreateLocalKnowledgeSourceDto) {
+    return this.memory.createSource(req.user.id, dto)
+  }
+
+  @Post('sources/:id/sync')
+  syncSource(@Req() req: any, @Param('id') id: string) {
+    return this.memory.syncSource(req.user.id, id)
+  }
+
+  @Delete('sources/:id')
+  deleteSource(@Req() req: any, @Param('id') id: string) {
+    return this.memory.deleteSource(req.user.id, id)
+  }
+
   @Delete(':id')
   delete(@Param('id') id: string, @Req() req: any) {
     return this.memory.delete(id, req.user.id)
@@ -250,5 +290,10 @@ export class MemoryController {
     const parsed = Number.parseInt(limit ?? '30', 10)
     const safe = Number.isFinite(parsed) ? parsed : 30
     return this.memory.getReviewQueue(req.user.id, safe)
+  }
+
+  @Post('decay')
+  runDecay() {
+    return this.memory.runDecayCycle()
   }
 }

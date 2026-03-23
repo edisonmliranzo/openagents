@@ -38,3 +38,10 @@ export interface WorkflowRunJobData {
   approvedKeys?: string[]
   input?: Record<string, unknown>
 }
+
+export interface ToolRunJobData {
+  userId: string
+  toolName: string
+  toolInput: Record<string, unknown>
+  conversationId?: string
+}

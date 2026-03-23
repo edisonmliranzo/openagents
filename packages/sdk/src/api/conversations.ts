@@ -1,5 +1,5 @@
 import type { OpenAgentsClient } from '../client'
-import type { Conversation, Message } from '@openagents/shared'
+import type { Conversation, ConversationRepairReport, Message } from '@openagents/shared'
 
 export function createConversationsApi(client: OpenAgentsClient) {
   return {
@@ -23,6 +23,12 @@ export function createConversationsApi(client: OpenAgentsClient) {
         { content },
         onChunk,
       ),
+
+    inspectRepair: (id: string) =>
+      client.get<ConversationRepairReport>(`/api/v1/conversations/${id}/repair`),
+
+    repair: (id: string) =>
+      client.post<ConversationRepairReport>(`/api/v1/conversations/${id}/repair`),
 
     delete: (id: string) => client.delete<void>(`/api/v1/conversations/${id}`),
   }

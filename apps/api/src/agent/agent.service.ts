@@ -614,6 +614,42 @@ export class AgentService {
         })
       }
 
+      // 9a. Self-evaluation: confidence scoring (opt-in via AGENT_SELF_EVAL=true)
+      if (process.env.AGENT_SELF_EVAL === 'true' && finalResponseContent) {
+        try {
+          const evalMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+            ...llmWorkingMessages,
+            {
+              role: 'user',
+              content:
+                'Rate your confidence in the above response on a scale of 1-5 ' +
+                '(1=very uncertain, 5=highly confident). Respond ONLY with a JSON object: ' +
+                '{"score": <1-5>, "reason": "<one sentence>"}',
+            },
+          ]
+          const evalResponse = await this.llm.complete(
+            evalMessages,
+            [],
+            'You are a self-evaluation assistant. Return only valid JSON.',
+            activeProvider,
+            activeUserApiKey,
+            activeUserBaseUrl,
+            activeModel,
+          )
+          const raw = evalResponse.content?.trim() ?? ''
+          const jsonMatch = raw.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]) as { score?: number; reason?: string }
+            const score = typeof parsed.score === 'number' ? Math.min(5, Math.max(1, Math.round(parsed.score))) : null
+            if (score !== null) {
+              finalResponseContent += `\n\n<confidence score="${score}/5">${parsed.reason ?? ''}</confidence>`
+            }
+          }
+        } catch {
+          // Self-eval is best-effort; never block the main response
+        }
+      }
+
       // 9. Save agent response
       if (finalResponseContent) {
         const agentMsg = await this.prisma.message.create({

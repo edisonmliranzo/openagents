@@ -139,3 +139,34 @@ export interface QueryMemoryResult {
   reviewQueue?: MemoryReviewItem[]
   queriedAt: string
 }
+
+export type LocalKnowledgeSourceKind = 'file' | 'folder' | 'repo'
+
+export interface LocalKnowledgeSource {
+  id: string
+  userId: string
+  path: string
+  kind: LocalKnowledgeSourceKind
+  includeGlobs: string[]
+  maxFiles: number
+  status: 'active' | 'error'
+  lastSyncedAt: string | null
+  lastError: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateLocalKnowledgeSourceInput {
+  path: string
+  kind?: LocalKnowledgeSourceKind
+  includeGlobs?: string[]
+  maxFiles?: number
+}
+
+export interface LocalKnowledgeSyncResult {
+  source: LocalKnowledgeSource
+  syncedFiles: number
+  createdEvents: number
+  warnings: string[]
+  syncedAt: string
+}

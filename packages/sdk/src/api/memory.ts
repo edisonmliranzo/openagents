@@ -2,6 +2,9 @@ import type { OpenAgentsClient } from '../client'
 import type {
   BrowserCaptureInput,
   BrowserCaptureResult,
+  CreateLocalKnowledgeSourceInput,
+  LocalKnowledgeSource,
+  LocalKnowledgeSyncResult,
   MemoryConflict,
   MemoryEvent,
   MemoryFact,
@@ -71,6 +74,17 @@ export function createMemoryApi(client: OpenAgentsClient) {
       const suffix = typeof limit === 'number' ? `?limit=${limit}` : ''
       return client.get<MemoryReviewItem[]>(`/api/v1/memory/review-queue${suffix}`)
     },
+
+    listSources: () => client.get<LocalKnowledgeSource[]>('/api/v1/memory/sources'),
+
+    createSource: (input: CreateLocalKnowledgeSourceInput) =>
+      client.post<LocalKnowledgeSource>('/api/v1/memory/sources', input),
+
+    syncSource: (id: string) =>
+      client.post<LocalKnowledgeSyncResult>(`/api/v1/memory/sources/${encodeURIComponent(id)}/sync`),
+
+    deleteSource: (id: string) =>
+      client.delete<{ ok: true }>(`/api/v1/memory/sources/${encodeURIComponent(id)}`),
 
     delete: (id: string) => client.delete<{ count: number }>(`/api/v1/memory/${id}`),
   }

@@ -179,6 +179,14 @@ function runCompose(subcommandArgs, options = {}) {
   return run('docker', [...dockerComposeArgs, ...subcommandArgs], options)
 }
 
+function diagnoseUpFailure() {
+  console.log('\n[openagents:prod] Startup failed. Capturing service state...')
+  runCompose(['ps', '-a'], { allowFailure: true })
+
+  console.log('\n[openagents:prod] Recent api/web/worker logs:')
+  runCompose(['logs', '--tail=160', 'api', 'web', 'worker'], { allowFailure: true })
+}
+
 async function waitForHttp(url, okStatuses, attempts = 30, delayMs = 2000) {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
@@ -240,7 +248,12 @@ async function build() {
 async function up() {
   ensureProdEnvFile()
   const prodEnv = parseEnvFile(envFile)
-  runCompose(['up', '-d'])
+  try {
+    runCompose(['up', '-d'])
+  } catch (error) {
+    diagnoseUpFailure()
+    throw error
+  }
   await verifyUp(prodEnv)
 }
 

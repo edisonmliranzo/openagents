@@ -32,3 +32,22 @@ export interface ToolResult {
   output: unknown
   error?: string
 }
+
+export interface ConversationRepairIssue {
+  code: string
+  severity: 'info' | 'warning' | 'critical'
+  message: string
+  relatedIds?: string[]
+}
+
+export interface ConversationRepairReport {
+  conversationId: string
+  repaired: boolean
+  issues: ConversationRepairIssue[]
+  actions: string[]
+  pendingApprovals: number
+  unresolvedApprovedApprovals: number
+  waitingRuns: number
+  stuckMessages: number
+  inspectedAt: string
+}

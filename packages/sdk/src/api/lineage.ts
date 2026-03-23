@@ -1,5 +1,5 @@
 import type { OpenAgentsClient } from '../client'
-import type { DataLineageRecord } from '@openagents/shared'
+import type { ConversationLineageGraph, DataLineageRecord } from '@openagents/shared'
 
 export function createLineageApi(client: OpenAgentsClient) {
   return {
@@ -13,5 +13,10 @@ export function createLineageApi(client: OpenAgentsClient) {
 
     byMessage: (messageId: string) =>
       client.get<DataLineageRecord | null>(`/api/v1/lineage/message/${encodeURIComponent(messageId)}`),
+
+    graph: (conversationId: string, limit = 80) =>
+      client.get<ConversationLineageGraph>(
+        `/api/v1/lineage/conversation/${encodeURIComponent(conversationId)}/graph?limit=${encodeURIComponent(String(limit))}`,
+      ),
   }
 }

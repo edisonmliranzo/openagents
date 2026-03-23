@@ -1,9 +1,10 @@
 'use client'
 
 import { sdk } from '@/stores/auth'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AllowWhatsAppDeviceInput,
+  ConnectorConnection,
   ConnectorHealthEntry,
   DiscordChannelHealth,
   DiscordPairingSession,
@@ -34,6 +35,14 @@ interface ChannelGroup {
   id: string
   label: string
   description: string
+}
+
+interface ConnectionFormState {
+  accessToken: string
+  refreshToken: string
+  tokenExpiresAt: string
+  scopes: string
+  accountEmail: string
 }
 
 const CHANNEL_GROUPS: ChannelGroup[] = [
@@ -111,9 +120,137 @@ async function copyToClipboard(text: string) {
   document.body.removeChild(textarea)
 }
 
+function GoogleConnectorCard(input: {
+  title: string
+  connectorId: string
+  connection: ConnectorConnection | null
+  form: ConnectionFormState
+  onChange: Dispatch<SetStateAction<ConnectionFormState>>
+  onSave: () => void
+  onDelete: () => void
+  saving: boolean
+  deleting: boolean
+}) {
+  const { title, connectorId, connection, form, onChange, onSave, onDelete, saving, deleting } = input
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+          <p className="text-sm text-slate-500">
+            Paste a Google access token. Add a refresh token if you want the connector to recover after expiry.
+          </p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${connection?.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+          {connection?.connected ? 'connected' : 'not connected'}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-medium text-slate-500">
+          Access token
+          <textarea
+            value={form.accessToken}
+            onChange={(event) => onChange((current) => ({ ...current, accessToken: event.target.value }))}
+            rows={4}
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-rose-200 focus:ring-2 focus:ring-rose-100"
+          />
+        </label>
+        <label className="text-xs font-medium text-slate-500">
+          Refresh token
+          <textarea
+            value={form.refreshToken}
+            onChange={(event) => onChange((current) => ({ ...current, refreshToken: event.target.value }))}
+            rows={4}
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-rose-200 focus:ring-2 focus:ring-rose-100"
+          />
+        </label>
+        <label className="text-xs font-medium text-slate-500">
+          Account email
+          <input
+            value={form.accountEmail}
+            onChange={(event) => onChange((current) => ({ ...current, accountEmail: event.target.value }))}
+            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-rose-200 focus:ring-2 focus:ring-rose-100"
+          />
+        </label>
+        <label className="text-xs font-medium text-slate-500">
+          Token expires at (ISO)
+          <input
+            value={form.tokenExpiresAt}
+            onChange={(event) => onChange((current) => ({ ...current, tokenExpiresAt: event.target.value }))}
+            placeholder="2026-03-16T18:00:00.000Z"
+            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-rose-200 focus:ring-2 focus:ring-rose-100"
+          />
+        </label>
+        <label className="text-xs font-medium text-slate-500 sm:col-span-2">
+          Scopes
+          <textarea
+            value={form.scopes}
+            onChange={(event) => onChange((current) => ({ ...current, scopes: event.target.value }))}
+            rows={2}
+            placeholder="https://www.googleapis.com/auth/gmail.modify, https://www.googleapis.com/auth/calendar"
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none focus:border-rose-200 focus:ring-2 focus:ring-rose-100"
+          />
+        </label>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+          connector id: <span className="font-mono">{connectorId}</span>
+        </span>
+        {connection?.accountEmail && (
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+            account: {connection.accountEmail}
+          </span>
+        )}
+        {connection?.tokenExpiresAt && (
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+            expires {timeUntil(connection.tokenExpiresAt)}
+          </span>
+        )}
+        {connection?.scopes?.length ? (
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+            {connection.scopes.length} scope(s)
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="h-9 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Connection'}
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting || !connection?.connected}
+          className="h-9 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {deleting ? 'Disconnecting...' : 'Disconnect'}
+        </button>
+      </div>
+    </article>
+  )
+}
+
 export default function ChannelsPage() {
+  const emptyConnectionForm = (): ConnectionFormState => ({
+    accessToken: '',
+    refreshToken: '',
+    tokenExpiresAt: '',
+    scopes: '',
+    accountEmail: '',
+  })
   const [tools, setTools] = useState<ConnectorTool[]>([])
   const [connectorHealth, setConnectorHealth] = useState<ConnectorHealthEntry[]>([])
+  const [gmailConnection, setGmailConnection] = useState<ConnectorConnection | null>(null)
+  const [calendarConnection, setCalendarConnection] = useState<ConnectorConnection | null>(null)
+  const [gmailForm, setGmailForm] = useState<ConnectionFormState>(() => emptyConnectionForm())
+  const [calendarForm, setCalendarForm] = useState<ConnectionFormState>(() => emptyConnectionForm())
   const [connectorSnapshotAt, setConnectorSnapshotAt] = useState<string | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const [latestNotification, setLatestNotification] = useState<Notification | null>(null)
@@ -153,6 +290,8 @@ export default function ChannelsPage() {
   const [isCreatingDiscordPairing, setIsCreatingDiscordPairing] = useState(false)
   const [unlinkingDiscordServerId, setUnlinkingDiscordServerId] = useState<string | null>(null)
   const [reconnectingConnectorId, setReconnectingConnectorId] = useState<string | null>(null)
+  const [savingConnectionId, setSavingConnectionId] = useState<string | null>(null)
+  const [deletingConnectionId, setDeletingConnectionId] = useState<string | null>(null)
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -164,6 +303,8 @@ export default function ChannelsPage() {
       const [
         toolList, approvals, notifications,
         connectorSnapshot,
+        gmailConn,
+        calendarConn,
         health, devices, pairings,
         tgHealth, tgChats, tgPairings,
         slHealth, slWorkspaces, slPairings,
@@ -173,6 +314,8 @@ export default function ChannelsPage() {
         sdk.approvals.list('pending'),
         sdk.notifications.list(),
         sdk.connectors.health(),
+        sdk.connectors.getConnection('google_gmail'),
+        sdk.connectors.getConnection('google_calendar'),
         sdk.channels.whatsappHealth(),
         sdk.channels.listWhatsAppDevices(),
         sdk.channels.listWhatsAppPairings(),
@@ -188,6 +331,8 @@ export default function ChannelsPage() {
       ])
       setTools(toolList)
       setConnectorHealth(connectorSnapshot.connectors)
+      setGmailConnection(gmailConn)
+      setCalendarConnection(calendarConn)
       setConnectorSnapshotAt(connectorSnapshot.generatedAt)
       setPendingApprovals(approvals.length)
       setLatestNotification(notifications[0] ?? null)
@@ -433,6 +578,52 @@ export default function ChannelsPage() {
     }
   }, [loadData])
 
+  const saveGoogleConnection = useCallback(async (connectorId: 'google_gmail' | 'google_calendar') => {
+    const form = connectorId === 'google_gmail' ? gmailForm : calendarForm
+    if (!form.accessToken.trim()) {
+      setError('Access token is required to connect Google actions.')
+      return
+    }
+
+    setSavingConnectionId(connectorId)
+    setError('')
+    try {
+      await sdk.connectors.saveConnection(connectorId, {
+        accessToken: form.accessToken.trim(),
+        refreshToken: form.refreshToken.trim() || undefined,
+        tokenExpiresAt: form.tokenExpiresAt.trim() || undefined,
+        accountEmail: form.accountEmail.trim() || undefined,
+        scopes: form.scopes
+          .split(/[,\n]/)
+          .map((value) => value.trim())
+          .filter(Boolean),
+      })
+      if (connectorId === 'google_gmail') {
+        setGmailForm(emptyConnectionForm())
+      } else {
+        setCalendarForm(emptyConnectionForm())
+      }
+      await loadData()
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to save Google connection')
+    } finally {
+      setSavingConnectionId(null)
+    }
+  }, [calendarForm, gmailForm, loadData])
+
+  const deleteGoogleConnection = useCallback(async (connectorId: 'google_gmail' | 'google_calendar') => {
+    setDeletingConnectionId(connectorId)
+    setError('')
+    try {
+      await sdk.connectors.deleteConnection(connectorId)
+      await loadData()
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to delete Google connection')
+    } finally {
+      setDeletingConnectionId(null)
+    }
+  }, [loadData])
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -562,6 +753,31 @@ export default function ChannelsPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <GoogleConnectorCard
+          title="Gmail Actions"
+          connectorId="google_gmail"
+          connection={gmailConnection}
+          form={gmailForm}
+          onChange={setGmailForm}
+          onSave={() => void saveGoogleConnection('google_gmail')}
+          onDelete={() => void deleteGoogleConnection('google_gmail')}
+          saving={savingConnectionId === 'google_gmail'}
+          deleting={deletingConnectionId === 'google_gmail'}
+        />
+        <GoogleConnectorCard
+          title="Calendar Actions"
+          connectorId="google_calendar"
+          connection={calendarConnection}
+          form={calendarForm}
+          onChange={setCalendarForm}
+          onSave={() => void saveGoogleConnection('google_calendar')}
+          onDelete={() => void deleteGoogleConnection('google_calendar')}
+          saving={savingConnectionId === 'google_calendar'}
+          deleting={deletingConnectionId === 'google_calendar'}
+        />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">

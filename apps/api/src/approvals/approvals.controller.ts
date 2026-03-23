@@ -24,4 +24,9 @@ export class ApprovalsController {
   deny(@Param('id') id: string, @Req() req: any) {
     return this.approvals.resolve(id, req.user.id, false)
   }
+
+  @Post('replay/:messageId')
+  replayFromLineage(@Param('messageId') messageId: string, @Req() req: any) {
+    return this.approvals.replayFromLineage(req.user.id, messageId)
+  }
 }

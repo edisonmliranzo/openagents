@@ -14,6 +14,7 @@ import { ConversationList } from '@/components/chat/ConversationList'
 import { LiveToolPanel } from '@/components/chat/LiveToolPanel'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
+import { storageGet, storageSet } from '@/lib/storage'
 import { PanelRight, RefreshCw, ShieldCheck } from 'lucide-react'
 
 function shortId(value?: string | null) {
@@ -96,22 +97,12 @@ export default function ChatPage() {
   }, [activeConversationId])
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(ASSISTANT_MODE_STORAGE_KEY)
-      if (stored && isAssistantMode(stored)) {
-        setAssistantMode(stored)
-      }
-    } catch {
-      // Ignore storage failures.
-    }
+    const stored = storageGet<string>(ASSISTANT_MODE_STORAGE_KEY, '')
+    if (stored && isAssistantMode(stored)) setAssistantMode(stored)
   }, [])
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(ASSISTANT_MODE_STORAGE_KEY, assistantMode)
-    } catch {
-      // Ignore storage failures.
-    }
+    storageSet(ASSISTANT_MODE_STORAGE_KEY, assistantMode)
   }, [assistantMode])
 
   const activeConversation = useMemo(

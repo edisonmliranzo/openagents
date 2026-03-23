@@ -207,6 +207,61 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
     return approval
   }
 
+  /**
+   * Approval replay: given a lineage message, re-approve any linked pending approvals.
+   * Useful for replaying tool calls that were interrupted or denied from the lineage view.
+   */
+  async replayFromLineage(
+    userId: string,
+    messageId: string,
+  ): Promise<{ replayed: string[]; skipped: string[]; detail: string }> {
+    const record = await this.lineage.getByMessage(userId, messageId)
+    if (!record) {
+      return { replayed: [], skipped: [], detail: 'No lineage record found for this message.' }
+    }
+
+    const approvalIds = record.approvals
+    if (approvalIds.length === 0) {
+      return { replayed: [], skipped: [], detail: 'No approvals linked to this message.' }
+    }
+
+    const replayed: string[] = []
+    const skipped: string[] = []
+
+    const rows = await this.prisma.approval.findMany({
+      where: { id: { in: approvalIds }, userId },
+      select: { id: true, status: true },
+    })
+    const rowMap = new Map(rows.map((row) => [row.id, row]))
+
+    for (const approvalId of approvalIds) {
+      const approval = rowMap.get(approvalId)
+      if (!approval) { skipped.push(approvalId); continue }
+      if (approval.status === 'approved') { skipped.push(approvalId); continue }
+
+      if (approval.status !== 'pending') {
+        // denied or other — reset to pending before resolving
+        await this.prisma.approval.update({
+          where: { id: approvalId },
+          data: { status: 'pending', resolvedAt: null },
+        })
+      }
+
+      try {
+        await this.resolve(approvalId, userId, true)
+        replayed.push(approvalId)
+      } catch {
+        skipped.push(approvalId)
+      }
+    }
+
+    return {
+      replayed,
+      skipped,
+      detail: `Replayed ${replayed.length} approval(s), skipped ${skipped.length}.`,
+    }
+  }
+
   async list(userId: string, status?: 'pending' | 'approved' | 'denied') {
     const approvals = await this.prisma.approval.findMany({
       where: { userId, ...(status ? { status } : {}) },

@@ -41,3 +41,27 @@ export interface ReconnectConnectorResult {
   connector: ConnectorHealthEntry
   reconnectedAt: string
 }
+
+export interface SaveConnectorConnectionInput {
+  accessToken: string
+  refreshToken?: string
+  tokenExpiresAt?: string
+  scopes?: string[]
+  accountEmail?: string
+}
+
+export interface ConnectorConnection {
+  connectorId: string
+  connected: boolean
+  accountEmail: string | null
+  scopes: string[]
+  tokenExpiresAt: string | null
+  connectedAt: string | null
+  updatedAt: string | null
+  toolNames: string[]
+}
+
+export interface ConnectorConnectionResult {
+  connector: ConnectorHealthEntry
+  connection: ConnectorConnection
+}
