@@ -92,5 +92,6 @@ export interface AgentVersionSnapshot {
     name: string
     title: string
     enabled: boolean
+    tools: string[]
   }>
 }
