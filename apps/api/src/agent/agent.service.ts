@@ -464,6 +464,11 @@ export class AgentService {
               )
               .catch((e) => this.logger.error('Notification create failed', e))
 
+            emit('status', {
+              status: 'waiting_approval',
+              tool: toolCall.name,
+              approvalId: approval.id,
+            })
             emit('approval_required', {
               approval,
               message: toolMsg,
