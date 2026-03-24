@@ -36,6 +36,10 @@ import { SkillRegistryModule } from './skill-registry/skill-registry.module'
 import { WebhooksModule } from './webhooks/webhooks.module'
 import { MetricsModule } from './metrics/metrics.module'
 import { TriggersModule } from './triggers/triggers.module'
+import { WorkspacesModule } from './workspaces/workspaces.module'
+import { AgentPresetsModule } from './agent-presets/agent-presets.module'
+import { ArtifactsModule } from './artifacts/artifacts.module'
+import { PacksModule } from './packs/packs.module'
 
 @Module({
   imports: [
@@ -78,6 +82,10 @@ import { TriggersModule } from './triggers/triggers.module'
     WebhooksModule,
     MetricsModule,
     TriggersModule,
+    WorkspacesModule,
+    AgentPresetsModule,
+    ArtifactsModule,
+    PacksModule,
   ],
 })
 export class AppModule {}

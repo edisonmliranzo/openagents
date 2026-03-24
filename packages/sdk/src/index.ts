@@ -28,6 +28,10 @@ export { createCiHealerApi } from './api/ci-healer'
 export { createSkillRegistryApi } from './api/skill-registry'
 export { createAgentVersionsApi } from './api/agent-versions'
 export { createConnectorsApi } from './api/connectors'
+export { createAgentPresetsApi } from './api/agent-presets'
+export { createArtifactsApi } from './api/artifacts'
+export { createWorkspacesApi } from './api/workspaces'
+export { createPacksApi } from './api/packs'
 
 import { OpenAgentsClient } from './client'
 import { createAuthApi } from './api/auth'
@@ -58,6 +62,10 @@ import { createCiHealerApi } from './api/ci-healer'
 import { createSkillRegistryApi } from './api/skill-registry'
 import { createAgentVersionsApi } from './api/agent-versions'
 import { createConnectorsApi } from './api/connectors'
+import { createAgentPresetsApi } from './api/agent-presets'
+import { createArtifactsApi } from './api/artifacts'
+import { createWorkspacesApi } from './api/workspaces'
+import { createPacksApi } from './api/packs'
 import type { SDKConfig } from './client'
 
 /** Convenience factory: creates a fully-wired SDK instance */
@@ -93,5 +101,9 @@ export function createSDK(config: SDKConfig) {
     skillRegistry: createSkillRegistryApi(client),
     agentVersions: createAgentVersionsApi(client),
     connectors: createConnectorsApi(client),
+    agentPresets: createAgentPresetsApi(client),
+    artifacts: createArtifactsApi(client),
+    workspaces: createWorkspacesApi(client),
+    packs: createPacksApi(client),
   }
 }
