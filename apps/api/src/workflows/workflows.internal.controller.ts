@@ -17,7 +17,7 @@ class ProcessWorkflowRunDto {
   @MaxLength(120)
   runId!: string
 
-  @IsIn(['manual', 'schedule', 'webhook', 'inbox_event'])
+  @IsIn(['manual', 'schedule', 'webhook', 'inbox_event', 'connector_event'])
   triggerKind!: WorkflowTriggerKind
 
   @IsOptional()

@@ -33,7 +33,13 @@ import type {
   WorkflowTriggerKind,
 } from '@openagents/shared'
 
-const TRIGGER_KINDS: WorkflowTriggerKind[] = ['manual', 'schedule', 'webhook', 'inbox_event']
+const TRIGGER_KINDS: WorkflowTriggerKind[] = [
+  'manual',
+  'schedule',
+  'webhook',
+  'inbox_event',
+  'connector_event',
+]
 
 class WorkflowTriggerDto {
   @IsIn(TRIGGER_KINDS)
@@ -54,6 +60,15 @@ class WorkflowTriggerDto {
   @IsString()
   @MaxLength(120)
   eventName?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  connectorId?: string
+
+  @IsOptional()
+  @IsObject()
+  eventFilter?: Record<string, string>
 }
 
 class WorkflowStepDto {

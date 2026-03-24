@@ -1303,6 +1303,25 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       return { kind: 'inbox_event', eventName: eventName.slice(0, 120) }
     }
 
+    if (kind === 'connector_event') {
+      const connectorId =
+        this.optionalText(trigger?.connectorId) ??
+        this.optionalText(fallback?.connectorId) ??
+        'connector'
+      const eventName =
+        this.optionalText(trigger?.eventName) ?? this.optionalText(fallback?.eventName) ?? undefined
+      const eventFilter =
+        this.sanitizeEventFilter(trigger?.eventFilter) ??
+        this.sanitizeEventFilter(fallback?.eventFilter)
+
+      return {
+        kind: 'connector_event',
+        connectorId: connectorId.slice(0, 80),
+        ...(eventName ? { eventName: eventName.slice(0, 120) } : {}),
+        ...(eventFilter ? { eventFilter } : {}),
+      }
+    }
+
     const providedSecret =
       this.optionalText(trigger?.webhookSecret) ?? this.optionalText(fallback?.webhookSecret)
     const webhookSecret = providedSecret
@@ -1314,9 +1333,31 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private sanitizeTriggerKind(kind: WorkflowTriggerKind | string) {
-    if (kind === 'manual' || kind === 'schedule' || kind === 'webhook' || kind === 'inbox_event')
+    if (
+      kind === 'manual' ||
+      kind === 'schedule' ||
+      kind === 'webhook' ||
+      kind === 'inbox_event' ||
+      kind === 'connector_event'
+    )
       return kind
     throw new BadRequestException(`Unsupported trigger kind: ${kind}`)
+  }
+
+  private sanitizeEventFilter(raw: unknown) {
+    const record = this.asRecord(raw)
+    if (!record) return undefined
+
+    const out: Record<string, string> = {}
+    for (const [key, value] of Object.entries(record)) {
+      const normalizedKey = key.trim().slice(0, 80)
+      const normalizedValue = this.optionalText(value)
+      if (!normalizedKey || !normalizedValue) continue
+      out[normalizedKey] = normalizedValue.slice(0, 160)
+      if (Object.keys(out).length >= 20) break
+    }
+
+    return Object.keys(out).length > 0 ? out : undefined
   }
 
   private sanitizeStepType(type: string | undefined) {
@@ -1783,7 +1824,13 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private sanitizeStoredTriggerKind(kind: string | undefined): WorkflowTriggerKind | null {
-    if (kind === 'manual' || kind === 'schedule' || kind === 'webhook' || kind === 'inbox_event')
+    if (
+      kind === 'manual' ||
+      kind === 'schedule' ||
+      kind === 'webhook' ||
+      kind === 'inbox_event' ||
+      kind === 'connector_event'
+    )
       return kind
     return null
   }
