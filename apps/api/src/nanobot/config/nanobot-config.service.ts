@@ -69,7 +69,7 @@ export class NanobotConfigService {
     if (typeof this.runtimeOverrides.parallelDelegationEnabled === 'boolean') {
       return this.runtimeOverrides.parallelDelegationEnabled
     }
-    return parseBoolean(this.config.get<string>('NANOBOT_PARALLEL_DELEGATION_ENABLED'), true)
+    return parseBoolean(this.config.get<string>('NANOBOT_PARALLEL_DELEGATION_ENABLED'), false)
   }
 
   get parallelDelegationMaxAgents() {

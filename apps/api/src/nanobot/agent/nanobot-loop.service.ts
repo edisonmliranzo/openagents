@@ -121,6 +121,7 @@ export class NanobotLoopService {
 
     try {
       let latestAgentReply = ''
+      let pausedForApproval = false
       const route = this.runtimeIntelligence.routeThinking(params.userMessage)
       this.runtimeIntelligence.recordThinkingRoute(params.userId, route)
 
@@ -274,6 +275,14 @@ export class NanobotLoopService {
             this.orchestration.addToolEvent(runId, toolName, success ? 'ok' : 'error')
             this.bus.publish('orchestration.updated', { runId, stage: 'executing', tool: toolName, success })
           }
+          if (event === 'approval_required') {
+            pausedForApproval = true
+            const nextAlive = this.alive.markWaiting(params.userId, 'waiting for approval', 'act')
+            this.sessions.setStatus(params.conversationId, 'waiting_tool')
+            this.bus.publish('run.event', { runId, event, waiting: 'approval' })
+            params.emit(event, { ...data, alive: nextAlive })
+            return
+          }
           if (event === 'status') {
             const status = typeof data?.status === 'string' ? data.status : ''
             if (status === 'running_tool') {
@@ -319,6 +328,15 @@ export class NanobotLoopService {
               params.emit(event, { ...data, alive: nextAlive })
               return
             }
+            if (status === 'waiting_approval') {
+              pausedForApproval = true
+              const toolName = typeof data?.tool === 'string' ? data.tool : 'tool'
+              const nextAlive = this.alive.markWaiting(params.userId, `waiting for approval: ${toolName}`, 'act')
+              this.sessions.setStatus(params.conversationId, 'waiting_tool')
+              this.bus.publish('run.event', { runId, event, stage: 'executing', waiting: 'approval', tool: toolName })
+              params.emit(event, { ...data, alive: nextAlive })
+              return
+            }
             if (status === 'done') {
               const nextAlive = this.alive.markDone(params.userId)
               this.orchestration.markReviewing(runId)
@@ -331,6 +349,10 @@ export class NanobotLoopService {
           params.emit(event, data)
         },
       })
+
+      if (pausedForApproval) {
+        return
+      }
 
       const recentToolCount = await this.countRecentRunTools(params.conversationId)
       await this.personality.updateForTurn(params.userId, {

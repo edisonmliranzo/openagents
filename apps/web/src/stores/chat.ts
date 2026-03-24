@@ -333,7 +333,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
           if (data.event === 'approval_required') {
             sawApprovalRequest = true
-            set((s) => ({ pendingApprovals: [...s.pendingApprovals, data.data.approval] }))
+            const approval = data.data?.approval as Approval | undefined
+            const approvalMessage =
+              typeof data.data?.message?.content === 'string' && data.data.message.content.trim()
+                ? data.data.message.content.trim()
+                : approval?.toolName
+                  ? `Approval requested for ${approval.toolName}. Review the pending action to continue.`
+                  : 'Approval requested. Review the pending action to continue.'
+
+            set((s) => ({
+              runStatus: 'waiting_approval',
+              pendingApprovals: approval
+                ? s.pendingApprovals.some((item) => item.id === approval.id)
+                  ? s.pendingApprovals
+                  : [...s.pendingApprovals, approval]
+                : s.pendingApprovals,
+              messages: s.messages.map((m) =>
+                m.id === agentTempId
+                  ? { ...m, content: approvalMessage, status: 'done' }
+                  : m,
+              ),
+            }))
           }
         } catch {}
       })
@@ -370,7 +390,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: nextMessages,
         activeHandoff,
         isStreaming: false,
-        runStatus: streamError ? 'error' : 'done',
+        runStatus: streamError ? 'error' : sawApprovalRequest ? 'waiting_approval' : 'done',
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: streamError,
