@@ -1,38 +1,40 @@
-// Agent version types for agent versioning
+import type { NanobotRuntimeConfig, NanobotSkillState } from './nanobot'
+
+export interface AgentVersionSettingsSnapshot {
+  preferredProvider?: string
+  preferredModel?: string
+  customSystemPrompt?: string
+}
+
 export interface AgentVersionSnapshot {
   id: string
-  version: string
-  config: Record<string, unknown>
+  userId: string
+  version: number
   createdAt: string
-  label?: string
   note?: string
-  settings: {
-    preferredProvider?: string
-    preferredModel?: string
-    customSystemPrompt?: string
-  }
-  runtimeConfig: {
-    enabled?: boolean
-    shadowMode?: boolean
-    maxLoopSteps?: number
-    runtimeLabel?: string
-  }
-  skills: Array<{
-    id: string
-    name: string
-    title: string
-    description: string
-    enabled: boolean
-    tools: string[]
-    promptAppendix?: string
-  }>
+  settings: AgentVersionSettingsSnapshot
+  runtimeConfig: NanobotRuntimeConfig
+  skills: NanobotSkillState[]
+}
+
+export interface CreateAgentVersionInput {
+  note?: string
 }
 
 export interface AgentVersionDiffEntry {
   path: string
-  oldValue: string
-  newValue: string
   before?: string
   after?: string
-  changeType: 'added' | 'removed' | 'modified'
+}
+
+export interface AgentVersionDiffResult {
+  fromId: string
+  toId: string
+  changes: AgentVersionDiffEntry[]
+}
+
+export interface AgentVersionRollbackResult {
+  ok: true
+  restoredVersionId: string
+  currentSnapshot: AgentVersionSnapshot
 }

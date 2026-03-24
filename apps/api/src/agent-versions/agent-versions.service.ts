@@ -21,7 +21,7 @@ const MAX_SNAPSHOTS_PER_USER = 200
 
 interface AgentVersionStoreFile {
   version: number
-  snapshots: AgentVersionSnapshot[]
+  snapshots: unknown[]
 }
 
 @Injectable()
@@ -147,17 +147,19 @@ export class AgentVersionsService {
       ? 1
       : Math.max(...existing.map((snapshot) => snapshot.version)) + 1
     const now = new Date().toISOString()
+    const note = this.optionalText(input.note)?.slice(0, 280) ?? undefined
+    const customSystemPrompt = this.optionalText(settings.customSystemPrompt) ?? undefined
 
     const snapshot: AgentVersionSnapshot = {
       id: randomUUID(),
       userId,
       version: nextVersion,
-      note: this.optionalText(input.note)?.slice(0, 280) ?? null,
       createdAt: now,
+      ...(note ? { note } : {}),
       settings: {
         preferredProvider: this.optionalText(settings.preferredProvider) ?? 'anthropic',
         preferredModel: this.optionalText(settings.preferredModel) ?? 'claude-sonnet-4-6',
-        customSystemPrompt: this.optionalText(settings.customSystemPrompt),
+        ...(customSystemPrompt ? { customSystemPrompt } : {}),
       },
       runtimeConfig: this.sanitizeRuntimeConfig(this.config.toJSON()),
       skills: this.sanitizeSkills(skills),
@@ -227,7 +229,11 @@ export class AgentVersionsService {
       const beforeText = this.diffValue(before)
       const afterText = this.diffValue(after)
       if (beforeText === afterText) return
-      changes.push({ path: pathName, before: beforeText, after: afterText })
+      changes.push({
+        path: pathName,
+        ...(beforeText !== undefined ? { before: beforeText } : {}),
+        ...(afterText !== undefined ? { after: afterText } : {}),
+      })
     }
 
     pushChange('settings.preferredProvider', from.settings.preferredProvider, to.settings.preferredProvider)
@@ -264,8 +270,8 @@ export class AgentVersionsService {
     return changes
   }
 
-  private diffValue(value: unknown): string | null {
-    if (value == null) return null
+  private diffValue(value: unknown): string | undefined {
+    if (value == null) return undefined
     if (typeof value === 'string') return value
     if (typeof value === 'number' || typeof value === 'boolean') return String(value)
     try {
@@ -286,7 +292,7 @@ export class AgentVersionsService {
     if (this.loadedUsers.has(userId)) return
     const store = await this.readStore(this.storeFilePath(userId))
     const snapshots = (store.snapshots ?? [])
-      .filter((snapshot) => snapshot.userId === userId)
+      .filter((snapshot) => this.matchesUserId(snapshot, userId))
       .map((snapshot) => this.sanitizeStoredSnapshot(snapshot, userId))
       .filter((snapshot): snapshot is AgentVersionSnapshot => Boolean(snapshot))
       .slice(-MAX_SNAPSHOTS_PER_USER)
@@ -294,32 +300,41 @@ export class AgentVersionsService {
     this.loadedUsers.add(userId)
   }
 
-  private sanitizeStoredSnapshot(snapshot: AgentVersionSnapshot, userId: string): AgentVersionSnapshot | null {
-    if (!snapshot || typeof snapshot !== 'object') return null
-    const createdAt = this.normalizeIso(snapshot.createdAt)
+  private matchesUserId(snapshot: unknown, userId: string) {
+    const record = this.asRecord(snapshot)
+    const storedUserId = this.optionalText(record?.userId)
+    return !storedUserId || storedUserId === userId
+  }
+
+  private sanitizeStoredSnapshot(snapshot: unknown, userId: string): AgentVersionSnapshot | null {
+    const record = this.asRecord(snapshot)
+    if (!record) return null
+
+    const createdAt = this.normalizeIso(record.createdAt)
     if (!createdAt) return null
 
-    const settingsRaw = this.asRecord(snapshot.settings) ?? {}
+    const settingsRaw = this.asRecord(record.settings) ?? {}
     const preferredProvider = this.optionalText(settingsRaw.preferredProvider) ?? 'anthropic'
     const preferredModel = this.optionalText(settingsRaw.preferredModel) ?? 'claude-sonnet-4-6'
-    const customSystemPrompt = this.optionalText(settingsRaw.customSystemPrompt)
+    const customSystemPrompt = this.optionalText(settingsRaw.customSystemPrompt) ?? undefined
 
-    const versionRaw = Number.parseInt(`${snapshot.version ?? 0}`, 10)
+    const versionRaw = Number.parseInt(`${record.version ?? 0}`, 10)
     const version = Number.isFinite(versionRaw) ? Math.max(1, versionRaw) : 1
+    const note = this.optionalText(record.note) ?? undefined
 
     return {
-      id: this.optionalText(snapshot.id) ?? randomUUID(),
+      id: this.optionalText(record.id) ?? randomUUID(),
       userId,
       version,
-      note: this.optionalText(snapshot.note),
       createdAt,
+      ...(note ? { note } : {}),
       settings: {
         preferredProvider,
         preferredModel,
-        customSystemPrompt,
+        ...(customSystemPrompt ? { customSystemPrompt } : {}),
       },
-      runtimeConfig: this.sanitizeRuntimeConfig(snapshot.runtimeConfig),
-      skills: this.sanitizeSkills(snapshot.skills),
+      runtimeConfig: this.sanitizeRuntimeConfig(record.runtimeConfig),
+      skills: this.sanitizeSkills(record.skills),
     }
   }
 
