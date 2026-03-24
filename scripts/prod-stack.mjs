@@ -2,6 +2,8 @@
 
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import http from 'node:http'
+import https from 'node:https'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -190,13 +192,10 @@ function diagnoseUpFailure() {
 async function waitForHttp(url, okStatuses, attempts = 30, delayMs = 2000) {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await fetch(url, {
-        redirect: 'manual',
-        signal: AbortSignal.timeout(5000),
-      })
+      const status = await getHttpStatus(url)
 
-      if (okStatuses.includes(response.status)) {
-        return response.status
+      if (status != null && okStatuses.includes(status)) {
+        return status
       }
     } catch {}
 
@@ -206,6 +205,35 @@ async function waitForHttp(url, okStatuses, attempts = 30, delayMs = 2000) {
   }
 
   throw new Error(`Timed out waiting for ${url}`)
+}
+
+function getHttpStatus(url, timeoutMs = 5000) {
+  const target = new URL(url)
+  const client = target.protocol === 'https:' ? https : http
+
+  return new Promise((resolve, reject) => {
+    const request = client.request(
+      target,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
+        },
+      },
+      (response) => {
+        const status = response.statusCode ?? null
+        response.resume()
+        response.on('end', () => resolve(status))
+      },
+    )
+
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error(`Request timed out for ${url}`))
+    })
+
+    request.on('error', reject)
+    request.end()
+  })
 }
 
 async function verifyUp(prodEnv) {
@@ -254,7 +282,12 @@ async function up() {
     diagnoseUpFailure()
     throw error
   }
-  await verifyUp(prodEnv)
+  try {
+    await verifyUp(prodEnv)
+  } catch (error) {
+    diagnoseUpFailure()
+    throw error
+  }
 }
 
 async function down() {
