@@ -58,6 +58,14 @@ model User {
   conversationSummaries ConversationSummary[]
   conversationHighlights ConversationHighlight[]
   actionItems      ActionItem[]
+  agentPresets     AgentPreset[]
+  artifacts        Artifact[]
+  artifactTemplates ArtifactTemplate[]
+  ownedWorkspaces  Workspace[] @relation("WorkspaceOwner")
+  workspaceMemberships WorkspaceMember[]
+  workspaceMemoryEntries WorkspaceMemoryEntry[]
+  packs            Pack[]
+  packInstalls     PackInstall[]
 }
 
 model RefreshToken {
@@ -867,4 +875,262 @@ model ActionItem {
 
   @@index([userId, status])
   @@index([userId, dueDate])
+}
+
+model AgentPreset {
+  id                 String   @id @default(cuid())
+  userId             String
+  workspaceId        String?
+  name               String
+  description        String?
+  role               String   @default("assistant")
+  outputStyle        String?
+  autonomyMode       String   @default("assist")
+  visibility         String   @default("private")
+  version            Int      @default(1)
+  preferredProvider  String?
+  preferredModel     String?
+  customSystemPrompt String?
+  enabledSkills      String   @default("[]")
+  tools              String   @default("[]")
+  connectorIds       String   @default("[]")
+  suggestedWorkflowIds String @default("[]")
+  policyJson         String?
+  appliedCount       Int      @default(0)
+  lastAppliedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation("WorkspacePresets", fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([userId, updatedAt])
+  @@index([workspaceId, updatedAt])
+}
+
+model Artifact {
+  id                 String   @id @default(cuid())
+  userId             String
+  workspaceId        String?
+  title              String
+  type               String
+  status             String   @default("draft")
+  summary            String?
+  labels             String   @default("[]")
+  sourceConversationId String?
+  sourceWorkflowId   String?
+  sourcePresetId     String?
+  sourcePackId       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace     Workspace?       @relation("WorkspaceOwnedArtifacts", fields: [workspaceId], references: [id], onDelete: SetNull)
+  versions      ArtifactVersion[]
+  sharedLinks   WorkspaceArtifact[]
+
+  @@index([userId, updatedAt])
+  @@index([workspaceId, updatedAt])
+}
+
+model ArtifactVersion {
+  id         String   @id @default(cuid())
+  artifactId String
+  version    Int
+  format     String   @default("markdown")
+  content    String
+  note       String?
+  metadata   String?
+  createdAt  DateTime @default(now())
+
+  artifact Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([artifactId, version])
+  @@index([artifactId, createdAt])
+}
+
+model ArtifactTemplate {
+  id            String   @id @default(cuid())
+  userId        String
+  workspaceId   String?
+  name          String
+  description   String?
+  type          String
+  defaultFormat String   @default("markdown")
+  outline       String?
+  promptGuide   String?
+  fieldSchema   String   @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation("WorkspaceArtifactTemplates", fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([userId, updatedAt])
+  @@index([workspaceId, updatedAt])
+}
+
+model Workspace {
+  id                         String   @id @default(cuid())
+  ownerId                    String
+  name                       String
+  description                String?
+  allowMemberInvites         Boolean  @default(true)
+  requireApprovalForNewMembers Boolean @default(false)
+  defaultMemberRole          String   @default("editor")
+  sharedMemoryEnabled        Boolean  @default(true)
+  sharedAgentsEnabled        Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  owner            User                 @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members          WorkspaceMember[]
+  invitations      WorkspaceInvitation[]
+  conversations    WorkspaceConversation[]
+  workflows        WorkspaceWorkflow[]
+  sharedArtifacts  WorkspaceArtifact[]
+  memoryEntries    WorkspaceMemoryEntry[]
+  presets          AgentPreset[]        @relation("WorkspacePresets")
+  artifacts        Artifact[]           @relation("WorkspaceOwnedArtifacts")
+  artifactTemplates ArtifactTemplate[]  @relation("WorkspaceArtifactTemplates")
+  packs            Pack[]               @relation("WorkspacePacks")
+
+  @@index([ownerId, updatedAt])
+}
+
+model WorkspaceMember {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  userId          String
+  role            String   @default("viewer")
+  permissions     String   @default("[]")
+  invitedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId, updatedAt])
+}
+
+model WorkspaceInvitation {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  email           String
+  role            String   @default("viewer")
+  invitedByUserId String
+  status          String   @default("pending")
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  @@index([email, status])
+}
+
+model WorkspaceConversation {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  conversationId String
+  title          String
+  sharedByUserId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, conversationId])
+  @@index([workspaceId, createdAt])
+}
+
+model WorkspaceWorkflow {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  workflowId     String
+  name           String
+  sharedByUserId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, workflowId])
+  @@index([workspaceId, createdAt])
+}
+
+model WorkspaceArtifact {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  artifactId     String
+  sharedByUserId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  artifact  Artifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, artifactId])
+  @@index([workspaceId, createdAt])
+}
+
+model WorkspaceMemoryEntry {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  createdByUserId String
+  type            String   @default("note")
+  title           String
+  content         String
+  tags            String   @default("[]")
+  sourceRef       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, updatedAt])
+  @@index([createdByUserId, updatedAt])
+}
+
+model Pack {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String?
+  slug        String
+  name        String
+  description String?
+  version     String   @default("1.0.0")
+  visibility  String   @default("private")
+  tags        String   @default("[]")
+  manifestJson String
+  installCount Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace?  @relation("WorkspacePacks", fields: [workspaceId], references: [id], onDelete: SetNull)
+  installs  PackInstall[]
+
+  @@unique([userId, slug])
+  @@index([visibility, updatedAt])
+  @@index([workspaceId, updatedAt])
+}
+
+model PackInstall {
+  id          String   @id @default(cuid())
+  packId      String
+  userId      String
+  status      String   @default("installed")
+  summary     String?
+  createdAt   DateTime @default(now())
+
+  pack Pack @relation(fields: [packId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([packId, userId])
+  @@index([userId, createdAt])
 }

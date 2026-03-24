@@ -11,6 +11,7 @@ import {
   Brain,
   ChevronDown,
   FileText,
+  Layers3,
   LogOut,
   Menu,
   MessageSquare,
@@ -20,6 +21,7 @@ import {
   ShieldCheck,
   Sun,
   Terminal,
+  Users,
   X,
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
@@ -45,6 +47,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     title: 'Assistant',
     items: [
       { label: 'Assistant Core', href: '/agent/openagent', icon: Activity },
+      { label: 'Presets', href: '/agent/presets', icon: Layers3 },
       { label: 'Skills', href: '/agent/skills', icon: Brain },
       { label: 'Marketplace', href: '/agent/marketplace', icon: BookOpen },
     ],
@@ -55,6 +58,8 @@ const BASE_NAV_GROUPS: NavGroup[] = [
       { label: 'Tasks', href: '/chat', icon: MessageSquare },
       { label: 'Actions', href: '/approvals', icon: ShieldCheck },
       { label: 'Knowledge', href: '/memory', icon: Brain },
+      { label: 'Artifacts', href: '/artifacts', icon: FileText },
+      { label: 'Workspaces', href: '/workspaces', icon: Users },
       { label: 'Runs', href: '/sessions', icon: Terminal },
     ],
   },
