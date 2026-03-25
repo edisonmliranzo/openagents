@@ -36,10 +36,8 @@ import {
   ChevronUp,
   Command,
   Gauge,
-  PlusCircle,
   RefreshCw,
   ShieldCheck,
-  Workflow,
 } from 'lucide-react'
 
 interface ChatWindowProps {
@@ -50,31 +48,7 @@ interface ChatWindowProps {
   onRuntimeLabelChange: (label: string) => void
 }
 
-interface QuickAction {
-  label: string
-  seed: string
-  mode: AssistantMode
-}
-
 type RuntimeProvider = keyof typeof LLM_MODEL_OPTIONS
-
-const QUICK_ACTIONS: QuickAction[] = [
-  {
-    label: 'Draft',
-    mode: 'plan',
-    seed: 'Draft the best first version of this and wait for approval before any external action.',
-  },
-  {
-    label: 'Execute',
-    mode: 'execute',
-    seed: 'Complete this request and use available tools whenever they materially help.',
-  },
-  {
-    label: 'Automate',
-    mode: 'plan',
-    seed: 'Design a reusable workflow or watcher for this task. Answer directly with objective, trigger, steps, approvals, state, and success criteria. Do not use tools unless I explicitly ask you to implement it.',
-  },
-]
 
 const THINK_LEVELS = ['', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
 const BINARY_THINK_LEVELS = ['', 'off', 'on'] as const
@@ -674,16 +648,6 @@ export function ChatWindow({
     await escalateToHuman(`Operator requested from ${assistantModeDefinition.label.toLowerCase()} mode.`)
   }
 
-  function handleQuickAction(action: QuickAction) {
-    if (action.mode !== assistantMode) {
-      onAssistantModeChange(action.mode)
-    }
-    setInput((current) =>
-      current.trim() ? `${current.trim()}\n\n${action.seed}` : action.seed,
-    )
-    focusComposer()
-  }
-
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const val = e.target.value
     setInput(val)
@@ -719,33 +683,39 @@ export function ChatWindow({
   }
 
   const inputIsCommand = input.trim().startsWith('/')
+  const isRuntimeCustomized = Boolean(
+    activeSession?.label?.trim() ||
+    activeSession?.thinkingLevel?.trim() ||
+    activeSession?.verboseLevel?.trim() ||
+    activeSession?.reasoningLevel?.trim() ||
+    activeSession?.model?.trim() ||
+    activeSession?.modelProvider?.trim(),
+  )
+  const assistantStatusText = isStreaming
+    ? 'Assistant is working...'
+    : activeHandoffStatus
+      ? `Waiting on a human operator (${activeHandoffStatus}).`
+      : runtimeBusy
+        ? 'Updating runtime...'
+        : 'Assistant ready'
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
-      {learnedSkill && (
-        <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2.5">
-          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-            <BrainCircuit size={12} />
-            <span>Learned skill</span>
-            <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
-            {learnedIntentLabel && (
-              <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] capitalize">
-                {learnedIntentLabel}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-              Session controls
-            </p>
-            <p className="mt-1 text-[13px] font-medium text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-              Routing, approvals, and runtime for the active session.
-            </p>
+          <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
+            {ASSISTANT_MODE_DEFINITIONS.map((definition) => (
+              <button
+                key={definition.id}
+                type="button"
+                onClick={() => onAssistantModeChange(definition.id)}
+                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${modeButtonClass(
+                  assistantMode === definition.id,
+                )}`}
+              >
+                {definition.label}
+              </button>
+            ))}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -762,6 +732,17 @@ export function ChatWindow({
                 human handoff {activeHandoffStatus}
               </span>
             )}
+            {learnedSkill && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+                <BrainCircuit size={12} />
+                <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
+                {learnedIntentLabel && (
+                  <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] capitalize">
+                    {learnedIntentLabel}
+                  </span>
+                )}
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setControlsExpanded((current) => !current)}
@@ -769,30 +750,12 @@ export function ChatWindow({
               aria-expanded={controlsExpanded}
             >
               {controlsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {controlsExpanded ? 'Collapse' : 'Expand controls'}
+              {controlsExpanded ? 'Hide details' : 'Details'}
             </button>
           </div>
         </div>
 
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-          {ASSISTANT_MODE_DEFINITIONS.map((definition) => (
-            <button
-              key={definition.id}
-              type="button"
-              onClick={() => onAssistantModeChange(definition.id)}
-              className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${modeButtonClass(
-                assistantMode === definition.id,
-              )}`}
-            >
-              {definition.label}
-              <span className="ml-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--tone-soft)]">
-                {definition.caption}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[var(--muted)] dark:text-[var(--muted)]">
           <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 font-mono uppercase tracking-[0.12em] text-[var(--tone-soft)]">
             {shortId(activeConversationId)}
           </span>
@@ -807,60 +770,75 @@ export function ChatWindow({
           <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
             {effectiveProviderLabel}
           </span>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-            {effectiveRuntime.source === 'session' ? 'session runtime' : 'default runtime'}
-          </span>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-            think {thinkingValue || 'inherit'}
-          </span>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-            verbose {verboseValue || 'inherit'}
-          </span>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-            reasoning {reasoningValue || 'inherit'}
-          </span>
-          {typeof activeSession?.totalTokens === 'number' && (
+          {isRuntimeCustomized && (
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+              customized runtime
+            </span>
+          )}
+          {thinkingValue && (
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+              think {thinkingValue}
+            </span>
+          )}
+          {verboseValue && (
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+              verbose {verboseValue}
+            </span>
+          )}
+          {reasoningValue && (
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+              reasoning {reasoningValue}
+            </span>
+          )}
+          {typeof activeSession?.totalTokens === 'number' && activeSession.totalTokens > 0 && (
             <span>{activeSession.totalTokens} tokens</span>
           )}
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => void executeOperatorCommand('/status')}
-            disabled={runtimeLoading || isStreaming}
-            className={controlButtonClass()}
-          >
-            <Gauge size={12} />
-            Status
-          </button>
-          <button
-            type="button"
-            onClick={() => void executeOperatorCommand('/approvals')}
-            disabled={runtimeLoading}
-            className={controlButtonClass()}
-          >
-            <ShieldCheck size={12} />
-            Approvals
-          </button>
-          <button
-            type="button"
-            onClick={() => void syncRuntimeState()}
-            disabled={runtimeLoading}
-            className={controlButtonClass()}
-          >
-            <RefreshCw size={12} />
-            Refresh runtime
-          </button>
-        </div>
-
         {controlsExpanded && (
           <div className="mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-              Advanced runtime
-            </p>
-            <p className="mt-1 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-              Model defaults plus per-session thinking, verbose, and reasoning controls.
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                  Session details
+                </p>
+                <p className="mt-1 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                  Runtime defaults plus per-session thinking, verbose, and reasoning controls.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void executeOperatorCommand('/status')}
+                  disabled={runtimeLoading || isStreaming}
+                  className={controlButtonClass()}
+                >
+                  <Gauge size={12} />
+                  Status
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void executeOperatorCommand('/approvals')}
+                  disabled={runtimeLoading}
+                  className={controlButtonClass()}
+                >
+                  <ShieldCheck size={12} />
+                  Approvals
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void syncRuntimeState()}
+                  disabled={runtimeLoading}
+                  className={controlButtonClass()}
+                >
+                  <RefreshCw size={12} />
+                  Refresh runtime
+                </button>
+              </div>
+            </div>
+
+            <p className="mt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+              Runtime controls
             </p>
 
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
@@ -1040,48 +1018,35 @@ export function ChatWindow({
       />
 
       <div className="border-t border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 sm:px-4">
-        <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
-          {QUICK_ACTIONS.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              onClick={() => handleQuickAction(action)}
-              className="shrink-0 whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-[11px] font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
-            >
-              {action.label}
-            </button>
-          ))}
-          <ResponsePresets onApply={handlePresetApply} />
-          <button
-            type="button"
-            onClick={() => void handleEscalate()}
-            disabled={!activeConversationId || Boolean(activeHandoffStatus) || isStreaming}
-            className="shrink-0 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <AlertTriangle size={12} />
-              Need human
-            </span>
-          </button>
-        </div>
-
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--muted)] dark:text-[var(--muted)]">
-          <p>
-            {assistantModeDefinition.label} mode. Press <kbd className="rounded border border-[var(--border)] px-1 font-mono">Enter</kbd> to send.
-          </p>
-          <p>
-            {isStreaming
-              ? 'Assistant is working...'
-              : activeHandoffStatus
-                ? `Waiting on a human operator (${activeHandoffStatus}).`
-                : runtimeBusy
-                  ? 'Updating runtime...'
-                  : 'Assistant ready'}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span>
+              {assistantModeDefinition.label} mode.
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5">
+              <Command size={10} />
+              / commands
+            </span>
+            <span>{assistantStatusText}</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <ResponsePresets onApply={handlePresetApply} />
+            <button
+              type="button"
+              onClick={() => void handleEscalate()}
+              disabled={!activeConversationId || Boolean(activeHandoffStatus) || isStreaming}
+              className="shrink-0 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <AlertTriangle size={12} />
+                Need human
+              </span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative flex w-full items-end gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 sm:flex-1">
+        <div className="relative flex w-full items-end gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2">
             {slashQuery !== null && (
               <SlashCommandPalette
                 query={slashQuery}
@@ -1118,30 +1083,6 @@ export function ChatWindow({
             >
               <ArrowUp size={16} />
             </button>
-          </div>
-
-          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
-            <button
-              type="button"
-              onClick={() => void executeOperatorCommand('/new')}
-              className="oa-soft-button inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
-            >
-              <PlusCircle size={14} />
-              New session
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onAssistantModeChange('plan')
-                setInput('Design a reusable workflow or watcher for this task. Answer directly with objective, trigger, steps, approvals, state, and success criteria. Do not use tools unless I explicitly ask you to implement it.')
-                focusComposer()
-              }}
-              className="oa-soft-button inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
-            >
-              <Workflow size={14} />
-              Build workflow
-            </button>
-          </div>
         </div>
       </div>
     </div>
