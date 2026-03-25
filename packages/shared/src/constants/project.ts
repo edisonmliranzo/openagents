@@ -4,6 +4,9 @@ export type OpenAgentsLocalQuickStartPlatform = 'windows' | 'macos' | 'ubuntu'
 export interface OpenAgentsQuickStartConfig {
   label: string
   shellPrefix: string
+  installCommand: string
+  startCommand: string
+  installerNote: string
   localCommands: string[]
   runtimeNote: string
   accessExample: string
@@ -11,6 +14,12 @@ export interface OpenAgentsQuickStartConfig {
 
 export const OPENAGENTS_REPO_URL = 'https://github.com/edisonmliranzo/openagents.git'
 export const OPENAGENTS_REPO_WEB_URL = 'https://github.com/edisonmliranzo/openagents'
+export const OPENAGENTS_RAW_BASE_URL =
+  'https://raw.githubusercontent.com/edisonmliranzo/openagents/main'
+export const OPENAGENTS_INSTALLER_URLS = {
+  windows: `${OPENAGENTS_RAW_BASE_URL}/scripts/install.ps1`,
+  unix: `${OPENAGENTS_RAW_BASE_URL}/scripts/install.sh`,
+} as const
 
 export const OPENAGENTS_SUPPORT_IDENTITY_PROMPT = [
   'You are OpenAgents, the assistant for the OpenAgents project.',
@@ -64,6 +73,9 @@ export const OPENAGENTS_LOCAL_QUICK_START: Record<
   windows: {
     label: 'Windows',
     shellPrefix: 'PS>',
+    installCommand: `powershell -NoProfile -ExecutionPolicy Bypass -c "irm ${OPENAGENTS_INSTALLER_URLS.windows} | iex"`,
+    startCommand: "cd $HOME\\openagents; pnpm dev",
+    installerNote: 'Installs Git, Node.js LTS, pnpm, Docker Desktop, clones the repo, and runs setup.',
     localCommands: [
       'winget install Git.Git',
       'winget install OpenJS.NodeJS.LTS',
@@ -81,6 +93,9 @@ export const OPENAGENTS_LOCAL_QUICK_START: Record<
   macos: {
     label: 'macOS',
     shellPrefix: '$',
+    installCommand: `curl -fsSL ${OPENAGENTS_INSTALLER_URLS.unix} | bash`,
+    startCommand: 'cd ~/openagents && pnpm dev',
+    installerNote: 'Installs Homebrew tools if needed, installs Git, Node, Docker Desktop, clones the repo, and runs setup.',
     localCommands: [
       'brew install git node@20',
       'brew install --cask docker',
@@ -97,6 +112,9 @@ export const OPENAGENTS_LOCAL_QUICK_START: Record<
   ubuntu: {
     label: 'Ubuntu',
     shellPrefix: '$',
+    installCommand: `curl -fsSL ${OPENAGENTS_INSTALLER_URLS.unix} | bash`,
+    startCommand: 'cd ~/openagents && pnpm dev',
+    installerNote: 'Installs Git, Node.js 20, pnpm, Docker, clones the repo, and runs setup.',
     localCommands: [
       'sudo apt-get update',
       'sudo apt-get install -y git curl ca-certificates gnupg',
@@ -129,7 +147,12 @@ function renderPromptGuide(title: string, lines: string[]) {
 }
 
 function renderQuickStartGuide(title: string, config: OpenAgentsQuickStartConfig) {
-  return renderPromptGuide(title, [...config.localCommands, `Access: ${config.accessExample}`])
+  return renderPromptGuide(title, [
+    `Install: ${config.installCommand}`,
+    `Start: ${config.startCommand}`,
+    ...config.localCommands,
+    `Access: ${config.accessExample}`,
+  ])
 }
 
 const OPENAGENTS_LOCAL_INSTALL_PROMPT_GUIDE = [

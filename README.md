@@ -39,7 +39,32 @@ It can answer questions, research the web, break a goal into steps, write conten
 
 ## Quick start (local)
 
-### 1. Prerequisites
+### 1. One-command install
+
+Windows (PowerShell):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/edisonmliranzo/openagents/main/scripts/install.ps1 | iex"
+cd $HOME\openagents; pnpm dev
+```
+
+macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/edisonmliranzo/openagents/main/scripts/install.sh | bash
+cd ~/openagents && pnpm dev
+```
+
+Ubuntu:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/edisonmliranzo/openagents/main/scripts/install.sh | bash
+cd ~/openagents && pnpm dev
+```
+
+The installer clones the repo into `~/openagents` (or `%USERPROFILE%\openagents` on Windows), installs Git/Node/pnpm/Docker when missing, and runs the existing `pnpm setup` bootstrap.
+
+### 2. Prerequisites
 
 - Git
 - Node.js 20+
@@ -79,7 +104,7 @@ corepack enable
 corepack prepare pnpm@9.0.0 --activate
 ```
 
-### 2. Clone and bootstrap
+### 3. Clone and bootstrap
 
 ```bash
 git clone https://github.com/edisonmliranzo/openagents.git
@@ -104,7 +129,7 @@ Useful variants:
 - `node scripts/setup.mjs --skip-docker`
 - `node scripts/setup.mjs --skip-migrate`
 
-### 3. Start apps
+### 4. Start apps
 
 ```bash
 pnpm dev
@@ -137,7 +162,7 @@ If you only want to print login URLs without starting the app:
 pnpm --filter @openagents/web run show:login-url
 ```
 
-### 4. Manual setup (optional)
+### 5. Manual setup (optional)
 
 ```bash
 pnpm install
@@ -160,7 +185,7 @@ Local URLs:
 - API: `http://localhost:3001`
 - API docs: `http://localhost:3001/docs`
 
-### 5. Update an existing local install
+### 6. Update an existing local install
 
 Windows (PowerShell):
 

@@ -290,18 +290,48 @@ export default function RootPage() {
                 <p className="text-xs text-slate-400">{activeQuickStart.runtimeNote}</p>
               </div>
 
-              <pre className="space-y-2 overflow-x-auto text-sm text-slate-100">
-                {activeQuickStart.localCommands.map((line) => (
-                  <div key={line} className="whitespace-pre">
-                    <span className="mr-2 text-cyan-300">{activeQuickStart.shellPrefix}</span>
-                    <code>{line}</code>
-                  </div>
-                ))}
-              </pre>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  Works everywhere. Installs everything.
+                </p>
+                <p className="mt-2 text-sm text-slate-300">{activeQuickStart.installerNote}</p>
 
-              <p className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-100">
-                Access example: {activeQuickStart.accessExample}
-              </p>
+                <div className="mt-4 space-y-2 overflow-x-auto text-sm text-slate-100">
+                  <div className="whitespace-pre">
+                    <span className="mr-2 text-cyan-300">{activeQuickStart.shellPrefix}</span>
+                    <code>{activeQuickStart.installCommand}</code>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                  Start OpenAgents
+                </p>
+                <div className="mt-2 overflow-x-auto text-sm text-cyan-50">
+                  <div className="whitespace-pre">
+                    <span className="mr-2 text-cyan-200">{activeQuickStart.shellPrefix}</span>
+                    <code>{activeQuickStart.startCommand}</code>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm text-cyan-100">
+                  Access example: {activeQuickStart.accessExample}
+                </p>
+              </div>
+
+              <details className="mt-4 rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-200">
+                  Manual install steps
+                </summary>
+                <pre className="mt-4 space-y-2 overflow-x-auto text-sm text-slate-100">
+                  {activeQuickStart.localCommands.map((line) => (
+                    <div key={line} className="whitespace-pre">
+                      <span className="mr-2 text-cyan-300">{activeQuickStart.shellPrefix}</span>
+                      <code>{line}</code>
+                    </div>
+                  ))}
+                </pre>
+              </details>
             </div>
           </article>
 
