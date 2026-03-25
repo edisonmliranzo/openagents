@@ -32,6 +32,8 @@ import {
   AlertTriangle,
   ArrowUp,
   BrainCircuit,
+  ChevronDown,
+  ChevronUp,
   Command,
   Gauge,
   PlusCircle,
@@ -302,6 +304,7 @@ export function ChatWindow({
   const [runtimeLoading, setRuntimeLoading] = useState(false)
   const [runtimeBusy, setRuntimeBusy] = useState<string | null>(null)
   const [operatorMessages, setOperatorMessages] = useState<Message[]>([])
+  const [controlsExpanded, setControlsExpanded] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const learnedIntentLabel = formatIntentLabel(learnedSkill?.intent)
@@ -734,18 +737,18 @@ export function ChatWindow({
         </div>
       )}
 
-      <div className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+      <div className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
               Session controls
             </p>
-            <p className="mt-1 text-sm font-medium text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-              Compact routing, approvals, and execution posture for the active session.
+            <p className="mt-1 text-[13px] font-medium text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+              Routing, approvals, and runtime for the active session.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
               {runStatus ?? (isStreaming ? 'running' : 'ready')}
             </span>
@@ -759,16 +762,25 @@ export function ChatWindow({
                 human handoff {activeHandoffStatus}
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => setControlsExpanded((current) => !current)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
+              aria-expanded={controlsExpanded}
+            >
+              {controlsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              {controlsExpanded ? 'Collapse' : 'Expand controls'}
+            </button>
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {ASSISTANT_MODE_DEFINITIONS.map((definition) => (
             <button
               key={definition.id}
               type="button"
               onClick={() => onAssistantModeChange(definition.id)}
-              className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${modeButtonClass(
+              className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${modeButtonClass(
                 assistantMode === definition.id,
               )}`}
             >
@@ -780,182 +792,198 @@ export function ChatWindow({
           ))}
         </div>
 
-        <div className="mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                Runtime
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
-                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 font-mono uppercase tracking-[0.12em] text-[var(--tone-soft)]">
-                  {shortId(activeConversationId)}
-                </span>
-                {activeSession?.label?.trim() && (
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1">
-                    {activeSession.label.trim()}
-                  </span>
-                )}
-                {typeof activeSession?.totalTokens === 'number' && (
-                  <span>{activeSession.totalTokens} tokens</span>
-                )}
-                <span>{effectiveRuntime.model} / {effectiveProviderLabel}</span>
-                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1">
-                  {effectiveRuntime.source === 'session' ? 'session runtime' : 'default runtime'}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void executeOperatorCommand('/status')}
-                disabled={runtimeLoading || isStreaming}
-                className={controlButtonClass()}
-              >
-                <Gauge size={12} />
-                Status
-              </button>
-              <button
-                type="button"
-                onClick={() => void executeOperatorCommand('/approvals')}
-                disabled={runtimeLoading}
-                className={controlButtonClass()}
-              >
-                <ShieldCheck size={12} />
-                Approvals
-              </button>
-              <button
-                type="button"
-                onClick={() => void syncRuntimeState()}
-                disabled={runtimeLoading}
-                className={controlButtonClass()}
-              >
-                <RefreshCw size={12} />
-                Refresh runtime
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                Default provider
-              </span>
-              <select
-                value={activeProvider}
-                disabled={runtimeLoading || Boolean(runtimeBusy)}
-                onChange={(e) => {
-                  const provider = e.target.value
-                  if (!isRuntimeProvider(provider)) return
-                  void updateRuntimeSettings(provider, LLM_MODELS[provider].default, 'provider')
-                }}
-                className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] dark:text-[var(--tone-inverse)]"
-              >
-                {RUNTIME_PROVIDERS.map((provider) => (
-                  <option key={provider} value={provider}>
-                    {LLM_PROVIDER_CAPABILITIES[provider].label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                Default model
-              </span>
-              <select
-                value={runtimeSettings?.preferredModel?.trim() || LLM_MODELS[activeProvider].default}
-                disabled={runtimeLoading || Boolean(runtimeBusy)}
-                onChange={(e) => void updateRuntimeSettings(activeProvider, e.target.value, 'model')}
-                className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] dark:text-[var(--tone-inverse)]"
-              >
-                {providerModelOptions.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                Thinking
-              </span>
-              <select
-                value={thinkingValue}
-                disabled={!activeConversationId || runtimeLoading || Boolean(runtimeBusy)}
-                onChange={(e) =>
-                  void patchActiveSession(
-                    { thinkingLevel: resolveThinkingPatchValue(e.target.value, binaryThinking) },
-                    `Thinking level set to ${e.target.value || 'inherit'}.`,
-                    'think',
-                  )
-                }
-                className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] disabled:opacity-60 dark:text-[var(--tone-inverse)]"
-              >
-                {thinkingOptions.map((value) => (
-                  <option key={value || 'inherit'} value={value}>
-                    {value || 'inherit'}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                Verbose
-              </span>
-              <select
-                value={verboseValue}
-                disabled={!activeConversationId || runtimeLoading || Boolean(runtimeBusy)}
-                onChange={(e) =>
-                  void patchActiveSession(
-                    { verboseLevel: e.target.value || null },
-                    `Verbose level set to ${e.target.value || 'inherit'}.`,
-                    'verbose',
-                  )
-                }
-                className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] disabled:opacity-60 dark:text-[var(--tone-inverse)]"
-              >
-                {verboseOptions.map((option) => (
-                  <option key={option.value || 'inherit'} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                Reasoning
-              </span>
-              <select
-                value={reasoningValue}
-                disabled={!activeConversationId || runtimeLoading || Boolean(runtimeBusy)}
-                onChange={(e) =>
-                  void patchActiveSession(
-                    { reasoningLevel: e.target.value || null },
-                    `Reasoning visibility set to ${e.target.value || 'inherit'}.`,
-                    'reasoning',
-                  )
-                }
-                className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] disabled:opacity-60 dark:text-[var(--tone-inverse)]"
-              >
-                {reasoningOptions.map((value) => (
-                  <option key={value || 'inherit'} value={value}>
-                    {value || 'inherit'}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 font-mono uppercase tracking-[0.12em] text-[var(--tone-soft)]">
+            {shortId(activeConversationId)}
+          </span>
+          {activeSession?.label?.trim() && (
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+              {activeSession.label.trim()}
+            </span>
+          )}
+          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+            {effectiveRuntime.model}
+          </span>
+          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+            {effectiveProviderLabel}
+          </span>
+          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+            {effectiveRuntime.source === 'session' ? 'session runtime' : 'default runtime'}
+          </span>
+          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+            think {thinkingValue || 'inherit'}
+          </span>
+          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+            verbose {verboseValue || 'inherit'}
+          </span>
+          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+            reasoning {reasoningValue || 'inherit'}
+          </span>
+          {typeof activeSession?.totalTokens === 'number' && (
+            <span>{activeSession.totalTokens} tokens</span>
+          )}
         </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void executeOperatorCommand('/status')}
+            disabled={runtimeLoading || isStreaming}
+            className={controlButtonClass()}
+          >
+            <Gauge size={12} />
+            Status
+          </button>
+          <button
+            type="button"
+            onClick={() => void executeOperatorCommand('/approvals')}
+            disabled={runtimeLoading}
+            className={controlButtonClass()}
+          >
+            <ShieldCheck size={12} />
+            Approvals
+          </button>
+          <button
+            type="button"
+            onClick={() => void syncRuntimeState()}
+            disabled={runtimeLoading}
+            className={controlButtonClass()}
+          >
+            <RefreshCw size={12} />
+            Refresh runtime
+          </button>
+        </div>
+
+        {controlsExpanded && (
+          <div className="mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+              Advanced runtime
+            </p>
+            <p className="mt-1 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+              Model defaults plus per-session thinking, verbose, and reasoning controls.
+            </p>
+
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              <label className="space-y-1">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
+                  Default provider
+                </span>
+                <select
+                  value={activeProvider}
+                  disabled={runtimeLoading || Boolean(runtimeBusy)}
+                  onChange={(e) => {
+                    const provider = e.target.value
+                    if (!isRuntimeProvider(provider)) return
+                    void updateRuntimeSettings(provider, LLM_MODELS[provider].default, 'provider')
+                  }}
+                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] dark:text-[var(--tone-inverse)]"
+                >
+                  {RUNTIME_PROVIDERS.map((provider) => (
+                    <option key={provider} value={provider}>
+                      {LLM_PROVIDER_CAPABILITIES[provider].label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
+                  Default model
+                </span>
+                <select
+                  value={runtimeSettings?.preferredModel?.trim() || LLM_MODELS[activeProvider].default}
+                  disabled={runtimeLoading || Boolean(runtimeBusy)}
+                  onChange={(e) => void updateRuntimeSettings(activeProvider, e.target.value, 'model')}
+                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] dark:text-[var(--tone-inverse)]"
+                >
+                  {providerModelOptions.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
+                  Thinking
+                </span>
+                <select
+                  value={thinkingValue}
+                  disabled={!activeConversationId || runtimeLoading || Boolean(runtimeBusy)}
+                  onChange={(e) =>
+                    void patchActiveSession(
+                      { thinkingLevel: resolveThinkingPatchValue(e.target.value, binaryThinking) },
+                      `Thinking level set to ${e.target.value || 'inherit'}.`,
+                      'think',
+                    )
+                  }
+                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] disabled:opacity-60 dark:text-[var(--tone-inverse)]"
+                >
+                  {thinkingOptions.map((value) => (
+                    <option key={value || 'inherit'} value={value}>
+                      {value || 'inherit'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
+                  Verbose
+                </span>
+                <select
+                  value={verboseValue}
+                  disabled={!activeConversationId || runtimeLoading || Boolean(runtimeBusy)}
+                  onChange={(e) =>
+                    void patchActiveSession(
+                      { verboseLevel: e.target.value || null },
+                      `Verbose level set to ${e.target.value || 'inherit'}.`,
+                      'verbose',
+                    )
+                  }
+                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] disabled:opacity-60 dark:text-[var(--tone-inverse)]"
+                >
+                  {verboseOptions.map((option) => (
+                    <option key={option.value || 'inherit'} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
+                  Reasoning
+                </span>
+                <select
+                  value={reasoningValue}
+                  disabled={!activeConversationId || runtimeLoading || Boolean(runtimeBusy)}
+                  onChange={(e) =>
+                    void patchActiveSession(
+                      { reasoningLevel: e.target.value || null },
+                      `Reasoning visibility set to ${e.target.value || 'inherit'}.`,
+                      'reasoning',
+                    )
+                  }
+                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] disabled:opacity-60 dark:text-[var(--tone-inverse)]"
+                >
+                  {reasoningOptions.map((value) => (
+                    <option key={value || 'inherit'} value={value}>
+                      {value || 'inherit'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface-muted)] px-3 py-3 sm:px-5">
         {visibleMessages.length === 0 ? (
           <div className="flex h-full items-center justify-center py-8">
-            <div className="w-full max-w-[760px] rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
+            <div className="w-full max-w-[880px] rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
               <div className="flex items-center gap-2 text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
                 <div className="oa-brand-badge flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold text-white">
                   OA
@@ -996,7 +1024,7 @@ export function ChatWindow({
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-[980px] space-y-3 pb-3 pt-1">
+          <div className="mx-auto max-w-[1180px] space-y-3 pb-3 pt-1">
             {visibleMessages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
@@ -1011,14 +1039,14 @@ export function ChatWindow({
         onAdd={handleAddPin}
       />
 
-      <div className="border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:px-4">
-        <div className="mb-3 flex flex-wrap gap-2">
+      <div className="border-t border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 sm:px-4">
+        <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
           {QUICK_ACTIONS.map((action) => (
             <button
               key={action.label}
               type="button"
               onClick={() => handleQuickAction(action)}
-              className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-[11px] font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
+              className="shrink-0 whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-[11px] font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
             >
               {action.label}
             </button>
@@ -1028,7 +1056,7 @@ export function ChatWindow({
             type="button"
             onClick={() => void handleEscalate()}
             disabled={!activeConversationId || Boolean(activeHandoffStatus) || isStreaming}
-            className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+            className="shrink-0 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
           >
             <span className="inline-flex items-center gap-1.5">
               <AlertTriangle size={12} />
@@ -1037,7 +1065,7 @@ export function ChatWindow({
           </button>
         </div>
 
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--muted)] dark:text-[var(--muted)]">
           <p>
             {assistantModeDefinition.label} mode. Press <kbd className="rounded border border-[var(--border)] px-1 font-mono">Enter</kbd> to send.
           </p>
@@ -1052,7 +1080,7 @@ export function ChatWindow({
           </p>
         </div>
 
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex w-full items-end gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 sm:flex-1">
             {slashQuery !== null && (
               <SlashCommandPalette
@@ -1079,7 +1107,7 @@ export function ChatWindow({
                     : `${assistantModeDefinition.placeholder} (type / for commands)`
                   : 'Runtime offline. /help still works locally.'
               }
-              className="max-h-44 min-h-[42px] w-full resize-none bg-transparent px-2 py-2 text-sm text-[var(--tone-strong)] outline-none placeholder:text-[var(--tone-soft)] disabled:cursor-not-allowed disabled:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"
+              className="max-h-40 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-[var(--tone-strong)] outline-none placeholder:text-[var(--tone-soft)] disabled:cursor-not-allowed disabled:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"
             />
             <button
               type="button"
@@ -1096,7 +1124,7 @@ export function ChatWindow({
             <button
               type="button"
               onClick={() => void executeOperatorCommand('/new')}
-              className="oa-soft-button inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
+              className="oa-soft-button inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
             >
               <PlusCircle size={14} />
               New session
@@ -1108,7 +1136,7 @@ export function ChatWindow({
                 setInput('Design a reusable workflow or watcher for this task. Answer directly with objective, trigger, steps, approvals, state, and success criteria. Do not use tools unless I explicitly ask you to implement it.')
                 focusComposer()
               }}
-              className="oa-soft-button inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
+              className="oa-soft-button inline-flex h-9 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
             >
               <Workflow size={14} />
               Build workflow
