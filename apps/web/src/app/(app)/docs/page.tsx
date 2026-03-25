@@ -44,11 +44,18 @@ const CAPABILITY_CARDS = [
     implHref: `${REPO_BASE}/blob/main/apps/api/src/connectors/connectors.service.ts`,
   },
   {
-    title: 'Lineage + Repair',
-    summary: 'Trace conversation state, inspect provenance, and repair runs that got stuck or diverged.',
+    title: 'Lineage',
+    summary: 'Trace memory files, approvals, tools, and external sources behind each response.',
     uiHref: '/control/lineage',
     apiHref: `${API_ORIGIN}/api/v1/lineage/recent`,
     implHref: `${REPO_BASE}/blob/main/apps/api/src/lineage/lineage.service.ts`,
+  },
+  {
+    title: 'Repair Center',
+    summary: 'Inspect stale messages, orphan approvals, and drifted run state, then apply repair actions.',
+    uiHref: '/control/repair',
+    apiHref: `${API_ORIGIN}/api/v1/conversations/:id/repair`,
+    implHref: `${REPO_BASE}/blob/main/apps/api/src/conversations/conversations.service.ts`,
   },
 ]
 

@@ -58,6 +58,11 @@ export interface TriggerEvent {
   processedAt?: string
 }
 
+export interface TriggerEventOption {
+  value: TriggerEventType
+  label: string
+}
+
 export interface CreateTriggerDto {
   name: string
   description?: string

@@ -56,11 +56,13 @@ export interface MetricsSummary {
   daily: DailyMetrics[]
 }
 
+export type MetricsGroupBy = 'day' | 'week' | 'month'
+
 export interface MetricsQuery {
   userId?: string
   startDate?: string
   endDate?: string
-  groupBy?: 'day' | 'week' | 'month'
+  groupBy?: MetricsGroupBy
 }
 
 export interface TokenUsage {
@@ -79,4 +81,69 @@ export interface ApprovalMetrics {
   denied: number
   approvalRate: number
   averageResolutionTimeMs: number
+}
+
+export interface BudgetLimit {
+  id: string
+  budgetType: string
+  limitUsd: number
+  alertAtUsd: number | null
+  currentSpentUsd: number
+  remainingUsd: number
+  percentUsed: number
+  enabled: boolean
+  periodStart: string
+  periodEnd: string
+}
+
+export interface BudgetStatusEntry {
+  id: string
+  budgetType: string
+  limitUsd: number
+  currentSpentUsd: number
+  alertAtUsd: number | null
+  remainingUsd: number
+  percentUsed: number
+  isOverBudget: boolean
+  isNearLimit: boolean
+}
+
+export interface BudgetStatus {
+  overBudget: boolean
+  budgets: BudgetStatusEntry[]
+}
+
+export interface SetBudgetLimitInput {
+  budgetType: string
+  limitUsd: number
+  alertAtUsd?: number
+}
+
+export interface LogMetricInput {
+  metricType: string
+  action: string
+  provider?: string
+  model?: string
+  durationMs?: number
+  tokensUsed?: number
+  costUsd?: number
+  conversationId?: string
+  toolName?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface MetricLogEntry {
+  id: string
+  userId: string
+  metricType: string
+  action: string
+  provider: string | null
+  model: string | null
+  durationMs: number | null
+  tokensUsed: number | null
+  costUsd: number | null
+  conversationId: string | null
+  toolName: string | null
+  metadata: Record<string, unknown> | null
+  createdAt: string
 }

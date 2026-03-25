@@ -23,6 +23,7 @@ import {
   Sun,
   Terminal,
   Users,
+  Wrench,
   X,
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
@@ -49,6 +50,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Chat', href: '/chat', icon: MessageSquare },
       { label: 'Sessions', href: '/sessions', icon: Terminal },
+      { label: 'Repair', href: '/control/repair', icon: Wrench },
       { label: 'Usage', href: '/control/usage', icon: Activity },
       { label: 'Cron Jobs', href: '/control/cron-jobs', icon: Bell },
     ],

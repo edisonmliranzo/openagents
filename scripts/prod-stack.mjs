@@ -207,6 +207,30 @@ async function waitForHttp(url, okStatuses, attempts = 30, delayMs = 2000) {
   throw new Error(`Timed out waiting for ${url}`)
 }
 
+async function waitForAnyHttp(urls, okStatuses, attempts = 30, delayMs = 2000) {
+  let lastUrl = urls[0] ?? 'unknown endpoint'
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    for (const url of urls) {
+      lastUrl = url
+
+      try {
+        const status = await getHttpStatus(url)
+
+        if (status != null && okStatuses.includes(status)) {
+          return { url, status }
+        }
+      } catch {}
+    }
+
+    if (attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+
+  throw new Error(`Timed out waiting for any of: ${urls.join(', ') || lastUrl}`)
+}
+
 function getHttpStatus(url, timeoutMs = 5000) {
   const target = new URL(url)
   const client = target.protocol === 'https:' ? https : http
@@ -236,16 +260,55 @@ function getHttpStatus(url, timeoutMs = 5000) {
   })
 }
 
+function shellEscape(value) {
+  return `'${`${value}`.replace(/'/g, `'\"'\"'`)}'`
+}
+
+function getContainerHttpStatus(service, url) {
+  const command = `curl -fsS -o /dev/null -w '%{http_code}' ${shellEscape(url)}`
+  const result = runCompose(['exec', '-T', service, 'sh', '-lc', command], {
+    capture: true,
+    allowFailure: true,
+  })
+  const status = Number.parseInt(`${result.stdout}`.trim(), 10)
+  return Number.isFinite(status) ? status : null
+}
+
 async function verifyUp(prodEnv) {
   const webHostPort = `${prodEnv.WEB_HOST_PORT ?? '3000'}`.trim() || '3000'
-  const loginUrl = `http://127.0.0.1:${webHostPort}/login`
-  const proxiedHealthUrl = `http://127.0.0.1:${webHostPort}/api/v1/health`
+  const hostBases = [
+    `http://127.0.0.1:${webHostPort}`,
+    `http://localhost:${webHostPort}`,
+    `http://[::1]:${webHostPort}`,
+  ]
+  const loginUrls = hostBases.map((base) => `${base}/login`)
+  const proxiedHealthUrls = hostBases.map((base) => `${base}/api/v1/health`)
 
   console.log('\n[openagents:prod] Verifying web login page...')
-  await waitForHttp(loginUrl, [200, 301, 302, 307, 308])
+  try {
+    await waitForAnyHttp(loginUrls, [200, 301, 302, 307, 308])
+  } catch (error) {
+    const internalLoginStatus = getContainerHttpStatus('web', 'http://localhost:3000/login')
+    if (internalLoginStatus != null && [200, 301, 302, 307, 308].includes(internalLoginStatus)) {
+      throw new Error(
+        `Web app is serving inside the container, but the host-published port ${webHostPort} is unreachable via 127.0.0.1, localhost, and ::1. Check Docker port bindings, IPv6-only localhost resolution, or host firewall rules.`,
+      )
+    }
+    throw error
+  }
 
   console.log('[openagents:prod] Verifying same-origin API proxy...')
-  await waitForHttp(proxiedHealthUrl, [200])
+  try {
+    await waitForAnyHttp(proxiedHealthUrls, [200])
+  } catch (error) {
+    const internalProxyStatus = getContainerHttpStatus('web', 'http://localhost:3000/api/v1/health')
+    if (internalProxyStatus === 200) {
+      throw new Error(
+        `Same-origin API proxy works inside the web container, but the host-published port ${webHostPort} is unreachable via 127.0.0.1, localhost, and ::1. Check Docker port bindings, IPv6-only localhost resolution, or host firewall rules.`,
+      )
+    }
+    throw error
+  }
 
   console.log(`[openagents:prod] Ready. Access: ${inferAccessUrl(prodEnv)}`)
 }

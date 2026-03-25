@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { AuditLog, Notification, SessionRow, User, UserSettings } from '@openagents/shared'
 import {
   Terminal, ShieldAlert, Zap, Bell, RefreshCw, Brain, Activity,
-  TrendingUp, Clock, CheckCircle2, AlertCircle,
+  TrendingUp, Clock, CheckCircle2, AlertCircle, Wrench,
 } from 'lucide-react'
 
 interface OverviewState {
@@ -293,6 +293,15 @@ export default function OverviewPage() {
         detail: `${formatNumber(state.pendingApprovals)} pending approvals can be previewed before execution`,
         icon: Terminal,
         tone: 'amber' as const,
+      },
+      {
+        title: 'Repair Center',
+        description: 'Diagnose stale messages, orphan approvals, and drifted run state.',
+        href: '/control/repair',
+        metric: `${formatNumber(state.pendingApprovals)} live blockers`,
+        detail: 'Scan recent conversations and apply one-click repair actions',
+        icon: Wrench,
+        tone: 'rose' as const,
       },
       {
         title: 'Operator Inbox',

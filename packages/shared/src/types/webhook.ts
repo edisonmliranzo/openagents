@@ -38,6 +38,10 @@ export interface WebhookConfig {
   updatedAt: string
 }
 
+export interface WebhookConfigSummary extends WebhookConfig {
+  deliveryCount: number
+}
+
 export interface WebhookDelivery {
   id: string
   webhookId: string
@@ -67,10 +71,23 @@ export interface UpdateWebhookDto {
   headers?: Record<string, string>
 }
 
+export interface WebhookEventOption {
+  value: WebhookEventType
+  label: string
+}
+
 export interface WebhookDeliveryStats {
   total: number
   success: number
   failed: number
   pending: number
   successRate: number
+}
+
+export interface WebhookRetryResult {
+  retried: true
+}
+
+export interface WebhookTestResult {
+  testDeliveryId: string
 }

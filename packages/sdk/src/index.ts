@@ -28,6 +28,9 @@ export { createCiHealerApi } from './api/ci-healer'
 export { createSkillRegistryApi } from './api/skill-registry'
 export { createAgentVersionsApi } from './api/agent-versions'
 export { createConnectorsApi } from './api/connectors'
+export { createMetricsApi } from './api/metrics'
+export { createTriggersApi } from './api/triggers'
+export { createWebhooksApi } from './api/webhooks'
 export { createAgentPresetsApi } from './api/agent-presets'
 export { createArtifactsApi } from './api/artifacts'
 export { createWorkspacesApi } from './api/workspaces'
@@ -62,6 +65,9 @@ import { createCiHealerApi } from './api/ci-healer'
 import { createSkillRegistryApi } from './api/skill-registry'
 import { createAgentVersionsApi } from './api/agent-versions'
 import { createConnectorsApi } from './api/connectors'
+import { createMetricsApi } from './api/metrics'
+import { createTriggersApi } from './api/triggers'
+import { createWebhooksApi } from './api/webhooks'
 import { createAgentPresetsApi } from './api/agent-presets'
 import { createArtifactsApi } from './api/artifacts'
 import { createWorkspacesApi } from './api/workspaces'
@@ -101,6 +107,9 @@ export function createSDK(config: SDKConfig) {
     skillRegistry: createSkillRegistryApi(client),
     agentVersions: createAgentVersionsApi(client),
     connectors: createConnectorsApi(client),
+    metrics: createMetricsApi(client),
+    triggers: createTriggersApi(client),
+    webhooks: createWebhooksApi(client),
     agentPresets: createAgentPresetsApi(client),
     artifacts: createArtifactsApi(client),
     workspaces: createWorkspacesApi(client),
