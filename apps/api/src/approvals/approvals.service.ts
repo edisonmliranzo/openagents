@@ -113,7 +113,7 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
       score += 20
       reasons.push('Requested outside autonomy window.')
     }
-    if (/(gmail|calendar_create_event|cron_remove|cron_add|draft|send|delete|remove|bybit_place_demo_order|order_create|trade)/i.test(lowerTool)) {
+    if (/(gmail|calendar_create_event|calendar_update_event|calendar_cancel_event|cron_remove|cron_add|draft|send|delete|remove|update|cancel|bybit_place_demo_order|order_create|trade)/i.test(lowerTool)) {
       score += 22
       reasons.push('Tool can mutate external state.')
     }

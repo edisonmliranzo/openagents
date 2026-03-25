@@ -86,6 +86,36 @@ function rememberActiveConversation(conversationId: string) {
   })
 }
 
+function formatStreamingStatus(status: string | null, data?: Record<string, unknown>) {
+  if (!status) return ''
+
+  const toolName =
+    typeof data?.tool === 'string' && data.tool.trim()
+      ? data.tool.trim()
+      : 'tool'
+
+  switch (status) {
+    case 'thinking':
+      return 'Thinking through the request...'
+    case 'planning':
+      return 'Planning the fastest safe path...'
+    case 'executing':
+      return 'Executing the plan...'
+    case 'running_tool':
+      return `Running ${toolName}...`
+    case 'retrying_tool': {
+      const attempt = Number.isFinite(Number(data?.attempt)) ? Number(data?.attempt) : null
+      return attempt ? `Retrying ${toolName} (attempt ${attempt})...` : `Retrying ${toolName}...`
+    }
+    case 'verifying':
+      return 'Verifying the result before replying...'
+    case 'waiting_approval':
+      return `Waiting for approval${toolName !== 'tool' ? `: ${toolName}` : '...'}`
+    default:
+      return ''
+  }
+}
+
 interface ChatState {
   conversations: Conversation[]
   conversationsLoading: boolean
@@ -242,7 +272,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       messages: [
         ...s.messages,
-        { id: agentTempId, conversationId: activeConversationId, role: 'agent', content: '', status: 'streaming', createdAt: new Date().toISOString() } as Message,
+        {
+          id: agentTempId,
+          conversationId: activeConversationId,
+          role: 'agent',
+          content: formatStreamingStatus('thinking'),
+          status: 'streaming',
+          createdAt: new Date().toISOString(),
+        } as Message,
       ],
     }))
 
@@ -283,7 +320,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ? data.data.learnedIntent.trim()
               : ''
             if (nextStatus) {
-              set({ runStatus: nextStatus })
+              const statusText = formatStreamingStatus(
+                nextStatus,
+                data.data && typeof data.data === 'object'
+                  ? (data.data as Record<string, unknown>)
+                  : undefined,
+              )
+              set((s) => ({
+                runStatus: nextStatus,
+                messages: s.messages.map((m) =>
+                  m.id === agentTempId && !sawAgentMessage && m.status === 'streaming'
+                    ? { ...m, content: statusText || m.content }
+                    : m,
+                ),
+              }))
             }
             if (learnedSkillId) {
               set({
@@ -384,6 +434,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       } else if (!sawAgentMessage && !sawApprovalRequest) {
         streamError = 'Agent returned no reply. Check provider settings and try again.'
+        const latestUser = [...messages].reverse().find((m) => m.role === 'user')
+        const latestAgentAfterUser = [...messages]
+          .reverse()
+          .find((m) => m.role === 'agent' && (!latestUser || m.createdAt >= latestUser.createdAt))
+
+        if (!latestAgentAfterUser) {
+          nextMessages = [
+            ...messages,
+            {
+              id: `agent-empty-${Date.now()}`,
+              conversationId: activeConversationId,
+              role: 'agent',
+              content: streamError,
+              status: 'error',
+              createdAt: new Date().toISOString(),
+            } as Message,
+          ]
+        }
       }
 
       set({

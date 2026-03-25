@@ -21,20 +21,20 @@ const CONNECTOR_CATALOG: ConnectorCatalogEntry[] = [
     id: 'google_gmail',
     label: 'Gmail',
     category: 'Productivity',
-    description: 'Search emails and draft replies using the Gmail API.',
+    description: 'Search mail, read threads, inspect labels, draft replies, and send drafts with the Gmail API.',
     docsUrl: 'https://developers.google.com/gmail/api',
     envVars: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
-    tools: ['gmail_search', 'gmail_draft_reply'],
+    tools: ['gmail_search', 'gmail_read_thread', 'gmail_list_labels', 'gmail_draft_reply', 'gmail_send_draft'],
     icon: '📧',
   },
   {
     id: 'google_calendar',
     label: 'Google Calendar',
     category: 'Productivity',
-    description: 'Check availability and create calendar events.',
+    description: 'Check availability plus create, update, and cancel calendar events.',
     docsUrl: 'https://developers.google.com/calendar',
     envVars: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
-    tools: ['calendar_get_availability', 'calendar_create_event'],
+    tools: ['calendar_get_availability', 'calendar_create_event', 'calendar_update_event', 'calendar_cancel_event'],
     icon: '📅',
   },
   {
@@ -251,6 +251,7 @@ export default function ConnectorsPage() {
           const status = getConnectorStatus(entry)
           const isExpanded = expandedId === entry.id
           const availableTools = entry.tools.filter((t) => installedToolNames.has(t))
+          const connection = connections.find((item) => item.connectorId === entry.id) ?? null
 
           return (
             <article
@@ -323,6 +324,30 @@ export default function ConnectorsPage() {
 
               {isExpanded && (
                 <div className="border-t border-slate-100 bg-slate-50 p-4 space-y-3">
+                  {connection?.diagnostics && (
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                            Scope Coverage
+                          </p>
+                          <p className="text-xs text-slate-600">{connection.diagnostics.summary}</p>
+                        </div>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                          {connection.diagnostics.availableTools.length}/{connection.diagnostics.toolAccess.length} ready
+                        </span>
+                      </div>
+                      {connection.diagnostics.missingScopes.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {connection.diagnostics.missingScopes.map((scope) => (
+                            <span key={scope} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-700">
+                              {scope}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {entry.envVars.length > 0 ? (
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">

@@ -53,12 +53,17 @@ export class ToolsService {
     private linear: LinearTool,
     private jira: JiraTool,
     private mcp: McpService,
-  ) {
+    ) {
     this.registry = new Map([
       ['gmail_search', { def: this.withBuiltinSource(this.gmail.searchDef), execute: this.gmail.search.bind(this.gmail) }],
+      ['gmail_read_thread', { def: this.withBuiltinSource(this.gmail.readThreadDef), execute: this.gmail.readThread.bind(this.gmail) }],
+      ['gmail_list_labels', { def: this.withBuiltinSource(this.gmail.listLabelsDef), execute: this.gmail.listLabels.bind(this.gmail) }],
       ['gmail_draft_reply', { def: this.withBuiltinSource(this.gmail.draftReplyDef), execute: this.gmail.draftReply.bind(this.gmail) }],
+      ['gmail_send_draft', { def: this.withBuiltinSource(this.gmail.sendDraftDef), execute: this.gmail.sendDraft.bind(this.gmail) }],
       ['calendar_get_availability', { def: this.withBuiltinSource(this.calendar.availabilityDef), execute: this.calendar.getAvailability.bind(this.calendar) }],
       ['calendar_create_event', { def: this.withBuiltinSource(this.calendar.createEventDef), execute: this.calendar.createEvent.bind(this.calendar) }],
+      ['calendar_update_event', { def: this.withBuiltinSource(this.calendar.updateEventDef), execute: this.calendar.updateEvent.bind(this.calendar) }],
+      ['calendar_cancel_event', { def: this.withBuiltinSource(this.calendar.cancelEventDef), execute: this.calendar.cancelEvent.bind(this.calendar) }],
       ['web_fetch', { def: this.withBuiltinSource(this.webFetch.def), execute: this.webFetch.fetch.bind(this.webFetch) }],
       ['web_search', { def: this.withBuiltinSource(this.webSearch.def), execute: this.webSearch.search.bind(this.webSearch) }],
       ['get_current_time', { def: this.withBuiltinSource(this.time.def), execute: this.time.getCurrentTime.bind(this.time) }],
@@ -151,7 +156,7 @@ export class ToolsService {
       ? connectorSnapshot?.connectors.find((entry) => entry.connectorId === connectorId) ?? null
       : null
     const predictedScope = this.inferScope(toolName)
-    const reversible = !/(delete|remove|revoke|shutdown|terminate|wipe|create_event|draft_reply|place_demo_order)/i.test(toolName)
+    const reversible = !/(delete|remove|revoke|shutdown|terminate|wipe|create_event|update_event|cancel_event|draft_reply|send_draft|place_demo_order)/i.test(toolName)
     const sideEffects = this.inferSideEffects(toolName)
     const risk = this.policy.evaluate({
       action: definition.description,
@@ -222,7 +227,7 @@ export class ToolsService {
 
   private inferScope(toolName: string) {
     const value = toolName.trim().toLowerCase()
-    if (/(create|draft|send|remove|delete|place_demo_order)/i.test(value)) return 'external_write' as const
+    if (/(create|draft|send|remove|delete|update|cancel|place_demo_order)/i.test(value)) return 'external_write' as const
     if (/(web_|gmail_|calendar_|bybit_get_|deep_research|computer_)/i.test(value)) return 'external_read' as const
     if (/(cron_add|cron_remove)/i.test(value)) return 'system_mutation' as const
     return 'local' as const

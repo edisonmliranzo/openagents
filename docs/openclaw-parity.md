@@ -2,6 +2,8 @@
 
 This document tracks parity work needed to align OpenAgents behavior with OpenClaw-style runtime flow.
 
+For the broader ranked execution program across parity, trust, repair, and operator scale, see `docs/openclaw-master-program.md`.
+
 ## Recently completed
 
 - [x] Ollama model picker loads installed local models from Ollama server.

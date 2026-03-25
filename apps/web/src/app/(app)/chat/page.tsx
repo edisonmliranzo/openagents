@@ -279,6 +279,7 @@ export default function ChatPage() {
                 onNewSession={async () => {
                   await createConversation()
                 }}
+                onRuntimeLabelChange={setRuntimeLabel}
               />
             </div>
           </section>
@@ -320,6 +321,7 @@ export default function ChatPage() {
                     await createConversation()
                     setMobilePanel('chat')
                   }}
+                  onRuntimeLabelChange={setRuntimeLabel}
                 />
               </div>
             </section>

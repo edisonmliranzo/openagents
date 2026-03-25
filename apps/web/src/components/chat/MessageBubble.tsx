@@ -184,6 +184,7 @@ export function MessageBubble({ message }: { message: Message }) {
   const [lineageOpen, setLineageOpen] = useState(false)
   const [lineageLoading, setLineageLoading] = useState(false)
   const [lineageError, setLineageError] = useState('')
+  const canShowLineage = message.role === 'agent' && message.status !== 'streaming'
 
   const handleCopyBlock = useCallback(async (index: number, content: string) => {
     try {
@@ -270,13 +271,15 @@ export function MessageBubble({ message }: { message: Message }) {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => void handleToggleLineage()}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 text-[10px] font-semibold transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
-            >
-              Why this answer
-            </button>
+            {canShowLineage && (
+              <button
+                type="button"
+                onClick={() => void handleToggleLineage()}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 text-[10px] font-semibold transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
+              >
+                Why this answer
+              </button>
+            )}
             {codeBlocks.length > 0 && (
               <button
                 type="button"

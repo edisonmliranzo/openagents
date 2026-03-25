@@ -399,6 +399,10 @@ export class AgentService {
             if (outsideAutonomyWindow) {
               runMetrics.autonomyFallbackApprovals += 1
             }
+            const approvalAction = this.describeApprovalAction(toolCall.name, toolCall.input)
+            const approvalRequestText = outsideAutonomyWindow
+              ? `Outside autonomy window (${autonomyStatus.timezone}). Requesting approval to ${approvalAction} (risk: ${risk.level}, score: ${risk.score}).`
+              : `Requesting approval to ${approvalAction} (risk: ${risk.level}, score: ${risk.score}).`
             runMetrics.toolCalls.push({
               name: toolCall.name,
               requiresApproval: true,
@@ -409,9 +413,7 @@ export class AgentService {
               data: {
                 conversationId,
                 role: 'tool',
-                content: outsideAutonomyWindow
-                  ? `Outside autonomy window. Requesting approval to use tool: ${toolCall.name} (risk: ${risk.level}, score: ${risk.score}).`
-                  : `Requesting to use tool: ${toolCall.name} (risk: ${risk.level}, score: ${risk.score}).`,
+                content: approvalRequestText,
                 status: 'pending',
                 toolCallJson: JSON.stringify(toolCall),
                 metadata: JSON.stringify({
@@ -420,6 +422,7 @@ export class AgentService {
                   riskReason: risk.reason,
                   autonomyWithinWindow: autonomyStatus.withinWindow,
                   requiresApprovalByPolicy: toolDef.requiresApproval,
+                  approvalAction,
                 }),
               },
             })
@@ -458,8 +461,8 @@ export class AgentService {
                 userId,
                 'Action required',
                 outsideAutonomyWindow
-                  ? `Outside autonomy window (${autonomyStatus.timezone}). Approve tool: ${toolCall.name}`
-                  : `Agent wants to use: ${toolCall.name} (risk: ${risk.level}).`,
+                  ? `Outside autonomy window (${autonomyStatus.timezone}). Approve request to ${approvalAction}.`
+                  : `Approve request to ${approvalAction} (risk: ${risk.level}).`,
                 'warning',
               )
               .catch((e) => this.logger.error('Notification create failed', e))
@@ -973,6 +976,42 @@ export class AgentService {
   private async sleep(ms: number) {
     if (ms <= 0) return
     await new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  private describeApprovalAction(toolName: string, toolInput: Record<string, unknown>) {
+    const value = toolName.trim().toLowerCase()
+    if (value === 'gmail_draft_reply') {
+      return `create a Gmail reply draft for thread ${this.describeId(toolInput.threadId)}`
+    }
+    if (value === 'gmail_send_draft') {
+      return `send Gmail draft ${this.describeId(toolInput.draftId)}`
+    }
+    if (value === 'calendar_create_event') {
+      const title = this.describeQuotedText(toolInput.title)
+      const start = this.describeId(toolInput.startTime)
+      return title
+        ? `create calendar event ${title}${start ? ` starting ${start}` : ''}`
+        : 'create a calendar event'
+    }
+    if (value === 'calendar_update_event') {
+      return `update calendar event ${this.describeId(toolInput.eventId)}`
+    }
+    if (value === 'calendar_cancel_event') {
+      return `cancel calendar event ${this.describeId(toolInput.eventId)}`
+    }
+    return `use tool ${toolName}`
+  }
+
+  private describeId(value: unknown) {
+    const normalized = typeof value === 'string' ? value.trim() : ''
+    return normalized || 'unknown'
+  }
+
+  private describeQuotedText(value: unknown) {
+    const normalized = typeof value === 'string' ? value.trim() : ''
+    if (!normalized) return ''
+    const singleLine = normalized.replace(/\s+/g, ' ').slice(0, 80)
+    return `"${singleLine}"`
   }
 
   private renderToolData(data: unknown) {
