@@ -1,8 +1,8 @@
 import {
-  OPENAGENTS_LOCAL_QUICK_START,
   OPENAGENTS_REPO_WEB_URL,
   OPENAGENTS_UBUNTU_SERVER_INSTALL_GUIDE,
 } from '@openagents/shared'
+import InstallQuickStart from '@/components/marketing/InstallQuickStart'
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const REPO_BASE = OPENAGENTS_REPO_WEB_URL
@@ -207,35 +207,8 @@ export default function DocsPage() {
           `pnpm setup` to install dependencies, create env files, start local infrastructure, and
           run Prisma.
         </p>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {Object.values(OPENAGENTS_LOCAL_QUICK_START).map((platform) => (
-            <article key={platform.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-sm font-semibold text-slate-800">{platform.label}</p>
-              <p className="mt-1 text-xs text-slate-500">{platform.runtimeNote}</p>
-              <div className="mt-3 rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
-                <p className="font-semibold text-slate-300">Install</p>
-                <code className="mt-2 block overflow-x-auto whitespace-pre-wrap">
-                  {platform.shellPrefix} {platform.installCommand}
-                </code>
-                <p className="mt-3 font-semibold text-slate-300">Start</p>
-                <code className="mt-2 block overflow-x-auto whitespace-pre-wrap">
-                  {platform.shellPrefix} {platform.startCommand}
-                </code>
-              </div>
-              <p className="mt-3 text-xs text-slate-500">{platform.installerNote}</p>
-              <details className="mt-3 rounded-md border border-slate-200 bg-white p-3">
-                <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                  Manual setup steps
-                </summary>
-                <pre className="mt-3 overflow-auto rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
-                  {platform.localCommands.map((line) => `${platform.shellPrefix} ${line}`).join('\n')}
-                </pre>
-              </details>
-              <p className="mt-3 text-xs font-medium text-slate-600">
-                Access example: {platform.accessExample}
-              </p>
-            </article>
-          ))}
+        <div className="mt-4">
+          <InstallQuickStart theme="light" />
         </div>
       </section>
 

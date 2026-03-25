@@ -169,7 +169,6 @@ function Wait-ForDocker([int]$TimeoutSeconds = 240) {
         return
       }
     } catch {
-      # Keep waiting for Docker Desktop.
     }
     Start-Sleep -Seconds 2
   }
@@ -261,7 +260,7 @@ if ($Help) {
 OpenAgents Windows installer
 
 Usage:
-  powershell -ExecutionPolicy Bypass -File scripts/install.ps1 [options]
+  powershell -ExecutionPolicy Bypass -File install.ps1 [options]
 
 Options:
   -InstallDir <path>  Target clone directory. Default: $HOME\openagents
