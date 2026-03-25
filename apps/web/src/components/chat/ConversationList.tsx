@@ -16,6 +16,11 @@ function timeAgo(iso: string | null | undefined) {
   return `${Math.floor(hr / 24)}d`
 }
 
+function shortId(value: string) {
+  if (value.length <= 12) return value
+  return `${value.slice(0, 6)}...${value.slice(-4)}`
+}
+
 export function ConversationList() {
   const { conversations, activeConversationId, selectConversation, createConversation } =
     useChatStore()
@@ -31,27 +36,27 @@ export function ConversationList() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3.5">
+      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
         <div>
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] dark:text-[var(--muted)]">
-            Threads
+          <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+            Sessions
           </h2>
-          <p className="mt-0.5 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
-            {filtered.length} threads
+          <p className="mt-0.5 text-[12px] font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+            {filtered.length} active threads
           </p>
         </div>
         <button
           onClick={() => void createConversation()}
-          title="New thread"
+          title="New session"
           className="oa-soft-button inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
         >
           <MessageSquarePlus size={14} />
-          New thread
+          New
         </button>
       </div>
 
       <div className="shrink-0 px-3 pb-1 pt-2.5">
-        <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 shadow-sm">
+        <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2">
           <Search
             size={12}
             className="shrink-0 text-[var(--tone-soft)] dark:text-[var(--tone-soft)]"
@@ -59,7 +64,7 @@ export function ConversationList() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search threads..."
+            placeholder="Search sessions..."
             className="w-full bg-transparent text-[12px] text-[var(--tone-default)] placeholder:text-[var(--tone-soft)] outline-none dark:text-[var(--tone-inverse)] dark:placeholder:text-[var(--tone-soft)]"
           />
         </div>
@@ -73,13 +78,14 @@ export function ConversationList() {
               className="text-[var(--tone-soft)] dark:text-[var(--tone-soft)]"
             />
             <p className="text-[11px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-              {query ? 'No matching threads' : 'No threads yet'}
+              {query ? 'No matching sessions' : 'No sessions yet'}
             </p>
           </div>
         )}
 
         {filtered.map((c) => {
           const active = c.id === activeConversationId
+          const sessionName = c.title?.trim() || 'main'
           return (
             <button
               key={c.id}
@@ -87,15 +93,15 @@ export function ConversationList() {
               className={clsx(
                 'group flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-100',
                 active
-                  ? 'border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--tone-strong)] shadow-sm dark:text-[var(--tone-inverse)]'
-                  : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)] hover:shadow-sm',
+                  ? 'border-[var(--border-strong)] bg-[var(--surface-subtle)] text-[var(--tone-strong)] shadow-sm dark:text-[var(--tone-inverse)]'
+                  : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)]',
               )}
             >
               <div
                 className={clsx(
                   'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md',
                   active
-                    ? 'oa-brand-badge text-white'
+                    ? 'bg-rose-50 text-[var(--accent)] dark:bg-rose-500/10'
                     : 'bg-[var(--surface-muted)] text-[var(--tone-soft)] group-hover:bg-[var(--surface-subtle)]',
                 )}
               >
@@ -104,24 +110,22 @@ export function ConversationList() {
               <div className="min-w-0 flex-1">
                 <p
                   className={clsx(
-                    'truncate text-[12px] font-medium leading-snug',
+                    'truncate text-[12px] font-semibold leading-snug',
                     active
                       ? 'text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]'
                       : 'text-[var(--tone-default)] group-hover:text-[var(--tone-strong)] dark:text-[var(--tone-inverse)] dark:group-hover:text-[var(--tone-inverse)]',
                   )}
                 >
-                  {c.title ?? 'Untitled task'}
+                  {sessionName}
                 </p>
-                {/* @ts-ignore updatedAt may exist */}
-                {c.updatedAt && (
-                  <p className="mt-0.5 text-[10px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                    {/* @ts-ignore */}
-                    {timeAgo(c.updatedAt)}
-                  </p>
-                )}
+                <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                  {shortId(c.id)} · {timeAgo(c.lastMessageAt ?? c.createdAt)}
+                </p>
               </div>
               {active && (
-                <span className="mt-0.5 inline-flex h-2 w-2 shrink-0 rounded-full bg-[var(--accent)]" />
+                <span className="mt-0.5 inline-flex rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--accent)]">
+                  active
+                </span>
               )}
             </button>
           )

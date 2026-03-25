@@ -8,7 +8,6 @@ import {
   getAssistantModeDefinition,
   type AssistantMode,
 } from './assistantModes'
-import { AgentAvatarPanel } from './AgentAvatarPanel'
 import { MessageBubble } from './MessageBubble'
 import { SlashCommandPalette, expandSlashCommand } from './SlashCommandPalette'
 import { PinnedContext, buildPinnedContextBlock, type PinnedItem } from './PinnedContext'
@@ -17,9 +16,8 @@ import {
   AlertTriangle,
   ArrowUp,
   BrainCircuit,
+  Command,
   PlusCircle,
-  Rocket,
-  Sparkles,
   Workflow,
 } from 'lucide-react'
 
@@ -38,24 +36,19 @@ interface QuickAction {
 
 const QUICK_ACTIONS: QuickAction[] = [
   {
-    label: 'Draft first',
+    label: 'Draft',
     mode: 'plan',
     seed: 'Draft the best first version of this and wait for approval before any external action.',
   },
   {
-    label: 'Run it',
+    label: 'Execute',
     mode: 'execute',
     seed: 'Complete this request and use available tools whenever they materially help.',
   },
   {
-    label: 'Schedule it',
+    label: 'Automate',
     mode: 'autopilot',
-    seed: 'Turn this into a reusable scheduled workflow with a clear trigger and operating summary.',
-  },
-  {
-    label: 'Watch it',
-    mode: 'autopilot',
-    seed: 'Monitor this and tell me when it changes or needs intervention.',
+    seed: 'Turn this into a reusable workflow or watcher with a clear operating loop.',
   },
 ]
 
@@ -69,9 +62,19 @@ function formatIntentLabel(intent: string | undefined) {
   return normalized
 }
 
-function modeCardClass(active: boolean) {
-  if (active) return 'border-indigo-300 bg-indigo-50 shadow-sm'
-  return 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]'
+function statusChipClass(status: string | null, isStreaming: boolean) {
+  const effective = status ?? (isStreaming ? 'running' : 'ready')
+  if (effective === 'error') return 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300'
+  if (effective.includes('approval')) return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
+  if (effective === 'done' || effective === 'ready') return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+  return 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--tone-default)] dark:text-[var(--tone-inverse)]'
+}
+
+function modeButtonClass(active: boolean) {
+  if (active) {
+    return 'border-[var(--border-strong)] bg-[var(--surface-subtle)] text-[var(--tone-strong)] shadow-sm dark:text-[var(--tone-inverse)]'
+  }
+  return 'border-[var(--border)] bg-[var(--surface)] text-[var(--tone-muted)] hover:bg-[var(--surface-muted)] dark:text-[var(--tone-inverse)]'
 }
 
 export function ChatWindow({
@@ -92,11 +95,9 @@ export function ChatWindow({
     escalateToHuman,
   } = useChatStore()
   const [input, setInput] = useState('')
-  const [showAvatarPanel, setShowAvatarPanel] = useState(false)
   const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([])
   const [slashQuery, setSlashQuery] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const contentLayoutRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const learnedIntentLabel = formatIntentLabel(learnedSkill?.intent)
   const assistantModeDefinition = useMemo(
@@ -119,25 +120,6 @@ export function ChatWindow({
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`
   }, [input])
 
-  useEffect(() => {
-    const el = contentLayoutRef.current
-    if (!el || typeof ResizeObserver === 'undefined') return
-
-    const syncLayout = (width: number) => {
-      setShowAvatarPanel(width >= 980)
-    }
-
-    syncLayout(el.clientWidth)
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      syncLayout(entry?.contentRect.width ?? el.clientWidth)
-    })
-
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-
   function focusComposer() {
     requestAnimationFrame(() => textareaRef.current?.focus())
   }
@@ -149,8 +131,7 @@ export function ChatWindow({
     setInput('')
     const expanded = expandSlashCommand(displayContent)
     const pinned = buildPinnedContextBlock(pinnedItems)
-    const withPinned = expanded + pinned
-    const content = buildAssistantModePrompt(assistantMode, withPinned)
+    const content = buildAssistantModePrompt(assistantMode, expanded + pinned)
     await sendMessage(content, { displayContent })
   }
 
@@ -180,7 +161,6 @@ export function ChatWindow({
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const val = e.target.value
     setInput(val)
-    // Detect slash command: starts with / and no space yet (still typing command name)
     const slashMatch = val.match(/^(\/[a-z]*)$/)
     if (slashMatch) {
       setSlashQuery(slashMatch[1])
@@ -190,7 +170,6 @@ export function ChatWindow({
   }
 
   function handleKey(e: React.KeyboardEvent) {
-    // When palette is open, arrow/enter/escape are handled by the palette itself
     if (slashQuery !== null && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
       return
     }
@@ -213,102 +192,16 @@ export function ChatWindow({
     setPinnedItems((prev) => prev.filter((p) => p.id !== id))
   }
 
-  const messageViewport = (
-    <div
-      className={
-        showAvatarPanel
-          ? 'min-h-0 h-full overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--surface)]'
-          : 'relative min-h-0 h-full'
-      }
-    >
-      <div className="h-full overflow-y-auto bg-gradient-to-b from-[var(--surface)] via-[var(--surface)] to-[var(--surface-muted)] px-3 py-3 sm:px-5">
-        {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center py-6">
-            <div className="w-full max-w-[820px] space-y-6 text-center">
-              <div className="oa-brand-badge mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-white">
-                <Sparkles size={17} />
-              </div>
-
-              <div>
-                <p className="text-[30px] font-semibold tracking-tight text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                  Tell the assistant the outcome you want.
-                </p>
-                <p className="mx-auto mt-2 max-w-[620px] text-sm text-[var(--muted)] dark:text-[var(--muted)]">
-                  In `Execute` and `Autopilot`, it will do real work. In `Plan`, it will think first
-                  and hold execution until the path is clear.
-                </p>
-              </div>
-
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                {ASSISTANT_MODE_DEFINITIONS.map((definition) => (
-                  <button
-                    key={definition.id}
-                    type="button"
-                    onClick={() => onAssistantModeChange(definition.id)}
-                    className={`rounded-2xl border p-4 text-left transition ${modeCardClass(
-                      assistantMode === definition.id,
-                    )}`}
-                  >
-                    <p className="text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                      {definition.label}
-                    </p>
-                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                      {definition.caption}
-                    </p>
-                    <p className="mt-2 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-                      {definition.description}
-                    </p>
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap justify-center gap-2.5">
-                {assistantModeDefinition.starterPrompts.map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    disabled={!gatewayConnected || isStreaming}
-                    onClick={() => void handleQuickPrompt(prompt)}
-                    className="oa-soft-button max-w-full rounded-full px-4 py-2 text-left text-[13px] transition disabled:cursor-not-allowed disabled:opacity-50 dark:text-[var(--tone-inverse)]"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-
-              <p className="text-xs text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                {gatewayConnected
-                  ? activeConversationId
-                    ? `${assistantModeDefinition.label} mode is active. Pick a starter or type your own request below.`
-                    : 'Create a task to begin.'
-                  : 'Reconnect the assistant runtime to begin.'}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="mx-auto max-w-[920px] space-y-4 pb-3 pt-2">
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
-            <div ref={bottomRef} />
-          </div>
-        )}
-      </div>
-    </div>
-  )
-
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
       {learnedSkill && (
-        <div className="relative border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 sm:px-5">
+        <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2.5">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
             <BrainCircuit size={12} />
-            <span>Auto-learned skill active</span>
-            <code className="rounded-md bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-              {learnedSkill.skillId}
-            </code>
+            <span>Learned skill</span>
+            <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
             {learnedIntentLabel && (
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-medium capitalize text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+              <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] capitalize">
                 {learnedIntentLabel}
               </span>
             )}
@@ -316,22 +209,19 @@ export function ChatWindow({
         </div>
       )}
 
-      <div className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:px-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] dark:text-[var(--muted)]">
-              Assistant posture
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+              Session controls
             </p>
             <p className="mt-1 text-sm font-medium text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-              {assistantModeDefinition.description}
+              Compact routing, approvals, and execution posture for the active session.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-              {assistantModeDefinition.label} mode
-            </span>
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+            <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
               {runStatus ?? (isStreaming ? 'running' : 'ready')}
             </span>
             {pendingApprovals.length > 0 && (
@@ -347,50 +237,75 @@ export function ChatWindow({
           </div>
         </div>
 
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-3 flex flex-wrap gap-2">
           {ASSISTANT_MODE_DEFINITIONS.map((definition) => (
             <button
               key={definition.id}
               type="button"
               onClick={() => onAssistantModeChange(definition.id)}
-              className={`rounded-2xl border px-3 py-3 text-left transition ${modeCardClass(
+              className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${modeButtonClass(
                 assistantMode === definition.id,
               )}`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                  {definition.label}
-                </p>
-                {assistantMode === definition.id && <Rocket size={14} className="text-indigo-500" />}
-              </div>
-              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+              {definition.label}
+              <span className="ml-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--tone-soft)]">
                 {definition.caption}
-              </p>
-              <p className="mt-2 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-                {definition.description}
-              </p>
+              </span>
             </button>
           ))}
         </div>
       </div>
 
-      <div
-        ref={contentLayoutRef}
-        className={
-          showAvatarPanel
-            ? 'grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] gap-3 p-3 sm:p-4'
-            : 'min-h-0 flex flex-1 flex-col'
-        }
-      >
-        {messageViewport}
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface-muted)] px-3 py-3 sm:px-5">
+        {messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center py-8">
+            <div className="w-full max-w-[760px] rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
+              <div className="flex items-center gap-2 text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                <div className="oa-brand-badge flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold text-white">
+                  OA
+                </div>
+                <div>
+                  <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                    Operator chat
+                  </p>
+                  <p className="text-lg font-semibold">Start with a session command or a clear outcome.</p>
+                </div>
+              </div>
 
-        {showAvatarPanel && (
-          <AgentAvatarPanel
-            gatewayConnected={gatewayConnected}
-            isStreaming={isStreaming}
-            messages={messages}
-            runStatus={runStatus}
-          />
+              <p className="mt-4 text-sm text-[var(--muted)] dark:text-[var(--muted)]">
+                Keep the request concrete. This surface is tuned for session work, approvals, tool use, and repeated operational tasks.
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {assistantModeDefinition.starterPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    disabled={!gatewayConnected || isStreaming}
+                    onClick={() => void handleQuickPrompt(prompt)}
+                    className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-left text-[12px] font-medium text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[var(--tone-inverse)]"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+                  <Command size={11} />
+                  Type `/` for commands
+                </span>
+                <span>{gatewayConnected ? 'Runtime connected' : 'Runtime disconnected'}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto max-w-[980px] space-y-3 pb-3 pt-1">
+            {messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
+            ))}
+            <div ref={bottomRef} />
+          </div>
         )}
       </div>
 
@@ -400,14 +315,14 @@ export function ChatWindow({
         onAdd={handleAddPin}
       />
 
-      <div className="relative border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:px-4">
-        <div className="mb-3 flex flex-wrap gap-2 px-1">
+      <div className="border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:px-4">
+        <div className="mb-3 flex flex-wrap gap-2">
           {QUICK_ACTIONS.map((action) => (
             <button
               key={action.label}
               type="button"
               onClick={() => handleQuickAction(action)}
-              className="oa-soft-button rounded-full px-3 py-1.5 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
+              className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-[11px] font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
             >
               {action.label}
             </button>
@@ -426,9 +341,9 @@ export function ChatWindow({
           </button>
         </div>
 
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-1 px-1 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
           <p>
-            {assistantModeDefinition.label} mode. Type <kbd className="rounded border border-[var(--border)] px-1">/</kbd> for commands. Enter to send.
+            {assistantModeDefinition.label} mode. Press <kbd className="rounded border border-[var(--border)] px-1 font-mono">Enter</kbd> to send.
           </p>
           <p>
             {isStreaming
@@ -440,7 +355,7 @@ export function ChatWindow({
         </div>
 
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
-          <div className="relative flex w-full items-end gap-2 rounded-3xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 shadow-sm sm:flex-1">
+          <div className="relative flex w-full items-end gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2 sm:flex-1">
             {slashQuery !== null && (
               <SlashCommandPalette
                 query={slashQuery}
@@ -462,11 +377,11 @@ export function ChatWindow({
               placeholder={
                 gatewayConnected
                   ? activeHandoffStatus
-                    ? 'This conversation is in human handoff mode.'
+                    ? 'This session is in human handoff mode.'
                     : `${assistantModeDefinition.placeholder} (type / for commands)`
                   : 'Reconnect the assistant runtime to start...'
               }
-              className="max-h-44 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-[var(--tone-strong)] outline-none placeholder:text-[var(--tone-soft)] disabled:cursor-not-allowed disabled:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"
+              className="max-h-44 min-h-[42px] w-full resize-none bg-transparent px-2 py-2 text-sm text-[var(--tone-strong)] outline-none placeholder:text-[var(--tone-soft)] disabled:cursor-not-allowed disabled:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"
             />
             <button
               type="button"
@@ -486,7 +401,7 @@ export function ChatWindow({
               className="oa-soft-button inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
             >
               <PlusCircle size={14} />
-              New thread
+              New session
             </button>
             <button
               type="button"
