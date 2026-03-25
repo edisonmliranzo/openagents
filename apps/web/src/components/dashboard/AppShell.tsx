@@ -16,6 +16,7 @@ import {
   Menu,
   MessageSquare,
   Moon,
+  Search,
   ScrollText,
   Settings2,
   ShieldCheck,
@@ -44,41 +45,42 @@ interface NavGroup {
 
 const BASE_NAV_GROUPS: NavGroup[] = [
   {
-    title: 'Assistant',
-    items: [
-      { label: 'Assistant Core', href: '/agent/openagent', icon: Activity },
-      { label: 'Presets', href: '/agent/presets', icon: Layers3 },
-      { label: 'Skills', href: '/agent/skills', icon: Brain },
-      { label: 'Marketplace', href: '/agent/marketplace', icon: BookOpen },
-    ],
-  },
-  {
-    title: 'Work',
-    items: [
-      { label: 'Tasks', href: '/chat', icon: MessageSquare },
-      { label: 'Actions', href: '/approvals', icon: ShieldCheck },
-      { label: 'Knowledge', href: '/memory', icon: Brain },
-      { label: 'Artifacts', href: '/artifacts', icon: FileText },
-      { label: 'Workspaces', href: '/workspaces', icon: Users },
-      { label: 'Runs', href: '/sessions', icon: Terminal },
-    ],
-  },
-  {
     title: 'Control',
     items: [
-      { label: 'Ops Overview', href: '/control/overview', icon: Activity },
-      { label: 'Dry Run', href: '/control/dry-run', icon: Terminal },
-      { label: 'Operator Inbox', href: '/control/operator', icon: ShieldCheck },
-      { label: 'Provenance', href: '/control/provenance', icon: Brain },
-      { label: 'Watchers', href: '/control/watchers', icon: Bell },
-      { label: 'Settings', href: '/settings/config', icon: Settings2 },
-      { label: 'Audit', href: '/audit', icon: FileText },
-      { label: 'System Logs', href: '/settings/logs', icon: ScrollText },
+      { label: 'Chat', href: '/chat', icon: MessageSquare },
+      { label: 'Sessions', href: '/sessions', icon: Terminal },
+      { label: 'Usage', href: '/control/usage', icon: Activity },
+      { label: 'Cron Jobs', href: '/control/cron-jobs', icon: Bell },
     ],
   },
   {
-    title: 'Resources',
-    items: [{ label: 'Docs', href: '/docs', icon: BookOpen }],
+    title: 'Agent',
+    items: [
+      { label: 'Agents', href: '/agent/agents', icon: Activity },
+      { label: 'Skills', href: '/agent/skills', icon: Brain },
+      { label: 'Nodes', href: '/agent/nodes', icon: Layers3 },
+      { label: 'Presets', href: '/agent/presets', icon: Layers3 },
+    ],
+  },
+  {
+    title: 'Settings',
+    items: [
+      { label: 'Config', href: '/settings/config', icon: Settings2 },
+      { label: 'Communications', href: '/control/channels', icon: Bell },
+      { label: 'Automation', href: '/control/watchers', icon: ShieldCheck },
+      { label: 'Infrastructure', href: '/control/instances', icon: Activity },
+      { label: 'Debug', href: '/settings/debug', icon: Terminal },
+      { label: 'Logs', href: '/settings/logs', icon: ScrollText },
+    ],
+  },
+  {
+    title: 'Studio',
+    items: [
+      { label: 'Artifacts', href: '/artifacts', icon: FileText },
+      { label: 'Workspaces', href: '/workspaces', icon: Users },
+      { label: 'Marketplace', href: '/agent/marketplace', icon: BookOpen },
+      { label: 'Docs', href: '/docs', icon: BookOpen },
+    ],
   },
 ]
 
@@ -128,6 +130,7 @@ export function AppShell({ children }: AppShellProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isNotificationsLoading, setIsNotificationsLoading] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [routeSearch, setRouteSearch] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const notifRef = useRef<HTMLDivElement | null>(null)
   const profileSyncedRef = useRef(false)
@@ -226,10 +229,16 @@ export function AppShell({ children }: AppShellProps) {
     () => notifications.filter((notification) => !notification.read).length,
     [notifications],
   )
+  const allNavItems = useMemo(() => navGroups.flatMap((group) => group.items), [navGroups])
+  const matchingRoute = useMemo(() => {
+    const query = routeSearch.trim().toLowerCase()
+    if (!query) return null
+    return allNavItems.find((item) => item.label.toLowerCase().includes(query)) ?? null
+  }, [allNavItems, routeSearch])
 
   const activeRouteLabel =
-    navGroups.flatMap((group) => group.items).find((item) => isActivePath(pathname, item.href))
-      ?.label ?? 'Dashboard'
+    allNavItems.find((item) => isActivePath(pathname, item.href))
+      ?.label ?? 'Control'
 
   async function handleSignOut() {
     if (typeof logout !== 'function') return
@@ -265,6 +274,12 @@ export function AppShell({ children }: AppShellProps) {
     }
   }
 
+  function handleRouteSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter' || !matchingRoute) return
+    router.push(matchingRoute.href)
+    setRouteSearch('')
+  }
+
   if (!hydrated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--background)]">
@@ -295,23 +310,23 @@ export function AppShell({ children }: AppShellProps) {
         />
       )}
 
-      <div className="mx-auto flex w-full max-w-[1720px]">
+      <div className="flex w-full">
         <aside
           className={clsx(
-            'fixed inset-y-0 left-0 z-50 flex w-[252px] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] px-3 py-4 backdrop-blur-2xl transition-transform duration-200 md:static md:z-0 md:translate-x-0',
+            'fixed inset-y-0 left-0 z-50 flex w-[226px] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] px-3 py-4 transition-transform duration-200 md:sticky md:top-0 md:h-[100dvh] md:z-10 md:translate-x-0',
             isMobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
           <div className="mb-4 flex items-center gap-3 px-2">
-            <div className="oa-brand-badge flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold text-white">
+            <div className="oa-brand-badge flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold text-white">
               OA
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-                OpenAgents
+              <p className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                Control
               </p>
-              <p className="truncate text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
-                Workspace
+              <p className="truncate text-[13px] font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                OpenAgents
               </p>
             </div>
             <button
@@ -324,10 +339,10 @@ export function AppShell({ children }: AppShellProps) {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-5 overflow-y-auto px-1">
+          <nav className="flex-1 space-y-4 overflow-y-auto px-1">
             {navGroups.map((group) => (
               <div key={group.title}>
-                <p className="mb-1.5 px-2 text-[11px] font-medium text-[var(--muted)] dark:text-[var(--muted)]">
+                <p className="mb-2 px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
                   {group.title}
                 </p>
                 <div className="space-y-1">
@@ -340,16 +355,16 @@ export function AppShell({ children }: AppShellProps) {
                         href={item.href}
                         onClick={() => setIsMobileNavOpen(false)}
                         className={clsx(
-                          'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] transition',
+                          'flex items-center gap-2.5 rounded-xl border border-transparent px-3 py-2.5 text-[13px] transition',
                           active
-                            ? 'oa-brand-badge text-white'
-                            : 'text-[var(--tone-default)] hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)] dark:hover:bg-[var(--surface-subtle)]',
+                            ? 'border-[var(--border)] bg-[var(--surface-subtle)] text-[var(--tone-strong)] shadow-sm dark:text-[var(--tone-inverse)]'
+                            : 'text-[var(--tone-default)] hover:border-[var(--border)] hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)] dark:hover:bg-[var(--surface-subtle)]',
                         )}
                       >
                         <Icon
                           size={14}
                           className={clsx(
-                            active ? 'text-white' : 'text-[var(--muted)] dark:text-[var(--muted)]',
+                            active ? 'text-[var(--accent)]' : 'text-[var(--muted)] dark:text-[var(--muted)]',
                           )}
                         />
                         <span className="truncate">{item.label}</span>
@@ -361,15 +376,15 @@ export function AppShell({ children }: AppShellProps) {
             ))}
           </nav>
 
-          <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5 backdrop-blur-xl dark:bg-[var(--surface-muted)]">
+          <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 dark:bg-[var(--surface-muted)]">
             <div className="flex items-center gap-2.5">
               <UserInitials name={user?.name} email={user?.email} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12px] font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
                   {user?.name ?? 'User'}
                 </p>
-                <p className="truncate text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">
-                  {user?.email}
+                <p className="truncate font-mono text-[10px] uppercase tracking-[0.14em] text-emerald-600 dark:text-emerald-300">
+                  workspace online
                 </p>
               </div>
               <button
@@ -386,9 +401,8 @@ export function AppShell({ children }: AppShellProps) {
         </aside>
 
         <div className="min-w-0 flex-1 md:ml-0">
-          <header className="sticky top-0 z-20 px-3 py-3 sm:px-6">
-            <div className="oa-card-elevated rounded-2xl px-3 py-2.5 backdrop-blur sm:px-4">
-              <div className="flex items-center justify-between gap-3">
+          <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[rgba(248,250,252,0.82)] px-3 py-3 backdrop-blur-md sm:px-6">
+            <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <button
                     type="button"
@@ -399,20 +413,37 @@ export function AppShell({ children }: AppShellProps) {
                     <Menu size={16} />
                   </button>
                   <div className="min-w-0">
+                    <p className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                      OpenAgents &gt; {activeRouteLabel}
+                    </p>
                     <p className="truncate text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
                       {activeRouteLabel}
                     </p>
                     <p className="truncate text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-                      Personal AI assistant workspace
+                      Local control plane for sessions, tools, and agents
                     </p>
                   </div>
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
+                  <div className="hidden items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 lg:flex">
+                    <Search size={13} className="text-[var(--tone-soft)]" />
+                    <input
+                      value={routeSearch}
+                      onChange={(event) => setRouteSearch(event.target.value)}
+                      onKeyDown={handleRouteSearchKeyDown}
+                      placeholder="Search routes"
+                      className="w-40 bg-transparent text-[12px] text-[var(--tone-default)] outline-none placeholder:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"
+                    />
+                    <span className="rounded-full border border-[var(--border)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--tone-soft)]">
+                      enter
+                    </span>
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
-                    className="oa-soft-button inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium transition dark:text-[var(--tone-inverse)]"
+                    className="oa-soft-button inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition dark:text-[var(--tone-inverse)]"
                     aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                     title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                   >
@@ -424,7 +455,7 @@ export function AppShell({ children }: AppShellProps) {
                     <button
                       type="button"
                       onClick={() => setIsNotificationsOpen((open) => !open)}
-                      className="oa-soft-button relative inline-flex h-9 w-9 items-center justify-center rounded-xl text-[var(--tone-muted)] transition dark:text-[var(--tone-inverse)]"
+                      className="oa-soft-button relative inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--tone-muted)] transition dark:text-[var(--tone-inverse)]"
                       aria-label="Notifications"
                     >
                       <Bell size={15} />
@@ -490,7 +521,7 @@ export function AppShell({ children }: AppShellProps) {
                     )}
                   </div>
 
-                  <div className="hidden items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 pl-1 pr-2.5 text-[12px] font-medium text-[var(--tone-default)] sm:flex dark:text-[var(--tone-inverse)]">
+                  <div className="hidden items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] py-1 pl-1 pr-2.5 text-[12px] font-medium text-[var(--tone-default)] sm:flex dark:text-[var(--tone-inverse)]">
                     <UserInitials name={user?.name} email={user?.email} />
                     <span className="hidden max-w-[120px] truncate sm:block">
                       {user?.name ?? user?.email ?? 'User'}
@@ -501,11 +532,10 @@ export function AppShell({ children }: AppShellProps) {
                     />
                   </div>
                 </div>
-              </div>
             </div>
           </header>
 
-          <main className="px-2 py-3 sm:px-6 sm:py-6">{children}</main>
+          <main className="px-2 py-3 sm:px-6 sm:py-5">{children}</main>
         </div>
       </div>
     </div>

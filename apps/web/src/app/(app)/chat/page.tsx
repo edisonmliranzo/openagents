@@ -32,6 +32,7 @@ export default function ChatPage() {
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('chat')
   const [showToolsPanel, setShowToolsPanel] = useState(false)
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('assist')
+  const [runtimeLabel, setRuntimeLabel] = useState('Default runtime')
   const {
     conversations,
     conversationsLoaded,
@@ -76,7 +77,7 @@ export default function ChatPage() {
         try {
           await createConversation()
         } catch {
-          // keep disconnected state banner
+          // Keep disconnected state banner.
         }
       }
     }
@@ -102,6 +103,17 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
+    const run = async () => {
+      const settings = await sdk.users.getSettings().catch(() => null)
+      if (!settings) return
+      const provider = settings.preferredProvider?.trim() || 'default'
+      const model = settings.preferredModel?.trim() || 'default model'
+      setRuntimeLabel(`Default (${model} / ${provider})`)
+    }
+    void run()
+  }, [])
+
+  useEffect(() => {
     storageSet(ASSISTANT_MODE_STORAGE_KEY, assistantMode)
   }, [assistantMode])
 
@@ -120,21 +132,16 @@ export default function ChatPage() {
 
   return (
     <div className="min-h-[calc(100dvh-56px)] px-0 py-1 sm:px-2 sm:py-2 lg:h-[calc(100dvh-96px)] lg:min-h-0 lg:overflow-hidden">
-      <div className="mx-auto flex min-h-[calc(100dvh-72px)] max-w-[1600px] flex-col gap-3 sm:gap-4 lg:h-full lg:min-h-0">
-        <header className="oa-card-elevated rounded-2xl px-4 py-3 sm:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="oa-brand-badge flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold text-white">
-                OA
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)] dark:text-[var(--muted)]">
-                  Personal Assistant
-                </p>
-                <p className="truncate text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                  {activeConversation?.title ?? 'Start a thread'}
-                </p>
-              </div>
+      <div className="mx-auto flex min-h-[calc(100dvh-72px)] max-w-[1880px] flex-col gap-3 sm:gap-4 lg:h-full lg:min-h-0">
+        <header className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                OpenAgents &gt; Chat
+              </p>
+              <p className="truncate text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                {activeConversation?.title ?? 'main'}
+              </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -146,18 +153,10 @@ export default function ChatPage() {
                 }`}
               >
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${gatewayConnected ? 'bg-[var(--accent)]' : 'bg-red-500'}`}
+                  className={`h-1.5 w-1.5 rounded-full ${gatewayConnected ? 'bg-emerald-500' : 'bg-red-500'}`}
                 />
                 {statusText}
               </span>
-
-              <div className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-                {assistantModeDefinition.label} mode
-              </div>
-
-              <div className="hidden rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-medium text-[var(--muted)] dark:text-[var(--muted)] sm:block">
-                {shortId(activeConversationId)}
-              </div>
 
               <button
                 type="button"
@@ -167,21 +166,36 @@ export default function ChatPage() {
                     ? 'border border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--tone-strong)] shadow-sm'
                     : 'oa-soft-button text-[var(--tone-muted)]'
                 }`}
-                title={showToolsPanel ? 'Hide assistant cockpit' : 'Show assistant cockpit'}
+                title={showToolsPanel ? 'Hide control panel' : 'Show control panel'}
               >
                 <PanelRight size={12} />
-                {showToolsPanel ? 'Hide cockpit' : 'Show cockpit'}
+                {showToolsPanel ? 'Hide control' : 'Show control'}
               </button>
 
               <button
                 type="button"
                 onClick={() => void loadConversations()}
                 className="oa-soft-button inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
-                title="Refresh threads"
+                title="Refresh sessions"
               >
                 <RefreshCw size={12} />
                 Refresh
               </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="inline-flex min-w-[180px] items-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] font-medium text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+              {activeConversation?.title ?? 'main'}
+            </div>
+            <div className="inline-flex min-w-[250px] items-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] font-medium text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+              {runtimeLabel}
+            </div>
+            <div className="inline-flex items-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+              {shortId(activeConversationId)}
+            </div>
+            <div className="inline-flex items-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
+              {assistantModeDefinition.label} mode
             </div>
           </div>
 
@@ -210,7 +224,7 @@ export default function ChatPage() {
                   : 'text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-slate-100'
               }`}
             >
-              Threads
+              Sessions
             </button>
             <button
               type="button"
@@ -232,15 +246,15 @@ export default function ChatPage() {
                   : 'text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-slate-100'
               }`}
             >
-              Cockpit
+              Control
             </button>
           </div>
         </header>
 
         <div
-          className={`hidden min-h-0 flex-1 gap-3 lg:grid ${showToolsPanel ? 'lg:grid-cols-[290px_minmax(0,1fr)_330px]' : 'lg:grid-cols-[290px_minmax(0,1fr)]'}`}
+          className={`hidden min-h-0 flex-1 gap-3 lg:grid ${showToolsPanel ? 'lg:grid-cols-[270px_minmax(0,1fr)_320px]' : 'lg:grid-cols-[270px_minmax(0,1fr)]'}`}
         >
-          <aside className="oa-card-elevated min-h-0 overflow-hidden rounded-2xl">
+          <aside className="min-h-0 overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
             <ConversationList />
           </aside>
 
@@ -270,7 +284,7 @@ export default function ChatPage() {
           </section>
 
           {showToolsPanel && (
-            <aside className="oa-card-elevated min-h-0 overflow-hidden rounded-2xl">
+            <aside className="min-h-0 overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
               <LiveToolPanel assistantMode={assistantMode} />
             </aside>
           )}
@@ -278,7 +292,7 @@ export default function ChatPage() {
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 lg:hidden">
           {mobilePanel === 'sessions' && (
-            <aside className="oa-card-elevated min-h-0 flex-1 overflow-hidden rounded-2xl">
+            <aside className="min-h-0 flex-1 overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
               <ConversationList />
             </aside>
           )}
@@ -312,7 +326,7 @@ export default function ChatPage() {
           )}
 
           {mobilePanel === 'tools' && (
-            <section className="oa-card-elevated min-h-0 flex-1 overflow-hidden rounded-2xl">
+            <section className="min-h-0 flex-1 overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
               <LiveToolPanel assistantMode={assistantMode} />
             </section>
           )}

@@ -42,6 +42,13 @@ function formatClock(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+function roleLabel(role: Message['role']) {
+  if (role === 'tool') return 'Tool'
+  if (role === 'system') return 'System'
+  if (role === 'user') return 'You'
+  return 'OpenAgents'
+}
+
 interface MessageBlock {
   type: 'text' | 'code'
   content: string
@@ -230,26 +237,35 @@ export function MessageBubble({ message }: { message: Message }) {
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="oa-user-bubble max-w-[92%] rounded-2xl rounded-br-sm px-4 py-3 text-sm shadow-sm sm:max-w-[76%]">
-          <p className="whitespace-pre-wrap">{message.content}</p>
-          <p className="mt-2 text-right text-[11px] font-medium text-[var(--tone-inverse-muted)]">
-            {formatClock(message.createdAt)}
+        <div className="max-w-[92%] rounded-2xl rounded-br-sm border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-[var(--tone-strong)] shadow-sm sm:max-w-[76%] dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-[var(--tone-inverse)]">
+          <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-500 dark:text-rose-300">
+            {roleLabel(message.role)} · {formatClock(message.createdAt)}
           </p>
+          <p className="whitespace-pre-wrap">{message.content}</p>
         </div>
       </div>
     )
   }
 
+  const isTool = message.role === 'tool'
+  const isSystem = message.role === 'system'
+
   return (
     <div className="space-y-2">
-      <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-sm">
+      <article
+        className={clsx(
+          'rounded-2xl border px-4 py-3 shadow-sm',
+          isTool
+            ? 'border-amber-200 bg-amber-50/60 dark:border-amber-500/20 dark:bg-amber-500/10'
+            : isSystem
+              ? 'border-slate-200 bg-slate-50/60 dark:border-slate-500/20 dark:bg-slate-500/10'
+              : 'border-[var(--border)] bg-[var(--surface)]',
+        )}
+      >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="inline-flex items-center gap-2">
-            <div className="oa-brand-badge flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white">
-              OA
-            </div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-              OpenAgents
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+              {roleLabel(message.role)} · {formatClock(message.createdAt)} · {message.status}
             </p>
           </div>
 
@@ -257,7 +273,7 @@ export function MessageBubble({ message }: { message: Message }) {
             <button
               type="button"
               onClick={() => void handleToggleLineage()}
-              className="oa-soft-button inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 text-[10px] font-semibold transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
             >
               Why this answer
             </button>
@@ -265,7 +281,7 @@ export function MessageBubble({ message }: { message: Message }) {
               <button
                 type="button"
                 onClick={() => void handleCopyAll()}
-                className="oa-soft-button inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 text-[10px] font-semibold transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
               >
                 <Copy size={12} />
                 {copiedAll ? 'Copied' : codeBlocks.length > 1 ? 'Copy all code' : 'Copy code'}
@@ -286,7 +302,7 @@ export function MessageBubble({ message }: { message: Message }) {
                 return (
                   <p
                     key={`line-p-${idx}`}
-                    className="text-[14px] leading-7 text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]"
+                    className="text-[14px] leading-6 text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]"
                   >
                     {block.content}
                   </p>
@@ -300,13 +316,13 @@ export function MessageBubble({ message }: { message: Message }) {
                   className="my-2 overflow-hidden rounded-xl border border-[var(--border)]"
                 >
                   <div className="flex items-center justify-between bg-[var(--surface-muted)] px-3 py-1.5">
-                    <span className="text-[10px] uppercase tracking-wide text-[var(--muted)] dark:text-[var(--muted)]">
+                    <span className="font-mono text-[10px] uppercase tracking-wide text-[var(--muted)] dark:text-[var(--muted)]">
                       {lang || 'code'}
                     </span>
                     <button
                       type="button"
                       onClick={() => void handleCopyBlock(idx, block.content)}
-                      className="oa-soft-button rounded px-2 py-0.5 text-[10px] font-semibold transition dark:text-[var(--tone-inverse)]"
+                      className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-semibold transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
                     >
                       {copiedCodeIndex === idx ? 'Copied' : 'Copy'}
                     </button>
