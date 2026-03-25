@@ -212,9 +212,25 @@ export default function DocsPage() {
             <article key={platform.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-semibold text-slate-800">{platform.label}</p>
               <p className="mt-1 text-xs text-slate-500">{platform.runtimeNote}</p>
-              <pre className="mt-3 overflow-auto rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
-                {platform.localCommands.map((line) => `${platform.shellPrefix} ${line}`).join('\n')}
-              </pre>
+              <div className="mt-3 rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
+                <p className="font-semibold text-slate-300">Install</p>
+                <code className="mt-2 block overflow-x-auto whitespace-pre-wrap">
+                  {platform.shellPrefix} {platform.installCommand}
+                </code>
+                <p className="mt-3 font-semibold text-slate-300">Start</p>
+                <code className="mt-2 block overflow-x-auto whitespace-pre-wrap">
+                  {platform.shellPrefix} {platform.startCommand}
+                </code>
+              </div>
+              <p className="mt-3 text-xs text-slate-500">{platform.installerNote}</p>
+              <details className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                  Manual setup steps
+                </summary>
+                <pre className="mt-3 overflow-auto rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
+                  {platform.localCommands.map((line) => `${platform.shellPrefix} ${line}`).join('\n')}
+                </pre>
+              </details>
               <p className="mt-3 text-xs font-medium text-slate-600">
                 Access example: {platform.accessExample}
               </p>
