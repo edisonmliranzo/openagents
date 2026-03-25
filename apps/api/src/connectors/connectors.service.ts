@@ -6,7 +6,9 @@ import type {
   ConnectorHealthAlert,
   ConnectorHealthEntry,
   ConnectorHealthSnapshot,
+  ConnectorScopeDiagnostics,
   ConnectorStatus,
+  ConnectorToolAccess,
   ReconnectConnectorResult,
   RecordConnectorHealthInput,
   SaveConnectorConnectionInput,
@@ -22,11 +24,11 @@ const ENCRYPTION_ALGORITHM = 'aes-256-gcm'
 const CONNECTOR_CATALOG = {
   google_gmail: {
     displayName: 'Gmail',
-    toolNames: ['gmail_search', 'gmail_draft_reply'],
+    toolNames: ['gmail_search', 'gmail_read_thread', 'gmail_list_labels', 'gmail_draft_reply', 'gmail_send_draft'],
   },
   google_calendar: {
     displayName: 'Google Calendar',
-    toolNames: ['calendar_get_availability', 'calendar_create_event'],
+    toolNames: ['calendar_get_availability', 'calendar_create_event', 'calendar_update_event', 'calendar_cancel_event'],
   },
   whatsapp: {
     displayName: 'WhatsApp',
@@ -56,6 +58,115 @@ interface ConnectorToolSeed {
   requiresApproval: boolean
 }
 
+interface GoogleToolScopeRule {
+  toolName: string
+  displayName: string
+  requiresApproval: boolean
+  mode: 'read' | 'write'
+  requiredAnyOf: string[][]
+  recommendedScopes: string[]
+}
+
+const GOOGLE_SCOPES = {
+  mailFull: 'https://mail.google.com/',
+  gmailReadonly: 'https://www.googleapis.com/auth/gmail.readonly',
+  gmailModify: 'https://www.googleapis.com/auth/gmail.modify',
+  gmailCompose: 'https://www.googleapis.com/auth/gmail.compose',
+  gmailMetadata: 'https://www.googleapis.com/auth/gmail.metadata',
+  gmailLabels: 'https://www.googleapis.com/auth/gmail.labels',
+  calendarFull: 'https://www.googleapis.com/auth/calendar',
+  calendarReadonly: 'https://www.googleapis.com/auth/calendar.readonly',
+  calendarEvents: 'https://www.googleapis.com/auth/calendar.events',
+  calendarEventsOwned: 'https://www.googleapis.com/auth/calendar.events.owned',
+  calendarAppCreated: 'https://www.googleapis.com/auth/calendar.app.created',
+  calendarFreeBusy: 'https://www.googleapis.com/auth/calendar.freebusy',
+  calendarEventsFreeBusy: 'https://www.googleapis.com/auth/calendar.events.freebusy',
+} as const
+
+const GOOGLE_CONNECTOR_SCOPE_RULES: Record<GoogleConnectorId, GoogleToolScopeRule[]> = {
+  google_gmail: [
+    {
+      toolName: 'gmail_search',
+      displayName: 'Gmail Search',
+      requiresApproval: false,
+      mode: 'read',
+      requiredAnyOf: [[GOOGLE_SCOPES.mailFull], [GOOGLE_SCOPES.gmailModify], [GOOGLE_SCOPES.gmailReadonly]],
+      recommendedScopes: [GOOGLE_SCOPES.gmailModify],
+    },
+    {
+      toolName: 'gmail_read_thread',
+      displayName: 'Gmail Read Thread',
+      requiresApproval: false,
+      mode: 'read',
+      requiredAnyOf: [[GOOGLE_SCOPES.mailFull], [GOOGLE_SCOPES.gmailModify], [GOOGLE_SCOPES.gmailReadonly], [GOOGLE_SCOPES.gmailMetadata]],
+      recommendedScopes: [GOOGLE_SCOPES.gmailModify],
+    },
+    {
+      toolName: 'gmail_list_labels',
+      displayName: 'Gmail List Labels',
+      requiresApproval: false,
+      mode: 'read',
+      requiredAnyOf: [[GOOGLE_SCOPES.mailFull], [GOOGLE_SCOPES.gmailModify], [GOOGLE_SCOPES.gmailReadonly], [GOOGLE_SCOPES.gmailMetadata], [GOOGLE_SCOPES.gmailLabels]],
+      recommendedScopes: [GOOGLE_SCOPES.gmailModify],
+    },
+    {
+      toolName: 'gmail_draft_reply',
+      displayName: 'Gmail Draft Reply',
+      requiresApproval: true,
+      mode: 'write',
+      requiredAnyOf: [[GOOGLE_SCOPES.mailFull], [GOOGLE_SCOPES.gmailModify], [GOOGLE_SCOPES.gmailCompose]],
+      recommendedScopes: [GOOGLE_SCOPES.gmailCompose],
+    },
+    {
+      toolName: 'gmail_send_draft',
+      displayName: 'Gmail Send Draft',
+      requiresApproval: true,
+      mode: 'write',
+      requiredAnyOf: [[GOOGLE_SCOPES.mailFull], [GOOGLE_SCOPES.gmailModify], [GOOGLE_SCOPES.gmailCompose]],
+      recommendedScopes: [GOOGLE_SCOPES.gmailCompose],
+    },
+  ],
+  google_calendar: [
+    {
+      toolName: 'calendar_get_availability',
+      displayName: 'Calendar Availability',
+      requiresApproval: false,
+      mode: 'read',
+      requiredAnyOf: [[GOOGLE_SCOPES.calendarFull], [GOOGLE_SCOPES.calendarReadonly], [GOOGLE_SCOPES.calendarFreeBusy], [GOOGLE_SCOPES.calendarEventsFreeBusy]],
+      recommendedScopes: [GOOGLE_SCOPES.calendarReadonly],
+    },
+    {
+      toolName: 'calendar_create_event',
+      displayName: 'Calendar Create Event',
+      requiresApproval: true,
+      mode: 'write',
+      requiredAnyOf: [[GOOGLE_SCOPES.calendarFull], [GOOGLE_SCOPES.calendarEvents], [GOOGLE_SCOPES.calendarAppCreated], [GOOGLE_SCOPES.calendarEventsOwned]],
+      recommendedScopes: [GOOGLE_SCOPES.calendarEvents],
+    },
+    {
+      toolName: 'calendar_update_event',
+      displayName: 'Calendar Update Event',
+      requiresApproval: true,
+      mode: 'write',
+      requiredAnyOf: [[GOOGLE_SCOPES.calendarFull], [GOOGLE_SCOPES.calendarEvents], [GOOGLE_SCOPES.calendarAppCreated], [GOOGLE_SCOPES.calendarEventsOwned]],
+      recommendedScopes: [GOOGLE_SCOPES.calendarEvents],
+    },
+    {
+      toolName: 'calendar_cancel_event',
+      displayName: 'Calendar Cancel Event',
+      requiresApproval: true,
+      mode: 'write',
+      requiredAnyOf: [[GOOGLE_SCOPES.calendarFull], [GOOGLE_SCOPES.calendarEvents], [GOOGLE_SCOPES.calendarAppCreated], [GOOGLE_SCOPES.calendarEventsOwned]],
+      recommendedScopes: [GOOGLE_SCOPES.calendarEvents],
+    },
+  ],
+}
+
+const GOOGLE_CONNECTOR_RECOMMENDED_SCOPES: Record<GoogleConnectorId, string[]> = {
+  google_gmail: [GOOGLE_SCOPES.gmailModify, GOOGLE_SCOPES.gmailCompose],
+  google_calendar: [GOOGLE_SCOPES.calendarReadonly, GOOGLE_SCOPES.calendarEvents],
+}
+
 const CONNECTOR_TOOL_SEEDS: Record<string, ConnectorToolSeed> = {
   gmail_search: {
     displayName: 'Gmail Search',
@@ -63,9 +174,27 @@ const CONNECTOR_TOOL_SEEDS: Record<string, ConnectorToolSeed> = {
     category: 'email',
     requiresApproval: false,
   },
+  gmail_read_thread: {
+    displayName: 'Gmail Read Thread',
+    description: 'Read a Gmail thread with message and attachment metadata.',
+    category: 'email',
+    requiresApproval: false,
+  },
+  gmail_list_labels: {
+    displayName: 'Gmail List Labels',
+    description: 'List Gmail labels for the connected account.',
+    category: 'email',
+    requiresApproval: false,
+  },
   gmail_draft_reply: {
     displayName: 'Gmail Draft Reply',
     description: 'Create a Gmail draft reply.',
+    category: 'email',
+    requiresApproval: true,
+  },
+  gmail_send_draft: {
+    displayName: 'Gmail Send Draft',
+    description: 'Send an existing Gmail draft.',
     category: 'email',
     requiresApproval: true,
   },
@@ -78,6 +207,18 @@ const CONNECTOR_TOOL_SEEDS: Record<string, ConnectorToolSeed> = {
   calendar_create_event: {
     displayName: 'Calendar Create Event',
     description: 'Create an event in Google Calendar.',
+    category: 'calendar',
+    requiresApproval: true,
+  },
+  calendar_update_event: {
+    displayName: 'Calendar Update Event',
+    description: 'Update an event in Google Calendar.',
+    category: 'calendar',
+    requiresApproval: true,
+  },
+  calendar_cancel_event: {
+    displayName: 'Calendar Cancel Event',
+    description: 'Delete an event in Google Calendar.',
     category: 'calendar',
     requiresApproval: true,
   },
@@ -245,6 +386,7 @@ export class ConnectorsService {
         connectedAt: null,
         updatedAt: null,
         toolNames,
+        diagnostics: null,
       }
     }
 
@@ -270,6 +412,7 @@ export class ConnectorsService {
     })
 
     const payload = this.parseStoredTokens(connected?.encryptedTokens ?? null)
+    const diagnostics = this.buildGoogleScopeDiagnostics(normalized, payload)
     return {
       connectorId: normalized,
       connected: Boolean(payload?.accessToken),
@@ -279,7 +422,32 @@ export class ConnectorsService {
       connectedAt: payload?.connectedAt ?? connected?.connectedAt?.toISOString() ?? null,
       updatedAt: payload?.updatedAt ?? connected?.updatedAt?.toISOString() ?? null,
       toolNames,
+      diagnostics,
     }
+  }
+
+  async assertGoogleToolAccess(userId: string, connectorId: string, toolName: string) {
+    const normalized = this.normalizeConnectorId(connectorId)
+    if (!this.isGoogleConnector(normalized)) {
+      throw new BadRequestException(`Connector "${normalized}" is not a Google connector.`)
+    }
+
+    const connection = await this.getConnection(userId, normalized)
+    if (!connection.connected) {
+      throw new BadRequestException(`Connector "${normalized}" is not connected.`)
+    }
+
+    const access = connection.diagnostics?.toolAccess.find((entry) => entry.toolName === toolName) ?? null
+    if (access?.status === 'blocked') {
+      const scopes = access.missingScopes.length > 0
+        ? access.missingScopes.join(', ')
+        : connection.diagnostics?.missingScopes.join(', ') || 'required scopes'
+      throw new BadRequestException(
+        `${access.displayName} is blocked because the ${CONNECTOR_CATALOG[normalized].displayName} connector is missing scope(s): ${scopes}.`,
+      )
+    }
+
+    return connection
   }
 
   async saveConnection(
@@ -511,6 +679,9 @@ export class ConnectorsService {
   }): ConnectorHealthEntry {
     const { connectorId, row } = input
     const catalog = CONNECTOR_CATALOG[connectorId]
+    const googleState = this.isGoogleConnector(connectorId)
+      ? this.resolveGoogleConnectorState(connectorId, input.connectedTools)
+      : null
     const inferred = this.inferConnectorStateFromLocalData({
       connectorId,
       connectedTools: input.connectedTools,
@@ -519,23 +690,28 @@ export class ConnectorsService {
       slackWorkspaces: input.slackWorkspaces,
       discordServers: input.discordServers,
     })
+    const tokenExpiresAt = row?.tokenExpiresAt ?? googleState?.tokenExpiresAt ?? null
 
-    const status = this.computeStatus({
+    let status = this.computeStatus({
       baseStatus: this.parseStatus(row?.status) ?? inferred.status,
       failureStreak: row?.failureStreak ?? inferred.failureStreak,
-      tokenExpiresAt: row?.tokenExpiresAt ?? null,
+      tokenExpiresAt,
       lastFailureAt: row?.lastFailureAt ?? inferred.lastFailureAt,
       lastSuccessAt: row?.lastSuccessAt ?? inferred.lastSuccessAt,
       rateLimitHits: row?.rateLimitHits ?? inferred.rateLimitHits,
     })
+    if (googleState?.diagnostics?.blockedTools.length && status === 'connected') {
+      status = 'degraded'
+    }
 
     const alerts = this.buildAlerts({
       status,
-      tokenExpiresAt: row?.tokenExpiresAt ?? null,
+      tokenExpiresAt,
       failureStreak: row?.failureStreak ?? inferred.failureStreak,
       rateLimitHits: row?.rateLimitHits ?? inferred.rateLimitHits,
       lastFailureAt: row?.lastFailureAt ?? inferred.lastFailureAt,
       lastSuccessAt: row?.lastSuccessAt ?? inferred.lastSuccessAt,
+      scopeDiagnostics: googleState?.diagnostics ?? null,
     })
 
     return {
@@ -545,7 +721,7 @@ export class ConnectorsService {
       lastSuccessAt: (row?.lastSuccessAt ?? inferred.lastSuccessAt)?.toISOString() ?? null,
       lastFailureAt: (row?.lastFailureAt ?? inferred.lastFailureAt)?.toISOString() ?? null,
       lastError: row?.lastError ?? inferred.lastError,
-      tokenExpiresAt: row?.tokenExpiresAt?.toISOString() ?? null,
+      tokenExpiresAt: tokenExpiresAt?.toISOString() ?? null,
       p95LatencyMs: row?.p95LatencyMs ?? null,
       rateLimitHits: row?.rateLimitHits ?? inferred.rateLimitHits,
       failureStreak: row?.failureStreak ?? inferred.failureStreak,
@@ -649,6 +825,91 @@ export class ConnectorsService {
     }
   }
 
+  private resolveGoogleConnectorState(connectorId: GoogleConnectorId, connectedTools: ConnectedToolRecord[]) {
+    const toolNames = new Set<string>([...CONNECTOR_CATALOG[connectorId].toolNames])
+    const latest = connectedTools
+      .filter((row) => toolNames.has(row.tool.name))
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0] ?? null
+    const payload = this.parseStoredTokens(latest?.encryptedTokens ?? null)
+    return {
+      payload,
+      tokenExpiresAt: this.parseIso(payload?.tokenExpiresAt),
+      diagnostics: this.buildGoogleScopeDiagnostics(connectorId, payload),
+    }
+  }
+
+  private buildGoogleScopeDiagnostics(
+    connectorId: GoogleConnectorId,
+    payload: StoredConnectorTokens | null,
+  ): ConnectorScopeDiagnostics {
+    const rules = GOOGLE_CONNECTOR_SCOPE_RULES[connectorId]
+    const grantedScopes = this.normalizeScopes(payload?.scopes)
+    const grantedSet = new Set(grantedScopes)
+    const toolAccess: ConnectorToolAccess[] = rules.map((rule) => {
+      const bestMissing = this.pickBestMissingScopes(rule.requiredAnyOf, grantedSet)
+      const available = bestMissing.length === 0
+      return {
+        toolName: rule.toolName,
+        displayName: rule.displayName,
+        requiresApproval: rule.requiresApproval,
+        mode: rule.mode,
+        status: available ? 'available' : 'blocked',
+        requiredScopes: rule.recommendedScopes,
+        missingScopes: bestMissing,
+        summary: available
+          ? `${rule.displayName} is ready.`
+          : `${rule.displayName} needs ${bestMissing.join(', ')}.`,
+      }
+    })
+    const availableTools = toolAccess
+      .filter((entry) => entry.status === 'available')
+      .map((entry) => entry.toolName)
+    const blockedTools = toolAccess
+      .filter((entry) => entry.status === 'blocked')
+      .map((entry) => entry.toolName)
+    const missingScopes = [...new Set(
+      toolAccess
+        .filter((entry) => entry.status === 'blocked')
+        .flatMap((entry) => entry.missingScopes),
+    )]
+    const tokenExpired = payload?.tokenExpiresAt
+      ? (this.parseIso(payload.tokenExpiresAt)?.getTime() ?? 0) <= Date.now()
+      : false
+    const hasRefreshToken = Boolean(this.optionalText(payload?.refreshToken))
+
+    let summary = `${CONNECTOR_CATALOG[connectorId].displayName} is not connected.`
+    if (payload?.accessToken) {
+      summary = blockedTools.length === 0
+        ? `${CONNECTOR_CATALOG[connectorId].displayName} is ready for all ${toolAccess.length} action(s).`
+        : `${CONNECTOR_CATALOG[connectorId].displayName} is missing scope coverage for ${blockedTools.length} action(s).`
+      if (tokenExpired) {
+        summary = `${CONNECTOR_CATALOG[connectorId].displayName} token is expired.`
+      } else if (!hasRefreshToken) {
+        summary += ' No refresh token is stored.'
+      }
+    }
+
+    return {
+      connectorId,
+      recommendedScopes: GOOGLE_CONNECTOR_RECOMMENDED_SCOPES[connectorId],
+      grantedScopes,
+      missingScopes,
+      availableTools,
+      blockedTools,
+      hasRefreshToken,
+      tokenExpired,
+      toolAccess,
+      summary,
+    }
+  }
+
+  private pickBestMissingScopes(requiredAnyOf: string[][], grantedScopes: Set<string>) {
+    const candidates = requiredAnyOf
+      .map((group) => group.filter((scope) => !grantedScopes.has(scope)))
+      .sort((a, b) => a.length - b.length)
+    return candidates[0] ?? []
+  }
+
   private buildAlerts(input: {
     status: ConnectorStatus
     tokenExpiresAt: Date | null
@@ -656,6 +917,7 @@ export class ConnectorsService {
     rateLimitHits: number
     lastFailureAt: Date | null
     lastSuccessAt: Date | null
+    scopeDiagnostics: ConnectorScopeDiagnostics | null
   }): ConnectorHealthAlert[] {
     const alerts: ConnectorHealthAlert[] = []
 
@@ -710,6 +972,27 @@ export class ConnectorsService {
         code: 'latest_operation_failed',
         severity: 'warning',
         message: 'Most recent connector operation failed.',
+      })
+    }
+
+    if (input.scopeDiagnostics && input.scopeDiagnostics.grantedScopes.length > 0 && input.scopeDiagnostics.blockedTools.length) {
+      alerts.push({
+        code: 'missing_scopes',
+        severity: 'warning',
+        message: `Missing scope coverage for ${input.scopeDiagnostics.blockedTools.length} action(s).`,
+      })
+    }
+
+    if (
+      input.scopeDiagnostics
+      && input.scopeDiagnostics.grantedScopes.length > 0
+      && !input.scopeDiagnostics.hasRefreshToken
+      && !input.scopeDiagnostics.tokenExpired
+    ) {
+      alerts.push({
+        code: 'no_refresh_token',
+        severity: 'warning',
+        message: 'No refresh token is stored for this connector.',
       })
     }
 

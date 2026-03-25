@@ -1,7 +1,22 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Brain, FileSearch, FileText, Search, Workflow, Zap } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  Activity,
+  BadgeInfo,
+  BookOpen,
+  Brain,
+  Cpu,
+  FileSearch,
+  FileText,
+  PlusCircle,
+  Search,
+  ShieldCheck,
+  Tag,
+  UserRound,
+  Workflow,
+  Zap,
+} from 'lucide-react'
 
 export interface SlashCommand {
   id: string
@@ -20,9 +35,20 @@ const CMD = {
   MEMORY: 'memory',
   RESEARCH: 'research',
   SCHEDULE: 'schedule',
+  NEW: 'new',
+  RESET: 'reset',
+  STATUS: 'status',
+  MODEL: 'model',
+  THINK: 'think',
+  VERBOSE: 'verbose',
+  REASONING: 'reasoning',
+  LABEL: 'label',
+  APPROVALS: 'approvals',
+  HUMAN: 'human',
+  HELP: 'help',
 } as const
 
-const BUILT_IN_COMMANDS: SlashCommand[] = [
+const AGENT_COMMANDS: SlashCommand[] = [
   { id: CMD.SEARCH,    label: '/search',    description: 'Search the web for information',                    icon: <Search size={14} />,   template: '/search '    },
   { id: CMD.SUMMARIZE, label: '/summarize', description: 'Summarize the conversation or a piece of text',     icon: <FileText size={14} />, template: '/summarize ' },
   { id: CMD.DRAFT,     label: '/draft',     description: 'Draft a document, email, or message',               icon: <FileSearch size={14} />, template: '/draft '   },
@@ -32,15 +58,71 @@ const BUILT_IN_COMMANDS: SlashCommand[] = [
   { id: CMD.SCHEDULE,  label: '/schedule',  description: 'Schedule a task or reminder',                       icon: <Zap size={14} />,      template: '/schedule '  },
 ]
 
+export const OPERATOR_COMMANDS: SlashCommand[] = [
+  { id: CMD.NEW,        label: '/new',        description: 'Start a fresh session',                                 icon: <PlusCircle size={14} />, template: '/new' },
+  { id: CMD.STATUS,     label: '/status',     description: 'Show runtime, session, and approval status',           icon: <Activity size={14} />,   template: '/status' },
+  { id: CMD.MODEL,      label: '/model',      description: 'Set provider/model, for example /model openai gpt-5.1', icon: <Cpu size={14} />,        template: '/model ' },
+  { id: CMD.THINK,      label: '/think',      description: 'Set session thinking level',                           icon: <Brain size={14} />,      template: '/think ' },
+  { id: CMD.VERBOSE,    label: '/verbose',    description: 'Set session verbosity',                                icon: <FileText size={14} />,   template: '/verbose ' },
+  { id: CMD.REASONING,  label: '/reasoning',  description: 'Set reasoning visibility for the current session',     icon: <Workflow size={14} />,   template: '/reasoning ' },
+  { id: CMD.LABEL,      label: '/label',      description: 'Rename the current session label',                     icon: <Tag size={14} />,        template: '/label ' },
+  { id: CMD.APPROVALS,  label: '/approvals',  description: 'Summarize pending approvals',                          icon: <ShieldCheck size={14} />, template: '/approvals' },
+  { id: CMD.HUMAN,      label: '/human',      description: 'Escalate the current session to a human',             icon: <UserRound size={14} />,  template: '/human ' },
+  { id: CMD.HELP,       label: '/help',       description: 'Show operator command help',                           icon: <BadgeInfo size={14} />,  template: '/help' },
+]
+
+const BUILT_IN_COMMANDS: SlashCommand[] = [...AGENT_COMMANDS, ...OPERATOR_COMMANDS]
+
+const OPERATOR_COMMAND_ALIASES: Record<string, string> = {
+  [CMD.RESET]: CMD.NEW,
+  reason: CMD.REASONING,
+}
+
+const OPERATOR_COMMAND_IDS = new Set(OPERATOR_COMMANDS.map((command) => command.id))
+
+export interface ParsedSlashCommand {
+  id: string
+  arg: string
+}
+
+export function parseSlashCommand(text: string): ParsedSlashCommand | null {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('/')) return null
+
+  const spaceIdx = trimmed.indexOf(' ')
+  const rawId = (spaceIdx === -1 ? trimmed.slice(1) : trimmed.slice(1, spaceIdx)).toLowerCase()
+  const id = OPERATOR_COMMAND_ALIASES[rawId] ?? rawId
+  const arg = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim()
+  return { id, arg }
+}
+
+export function isOperatorCommandId(id: string) {
+  return OPERATOR_COMMAND_IDS.has(id)
+}
+
+export function buildOperatorCommandHelpText() {
+  return [
+    'Operator commands',
+    '/new: start a fresh session',
+    '/status: show runtime, session, approvals, and handoff state',
+    '/model [provider] <model>: update the default provider/model',
+    '/think <inherit|off|minimal|low|medium|high|xhigh|on>: set per-session thinking',
+    '/verbose <inherit|off|on|full>: set per-session verbosity',
+    '/reasoning <inherit|off|on|stream>: set per-session reasoning visibility',
+    '/label <name|clear>: update the current session label',
+    '/approvals: summarize pending approvals for this session',
+    '/human [reason]: escalate the active session to a human operator',
+    '/help: show this command list',
+  ].join('\n')
+}
+
 // Expand a slash command input into the full prompt text sent to the agent.
 // Consolidates the with-arg / without-arg cases per command.
 export function expandSlashCommand(text: string): string {
-  const trimmed = text.trim()
-  if (!trimmed.startsWith('/')) return text
-
-  const spaceIdx = trimmed.indexOf(' ')
-  const cmd = spaceIdx === -1 ? trimmed.slice(1) : trimmed.slice(1, spaceIdx)
-  const arg = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim()
+  const parsed = parseSlashCommand(text)
+  if (!parsed) return text
+  const cmd = parsed.id
+  const arg = parsed.arg
 
   switch (cmd) {
     case CMD.SEARCH:    return arg ? `Search the web for: ${arg}` : 'Search the web for: '

@@ -7,6 +7,33 @@ export interface ConnectorHealthAlert {
   message: string
 }
 
+export type ConnectorToolAccessStatus = 'available' | 'blocked'
+export type ConnectorToolAccessMode = 'read' | 'write'
+
+export interface ConnectorToolAccess {
+  toolName: string
+  displayName: string
+  requiresApproval: boolean
+  mode: ConnectorToolAccessMode
+  status: ConnectorToolAccessStatus
+  requiredScopes: string[]
+  missingScopes: string[]
+  summary: string
+}
+
+export interface ConnectorScopeDiagnostics {
+  connectorId: string
+  recommendedScopes: string[]
+  grantedScopes: string[]
+  missingScopes: string[]
+  availableTools: string[]
+  blockedTools: string[]
+  hasRefreshToken: boolean
+  tokenExpired: boolean
+  toolAccess: ConnectorToolAccess[]
+  summary: string
+}
+
 export interface ConnectorHealthEntry {
   connectorId: string
   displayName: string
@@ -59,6 +86,7 @@ export interface ConnectorConnection {
   connectedAt: string | null
   updatedAt: string | null
   toolNames: string[]
+  diagnostics: ConnectorScopeDiagnostics | null
 }
 
 export interface ConnectorConnectionResult {

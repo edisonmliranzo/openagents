@@ -2,6 +2,8 @@
 
 This document turns the broader backlog in `docs/product-expansion-roadmap.md` into an executable delivery program.
 
+For the cross-cutting ranked "do it all" OpenClaw-aligned execution queue, see `docs/openclaw-master-program.md`.
+
 It assumes the current OpenAgents baseline already exists:
 
 - chat, approvals, workflows, channels, memory, lineage, and control-plane surfaces
