@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import {
@@ -32,7 +32,6 @@ export default function ChatPage() {
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('chat')
   const [showToolsPanel, setShowToolsPanel] = useState(false)
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('assist')
-  const [runtimeLabel, setRuntimeLabel] = useState('Default runtime')
   const {
     conversations,
     conversationsLoaded,
@@ -103,17 +102,6 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
-    const run = async () => {
-      const settings = await sdk.users.getSettings().catch(() => null)
-      if (!settings) return
-      const provider = settings.preferredProvider?.trim() || 'default'
-      const model = settings.preferredModel?.trim() || 'default model'
-      setRuntimeLabel(`Default (${model} / ${provider})`)
-    }
-    void run()
-  }, [])
-
-  useEffect(() => {
     storageSet(ASSISTANT_MODE_STORAGE_KEY, assistantMode)
   }, [assistantMode])
 
@@ -129,26 +117,37 @@ export default function ChatPage() {
   const gatewayConnected = gatewayStatus === 'connected'
   const statusText = gatewayConnected ? 'Assistant online' : gatewayMessage || 'Assistant offline'
   const hasPendingApprovals = pendingApprovals.length > 0
+  const handleRuntimeLabelChange = useCallback((_label: string) => {}, [])
 
   return (
     <div className="min-h-[calc(100dvh-56px)] px-0 py-1 sm:px-2 sm:py-2 lg:h-[calc(100dvh-96px)] lg:min-h-0 lg:overflow-hidden">
-      <div className="mx-auto flex min-h-[calc(100dvh-72px)] max-w-[1880px] flex-col gap-3 sm:gap-4 lg:h-full lg:min-h-0">
-        <header className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:px-5">
+      <div className="mx-auto flex min-h-[calc(100dvh-72px)] max-w-[1880px] flex-col gap-2.5 sm:gap-3 lg:h-full lg:min-h-0">
+        <header className="space-y-2 px-2 pt-1 sm:px-1">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                OpenAgents &gt; Chat
+                Chat
               </p>
-              <p className="truncate text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                {activeConversation?.title ?? 'main'}
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <p className="truncate text-base font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                  {activeConversation?.title ?? 'main'}
+                </p>
+                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                  {assistantModeDefinition.label}
+                </span>
+                {activeConversationId && (
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                    {shortId(activeConversationId)}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <span
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold ${
                   gatewayConnected
-                    ? 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--tone-default)] dark:text-[var(--tone-inverse)]'
+                    ? 'border-[var(--border)] bg-[var(--surface)] text-[var(--tone-default)] dark:text-[var(--tone-inverse)]'
                     : 'border-red-200 bg-red-50 text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300'
                 }`}
               >
@@ -161,46 +160,30 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => setShowToolsPanel((open) => !open)}
-                className={`hidden h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition dark:text-[var(--tone-inverse)] lg:inline-flex ${
+                className={`hidden h-8 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)] lg:inline-flex ${
                   showToolsPanel
-                    ? 'border border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--tone-strong)] shadow-sm'
+                    ? 'border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--tone-strong)] shadow-sm'
                     : 'oa-soft-button text-[var(--tone-muted)]'
                 }`}
                 title={showToolsPanel ? 'Hide control panel' : 'Show control panel'}
               >
                 <PanelRight size={12} />
-                {showToolsPanel ? 'Hide control' : 'Show control'}
+                {showToolsPanel ? 'Hide tools' : 'Tools'}
               </button>
 
               <button
                 type="button"
                 onClick={() => void loadConversations()}
-                className="oa-soft-button inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition dark:text-[var(--tone-inverse)]"
+                className="oa-soft-button inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--tone-muted)] transition dark:text-[var(--tone-inverse)]"
                 title="Refresh sessions"
               >
                 <RefreshCw size={12} />
-                Refresh
               </button>
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <div className="inline-flex min-w-[180px] items-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] font-medium text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-              {activeConversation?.title ?? 'main'}
-            </div>
-            <div className="inline-flex min-w-[250px] items-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] font-medium text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-              {runtimeLabel}
-            </div>
-            <div className="inline-flex items-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-              {shortId(activeConversationId)}
-            </div>
-            <div className="inline-flex items-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-[12px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-              {assistantModeDefinition.label} mode
-            </div>
-          </div>
-
           {(lastError || !gatewayConnected) && (
-            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
               {lastError ?? gatewayMessage ?? 'Gateway disconnected.'}
               {lastError && (
                 <button
@@ -214,7 +197,7 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 lg:hidden">
+          <div className="grid grid-cols-3 gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 lg:hidden">
             <button
               type="button"
               onClick={() => setMobilePanel('sessions')}
@@ -252,7 +235,7 @@ export default function ChatPage() {
         </header>
 
         <div
-          className={`hidden min-h-0 flex-1 gap-3 lg:grid ${showToolsPanel ? 'lg:grid-cols-[270px_minmax(0,1fr)_320px]' : 'lg:grid-cols-[270px_minmax(0,1fr)]'}`}
+          className={`hidden min-h-0 flex-1 gap-2.5 lg:grid ${showToolsPanel ? 'lg:grid-cols-[236px_minmax(0,1fr)_292px]' : 'lg:grid-cols-[236px_minmax(0,1fr)]'}`}
         >
           <aside className="min-h-0 overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
             <ConversationList />
@@ -279,7 +262,7 @@ export default function ChatPage() {
                 onNewSession={async () => {
                   await createConversation()
                 }}
-                onRuntimeLabelChange={setRuntimeLabel}
+                onRuntimeLabelChange={handleRuntimeLabelChange}
               />
             </div>
           </section>
@@ -317,11 +300,11 @@ export default function ChatPage() {
                   assistantMode={assistantMode}
                   onAssistantModeChange={setAssistantMode}
                   gatewayConnected={gatewayConnected}
-                  onNewSession={async () => {
-                    await createConversation()
-                    setMobilePanel('chat')
-                  }}
-                  onRuntimeLabelChange={setRuntimeLabel}
+                onNewSession={async () => {
+                  await createConversation()
+                  setMobilePanel('chat')
+                }}
+                  onRuntimeLabelChange={handleRuntimeLabelChange}
                 />
               </div>
             </section>

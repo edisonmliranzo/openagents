@@ -37,6 +37,7 @@ export function PinnedContext({ items, onRemove, onAdd }: PinnedContextProps) {
   const [showAdd, setShowAdd] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [inputType, setInputType] = useState<'url' | 'text'>('url')
+  const hasPinnedItems = items.length > 0
 
   function handleAdd() {
     const val = inputValue.trim()
@@ -57,12 +58,20 @@ export function PinnedContext({ items, onRemove, onAdd }: PinnedContextProps) {
   }
 
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2">
+    <div
+      className={`border-b border-[var(--border)] px-4 ${
+        hasPinnedItems || showAdd
+          ? 'bg-[var(--surface-muted)] py-2'
+          : 'bg-[var(--surface)] py-1.5'
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--muted)]">
-          <Paperclip size={10} />
-          Pinned
-        </span>
+        {(hasPinnedItems || showAdd) && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--muted)]">
+            <Paperclip size={10} />
+            Pinned
+          </span>
+        )}
 
         {items.map((item) => (
           <span
@@ -118,7 +127,11 @@ export function PinnedContext({ items, onRemove, onAdd }: PinnedContextProps) {
           <button
             type="button"
             onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--border)] px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--tone-default)] dark:hover:text-[var(--tone-inverse)]"
+            className={`inline-flex items-center gap-1 rounded-full ${
+              hasPinnedItems
+                ? 'border border-dashed border-[var(--border)] px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)]'
+                : 'px-0 py-0 text-[10px] font-medium text-[var(--muted)]'
+            } transition hover:border-[var(--border-strong)] hover:text-[var(--tone-default)] dark:hover:text-[var(--tone-inverse)]`}
           >
             <Paperclip size={10} />
             Pin context
