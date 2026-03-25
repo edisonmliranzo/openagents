@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO_URL="https://github.com/edisonmliranzo/openagents.git"
 INSTALL_DIR="${HOME}/openagents"
+REPO_REF="${OPENAGENTS_INSTALL_GIT_REF:-main}"
 RUN_DEV=0
 SKIP_DOCKER=0
 SKIP_MIGRATE=0
@@ -20,6 +21,9 @@ Options:
   --skip-docker      Skip Docker startup and run the lighter setup path
   --skip-migrate     Skip Prisma migrate during setup
   --help             Show this help
+
+Environment:
+  OPENAGENTS_INSTALL_GIT_REF  Git branch or tag to install. Default: main
 EOF
 }
 
@@ -171,13 +175,18 @@ wait_for_docker() {
   return 1
 }
 
+sync_repo_ref() {
+  run git -C "${INSTALL_DIR}" fetch origin --prune --tags
+  run git -C "${INSTALL_DIR}" checkout "${REPO_REF}"
+  run git -C "${INSTALL_DIR}" pull --ff-only origin "${REPO_REF}"
+}
+
 clone_or_update_repo() {
   log_step "Repository"
   mkdir -p "$(dirname "${INSTALL_DIR}")"
 
   if [[ -d "${INSTALL_DIR}/.git" ]]; then
-    run git -C "${INSTALL_DIR}" fetch origin --prune
-    run git -C "${INSTALL_DIR}" pull --ff-only origin main
+    sync_repo_ref
     return
   fi
 
@@ -187,6 +196,7 @@ clone_or_update_repo() {
   fi
 
   run git clone "${REPO_URL}" "${INSTALL_DIR}"
+  sync_repo_ref
 }
 
 run_setup_script() {
@@ -208,6 +218,57 @@ run_setup_with_sudo_docker() {
   if (( ! SKIP_MIGRATE )); then
     (cd "${INSTALL_DIR}" && run pnpm --filter @openagents/api run db:migrate)
   fi
+}
+
+create_launcher_files() {
+  local command_launcher="${INSTALL_DIR}/OpenAgents.command"
+  local shell_launcher="${INSTALL_DIR}/openagents-start.sh"
+  local start_here="${INSTALL_DIR}/OPENAGENTS-START-HERE.txt"
+  local launcher_hint
+
+  cat > "${command_launcher}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+pnpm dev
+EOF
+
+  cat > "${shell_launcher}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+pnpm dev
+EOF
+
+  chmod +x "${command_launcher}" "${shell_launcher}"
+
+  if [[ "${os_name}" == "Darwin" ]]; then
+    launcher_hint="Double-click OpenAgents.command"
+  else
+    launcher_hint="Run ./openagents-start.sh"
+  fi
+
+  cat > "${start_here}" <<EOF
+OpenAgents is installed.
+
+Folder:
+${INSTALL_DIR}
+
+Branch or tag:
+${REPO_REF}
+
+Start OpenAgents:
+- ${launcher_hint}
+- or run: cd "${INSTALL_DIR}" && pnpm dev
+
+Update OpenAgents:
+- Rerun the same install command you used the first time.
+
+Login:
+- http://localhost:3000/login
+EOF
 }
 
 os_name="$(uname -s)"
@@ -251,10 +312,24 @@ case "${os_name}" in
     ;;
 esac
 
+create_launcher_files
+
 printf '\nOpenAgents is installed.\n'
 printf 'Repo: %s\n' "${INSTALL_DIR}"
+printf 'Git ref: %s\n' "${REPO_REF}"
+if [[ "${os_name}" == "Darwin" ]]; then
+  printf 'Launcher: %s\n' "${INSTALL_DIR}/OpenAgents.command"
+else
+  printf 'Launcher: %s\n' "${INSTALL_DIR}/openagents-start.sh"
+fi
+printf 'Instructions: %s\n' "${INSTALL_DIR}/OPENAGENTS-START-HERE.txt"
 printf 'Start it with:\n'
 printf '  cd %q && pnpm dev\n' "${INSTALL_DIR}"
+if [[ "${os_name}" == "Darwin" ]]; then
+  printf 'Or double-click %s\n' "${INSTALL_DIR}/OpenAgents.command"
+else
+  printf 'Or run %s\n' "${INSTALL_DIR}/openagents-start.sh"
+fi
 printf 'Then open http://localhost:3000/login\n'
 
 if (( RUN_DEV )); then

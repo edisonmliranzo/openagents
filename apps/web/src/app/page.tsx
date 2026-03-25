@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
 import {
   ArrowRight,
   CheckCircle2,
@@ -12,15 +11,10 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react'
-import {
-  OPENAGENTS_LOCAL_QUICK_START,
-  OPENAGENTS_REPO_WEB_URL,
-  type OpenAgentsLocalQuickStartPlatform,
-} from '@openagents/shared'
+import { OPENAGENTS_REPO_WEB_URL } from '@openagents/shared'
+import InstallQuickStart from '@/components/marketing/InstallQuickStart'
 import styles from './landing.module.css'
 import { useAuthStore } from '@/stores/auth'
-
-type Platform = OpenAgentsLocalQuickStartPlatform
 
 interface FeatureCard {
   title: string
@@ -77,8 +71,6 @@ const DELIVERABLES = [
 
 export default function RootPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
-  const [platform, setPlatform] = useState<Platform>('windows')
-  const activeQuickStart = useMemo(() => OPENAGENTS_LOCAL_QUICK_START[platform], [platform])
   const appHref = accessToken ? '/chat' : '/login'
   const appLabel = accessToken ? 'Open Assistant' : 'Login'
 
@@ -262,76 +254,8 @@ export default function RootPage() {
               </div>
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-2">
-              {(Object.keys(OPENAGENTS_LOCAL_QUICK_START) as Platform[]).map((key) => {
-                const active = key === platform
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setPlatform(key)}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                      active
-                        ? 'border border-rose-300/50 bg-rose-500/20 text-rose-100'
-                        : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
-                    }`}
-                  >
-                    {OPENAGENTS_LOCAL_QUICK_START[key].label}
-                  </button>
-                )
-              })}
-            </div>
-
             <div className={styles.commandShell}>
-              <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-                  {activeQuickStart.label}
-                </p>
-                <p className="text-xs text-slate-400">{activeQuickStart.runtimeNote}</p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Works everywhere. Installs everything.
-                </p>
-                <p className="mt-2 text-sm text-slate-300">{activeQuickStart.installerNote}</p>
-
-                <div className="mt-4 space-y-2 overflow-x-auto text-sm text-slate-100">
-                  <div className="whitespace-pre">
-                    <span className="mr-2 text-cyan-300">{activeQuickStart.shellPrefix}</span>
-                    <code>{activeQuickStart.installCommand}</code>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
-                  Start OpenAgents
-                </p>
-                <div className="mt-2 overflow-x-auto text-sm text-cyan-50">
-                  <div className="whitespace-pre">
-                    <span className="mr-2 text-cyan-200">{activeQuickStart.shellPrefix}</span>
-                    <code>{activeQuickStart.startCommand}</code>
-                  </div>
-                </div>
-                <p className="mt-3 text-sm text-cyan-100">
-                  Access example: {activeQuickStart.accessExample}
-                </p>
-              </div>
-
-              <details className="mt-4 rounded-2xl border border-white/10 bg-slate-950/35 p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-slate-200">
-                  Manual install steps
-                </summary>
-                <pre className="mt-4 space-y-2 overflow-x-auto text-sm text-slate-100">
-                  {activeQuickStart.localCommands.map((line) => (
-                    <div key={line} className="whitespace-pre">
-                      <span className="mr-2 text-cyan-300">{activeQuickStart.shellPrefix}</span>
-                      <code>{line}</code>
-                    </div>
-                  ))}
-                </pre>
-              </details>
+              <InstallQuickStart theme="dark" />
             </div>
           </article>
 

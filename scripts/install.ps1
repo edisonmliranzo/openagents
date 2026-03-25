@@ -10,6 +10,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $RepoUrl = 'https://github.com/edisonmliranzo/openagents.git'
+$RepoRef = if ([string]::IsNullOrWhiteSpace($Env:OPENAGENTS_INSTALL_GIT_REF)) {
+  'main'
+} else {
+  $Env:OPENAGENTS_INSTALL_GIT_REF.Trim()
+}
 
 function Write-Step([string]$Title) {
   Write-Host ""
@@ -48,6 +53,15 @@ function Invoke-External {
   if ($LASTEXITCODE -ne 0) {
     throw "Command failed with exit code ${LASTEXITCODE}: $FilePath $display"
   }
+}
+
+function Write-AsciiFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Content
+  )
+
+  Set-Content -LiteralPath $Path -Value $Content -Encoding Ascii
 }
 
 function Ensure-Winget {
@@ -163,6 +177,12 @@ function Wait-ForDocker([int]$TimeoutSeconds = 240) {
   throw 'Docker Desktop did not become ready in time. Start Docker Desktop manually or rerun with -SkipDocker.'
 }
 
+function Sync-RepoRef {
+  Invoke-External 'git' @('-C', $InstallDir, 'fetch', 'origin', '--prune', '--tags')
+  Invoke-External 'git' @('-C', $InstallDir, 'checkout', $RepoRef)
+  Invoke-External 'git' @('-C', $InstallDir, 'pull', '--ff-only', 'origin', $RepoRef)
+}
+
 function Clone-Or-UpdateRepo {
   $parentDir = Split-Path -Parent $InstallDir
   if (-not [string]::IsNullOrWhiteSpace($parentDir) -and -not (Test-Path $parentDir)) {
@@ -171,8 +191,7 @@ function Clone-Or-UpdateRepo {
 
   $gitDir = Join-Path $InstallDir '.git'
   if (Test-Path $gitDir) {
-    Invoke-External 'git' @('-C', $InstallDir, 'fetch', 'origin', '--prune')
-    Invoke-External 'git' @('-C', $InstallDir, 'pull', '--ff-only', 'origin', 'main')
+    Sync-RepoRef
     return
   }
 
@@ -181,6 +200,7 @@ function Clone-Or-UpdateRepo {
   }
 
   Invoke-External 'git' @('clone', $RepoUrl, $InstallDir)
+  Sync-RepoRef
 }
 
 function Run-Setup {
@@ -192,6 +212,48 @@ function Run-Setup {
   }
 
   Invoke-External 'pnpm' @($scriptName) $InstallDir
+}
+
+function New-LauncherFiles {
+  $cmdLauncherPath = Join-Path $InstallDir 'OpenAgents.cmd'
+  $cmdLauncher = @'
+@echo off
+cd /d "%~dp0"
+pnpm dev
+pause
+'@
+
+  $psLauncherPath = Join-Path $InstallDir 'OpenAgents.ps1'
+  $psLauncher = @'
+$ErrorActionPreference = 'Stop'
+Set-Location $PSScriptRoot
+pnpm dev
+'@
+
+  $readmePath = Join-Path $InstallDir 'OPENAGENTS-START-HERE.txt'
+  $readmeText = @"
+OpenAgents is installed.
+
+Folder:
+$InstallDir
+
+Branch or tag:
+$RepoRef
+
+Start OpenAgents:
+- Double-click OpenAgents.cmd
+- or run: Set-Location '$InstallDir'; pnpm dev
+
+Update OpenAgents:
+- Rerun the same install command you used the first time.
+
+Login:
+- http://localhost:3000/login
+"@
+
+  Write-AsciiFile -Path $cmdLauncherPath -Content $cmdLauncher
+  Write-AsciiFile -Path $psLauncherPath -Content $psLauncher
+  Write-AsciiFile -Path $readmePath -Content $readmeText
 }
 
 if ($Help) {
@@ -207,6 +269,9 @@ Options:
   -SkipDocker         Skip Docker startup and run the lighter setup path
   -SkipMigrate        Skip Prisma migrate during setup
   -Help               Show this help
+
+Environment:
+  OPENAGENTS_INSTALL_GIT_REF  Git branch or tag to install. Default: main
 '@
   exit 0
 }
@@ -229,12 +294,17 @@ try {
 
   Write-Step 'OpenAgents setup'
   Run-Setup
+  New-LauncherFiles
 
   Write-Host ''
   Write-Host 'OpenAgents is installed.' -ForegroundColor Green
   Write-Host "Repo: $InstallDir"
+  Write-Host "Git ref: $RepoRef"
+  Write-Host "Launcher: $(Join-Path $InstallDir 'OpenAgents.cmd')"
+  Write-Host "Instructions: $(Join-Path $InstallDir 'OPENAGENTS-START-HERE.txt')"
   Write-Host 'Start it with:'
   Write-Host "  Set-Location '$InstallDir'; pnpm dev"
+  Write-Host "Or double-click $(Join-Path $InstallDir 'OpenAgents.cmd')"
   Write-Host 'Then open http://localhost:3000/login'
 
   if ($RunDev) {

@@ -64,6 +64,15 @@ cd ~/openagents && pnpm dev
 
 The installer clones the repo into `~/openagents` (or `%USERPROFILE%\openagents` on Windows), installs Git/Node/pnpm/Docker when missing, and runs the existing `pnpm setup` bootstrap.
 
+If you are already on a running OpenAgents site, prefer the install commands shown on that site. The web app now serves `/install.ps1` and `/install.sh` directly so users can copy one command from the product UI instead of using raw GitHub links.
+
+Re-run the same install command any time to update an existing install. The installer also creates:
+
+- `OpenAgents.cmd` on Windows
+- `OpenAgents.command` on macOS
+- `openagents-start.sh` on Ubuntu/Linux
+- `OPENAGENTS-START-HERE.txt` with plain-language start and update instructions
+
 ### 2. Prerequisites
 
 - Git

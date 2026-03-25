@@ -6,6 +6,7 @@ export interface OpenAgentsQuickStartConfig {
   shellPrefix: string
   installCommand: string
   startCommand: string
+  launcherHint: string
   installerNote: string
   localCommands: string[]
   runtimeNote: string
@@ -16,10 +17,69 @@ export const OPENAGENTS_REPO_URL = 'https://github.com/edisonmliranzo/openagents
 export const OPENAGENTS_REPO_WEB_URL = 'https://github.com/edisonmliranzo/openagents'
 export const OPENAGENTS_RAW_BASE_URL =
   'https://raw.githubusercontent.com/edisonmliranzo/openagents/main'
+export const OPENAGENTS_INSTALL_GIT_REF = 'main'
+export const OPENAGENTS_INSTALL_GIT_REF_ENV = 'OPENAGENTS_INSTALL_GIT_REF'
+export const OPENAGENTS_INSTALLER_WEB_PATHS = {
+  windows: '/install.ps1',
+  unix: '/install.sh',
+} as const
 export const OPENAGENTS_INSTALLER_URLS = {
   windows: `${OPENAGENTS_RAW_BASE_URL}/scripts/install.ps1`,
   unix: `${OPENAGENTS_RAW_BASE_URL}/scripts/install.sh`,
 } as const
+
+function normalizeOpenAgentsOrigin(origin?: string) {
+  const normalized = origin?.trim()
+  return normalized ? normalized.replace(/\/+$/, '') : ''
+}
+
+function resolveOpenAgentsInstallGitRef(gitRef?: string) {
+  const normalized = gitRef?.trim()
+  return normalized || OPENAGENTS_INSTALL_GIT_REF
+}
+
+function shouldInjectOpenAgentsGitRef(gitRef: string) {
+  return gitRef !== OPENAGENTS_INSTALL_GIT_REF
+}
+
+export function getOpenAgentsInstallerUrl(
+  platform: OpenAgentsLocalQuickStartPlatform,
+  origin?: string,
+) {
+  const normalizedOrigin = normalizeOpenAgentsOrigin(origin)
+  if (normalizedOrigin) {
+    return `${normalizedOrigin}${
+      platform === 'windows'
+        ? OPENAGENTS_INSTALLER_WEB_PATHS.windows
+        : OPENAGENTS_INSTALLER_WEB_PATHS.unix
+    }`
+  }
+
+  return platform === 'windows' ? OPENAGENTS_INSTALLER_URLS.windows : OPENAGENTS_INSTALLER_URLS.unix
+}
+
+export function getOpenAgentsInstallCommand(
+  platform: OpenAgentsLocalQuickStartPlatform,
+  origin?: string,
+  gitRef?: string,
+) {
+  const installerUrl = getOpenAgentsInstallerUrl(platform, origin)
+  const resolvedGitRef = resolveOpenAgentsInstallGitRef(gitRef)
+
+  if (platform === 'windows') {
+    if (shouldInjectOpenAgentsGitRef(resolvedGitRef)) {
+      return `powershell -NoProfile -ExecutionPolicy Bypass -c "$env:${OPENAGENTS_INSTALL_GIT_REF_ENV}='${resolvedGitRef}'; irm ${installerUrl} | iex"`
+    }
+
+    return `powershell -NoProfile -ExecutionPolicy Bypass -c "irm ${installerUrl} | iex"`
+  }
+
+  if (shouldInjectOpenAgentsGitRef(resolvedGitRef)) {
+    return `curl -fsSL ${installerUrl} | ${OPENAGENTS_INSTALL_GIT_REF_ENV}='${resolvedGitRef}' bash`
+  }
+
+  return `curl -fsSL ${installerUrl} | bash`
+}
 
 export const OPENAGENTS_SUPPORT_IDENTITY_PROMPT = [
   'You are OpenAgents, the assistant for the OpenAgents project.',
@@ -73,8 +133,9 @@ export const OPENAGENTS_LOCAL_QUICK_START: Record<
   windows: {
     label: 'Windows',
     shellPrefix: 'PS>',
-    installCommand: `powershell -NoProfile -ExecutionPolicy Bypass -c "irm ${OPENAGENTS_INSTALLER_URLS.windows} | iex"`,
+    installCommand: getOpenAgentsInstallCommand('windows'),
     startCommand: "cd $HOME\\openagents; pnpm dev",
+    launcherHint: 'Or double-click OpenAgents.cmd inside the openagents folder.',
     installerNote: 'Installs Git, Node.js LTS, pnpm, Docker Desktop, clones the repo, and runs setup.',
     localCommands: [
       'winget install Git.Git',
@@ -93,8 +154,9 @@ export const OPENAGENTS_LOCAL_QUICK_START: Record<
   macos: {
     label: 'macOS',
     shellPrefix: '$',
-    installCommand: `curl -fsSL ${OPENAGENTS_INSTALLER_URLS.unix} | bash`,
+    installCommand: getOpenAgentsInstallCommand('macos'),
     startCommand: 'cd ~/openagents && pnpm dev',
+    launcherHint: 'Or double-click OpenAgents.command inside the openagents folder.',
     installerNote: 'Installs Homebrew tools if needed, installs Git, Node, Docker Desktop, clones the repo, and runs setup.',
     localCommands: [
       'brew install git node@20',
@@ -112,8 +174,9 @@ export const OPENAGENTS_LOCAL_QUICK_START: Record<
   ubuntu: {
     label: 'Ubuntu',
     shellPrefix: '$',
-    installCommand: `curl -fsSL ${OPENAGENTS_INSTALLER_URLS.unix} | bash`,
+    installCommand: getOpenAgentsInstallCommand('ubuntu'),
     startCommand: 'cd ~/openagents && pnpm dev',
+    launcherHint: 'Or run ~/openagents/openagents-start.sh to relaunch it later.',
     installerNote: 'Installs Git, Node.js 20, pnpm, Docker, clones the repo, and runs setup.',
     localCommands: [
       'sudo apt-get update',
