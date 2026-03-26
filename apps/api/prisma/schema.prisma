@@ -412,6 +412,8 @@ model UserSettings {
   preferredModel     String   @default("claude-sonnet-4-6")
   customSystemPrompt String?
   lastActiveConversationId String?
+  beginnerMode       Boolean  @default(true)
+  onboardingCompletedAt DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

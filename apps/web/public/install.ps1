@@ -246,6 +246,12 @@ Start OpenAgents:
 Update OpenAgents:
 - Rerun the same install command you used the first time.
 
+Health check:
+- Run: Set-Location '$InstallDir'; pnpm doctor
+
+Backup:
+- Run: Set-Location '$InstallDir'; pnpm backup:create
+
 Login:
 - http://localhost:3000/login
 "@
@@ -304,6 +310,10 @@ try {
   Write-Host 'Start it with:'
   Write-Host "  Set-Location '$InstallDir'; pnpm dev"
   Write-Host "Or double-click $(Join-Path $InstallDir 'OpenAgents.cmd')"
+  Write-Host 'Doctor command:'
+  Write-Host "  Set-Location '$InstallDir'; pnpm doctor"
+  Write-Host 'Backup command:'
+  Write-Host "  Set-Location '$InstallDir'; pnpm backup:create"
   Write-Host 'Then open http://localhost:3000/login'
 
   if ($RunDev) {

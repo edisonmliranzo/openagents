@@ -51,12 +51,16 @@ export class UsersService {
     preferredModel?: string
     customSystemPrompt?: string | null
     lastActiveConversationId?: string | null
+    beginnerMode?: boolean
+    onboardingCompletedAt?: string | null
   }) {
     const updateData: {
       preferredProvider?: string
       preferredModel?: string
       customSystemPrompt?: string | null
       lastActiveConversationId?: string | null
+      beginnerMode?: boolean
+      onboardingCompletedAt?: Date | null
     } = {}
 
     if ('preferredProvider' in data) updateData.preferredProvider = data.preferredProvider
@@ -67,6 +71,12 @@ export class UsersService {
         userId,
         data.lastActiveConversationId,
       )
+    }
+    if ('beginnerMode' in data && typeof data.beginnerMode === 'boolean') {
+      updateData.beginnerMode = data.beginnerMode
+    }
+    if ('onboardingCompletedAt' in data) {
+      updateData.onboardingCompletedAt = this.normalizeOptionalDate(data.onboardingCompletedAt)
     }
 
     return this.prisma.userSettings.upsert({
@@ -346,6 +356,18 @@ export class UsersService {
   private normalizeOptionalText(value?: string | null) {
     const normalized = (value ?? '').trim()
     return normalized.length > 0 ? normalized : null
+  }
+
+  private normalizeOptionalDate(value?: string | null) {
+    const normalized = this.normalizeOptionalText(value)
+    if (!normalized) return null
+
+    const parsed = new Date(normalized)
+    if (!Number.isFinite(parsed.getTime())) {
+      throw new BadRequestException('Invalid timestamp.')
+    }
+
+    return parsed
   }
 
   private async normalizeLastActiveConversationId(userId: string, value?: string | null) {

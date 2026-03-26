@@ -266,6 +266,12 @@ Start OpenAgents:
 Update OpenAgents:
 - Rerun the same install command you used the first time.
 
+Health check:
+- Run: cd "${INSTALL_DIR}" && pnpm doctor
+
+Backup:
+- Run: cd "${INSTALL_DIR}" && pnpm backup:create
+
 Login:
 - http://localhost:3000/login
 EOF
@@ -330,6 +336,10 @@ if [[ "${os_name}" == "Darwin" ]]; then
 else
   printf 'Or run %s\n' "${INSTALL_DIR}/openagents-start.sh"
 fi
+printf 'Doctor command:\n'
+printf '  cd %q && pnpm doctor\n' "${INSTALL_DIR}"
+printf 'Backup command:\n'
+printf '  cd %q && pnpm backup:create\n' "${INSTALL_DIR}"
 printf 'Then open http://localhost:3000/login\n'
 
 if (( RUN_DEV )); then
