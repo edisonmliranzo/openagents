@@ -87,7 +87,8 @@ export class ConversationsController {
 
       const message = dto.content ?? ''
       const isSkillCommand = SKILL_COMMAND_PATTERN.test(message)
-      const isAdaptiveSkillIntent = ADAPTIVE_SKILL_INTENT_PATTERN.test(message)
+      const isAdaptiveSkillIntent =
+        this.nanobotConfig.adaptiveIntentRoutingEnabled && ADAPTIVE_SKILL_INTENT_PATTERN.test(message)
       const useNanobotLoop = this.nanobotConfig.enabled || isSkillCommand || isAdaptiveSkillIntent
       const run = useNanobotLoop
         ? this.nanobotLoop.run.bind(this.nanobotLoop)
