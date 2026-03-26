@@ -64,6 +64,14 @@ const MANUS_MODE_MAX_TOOL_ROUNDS = 14
 const MANUS_MODE_TOOL_RETRY_ATTEMPTS = 3
 const MANUS_MODE_TOOL_RETRY_BASE_DELAY_MS = 250
 const MANUS_LITE_DEFAULT_PROVIDER: LLMProvider = 'ollama'
+const NORMAL_CONTEXT_MESSAGE_LIMIT = 12
+const FAST_CONTEXT_MESSAGE_LIMIT = 6
+const NORMAL_CONTEXT_CHARS_PER_MESSAGE = 1_600
+const FAST_CONTEXT_CHARS_PER_MESSAGE = 900
+const NORMAL_CONTEXT_CHARS_TOTAL = 10_000
+const FAST_CONTEXT_CHARS_TOTAL = 3_600
+const NORMAL_MEMORY_CONTEXT_CHARS = 4_000
+const FAST_MEMORY_CONTEXT_CHARS = 1_200
 
 interface AgentRunToolMetric {
   name: string
@@ -133,25 +141,36 @@ export class AgentService {
     })
     let activeProviderForRun: LLMProvider | null = null
     let activeModelForRun: string | null = null
+    const fastAdvisoryMode = this.shouldUseFastAdvisoryMode(userMessage)
+
+    emit('status', {
+      status: 'thinking',
+      ...(fastAdvisoryMode ? { mode: 'fast_advisory' } : {}),
+    })
 
     try {
       // 3. Load user settings (provider, custom prompt)
+      const prepStartedAt = Date.now()
       const settings = await this.users.getSettings(userId)
       const routing = this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel)
       const provider = routing.provider
-      const preferredModel = routing.model
+      const preferredModel = fastAdvisoryMode
+        ? this.resolveFastAdvisoryModel(provider, routing.model)
+        : routing.model
       let autonomyStatus = await this.memory.getAutonomyStatus(userId)
 
       // 4. Build context: recent messages + long-term memory
       const recentMessages = await this.prisma.message.findMany({
         where: { conversationId },
         orderBy: { createdAt: 'desc' },
-        take: SHORT_TERM_MEMORY_LIMIT,
+        take: fastAdvisoryMode
+          ? Math.min(FAST_CONTEXT_MESSAGE_LIMIT + 2, SHORT_TERM_MEMORY_LIMIT)
+          : Math.min(NORMAL_CONTEXT_MESSAGE_LIMIT + 4, SHORT_TERM_MEMORY_LIMIT),
       })
 
       const [memories, filesystemContext] = await Promise.all([
         this.memory.getForUser(userId),
-        this.memory.buildFilesystemContext(userId),
+        fastAdvisoryMode ? Promise.resolve('') : this.memory.buildFilesystemContext(userId),
       ])
       const lineageMemoryFiles = filesystemContext
         ? ['SOUL.md', 'USER.md', 'MEMORY.md', 'HEARTBEAT.md']
@@ -160,11 +179,7 @@ export class AgentService {
       const lineageTools: LineageToolInfluence[] = []
       const lineageApprovals: string[] = []
       const lineageExternalSources = new Set<string>()
-      const memorySections = [
-        memories.length ? memories.map((m) => `[${m.type}] ${m.content}`).join('\n') : '',
-        filesystemContext ? `Filesystem memory:\n${filesystemContext}` : '',
-      ].filter(Boolean)
-      const memoryContext = memorySections.join('\n\n')
+      const memoryContext = this.buildMemoryContext(memories, filesystemContext, fastAdvisoryMode)
 
       const basePrompt = settings.customSystemPrompt ?? DEFAULT_SYSTEM_PROMPT
       const manusModeEnabled = this.isManusModeEnabled()
@@ -183,18 +198,20 @@ export class AgentService {
         : systemPrompt
 
       // 5. Get available tools for this user
-      const availableTools = await this.tools.getAvailableForUser(userId)
+      const availableTools = fastAdvisoryMode
+        ? []
+        : await this.tools.getAvailableForUser(userId)
 
       // 6. Build LLM messages (oldest first)
-      const llmMessages = recentMessages
-        .reverse()
-        .filter((m) => m.role === 'user' || m.role === 'agent')
-        .map((m) => ({
-          role: (m.role === 'agent' ? 'assistant' : 'user') as 'user' | 'assistant',
-          content: m.content,
-        }))
+      const llmMessages = this.buildLlmMessages(recentMessages, fastAdvisoryMode)
 
-      emit('status', { status: 'thinking' })
+      const prepElapsedMs = Date.now() - prepStartedAt
+      if (prepElapsedMs >= 1500) {
+        this.logger.warn(
+          `Slow agent prep for conversation ${conversationId}: ${prepElapsedMs}ms (fastAdvisory=${fastAdvisoryMode}, messages=${llmMessages.length}, tools=${availableTools.length}).`,
+        )
+      }
+
       if (manusModeEnabled) {
         emit('status', { status: 'planning' })
       }
@@ -942,6 +959,12 @@ export class AgentService {
     return LLM_MODELS[provider].fast
   }
 
+  private resolveFastAdvisoryModel(provider: LLMProvider, currentModel?: string) {
+    const normalized = currentModel?.trim()
+    if (normalized) return normalized
+    return LLM_MODELS[provider].fast
+  }
+
   private normalizeProvider(value?: string | null): LLMProvider | null {
     const normalized = (value ?? '').trim().toLowerCase()
     if (
@@ -1164,6 +1187,96 @@ export class AgentService {
     if (normalized.length <= maxLength) return normalized
     const head = normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()
     return `${head}...`
+  }
+
+  private shouldUseFastAdvisoryMode(userMessage: string) {
+    const normalized = userMessage.trim().toLowerCase()
+    if (!normalized) return false
+
+    const advisoryIntent =
+      /\b(help me|tell me|what should|which should|recommend|plan|design|how do i|how should i|i need|need to)\b/.test(normalized)
+    const apiDesignIntent =
+      /\b(api|apis|endpoint|endpoints|schema|schemas|integration|integrations|architecture)\b/.test(normalized)
+    const executionIntent =
+      /\b(run|execute|send|create event|book|schedule|post this|publish|draft and send|place order)\b/.test(normalized)
+
+    return advisoryIntent && apiDesignIntent && !executionIntent
+  }
+
+  private buildLlmMessages(
+    recentMessages: Array<{ role: string; content: string }>,
+    fastAdvisoryMode: boolean,
+  ) {
+    const filtered = recentMessages
+      .slice()
+      .reverse()
+      .filter((message) => message.role === 'user' || message.role === 'agent')
+
+    const messageLimit = fastAdvisoryMode ? FAST_CONTEXT_MESSAGE_LIMIT : NORMAL_CONTEXT_MESSAGE_LIMIT
+    const perMessageLimit = fastAdvisoryMode
+      ? FAST_CONTEXT_CHARS_PER_MESSAGE
+      : NORMAL_CONTEXT_CHARS_PER_MESSAGE
+    const totalLimit = fastAdvisoryMode ? FAST_CONTEXT_CHARS_TOTAL : NORMAL_CONTEXT_CHARS_TOTAL
+    const selected = filtered.slice(-messageLimit)
+
+    let usedChars = 0
+    return selected.reduce<Array<{ role: 'user' | 'assistant'; content: string }>>((acc, message) => {
+      if (usedChars >= totalLimit) return acc
+
+      const remaining = totalLimit - usedChars
+      const limit = Math.max(0, Math.min(perMessageLimit, remaining))
+      const content = this.clipContextText(message.content, limit)
+      if (!content) return acc
+
+      usedChars += content.length
+      acc.push({
+        role: (message.role === 'agent' ? 'assistant' : 'user') as 'user' | 'assistant',
+        content,
+      })
+      return acc
+    }, [])
+  }
+
+  private buildMemoryContext(
+    memories: Array<{ type: string; content: string }>,
+    filesystemContext: string,
+    fastAdvisoryMode: boolean,
+  ) {
+    const totalLimit = fastAdvisoryMode ? FAST_MEMORY_CONTEXT_CHARS : NORMAL_MEMORY_CONTEXT_CHARS
+    const sections: string[] = []
+    let usedChars = 0
+
+    if (memories.length > 0 && usedChars < totalLimit) {
+      const remaining = totalLimit - usedChars
+      const rawMemorySummary = memories
+        .slice(0, fastAdvisoryMode ? 6 : 12)
+        .map((memory) => `[${memory.type}] ${memory.content}`)
+        .join('\n')
+      const clipped = this.clipContextText(rawMemorySummary, remaining)
+      if (clipped) {
+        sections.push(clipped)
+        usedChars += clipped.length
+      }
+    }
+
+    if (filesystemContext && usedChars < totalLimit) {
+      const remaining = totalLimit - usedChars
+      const clipped = this.clipContextText(`Filesystem memory:\n${filesystemContext}`, remaining)
+      if (clipped) {
+        sections.push(clipped)
+      }
+    }
+
+    return sections.join('\n\n')
+  }
+
+  private clipContextText(value: string, limit: number) {
+    if (limit <= 0) return ''
+    const normalized = value.replace(/\s+/g, ' ').trim()
+    if (!normalized) return ''
+    if (normalized.length <= limit) return normalized
+    if (limit <= 3) return normalized.slice(0, limit)
+    return `${normalized.slice(0, limit - 3).trimEnd()}...`
   }
 
   private async autoTitle(
