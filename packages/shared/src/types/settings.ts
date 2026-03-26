@@ -5,6 +5,8 @@ export interface UserSettings {
   preferredModel: string
   customSystemPrompt: string | null
   lastActiveConversationId: string | null
+  beginnerMode: boolean
+  onboardingCompletedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -14,6 +16,8 @@ export interface UpdateSettingsDto {
   preferredModel?: string
   customSystemPrompt?: string | null
   lastActiveConversationId?: string | null
+  beginnerMode?: boolean
+  onboardingCompletedAt?: string | null
 }
 
 export interface LlmApiKey {

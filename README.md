@@ -73,6 +73,13 @@ Re-run the same install command any time to update an existing install. The inst
 - `openagents-start.sh` on Ubuntu/Linux
 - `OPENAGENTS-START-HERE.txt` with plain-language start and update instructions
 
+After login, use:
+
+- `/settings/get-started` for the guided first-run checklist
+- `/settings/doctor` for browser-visible diagnostics and recovery commands
+- `pnpm doctor` for local machine checks
+- `pnpm backup:create` before upgrades or risky changes
+
 ### 2. Prerequisites
 
 - Git

@@ -14,6 +14,8 @@ class UpdateSettingsDto {
   @IsString() @IsOptional() preferredModel?: string
   @IsString() @IsOptional() customSystemPrompt?: string
   @IsString() @IsOptional() lastActiveConversationId?: string
+  @IsBoolean() @IsOptional() beginnerMode?: boolean
+  @IsString() @IsOptional() onboardingCompletedAt?: string
 }
 
 class UpsertLlmKeyDto {

@@ -20,6 +20,7 @@ import {
   ScrollText,
   Settings2,
   ShieldCheck,
+  Sparkles,
   Sun,
   Terminal,
   Users,
@@ -27,7 +28,7 @@ import {
   X,
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
-import type { Notification } from '@openagents/shared'
+import type { Notification, UserSettings } from '@openagents/shared'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -48,6 +49,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
   {
     title: 'Control',
     items: [
+      { label: 'Get Started', href: '/settings/get-started', icon: Sparkles },
       { label: 'Chat', href: '/chat', icon: MessageSquare },
       { label: 'Sessions', href: '/sessions', icon: Terminal },
       { label: 'Repair', href: '/control/repair', icon: Wrench },
@@ -68,6 +70,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     title: 'Settings',
     items: [
       { label: 'Config', href: '/settings/config', icon: Settings2 },
+      { label: 'Doctor', href: '/settings/doctor', icon: Wrench },
       { label: 'Communications', href: '/control/channels', icon: Bell },
       { label: 'Automation', href: '/control/watchers', icon: ShieldCheck },
       { label: 'Infrastructure', href: '/control/instances', icon: Activity },
@@ -87,6 +90,14 @@ const BASE_NAV_GROUPS: NavGroup[] = [
 ]
 
 const THEME_STORAGE_KEY = 'openagents.dashboard.theme'
+const BEGINNER_MODE_NAV_HREFS = new Set([
+  '/settings/get-started',
+  '/chat',
+  '/control/repair',
+  '/settings/config',
+  '/settings/doctor',
+  '/docs',
+])
 
 function isActivePath(current: string, href: string) {
   if (href === '/') return current === href
@@ -134,6 +145,7 @@ export function AppShell({ children }: AppShellProps) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [routeSearch, setRouteSearch] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [userSettings, setUserSettings] = useState<UserSettings | null>(null)
   const notifRef = useRef<HTMLDivElement | null>(null)
   const profileSyncedRef = useRef(false)
   const isOwnerUser = (user?.role ?? '').toLowerCase() === 'owner'
@@ -212,6 +224,34 @@ export function AppShell({ children }: AppShellProps) {
   }, [hydrated, accessToken, loadNotifications])
 
   useEffect(() => {
+    if (!hydrated || !accessToken) return
+    let cancelled = false
+    const refreshSettings = () => {
+      void sdk.users.getSettings()
+        .then((settings) => {
+          if (!cancelled) {
+            setUserSettings(settings)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setUserSettings(null)
+          }
+        })
+    }
+
+    refreshSettings()
+    window.addEventListener('focus', refreshSettings)
+    window.addEventListener('openagents:settings-updated', refreshSettings as EventListener)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', refreshSettings)
+      window.removeEventListener('openagents:settings-updated', refreshSettings as EventListener)
+    }
+  }, [hydrated, accessToken, pathname])
+
+  useEffect(() => {
     if (!isNotificationsOpen) return
     const onPointerDown = (event: MouseEvent) => {
       if (!notifRef.current) return
@@ -231,6 +271,18 @@ export function AppShell({ children }: AppShellProps) {
     () => notifications.filter((notification) => !notification.read).length,
     [notifications],
   )
+  const beginnerMode = userSettings?.beginnerMode ?? false
+  const visibleNavGroups = useMemo<NavGroup[]>(() => {
+    if (!beginnerMode) return navGroups
+    return navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) => BEGINNER_MODE_NAV_HREFS.has(item.href) || isActivePath(pathname, item.href),
+        ),
+      }))
+      .filter((group) => group.items.length > 0)
+  }, [beginnerMode, navGroups, pathname])
   const allNavItems = useMemo(() => navGroups.flatMap((group) => group.items), [navGroups])
   const matchingRoute = useMemo(() => {
     const query = routeSearch.trim().toLowerCase()
@@ -342,7 +394,7 @@ export function AppShell({ children }: AppShellProps) {
           </div>
 
           <nav className="flex-1 space-y-4 overflow-y-auto px-1">
-            {navGroups.map((group) => (
+            {visibleNavGroups.map((group) => (
               <div key={group.title}>
                 <p className="mb-2 px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
                   {group.title}
@@ -537,7 +589,20 @@ export function AppShell({ children }: AppShellProps) {
             </div>
           </header>
 
-          <main className="px-2 py-3 sm:px-6 sm:py-5">{children}</main>
+          <main className="px-2 py-3 sm:px-6 sm:py-5">
+            {beginnerMode && pathname !== '/settings/get-started' && (
+              <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Beginner mode is on. Only the essential routes are visible.
+                {' '}
+                <Link href="/settings/get-started" className="font-semibold underline underline-offset-2">
+                  Open guided setup
+                </Link>
+                {' '}
+                to finish onboarding or turn it off.
+              </div>
+            )}
+            {children}
+          </main>
         </div>
       </div>
     </div>

@@ -282,6 +282,7 @@ export function ChatWindow({
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const learnedIntentLabel = formatIntentLabel(learnedSkill?.intent)
+  const beginnerMode = Boolean(runtimeSettings?.beginnerMode)
   const assistantModeDefinition = useMemo(
     () => getAssistantModeDefinition(assistantMode),
     [assistantMode],
@@ -743,23 +744,27 @@ export function ChatWindow({
                 )}
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => setControlsExpanded((current) => !current)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
-              aria-expanded={controlsExpanded}
-            >
-              {controlsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {controlsExpanded ? 'Hide details' : 'Details'}
-            </button>
+            {!beginnerMode && (
+              <button
+                type="button"
+                onClick={() => setControlsExpanded((current) => !current)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
+                aria-expanded={controlsExpanded}
+              >
+                {controlsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                {controlsExpanded ? 'Hide details' : 'Details'}
+              </button>
+            )}
           </div>
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[var(--muted)] dark:text-[var(--muted)]">
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 font-mono uppercase tracking-[0.12em] text-[var(--tone-soft)]">
-            {shortId(activeConversationId)}
-          </span>
-          {activeSession?.label?.trim() && (
+          {!beginnerMode && (
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 font-mono uppercase tracking-[0.12em] text-[var(--tone-soft)]">
+              {shortId(activeConversationId)}
+            </span>
+          )}
+          {!beginnerMode && activeSession?.label?.trim() && (
             <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
               {activeSession.label.trim()}
             </span>
@@ -770,32 +775,37 @@ export function ChatWindow({
           <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
             {effectiveProviderLabel}
           </span>
-          {isRuntimeCustomized && (
+          {beginnerMode && (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              beginner mode
+            </span>
+          )}
+          {!beginnerMode && isRuntimeCustomized && (
             <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
               customized runtime
             </span>
           )}
-          {thinkingValue && (
+          {!beginnerMode && thinkingValue && (
             <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
               think {thinkingValue}
             </span>
           )}
-          {verboseValue && (
+          {!beginnerMode && verboseValue && (
             <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
               verbose {verboseValue}
             </span>
           )}
-          {reasoningValue && (
+          {!beginnerMode && reasoningValue && (
             <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
               reasoning {reasoningValue}
             </span>
           )}
-          {typeof activeSession?.totalTokens === 'number' && activeSession.totalTokens > 0 && (
+          {!beginnerMode && typeof activeSession?.totalTokens === 'number' && activeSession.totalTokens > 0 && (
             <span>{activeSession.totalTokens} tokens</span>
           )}
         </div>
 
-        {controlsExpanded && (
+        {!beginnerMode && controlsExpanded && (
           <div className="mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -1031,7 +1041,7 @@ export function ChatWindow({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <ResponsePresets onApply={handlePresetApply} />
+            {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
             <button
               type="button"
               onClick={() => void handleEscalate()}
