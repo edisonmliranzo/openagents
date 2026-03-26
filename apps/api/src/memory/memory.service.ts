@@ -799,7 +799,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
   }
 
   async buildFilesystemContext(userId: string) {
-    const userDir = await this.syncFiles(userId)
+    const userDir = await this.ensureCoreMemoryFiles(userId)
     const sections: string[] = []
     let used = 0
 
@@ -813,7 +813,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
         sections.push(section)
         used += section.length
       } catch {
-        // Skip missing file; syncFiles should have created it already.
+        // Skip missing file; ensureCoreMemoryFiles creates defaults on demand.
       }
     }
 
@@ -1335,6 +1335,88 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     } catch {
       await fs.writeFile(fullPath, content, 'utf8')
     }
+  }
+
+  private async ensureCoreMemoryFiles(userId: string) {
+    const userDir = await this.ensureUserDir(userId)
+
+    const [profile, settings, memories, cronJobs] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, name: true, createdAt: true },
+      }),
+      this.prisma.userSettings.findUnique({
+        where: { userId },
+        select: {
+          customSystemPrompt: true,
+          preferredProvider: true,
+          preferredModel: true,
+        },
+      }),
+      this.prisma.memory.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 200,
+      }),
+      this.prisma.cronJob.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+      }),
+    ])
+
+    if (!profile) return userDir
+
+    const soul = settings?.customSystemPrompt?.trim() || [
+      '# SOUL',
+      '',
+      'You are a practical assistant.',
+      'You should use tools when useful, ask for approval before sensitive actions,',
+      'and keep responses concise and actionable.',
+    ].join('\n')
+
+    const userDoc = [
+      '# USER',
+      '',
+      `id: ${profile.id}`,
+      `name: ${profile.name ?? ''}`,
+      `email: ${profile.email}`,
+      `joined: ${profile.createdAt.toISOString()}`,
+      `preferred_provider: ${settings?.preferredProvider ?? ''}`,
+      `preferred_model: ${settings?.preferredModel ?? ''}`,
+      '',
+      'preferences:',
+      '- language: en',
+      '- tone: concise',
+    ].join('\n')
+
+    const memoryDoc = [
+      '# MEMORY',
+      '',
+      ...memories.map((entry) => `- [${entry.type}] ${entry.content}`),
+    ].join('\n')
+
+    const heartbeatDoc = [
+      '# HEARTBEAT',
+      '',
+      '## Active Tasks',
+      ...cronJobs
+        .filter((job) => job.enabled)
+        .map((job) => `- ${job.name} (${job.scheduleKind}: ${job.scheduleValue})`),
+      '',
+      '## Disabled Tasks',
+      ...cronJobs
+        .filter((job) => !job.enabled)
+        .map((job) => `- ${job.name}`),
+    ].join('\n')
+
+    await Promise.all([
+      this.writeCoreFileIfMissing(userDir, 'SOUL.md', soul),
+      this.writeCoreFileIfMissing(userDir, 'USER.md', userDoc),
+      this.writeCoreFileIfMissing(userDir, 'MEMORY.md', memoryDoc),
+      this.writeCoreFileIfMissing(userDir, 'HEARTBEAT.md', heartbeatDoc),
+    ])
+
+    return userDir
   }
 
   private assertFileName(fileName: string) {

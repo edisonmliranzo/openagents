@@ -338,7 +338,8 @@ export class WhatsAppService {
 
     try {
       const isSkillCommand = SKILL_COMMAND_PATTERN.test(userMessage)
-      const isAdaptiveSkillIntent = ADAPTIVE_SKILL_INTENT_PATTERN.test(userMessage)
+      const isAdaptiveSkillIntent =
+        this.nanobotConfig.adaptiveIntentRoutingEnabled && ADAPTIVE_SKILL_INTENT_PATTERN.test(userMessage)
       const run = this.nanobotConfig.enabled || isSkillCommand || isAdaptiveSkillIntent
         ? this.nanobotLoop.run.bind(this.nanobotLoop)
         : this.agent.run.bind(this.agent)

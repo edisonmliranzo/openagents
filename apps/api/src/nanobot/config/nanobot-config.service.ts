@@ -65,6 +65,10 @@ export class NanobotConfigService {
     return this.config.get<string>('NANOBOT_RUNTIME_LABEL') ?? 'nanobot'
   }
 
+  get adaptiveIntentRoutingEnabled() {
+    return parseBoolean(this.config.get<string>('NANOBOT_ADAPTIVE_INTENT_ROUTING'), false)
+  }
+
   get parallelDelegationEnabled() {
     if (typeof this.runtimeOverrides.parallelDelegationEnabled === 'boolean') {
       return this.runtimeOverrides.parallelDelegationEnabled
