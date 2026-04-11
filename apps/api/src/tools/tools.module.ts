@@ -15,8 +15,13 @@ import { GithubTool } from './connectors/github.tool'
 import { NotionTool } from './connectors/notion.tool'
 import { LinearTool } from './connectors/linear.tool'
 import { JiraTool } from './connectors/jira.tool'
+import { NewsTool } from './connectors/news.tool'
+import { YoutubeTool } from './connectors/youtube.tool'
+import { MemoryPersonalTool } from './connectors/memory-personal.tool'
+import { ProactiveTool } from './connectors/proactive.tool'
 import { CronModule } from '../cron/cron.module'
 import { ConnectorsModule } from '../connectors/connectors.module'
+import { MemoryModule } from '../memory/memory.module'
 import { McpService } from './mcp.service'
 import { PromptGuardService } from './prompt-guard.service'
 import { OutboundGuardService } from './outbound-guard.service'
@@ -24,7 +29,7 @@ import { PolicyModule } from '../policy/policy.module'
 import { ToolsInternalController } from './tools.internal.controller'
 
 @Module({
-  imports: [CronModule, ConnectorsModule, PolicyModule],
+  imports: [CronModule, ConnectorsModule, PolicyModule, MemoryModule],
   providers: [
     ToolsService,
     GmailTool,
@@ -41,6 +46,10 @@ import { ToolsInternalController } from './tools.internal.controller'
     NotionTool,
     LinearTool,
     JiraTool,
+    NewsTool,
+    YoutubeTool,
+    MemoryPersonalTool,
+    ProactiveTool,
     McpService,
     PromptGuardService,
     OutboundGuardService,

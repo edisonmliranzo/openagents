@@ -21,9 +21,10 @@ import { LLM_MODEL_OPTIONS, LLM_PROVIDER_CAPABILITIES } from '@openagents/shared
 
 // Types
 
-type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax'
+type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax' | 'perplexity'
 
-const PROVIDERS: Provider[] = ['anthropic', 'openai', 'google', 'minimax', 'ollama']
+const PROVIDERS: Provider[] = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'ollama']
+const CLOUD_PROVIDERS = ['anthropic', 'openai', 'google', 'perplexity', 'minimax'] as const
 const DEFAULT_OLLAMA_BASE_URL = process.env.NEXT_PUBLIC_OLLAMA_BASE_URL?.trim() || 'http://localhost:11434'
 
 interface ProviderCardState {
@@ -44,6 +45,7 @@ const DEFAULTS: Record<Provider, ProviderCardState> = {
   anthropic: { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   openai:    { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   google:    { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  perplexity:{ apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   minimax:   { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   ollama:    { apiKey: '', baseUrl: DEFAULT_OLLAMA_BASE_URL, showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
 }
@@ -52,6 +54,7 @@ const PROVIDER_PLAN_OPTIONS: Record<Exclude<Provider, 'ollama'>, string[]> = {
   anthropic: ['Free', 'Pro', 'Max', 'Team', 'Enterprise'],
   openai: ['Free', 'Plus (Codex)', 'Pro (Codex)', 'Team', 'Enterprise'],
   google: ['Free', 'AI Pro', 'AI Ultra', 'Workspace Enterprise'],
+  perplexity: ['Starter', 'Pro', 'Enterprise'],
   minimax: ['Starter', 'Pro', 'Enterprise'],
 }
 
@@ -84,6 +87,14 @@ const PROVIDER_META: Record<Provider, {
     icon: <Sparkles className="h-5 w-5" />,
     gradient: 'from-blue-500 to-indigo-600',
     ring: 'ring-blue-400',
+    inputLabel: 'API Key',
+    isKeyless: false,
+  },
+  perplexity: {
+    label: 'Perplexity',
+    icon: <Link2 className="h-5 w-5" />,
+    gradient: 'from-cyan-500 to-sky-600',
+    ring: 'ring-cyan-400',
     inputLabel: 'API Key',
     isKeyless: false,
   },
@@ -341,7 +352,7 @@ export default function ConfigPage() {
         sdk.users.getSettings(),
         sdk.users.getLlmKeys(),
         sdk.users.listDomains(),
-        ...(['anthropic', 'openai', 'google', 'minimax'] as const).map((p) =>
+        ...CLOUD_PROVIDERS.map((p) =>
           sdk.users.listFallbackLlmKeys(p).then((list) => ({ provider: p, list })).catch(() => ({ provider: p, list: [] as Array<{ id: string; label: string | null; priority: number; isActive: boolean; createdAt: string }> })),
         ),
       ])
@@ -369,6 +380,7 @@ export default function ConfigPage() {
         anthropic: { ...DEFAULTS.anthropic },
         openai: { ...DEFAULTS.openai },
         google: { ...DEFAULTS.google },
+        perplexity: { ...DEFAULTS.perplexity },
         minimax: { ...DEFAULTS.minimax },
         ollama: { ...DEFAULTS.ollama },
       }
@@ -519,7 +531,7 @@ export default function ConfigPage() {
           key.provider !== 'ollama' && key.isActive && isProvider(key.provider),
       )?.provider
       if (!savedCloudProvider) {
-        setError('No active cloud provider configured. Save a key for Anthropic, OpenAI, or Google first.')
+        setError('No active cloud provider configured. Save a key for Anthropic, OpenAI, Google, Perplexity, or MiniMax first.')
         return
       }
       const cloudModelOptions = providerModels(savedCloudProvider)
@@ -1235,7 +1247,7 @@ export default function ConfigPage() {
           </div>
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {(['anthropic', 'openai', 'google', 'minimax'] as const).map((provider) => {
+          {CLOUD_PROVIDERS.map((provider) => {
             const meta = PROVIDER_META[provider]
             const providerFallbacks = fallbackKeys[provider] ?? []
             return (

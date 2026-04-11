@@ -1034,7 +1034,8 @@ export class AgentService {
       normalized === 'openai' ||
       normalized === 'google' ||
       normalized === 'ollama' ||
-      normalized === 'minimax'
+      normalized === 'minimax' ||
+      normalized === 'perplexity'
     ) {
       return normalized
     }

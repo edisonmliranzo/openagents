@@ -40,6 +40,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module'
 import { AgentPresetsModule } from './agent-presets/agent-presets.module'
 import { ArtifactsModule } from './artifacts/artifacts.module'
 import { PacksModule } from './packs/packs.module'
+import { ResearchModule } from './research/research.module'
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { PacksModule } from './packs/packs.module'
     AgentPresetsModule,
     ArtifactsModule,
     PacksModule,
+    ResearchModule,
   ],
 })
 export class AppModule {}
