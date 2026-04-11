@@ -284,7 +284,7 @@ function buildNextSteps({
   if (activeHandoffStatus) {
     items.push({
       title: 'Open operator inbox',
-      detail: `This thread is currently in ${activeHandoffStatus} handoff mode.`,
+      detail: `This session is currently in ${activeHandoffStatus} handoff mode.`,
       href: '/control/operator',
     })
   }
@@ -292,7 +292,7 @@ function buildNextSteps({
   if (assistantMode === 'plan') {
     items.push({
       title: 'Preview execution',
-      detail: 'Use dry-run to test a tool plan before switching this thread into execution.',
+      detail: 'Use dry-run to test a tool plan before switching this session into execution.',
       href: '/control/dry-run',
     })
   }
@@ -300,7 +300,7 @@ function buildNextSteps({
   if (assistantMode === 'execute') {
     items.push({
       title: 'Keep the loop tight',
-      detail: 'Operator inbox and dry-run are the fastest safety rails for execution-heavy threads.',
+      detail: 'Operator inbox and dry-run are the fastest safety rails for execution-heavy sessions.',
       href: '/control/operator',
     })
   }
@@ -418,7 +418,7 @@ export function LiveToolPanel({ assistantMode }: LiveToolPanelProps) {
           </span>
         </div>
         <p className="mt-1 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-          Live OpenAgents posture, next actions, and execution telemetry for the active thread.
+          Live OpenAgents posture, next actions, and execution telemetry for the active session.
         </p>
       </div>
 
@@ -438,7 +438,7 @@ export function LiveToolPanel({ assistantMode }: LiveToolPanelProps) {
             label="Handoff"
             value={activeHandoffStatus ?? 'none'}
             detail={
-              activeHandoffStatus ? 'Human operator is attached to this thread' : 'Agent owns the thread'
+              activeHandoffStatus ? 'Human operator is attached to this session' : 'OpenAgents owns this session'
             }
           />
           <SummaryCard
@@ -522,7 +522,7 @@ export function LiveToolPanel({ assistantMode }: LiveToolPanelProps) {
           <div className="flex items-center gap-2">
             <ShieldCheck size={14} className="text-amber-500" />
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
-              Operator Rails
+              Control Rails
             </p>
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">

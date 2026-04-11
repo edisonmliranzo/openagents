@@ -68,7 +68,7 @@ export const OPERATOR_COMMANDS: SlashCommand[] = [
   { id: CMD.LABEL,      label: '/label',      description: 'Rename the current session label',                     icon: <Tag size={14} />,        template: '/label ' },
   { id: CMD.APPROVALS,  label: '/approvals',  description: 'Summarize pending approvals',                          icon: <ShieldCheck size={14} />, template: '/approvals' },
   { id: CMD.HUMAN,      label: '/human',      description: 'Escalate the current session to a human',             icon: <UserRound size={14} />,  template: '/human ' },
-  { id: CMD.HELP,       label: '/help',       description: 'Show operator command help',                           icon: <BadgeInfo size={14} />,  template: '/help' },
+  { id: CMD.HELP,       label: '/help',       description: 'Show OpenAgents command help',                         icon: <BadgeInfo size={14} />,  template: '/help' },
 ]
 
 const BUILT_IN_COMMANDS: SlashCommand[] = [...AGENT_COMMANDS, ...OPERATOR_COMMANDS]
@@ -102,7 +102,7 @@ export function isOperatorCommandId(id: string) {
 
 export function buildOperatorCommandHelpText() {
   return [
-    'Operator commands',
+    'OpenAgents commands',
     '/new: start a fresh session',
     '/status: show runtime, session, approvals, and handoff state',
     '/model [provider] <model>: update the default provider/model',

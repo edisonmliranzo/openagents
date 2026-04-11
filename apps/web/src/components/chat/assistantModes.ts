@@ -22,7 +22,7 @@ export const ASSISTANT_MODE_DEFINITIONS: AssistantModeDefinition[] = [
     description: 'Best for general help, drafting, summaries, and quick answers.',
     placeholder: 'Ask your assistant to help, draft, summarize, or think through a task...',
     starterPrompts: [
-      'Summarize what matters most from this thread and tell me what to do next.',
+      'Summarize what matters most from this session and tell me what to do next.',
       'Draft a clear response I can send to a customer about an urgent delivery issue.',
       'Turn these scattered notes into a clean plan with priorities and risks.',
       'Explain the tradeoffs between these two approaches in plain language.',

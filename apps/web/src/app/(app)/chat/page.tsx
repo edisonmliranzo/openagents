@@ -12,9 +12,9 @@ import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { ConversationList } from '@/components/chat/ConversationList'
 import { LiveToolPanel } from '@/components/chat/LiveToolPanel'
+import { storageGet, storageSet } from '@/lib/storage'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
-import { storageGet, storageSet } from '@/lib/storage'
 
 export default function ChatPage() {
   const searchParams = useSearchParams()
@@ -109,7 +109,7 @@ export default function ChatPage() {
   const handleRuntimeLabelChange = useCallback((_label: string) => {}, [])
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-[1700px] flex-col gap-3">
+    <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full flex-col gap-3">
       {(lastError || !gatewayConnected || hasPendingApprovals) && (
         <div className="flex flex-wrap items-center gap-2 px-1">
           {!gatewayConnected && (
@@ -123,7 +123,7 @@ export default function ChatPage() {
               onClick={clearError}
               className="rounded-full border border-[#f3c8c5] bg-[#fff8f7] px-3 py-1.5 text-xs font-semibold text-[#d92d20]"
             >
-              {lastError} · Dismiss
+              {lastError} | Dismiss
             </button>
           )}
           {hasPendingApprovals && (
@@ -157,7 +157,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[248px_minmax(0,1fr)] min-[1720px]:grid-cols-[248px_minmax(0,1fr)_292px]">
+      <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[216px_minmax(0,1fr)] min-[1920px]:grid-cols-[216px_minmax(0,1fr)_260px]">
         <aside className="hidden min-h-0 overflow-hidden rounded-[26px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] xl:block">
           <ConversationList />
         </aside>
@@ -174,7 +174,7 @@ export default function ChatPage() {
           />
         </div>
 
-        <aside className="hidden min-h-0 overflow-hidden rounded-[26px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] min-[1720px]:block">
+        <aside className="hidden min-h-0 overflow-hidden rounded-[26px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] min-[1920px]:block">
           <LiveToolPanel assistantMode={assistantMode} />
         </aside>
       </div>

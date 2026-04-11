@@ -153,7 +153,7 @@ export function MessageBubble({ message }: { message: Message }) {
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         </div>
         <span className="pr-1 text-[11px] text-[#98a2b3]">
-          {roleLabel(message.role)} · {formatClock(message.createdAt)}
+          {roleLabel(message.role)} | {formatClock(message.createdAt)}
         </span>
       </div>
     )
@@ -329,7 +329,7 @@ export function MessageBubble({ message }: { message: Message }) {
       </div>
 
       <span className="pl-0.5 text-[11px] text-[#98a2b3]">
-        {roleLabel(message.role)} · {formatClock(message.createdAt)}
+        {roleLabel(message.role)} | {formatClock(message.createdAt)}
       </span>
     </div>
   )
