@@ -8,14 +8,26 @@ import {
   Query,
   UseGuards,
   Request,
+  OnModuleInit,
 } from '@nestjs/common'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { MetricsService } from './metrics.service'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 
 @Controller('api/v1/metrics')
 @UseGuards(JwtAuthGuard)
-export class MetricsController {
-  constructor(private readonly metricsService: MetricsService) {}
+export class MetricsController implements OnModuleInit {
+  constructor(
+    private readonly metricsService: MetricsService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  onModuleInit() {
+    // Listen for all metrics events
+    this.eventEmitter.on('metrics.*', (data: any, event: string) => {
+      console.log('Metrics event received:', event, data)
+    })
+  }
 
   @Get('summary')
   async getSummary(

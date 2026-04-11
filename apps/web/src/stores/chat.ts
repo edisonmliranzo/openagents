@@ -16,6 +16,48 @@ export interface ChatToolStreamEvent {
   createdAt: string
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function ensureArrayResponse<T>(value: unknown, label: string) {
+  if (Array.isArray(value)) {
+    return value as T[]
+  }
+  throw new Error(`Received an invalid ${label} response from the API.`)
+}
+
+function ensureConversationResponse(value: unknown) {
+  if (isRecord(value) && typeof value.id === 'string') {
+    return value as unknown as Conversation
+  }
+  throw new Error('Received an invalid conversation response from the API.')
+}
+
+function normalizeApproval(value: unknown): Approval | null {
+  if (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.toolName === 'string' &&
+    typeof value.status === 'string'
+  ) {
+    return value as unknown as Approval
+  }
+  return null
+}
+
+function normalizeHandoff(value: unknown): HumanHandoffTicket | null {
+  if (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.conversationId === 'string' &&
+    typeof value.status === 'string'
+  ) {
+    return value as unknown as HumanHandoffTicket
+  }
+  return null
+}
+
 function formatAgentError(raw: string) {
   const value = raw.trim()
   if (!value) return 'Agent request failed.'
@@ -167,7 +209,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   async loadConversations() {
     set({ conversationsLoading: true })
     try {
-      const conversations = await sdk.conversations.list()
+      const conversations = ensureArrayResponse<Conversation>(
+        await sdk.conversations.list(),
+        'conversations',
+      )
       set({
         conversations,
         conversationsLoading: false,
@@ -187,14 +232,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   async selectConversation(id) {
     try {
-      const [messages, activeHandoff] = await Promise.all([
+      const [messagesResult, activeHandoffResult] = await Promise.all([
         sdk.conversations.messages(id),
         sdk.handoffs.getActive(id),
       ])
+      const messages = ensureArrayResponse<Message>(messagesResult, 'messages')
       set({
         activeConversationId: id,
         messages,
-        activeHandoff,
+        activeHandoff: normalizeHandoff(activeHandoffResult),
         streamToolEvents: [],
         runStatus: null,
         learnedSkill: null,
@@ -210,7 +256,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   async createConversation() {
     try {
-      const conv = await sdk.conversations.create()
+      const conv = ensureConversationResponse(await sdk.conversations.create())
       set((s) => ({
         conversations: [conv, ...s.conversations],
         activeConversationId: conv.id,
@@ -383,7 +429,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
           if (data.event === 'approval_required') {
             sawApprovalRequest = true
-            const approval = data.data?.approval as Approval | undefined
+            const approval = normalizeApproval(data.data?.approval)
             const approvalMessage =
               typeof data.data?.message?.content === 'string' && data.data.message.content.trim()
                 ? data.data.message.content.trim()
@@ -409,8 +455,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       })
 
       // Reload messages to get server-side IDs
-      const messages = await sdk.conversations.messages(activeConversationId)
-      const activeHandoff = await sdk.handoffs.getActive(activeConversationId)
+      const messages = ensureArrayResponse<Message>(
+        await sdk.conversations.messages(activeConversationId),
+        'messages',
+      )
+      const activeHandoff = normalizeHandoff(await sdk.handoffs.getActive(activeConversationId))
 
       let nextMessages = messages
       if (streamError) {
@@ -514,7 +563,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { activeConversationId } = get()
     if (!activeConversationId) return
     try {
-      const handoff = await sdk.handoffs.getActive(activeConversationId)
+      const handoff = normalizeHandoff(await sdk.handoffs.getActive(activeConversationId))
       set({ activeHandoff: handoff, lastError: null })
     } catch (err: any) {
       set({ lastError: err?.message ?? 'Failed to refresh handoff state' })
@@ -528,10 +577,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return
     }
     try {
-      const handoff = await sdk.handoffs.create({
+      const handoff = normalizeHandoff(await sdk.handoffs.create({
         conversationId: activeConversationId,
         ...(reason?.trim() ? { reason: reason.trim() } : {}),
-      })
+      }))
       set({ activeHandoff: handoff, lastError: null })
     } catch (err: any) {
       set({ lastError: err?.message ?? 'Failed to escalate conversation' })

@@ -61,15 +61,16 @@ export class OpenAgentsClient {
       return undefined as T
     }
 
-    if (this.isJsonResponse(res)) {
-      try {
-        return JSON.parse(raw) as T
-      } catch {
-        throw new APIError(res.status, `Invalid JSON response from ${res.url}`)
-      }
+    if (!this.isJsonResponse(res)) {
+      const contentType = res.headers.get('content-type')?.toLowerCase() ?? 'unknown content type'
+      throw new APIError(res.status, `Unexpected ${contentType} response from ${res.url}`)
     }
 
-    return raw as T
+    try {
+      return JSON.parse(raw) as T
+    } catch {
+      throw new APIError(res.status, `Invalid JSON response from ${res.url}`)
+    }
   }
 
   private async request<T>(
