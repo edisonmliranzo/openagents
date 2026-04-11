@@ -886,18 +886,29 @@ export function ChatWindow({
     activeSession?.modelProvider?.trim(),
   )
   const assistantStatusText = isStreaming
-    ? 'Assistant is working...'
+    ? 'OpenAgents is working...'
     : activeHandoffStatus
       ? `Waiting on a human operator (${activeHandoffStatus}).`
       : runtimeBusy
         ? 'Updating runtime...'
-        : 'Assistant ready'
+        : 'OpenAgents ready'
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[30px] border border-[#e4e7ec] bg-white shadow-[0_22px_56px_rgba(15,23,42,0.08)]">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-[#e4e7ec] bg-white shadow-[0_22px_56px_rgba(15,23,42,0.08)]">
       <div className="border-b border-[#eceef4] bg-white px-4 py-4 sm:px-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-[#f2d5d2] bg-[#fff7f5] px-2.5 py-1.5 text-[#101828] shadow-sm">
+              <div className="oa-brand-badge flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold text-white">
+                OA
+              </div>
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">
+                  OpenAgents
+                </p>
+                <p className="text-[13px] font-semibold leading-none text-[#101828]">Chat</p>
+              </div>
+            </div>
             <button
               type="button"
               onClick={() => void onNewSession()}
@@ -1155,14 +1166,14 @@ export function ChatWindow({
                 </div>
                 <div>
                   <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                    Operator chat
+                    OpenAgents chat
                   </p>
-                  <p className="text-lg font-semibold">Start with a session command or a clear outcome.</p>
+                  <p className="text-lg font-semibold">Give OpenAgents a clear outcome.</p>
                 </div>
               </div>
 
               <p className="mt-4 text-sm text-[var(--muted)] dark:text-[var(--muted)]">
-                Keep the request concrete. This surface is tuned for session work, approvals, tool use, and repeated operational tasks.
+                Keep the request concrete. OpenAgents is tuned for session work, approvals, tool use, and repeated operational tasks.
               </p>
 
               <div className="mt-5 flex flex-wrap gap-2">
@@ -1189,7 +1200,7 @@ export function ChatWindow({
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-[1180px] space-y-3 pb-3 pt-1">
+          <div className="mx-auto max-w-[1360px] space-y-3 pb-3 pt-1">
             {visibleMessages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}

@@ -756,7 +756,7 @@ export default function ChannelsPage() {
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Connector Health</h2>
             <p className="text-sm text-slate-500">
-              Unified status for OAuth tools and linked messaging channels, modeled after the OpenClaw-style control plane.
+              Unified status for OAuth tools and linked messaging channels, modeled after the OpenAgents control plane.
             </p>
           </div>
           <p className="text-xs text-slate-500">

@@ -9,7 +9,6 @@ import {
   Bell,
   BookOpen,
   Brain,
-  Bug,
   ChevronDown,
   FileText,
   Layers3,
@@ -383,7 +382,7 @@ export function AppShell({ children }: AppShellProps) {
 
   if (isChatControlRoute) {
     return (
-      <div className="dashboard-theme relative min-h-[100dvh] bg-[#f5f6fa]">
+      <div className="dashboard-theme relative min-h-[100dvh] bg-[var(--background)]">
         {isMobileNavOpen && (
           <button
             type="button"
@@ -396,19 +395,19 @@ export function AppShell({ children }: AppShellProps) {
         <div className="flex min-h-[100dvh]">
           <aside
             className={clsx(
-              'fixed inset-y-0 left-0 z-50 flex w-[258px] flex-col border-r border-[#e8eaf2] bg-[rgba(255,255,255,0.94)] px-3 py-4 transition-transform duration-200 lg:sticky lg:top-0 lg:h-[100dvh] lg:z-10 lg:translate-x-0',
+              'fixed inset-y-0 left-0 z-50 flex w-[236px] flex-col border-r border-[#e8eaf2] bg-[rgba(255,255,255,0.9)] px-3 py-4 transition-transform duration-200 lg:sticky lg:top-0 lg:h-[100dvh] lg:z-10 lg:translate-x-0',
               isMobileNavOpen ? 'translate-x-0' : '-translate-x-full',
             )}
           >
             <div className="mb-5 flex items-center gap-3 px-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff7068_0%,#ef4444_70%,#d92d20_100%)] text-white shadow-[0_10px_24px_rgba(239,68,68,0.28)]">
-                <Bug size={18} />
+              <div className="oa-brand-badge flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-bold text-white">
+                OA
               </div>
               <div className="min-w-0">
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7b8497]">
-                  Control
+                  Chat
                 </p>
-                <p className="truncate text-[15px] font-semibold text-[#101828]">OpenClaw</p>
+                <p className="truncate text-[15px] font-semibold text-[#101828]">OpenAgents</p>
               </div>
               <button
                 type="button"
@@ -482,8 +481,8 @@ export function AppShell({ children }: AppShellProps) {
                   </button>
                   <div className="min-w-0">
                     <p className="truncate text-[15px] text-[#475467]">
-                      <span className="font-medium">OpenClaw</span>
-                      <span className="px-1.5 text-[#98a2b3]">›</span>
+                      <span className="font-medium">OpenAgents</span>
+                      <span className="px-1.5 text-[#98a2b3]">&gt;</span>
                       <span className="font-semibold text-[#ef4444]">Chat</span>
                     </p>
                   </div>
@@ -500,7 +499,7 @@ export function AppShell({ children }: AppShellProps) {
                       className="w-40 bg-transparent text-[13px] text-[#344054] outline-none placeholder:text-[#98a2b3]"
                     />
                     <span className="rounded-full border border-[#e4e7ec] px-2 py-0.5 font-mono text-[10px] text-[#98a2b3]">
-                      ⌘K
+                      Ctrl K
                     </span>
                   </div>
 
