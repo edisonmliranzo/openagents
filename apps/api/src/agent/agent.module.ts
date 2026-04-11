@@ -8,9 +8,10 @@ import { ApprovalsModule } from '../approvals/approvals.module'
 import { UsersModule } from '../users/users.module'
 import { AuditModule } from '../audit/audit.module'
 import { NotificationsModule } from '../notifications/notifications.module'
+import { EventsModule } from '../events/events.module'
 
 @Module({
-  imports: [ToolsModule, MemoryModule, ApprovalsModule, UsersModule, AuditModule, NotificationsModule],
+  imports: [ToolsModule, MemoryModule, ApprovalsModule, UsersModule, AuditModule, NotificationsModule, EventsModule],
   controllers: [AgentController],
   providers: [AgentService, LLMService],
   exports: [AgentService, LLMService],

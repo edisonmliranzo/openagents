@@ -27,6 +27,20 @@ export class MetricsController {
     return this.metricsService.getMetricsSummary(req.user.id, { startDate, endDate, groupBy })
   }
 
+  @Get('logs')
+  async getMetricLogs(
+    @Request() req: any,
+    @Query('take') take?: string,
+    @Query('metricType') metricType?: string,
+    @Query('action') action?: string,
+  ) {
+    return this.metricsService.listMetricLogs(req.user.id, {
+      take: take ? parseInt(take, 10) : undefined,
+      metricType,
+      action,
+    })
+  }
+
   @Get('user')
   async getUserMetrics(
     @Request() req: any,

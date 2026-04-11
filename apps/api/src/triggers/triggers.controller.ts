@@ -62,7 +62,20 @@ export class TriggersController {
       { value: 'slack.message', label: 'Slack Message' },
       { value: 'discord.message', label: 'Discord Message' },
       { value: 'timer.elapsed', label: 'Timer Elapsed' },
+      { value: 'approval.pending', label: 'Approval Pending' },
+      { value: 'approval.approved', label: 'Approval Approved' },
+      { value: 'approval.denied', label: 'Approval Denied' },
       { value: 'approval.completed', label: 'Approval Completed' },
+      { value: 'conversation.started', label: 'Conversation Started' },
+      { value: 'conversation.message', label: 'Conversation Message' },
+      { value: 'tool.executed', label: 'Tool Executed' },
+      { value: 'tool.failed', label: 'Tool Failed' },
+      { value: 'workflow.started', label: 'Workflow Started' },
+      { value: 'workflow.completed', label: 'Workflow Completed' },
+      { value: 'workflow.failed', label: 'Workflow Failed' },
+      { value: 'agent.run.started', label: 'Agent Run Started' },
+      { value: 'agent.run.completed', label: 'Agent Run Completed' },
+      { value: 'agent.run.failed', label: 'Agent Run Failed' },
     ]
     return events
   }

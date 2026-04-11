@@ -14,6 +14,7 @@ import { AgentService } from '../agent/agent.service'
 import { ToolsService } from '../tools/tools.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { MissionControlService } from '../mission-control/mission-control.service'
+import { RuntimeEventsService } from '../events/runtime-events.service'
 import { QUEUE_NAMES, WORKFLOW_JOB_NAMES } from '@openagents/shared'
 import type {
   CreateWorkflowInput,
@@ -73,6 +74,7 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
     private tools: ToolsService,
     private prisma: PrismaService,
     private mission: MissionControlService,
+    private runtimeEvents: RuntimeEventsService,
   ) {
     const configuredMode = (process.env.WORKFLOW_PROCESSING_MODE ?? 'inline').toLowerCase()
     this.processingMode = configuredMode === 'queue' ? 'queue' : 'inline'
@@ -651,6 +653,18 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
         triggerKind,
       },
     })
+    void this.runtimeEvents.publish({
+      name: 'workflow.started',
+      userId,
+      runId: run.id,
+      workflowId: workflow.id,
+      actor: { type: 'system' },
+      resource: { type: 'workflow', id: workflow.id },
+      payload: {
+        workflowName: workflow.name,
+        triggerKind,
+      },
+    })
 
     let activeConversationId: string | null = null
     let runError: string | null = null
@@ -928,6 +942,26 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
         error: run.error,
       },
     })
+    if (run.status === 'done' || run.status === 'error') {
+      void this.runtimeEvents.publish({
+        name: run.status === 'done' ? 'workflow.completed' : 'workflow.failed',
+        userId,
+        runId: run.id,
+        workflowId: workflow.id,
+        actor: { type: 'system' },
+        resource: { type: 'workflow', id: workflow.id },
+        payload: {
+          workflowName: workflow.name,
+          triggerKind,
+          stepCount: run.stepResults.length,
+          durationMs:
+            run.finishedAt && run.startedAt
+              ? new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()
+              : undefined,
+          error: run.error,
+        },
+      })
+    }
 
     // Webhook outbox: fire-and-forget POST on terminal run status
     if (

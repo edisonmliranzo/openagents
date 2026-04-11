@@ -38,6 +38,7 @@ export class WebhooksController {
   @Get('events')
   async listEvents() {
     const events: { value: WebhookEventType; label: string }[] = [
+      { value: 'agent.run.started', label: 'Agent Run Started' },
       { value: 'agent.run.completed', label: 'Agent Run Completed' },
       { value: 'agent.run.failed', label: 'Agent Run Failed' },
       { value: 'approval.pending', label: 'Approval Pending' },

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { WebhookEventType, WebhookPayload } from '@openagents/shared'
 import * as crypto from 'crypto'
+import type { RuntimeEvent } from '../events/runtime-event.types'
 
 @Injectable()
 export class WebhooksService {
@@ -193,6 +194,31 @@ export class WebhooksService {
     return { triggered: matchingWebhooks.length, deliveries: deliveries.length }
   }
 
+  async dispatchEvent(event: RuntimeEvent) {
+    const webhookEvent = this.toWebhookEventType(event.name)
+    if (!webhookEvent) {
+      return { dispatched: false, reason: 'unsupported_event' as const }
+    }
+
+    const result = await this.triggerEvent(webhookEvent, event.userId, {
+      ...(event.payload ?? {}),
+      eventName: event.name,
+      occurredAt: event.occurredAt ?? new Date().toISOString(),
+      conversationId: event.conversationId ?? null,
+      runId: event.runId ?? null,
+      approvalId: event.approvalId ?? null,
+      workflowId: event.workflowId ?? null,
+      actor: event.actor ?? null,
+      resource: event.resource ?? null,
+    })
+
+    return {
+      dispatched: true,
+      webhookEvent,
+      ...result,
+    }
+  }
+
   private async deliverWebhook(deliveryId: string, webhook: any) {
     const delivery = await this.prisma.webhookDelivery.findUnique({
       where: { id: deliveryId },
@@ -295,5 +321,32 @@ export class WebhooksService {
 
     this.deliverWebhook(delivery.id, webhook)
     return { testDeliveryId: delivery.id }
+  }
+
+  private toWebhookEventType(eventName: string): WebhookEventType | null {
+    const supported: WebhookEventType[] = [
+      'agent.run.started',
+      'agent.run.completed',
+      'agent.run.failed',
+      'approval.pending',
+      'approval.approved',
+      'approval.denied',
+      'tool.executed',
+      'tool.failed',
+      'conversation.started',
+      'conversation.message',
+      'workflow.started',
+      'workflow.completed',
+      'workflow.failed',
+      'memory.created',
+      'memory.updated',
+      'user.login',
+      'user.registered',
+      'error.occurred',
+    ]
+
+    return supported.includes(eventName as WebhookEventType)
+      ? eventName as WebhookEventType
+      : null
   }
 }

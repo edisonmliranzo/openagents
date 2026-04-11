@@ -1,5 +1,6 @@
 // Webhook event types
 export type WebhookEventType =
+  | 'agent.run.started'
   | 'agent.run.completed'
   | 'agent.run.failed'
   | 'approval.pending'

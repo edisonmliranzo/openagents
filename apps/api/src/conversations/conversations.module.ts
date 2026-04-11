@@ -5,9 +5,10 @@ import { AgentModule } from '../agent/agent.module'
 import { AuthModule } from '../auth/auth.module'
 import { NanobotModule } from '../nanobot/nanobot.module'
 import { ApprovalsModule } from '../approvals/approvals.module'
+import { EventsModule } from '../events/events.module'
 
 @Module({
-  imports: [AgentModule, AuthModule, NanobotModule, ApprovalsModule],
+  imports: [AgentModule, AuthModule, NanobotModule, ApprovalsModule, EventsModule],
   controllers: [ConversationsController],
   providers: [ConversationsService],
   exports: [ConversationsService],

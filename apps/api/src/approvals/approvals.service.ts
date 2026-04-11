@@ -20,6 +20,7 @@ import { ToolsService } from '../tools/tools.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { DataLineageService } from '../lineage/lineage.service'
 import { MissionControlService } from '../mission-control/mission-control.service'
+import { RuntimeEventsService } from '../events/runtime-events.service'
 
 export interface CreateApprovalDto {
   conversationId: string
@@ -65,6 +66,7 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
     private notifications: NotificationsService,
     private lineage: DataLineageService,
     private mission: MissionControlService,
+    private runtimeEvents: RuntimeEventsService,
   ) {
     const configuredMode = (process.env.APPROVAL_CONTINUATION_MODE ?? 'inline').toLowerCase()
     this.continuationMode = configuredMode === 'queue' ? 'queue' : 'inline'
@@ -202,6 +204,20 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
         toolName: dto.toolName,
         risk: approval.risk ?? null,
         inputKeys: approval.inputKeys ?? [],
+      },
+    })
+    void this.runtimeEvents.publish({
+      name: 'approval.pending',
+      userId: dto.userId,
+      conversationId: dto.conversationId,
+      approvalId: created.id,
+      actor: { type: 'agent' },
+      resource: { type: 'approval', id: created.id },
+      payload: {
+        toolName: dto.toolName,
+        risk: approval.risk ?? null,
+        requiresApprovalByPolicy: dto.requiresApprovalByPolicy ?? false,
+        autonomyWithinWindow: dto.autonomyWithinWindow ?? false,
       },
     })
     return approval
@@ -344,6 +360,19 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
       approvalId: approval.id,
       payload: {
         toolName: approval.toolName,
+        risk: this.toApprovalView(approval).risk ?? null,
+      },
+    })
+    void this.runtimeEvents.publish({
+      name: approved ? 'approval.approved' : 'approval.denied',
+      userId: approval.userId,
+      conversationId: approval.conversationId,
+      approvalId: approval.id,
+      actor: { type: 'user', id: approval.userId },
+      resource: { type: 'approval', id: approval.id },
+      payload: {
+        toolName: approval.toolName,
+        status: approved ? 'approved' : 'denied',
         risk: this.toApprovalView(approval).risk ?? null,
       },
     })
@@ -543,6 +572,20 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
       approvalId,
       payload: {
         toolName,
+        error: result.success ? null : (result.error ?? 'Tool failed'),
+      },
+    })
+    void this.runtimeEvents.publish({
+      name: result.success ? 'tool.executed' : 'tool.failed',
+      userId,
+      conversationId,
+      approvalId,
+      actor: { type: 'agent' },
+      resource: { type: 'tool', id: toolName },
+      payload: {
+        toolName,
+        source,
+        success: result.success,
         error: result.success ? null : (result.error ?? 'Tool failed'),
       },
     })
