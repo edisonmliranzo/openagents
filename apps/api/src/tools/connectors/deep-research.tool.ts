@@ -19,6 +19,13 @@ interface ResearchSource {
   error: string | null
   guarded?: boolean
   guardFindings?: Array<{ id: string; label: string; excerpt: string }>
+  llmsTxt?: {
+    url: string
+    contentPreview: string
+    truncated: boolean
+    guarded: boolean
+    guardFindings?: Array<{ id: string; label: string; excerpt: string }>
+  } | null
 }
 
 const MAX_RESULTS = 12
@@ -36,7 +43,7 @@ export class DeepResearchTool {
       name: 'deep_research',
       displayName: 'Deep Research',
       description:
-        'Research a topic by combining web search + multi-page fetch with citation-ready sources and prompt-guard sanitization.',
+        'Research a topic by combining web search + multi-page fetch with citation-ready sources, prompt-guard sanitization, and site llms.txt discovery when available.',
       requiresApproval: false,
       inputSchema: {
         type: 'object',
@@ -58,6 +65,10 @@ export class DeepResearchTool {
             type: 'boolean',
             description: 'Include larger content excerpts from fetched pages (default: false)',
           },
+          includeLlmsTxt: {
+            type: 'boolean',
+            description: 'Attempt site-level llms.txt discovery during page fetches (default: true)',
+          },
         },
         required: ['query'],
       },
@@ -71,6 +82,7 @@ export class DeepResearchTool {
       maxPages?: number
       provider?: string
       includePageContent?: boolean
+      includeLlmsTxt?: boolean
     },
     userId: string,
   ): Promise<ToolResult> {
@@ -82,6 +94,7 @@ export class DeepResearchTool {
     const maxResults = this.normalizeCount(input.maxResults, 6, MAX_RESULTS)
     const maxPages = this.normalizeCount(input.maxPages, 4, MAX_PAGES)
     const includePageContent = Boolean(input.includePageContent)
+    const includeLlmsTxt = input.includeLlmsTxt !== false
 
     const search = await this.webSearch.search(
       { query, count: maxResults, provider: input.provider },
@@ -109,7 +122,7 @@ export class DeepResearchTool {
 
     const selected = parsed.results.slice(0, maxPages)
     const sources = await Promise.all(
-      selected.map((result) => this.fetchSource(result, includePageContent, userId)),
+      selected.map((result) => this.fetchSource(result, includePageContent, includeLlmsTxt, userId)),
     )
     const fetched = sources.filter((source) => source.status === 'fetched')
     const synthesis = this.synthesize(query, fetched)
@@ -171,9 +184,10 @@ export class DeepResearchTool {
   private async fetchSource(
     result: WebResult,
     includePageContent: boolean,
+    includeLlmsTxt: boolean,
     userId: string,
   ): Promise<ResearchSource> {
-    const fetched = await this.webFetch.fetch({ url: result.url }, userId)
+    const fetched = await this.webFetch.fetch({ url: result.url, includeLlmsTxt }, userId)
     if (!fetched.success) {
       return {
         title: result.title,
@@ -187,6 +201,7 @@ export class DeepResearchTool {
 
     const content = this.extractFetchContent(fetched.output)
     const promptGuard = this.extractPromptGuard(fetched.output)
+    const llmsTxt = this.extractLlmsTxt(fetched.output, includePageContent)
     const fallback = result.snippet || `Fetched source: ${result.url}`
     const previewLimit = includePageContent ? 2200 : 650
     return {
@@ -197,6 +212,7 @@ export class DeepResearchTool {
       contentPreview: this.clip(content || fallback, previewLimit),
       error: null,
       guarded: promptGuard.flagged,
+      llmsTxt,
       ...(promptGuard.findings.length > 0 ? { guardFindings: promptGuard.findings } : {}),
     }
   }
@@ -245,6 +261,43 @@ export class DeepResearchTool {
     }
   }
 
+  private extractLlmsTxt(output: unknown, includePageContent: boolean) {
+    if (!output || typeof output !== 'object') return null
+
+    const raw = output as Record<string, unknown>
+    const llmsTxt = raw.llmsTxt
+    if (!llmsTxt || typeof llmsTxt !== 'object') return null
+
+    const row = llmsTxt as Record<string, unknown>
+    const url = typeof row.url === 'string' ? row.url : ''
+    const content = typeof row.content === 'string' ? row.content : ''
+    if (!url || !content) return null
+
+    const promptGuard = row.promptGuard && typeof row.promptGuard === 'object'
+      ? row.promptGuard as Record<string, unknown>
+      : null
+    const findings = Array.isArray(promptGuard?.findings)
+      ? promptGuard!.findings
+          .filter(
+            (finding): finding is { id: string; label: string; excerpt: string } =>
+              Boolean(finding) &&
+              typeof finding === 'object' &&
+              typeof (finding as Record<string, unknown>).id === 'string' &&
+              typeof (finding as Record<string, unknown>).label === 'string' &&
+              typeof (finding as Record<string, unknown>).excerpt === 'string',
+          )
+          .slice(0, 6)
+      : []
+
+    return {
+      url,
+      contentPreview: this.clip(content, includePageContent ? 1200 : 420),
+      truncated: Boolean(row.truncated),
+      guarded: Boolean(promptGuard?.flagged),
+      ...(findings.length > 0 ? { guardFindings: findings } : {}),
+    }
+  }
+
   private synthesize(query: string, sources: ResearchSource[]) {
     if (!sources.length) {
       return {
@@ -255,7 +308,14 @@ export class DeepResearchTool {
 
     const sentences: string[] = []
     for (const source of sources) {
-      const text = source.contentPreview ?? source.snippet
+      const text = [
+        source.contentPreview ?? source.snippet,
+        source.llmsTxt?.contentPreview
+          ? `LLMS.TXT guidance: ${source.llmsTxt.contentPreview}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
       const next = this.toSentences(text, 2)
       for (const sentence of next) {
         sentences.push(sentence)

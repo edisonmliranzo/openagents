@@ -34,6 +34,8 @@ For the broader ranked execution program across parity, trust, repair, and opera
 - [x] Workflow runs now support rerun from saved input and persist resume cursors for restart recovery.
 - [x] Config UI now shows provider/model routing capability hints.
 - [x] Audit and memory UIs now expose drilldowns, review queue, and conflict governance.
+- [x] Research tools now auto-discover site `llms.txt` guidance during `web_fetch` / `deep_research` when publishers expose it.
+- [x] Memory query now supports diversified recall plus temporal decay tuning for fresher search results.
 
 ## Next parity slices
 

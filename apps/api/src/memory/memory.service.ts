@@ -47,6 +47,9 @@ const STALE_REVIEW_DAYS = 21
 const DEFAULT_LOCAL_KNOWLEDGE_MAX_FILES = 50
 const MAX_LOCAL_KNOWLEDGE_FILES = 150
 const DEFAULT_LOCAL_KNOWLEDGE_GLOBS = ['*.md', '*.txt', '*.json', '*.ts', '*.tsx', '*.js', '*.py']
+const DEFAULT_QUERY_TEMPORAL_DECAY_DAYS = 30
+const MIN_QUERY_TEMPORAL_DECAY_DAYS = 3
+const MAX_QUERY_TEMPORAL_DECAY_DAYS = 180
 const MEMORY_EVENT_KINDS = new Set<MemoryEventKind>([
   'conversation',
   'workflow',
@@ -82,6 +85,14 @@ interface CuratedPoint {
 interface LocalKnowledgeSourceStore {
   version: number
   sources: LocalKnowledgeSource[]
+}
+
+interface TieredRankedCandidate<T> {
+  item: T
+  score: number
+  updatedAtIso: string
+  anchor: string
+  tokens: string[]
 }
 
 const DECAY_WORKER_INTERVAL_MS = 6 * 60 * 60 * 1000 // every 6 hours
@@ -326,6 +337,8 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     const includeFacts = input.includeFacts ?? true
     const tagFilter = this.normalizeTags(input.tags)
     const minConfidence = this.clampConfidence(input.minConfidence, 0)
+    const diversify = input.diversify !== false
+    const temporalDecayDays = this.normalizeTemporalDecayDays(input.temporalDecayDays)
 
     const eventRows = await this.prisma.memoryEvent.findMany({
       where: { userId },
@@ -333,12 +346,12 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
       take: 240,
     })
 
-    const eventCandidates = eventRows
+    const rankedEvents = eventRows
       .map((row) => this.toMemoryEvent(row))
       .filter((event) => tagFilter.length === 0 || tagFilter.every((tag) => event.tags.includes(tag)))
       .filter((event) => (event.effectiveConfidence ?? event.confidence) >= minConfidence)
-      .map((event) => ({
-        event,
+      .map((event): TieredRankedCandidate<MemoryEvent> => ({
+        item: event,
         score: this.scoreTieredCandidate({
           textScore: this.scoreTextMatch(query, tokens, [
           event.summary,
@@ -349,25 +362,35 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
           confidence: event.effectiveConfidence ?? event.confidence,
           updatedAtIso: event.updatedAt,
           freshUntilIso: event.freshUntil,
+          temporalDecayDays,
         }),
+        updatedAtIso: event.updatedAt,
+        anchor: `${event.kind}:${event.sourceRef ?? event.conflictGroup ?? ''}`,
+        tokens: this.candidateTokens([
+          event.summary,
+          ...event.tags,
+          event.sourceRef ?? '',
+        ]),
       }))
       .filter((item) => item.score > 0)
-      .sort((a, b) => b.score - a.score || b.event.updatedAt.localeCompare(a.event.updatedAt))
-      .slice(0, safeLimit)
-      .map((item) => item.event)
+      .sort((a, b) => b.score - a.score || b.updatedAtIso.localeCompare(a.updatedAtIso))
+
+    const eventCandidates = this.selectTieredCandidates(rankedEvents, safeLimit, diversify)
+      .map((item) => item.item)
 
     let facts: MemoryFact[] = []
+    let rankedFacts: Array<TieredRankedCandidate<MemoryFact>> = []
     if (includeFacts) {
       const factRows = await this.prisma.memoryFact.findMany({
         where: { userId },
         orderBy: { updatedAt: 'desc' },
         take: 240,
       })
-      facts = factRows
+      rankedFacts = factRows
         .map((row) => this.toMemoryFact(row))
         .filter((fact) => (fact.effectiveConfidence ?? fact.confidence) >= minConfidence)
-        .map((fact) => ({
-          fact,
+        .map((fact): TieredRankedCandidate<MemoryFact> => ({
+          item: fact,
           score: this.scoreTieredCandidate({
             textScore: this.scoreTextMatch(query, tokens, [
             fact.entity,
@@ -378,12 +401,22 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
             confidence: fact.effectiveConfidence ?? fact.confidence,
             updatedAtIso: fact.updatedAt,
             freshUntilIso: fact.freshUntil,
+            temporalDecayDays,
           }),
+          updatedAtIso: fact.updatedAt,
+          anchor: `${fact.entity}:${fact.key}`,
+          tokens: this.candidateTokens([
+            fact.entity,
+            fact.key,
+            fact.value,
+            fact.sourceRef ?? '',
+          ]),
         }))
         .filter((item) => item.score > 0)
-        .sort((a, b) => b.score - a.score || b.fact.updatedAt.localeCompare(a.fact.updatedAt))
-        .slice(0, safeLimit)
-        .map((item) => item.fact)
+        .sort((a, b) => b.score - a.score || b.updatedAtIso.localeCompare(a.updatedAtIso))
+
+      facts = this.selectTieredCandidates(rankedFacts, safeLimit, diversify)
+        .map((item) => item.item)
     }
 
     const includeConflicts = input.includeConflicts ?? false
@@ -399,6 +432,12 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
       facts,
       ...(conflicts ? { conflicts } : {}),
       ...(reviewQueue ? { reviewQueue } : {}),
+      strategy: {
+        diversify,
+        temporalDecayDays,
+        eventMatches: rankedEvents.length,
+        factMatches: rankedFacts.length,
+      },
       queriedAt: new Date().toISOString(),
     }
   }
@@ -1720,6 +1759,20 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     )]
   }
 
+  private candidateTokens(values: string[]) {
+    return [...new Set(
+      values
+        .filter((value) => typeof value === 'string' && value.length > 0)
+        .join(' ')
+        .toLowerCase()
+        .replace(/[^a-z0-9_\s-]/g, ' ')
+        .split(/\s+/)
+        .map((value) => value.trim())
+        .filter((value) => value.length >= 3)
+        .slice(0, 20),
+    )]
+  }
+
   private scoreTextMatch(query: string, tokens: string[], values: string[]) {
     const haystack = values
       .filter((value) => typeof value === 'string' && value.length > 0)
@@ -1743,17 +1796,18 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     confidence: number
     updatedAtIso: string
     freshUntilIso: string | null
+    temporalDecayDays: number
   }) {
     if (input.textScore <= 0) return 0
-    const recency = this.recencyScore(input.updatedAtIso, input.freshUntilIso)
+    const recency = this.recencyScore(input.updatedAtIso, input.freshUntilIso, input.temporalDecayDays)
     return input.textScore * 5 + input.confidence * 3 + recency * 2
   }
 
-  private recencyScore(updatedAtIso: string, freshUntilIso: string | null) {
+  private recencyScore(updatedAtIso: string, freshUntilIso: string | null, temporalDecayDays: number) {
     const updatedTs = new Date(updatedAtIso).getTime()
     if (!Number.isFinite(updatedTs)) return 0
     const ageDays = Math.max(0, (Date.now() - updatedTs) / (24 * 60 * 60 * 1000))
-    let score = Math.max(0, 1 - ageDays / 30)
+    let score = Math.max(0, 1 - ageDays / Math.max(MIN_QUERY_TEMPORAL_DECAY_DAYS, temporalDecayDays))
     if (freshUntilIso) {
       const freshUntilTs = new Date(freshUntilIso).getTime()
       if (Number.isFinite(freshUntilTs) && freshUntilTs >= Date.now()) {
@@ -1761,6 +1815,63 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return score
+  }
+
+  private selectTieredCandidates<T>(
+    ranked: Array<TieredRankedCandidate<T>>,
+    limit: number,
+    diversify: boolean,
+  ) {
+    if (!diversify) return ranked.slice(0, limit)
+
+    const remaining = [...ranked]
+    const selected: Array<TieredRankedCandidate<T>> = []
+
+    while (remaining.length > 0 && selected.length < limit) {
+      let bestIndex = 0
+      let bestScore = Number.NEGATIVE_INFINITY
+
+      for (let index = 0; index < remaining.length; index += 1) {
+        const candidate = remaining[index]
+        const redundancy = selected.length === 0
+          ? 0
+          : Math.max(...selected.map((picked) => this.diversityPenalty(candidate, picked)))
+        const adjusted = candidate.score - redundancy * 4
+        if (adjusted > bestScore) {
+          bestScore = adjusted
+          bestIndex = index
+        }
+      }
+
+      selected.push(remaining.splice(bestIndex, 1)[0])
+    }
+
+    return selected
+  }
+
+  private diversityPenalty<T>(
+    candidate: TieredRankedCandidate<T>,
+    picked: TieredRankedCandidate<T>,
+  ) {
+    let penalty = 0
+    if (candidate.anchor && picked.anchor && candidate.anchor === picked.anchor) {
+      penalty += 0.65
+    }
+
+    if (candidate.tokens.length === 0 || picked.tokens.length === 0) {
+      return Math.min(1, penalty)
+    }
+
+    const pickedTokens = new Set(picked.tokens)
+    const shared = candidate.tokens.filter((token) => pickedTokens.has(token)).length
+    const overlap = shared / Math.max(candidate.tokens.length, picked.tokens.length, 1)
+    return Math.min(1, penalty + overlap * 0.75)
+  }
+
+  private normalizeTemporalDecayDays(raw: number | undefined) {
+    const parsed = typeof raw === 'number' ? raw : Number.parseInt(`${raw ?? ''}`, 10)
+    if (!Number.isFinite(parsed)) return DEFAULT_QUERY_TEMPORAL_DECAY_DAYS
+    return Math.max(MIN_QUERY_TEMPORAL_DECAY_DAYS, Math.min(MAX_QUERY_TEMPORAL_DECAY_DAYS, Math.trunc(parsed)))
   }
 
   private effectiveConfidence(

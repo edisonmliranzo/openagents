@@ -50,6 +50,16 @@ class QueryMemoryDto {
   @IsOptional()
   @IsBoolean()
   includeConflicts?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  diversify?: boolean
+
+  @IsOptional()
+  @IsInt()
+  @Min(3)
+  @Max(180)
+  temporalDecayDays?: number
 }
 
 class WriteMemoryEventDto {
