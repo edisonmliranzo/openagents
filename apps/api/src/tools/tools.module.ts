@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common'
+import { Module, forwardRef } from '@nestjs/common'
 import { ToolsService } from './tools.service'
 import { ToolsController } from './tools.controller'
 import { GmailTool } from './connectors/gmail.tool'
@@ -19,6 +19,7 @@ import { NewsTool } from './connectors/news.tool'
 import { YoutubeTool } from './connectors/youtube.tool'
 import { MemoryPersonalTool } from './connectors/memory-personal.tool'
 import { ProactiveTool } from './connectors/proactive.tool'
+import { CronModule } from '../cron/cron.module'
 import { ConnectorsModule } from '../connectors/connectors.module'
 import { MemoryModule } from '../memory/memory.module'
 import { McpService } from './mcp.service'
@@ -28,7 +29,7 @@ import { PolicyModule } from '../policy/policy.module'
 import { ToolsInternalController } from './tools.internal.controller'
 
 @Module({
-  imports: [ConnectorsModule, PolicyModule, MemoryModule],
+  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule],
   providers: [
     ToolsService,
     GmailTool,
