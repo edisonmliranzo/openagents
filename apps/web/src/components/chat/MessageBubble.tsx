@@ -148,8 +148,8 @@ export function MessageBubble({ message }: { message: Message }) {
   // ── User bubble ──────────────────────────────────────────────────────────────
   if (isUser) {
     return (
-      <div className="flex flex-col items-end gap-1">
-        <div className="oa-user-bubble max-w-[90%] rounded-2xl rounded-br-sm px-4 py-3 text-sm sm:max-w-[80%] 2xl:max-w-[74%]">
+      <div className="flex flex-col items-end gap-1.5">
+        <div className="oa-user-bubble max-w-[90%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm shadow-none sm:max-w-[75%] xl:max-w-[62%]">
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         </div>
         <span className="pr-1 text-[11px] text-[#98a2b3]">
@@ -186,13 +186,13 @@ export function MessageBubble({ message }: { message: Message }) {
 
   // ── Agent bubble ─────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col items-start gap-1">
-      <div className="w-full max-w-full xl:max-w-[96%]">
+    <div className="flex flex-col items-start gap-1.5">
+      <div className="w-full max-w-full xl:max-w-[92%]">
         {thinking.map((block, idx) => (
           <ThinkingBlock key={`thinking-${idx}`} content={block} />
         ))}
 
-        <div className="text-[14px] leading-relaxed text-[#101828] dark:text-white">
+        <div className="rounded-[22px] border border-[#e4e7ec] bg-white px-4 py-4 text-[14px] leading-relaxed text-[#101828] shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-[#2d3347] dark:bg-[#141824] dark:text-white">
           {visible ? (
             (() => {
               let codeIdx = -1
@@ -281,7 +281,7 @@ export function MessageBubble({ message }: { message: Message }) {
 
         {/* action row */}
         {(canShowLineage || codeBlocks.length > 0) && (
-          <div className="mt-1 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
             {canShowLineage && (
               <button
                 type="button"

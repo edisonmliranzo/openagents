@@ -10,8 +10,6 @@ import {
 } from '@/components/chat/assistantModes'
 import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
-import { ConversationList } from '@/components/chat/ConversationList'
-import { LiveToolPanel } from '@/components/chat/LiveToolPanel'
 import { storageGet, storageSet } from '@/lib/storage'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
@@ -109,7 +107,7 @@ export default function ChatPage() {
   const handleRuntimeLabelChange = useCallback((_label: string) => {}, [])
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full flex-col gap-3">
+    <div className="mx-auto flex h-full min-h-0 w-full flex-col gap-3 overflow-hidden">
       {(lastError || !gatewayConnected || hasPendingApprovals) && (
         <div className="flex flex-wrap items-center gap-2 px-1">
           {!gatewayConnected && (
@@ -157,36 +155,16 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[216px_minmax(0,1fr)] min-[1920px]:grid-cols-[216px_minmax(0,1fr)_260px]">
-        <aside className="hidden min-h-0 overflow-hidden rounded-[26px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] xl:block">
-          <ConversationList />
-        </aside>
-
-        <div className="min-h-0 min-w-0 flex-1">
-          <ChatWindow
-            assistantMode={assistantMode}
-            onAssistantModeChange={setAssistantMode}
-            gatewayConnected={gatewayConnected}
-            onNewSession={async () => {
-              await createConversation()
-            }}
-            onRuntimeLabelChange={handleRuntimeLabelChange}
-          />
-        </div>
-
-        <aside className="hidden min-h-0 overflow-hidden rounded-[26px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] min-[1920px]:block">
-          <LiveToolPanel assistantMode={assistantMode} />
-        </aside>
-      </div>
-
-      <div className="grid gap-3 xl:hidden">
-        <section className="overflow-hidden rounded-[24px] border border-[#e4e7ec] bg-white shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
-          <ConversationList />
-        </section>
-
-        <section className="overflow-hidden rounded-[24px] border border-[#e4e7ec] bg-white shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
-          <LiveToolPanel assistantMode={assistantMode} />
-        </section>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <ChatWindow
+          assistantMode={assistantMode}
+          onAssistantModeChange={setAssistantMode}
+          gatewayConnected={gatewayConnected}
+          onNewSession={async () => {
+            await createConversation()
+          }}
+          onRuntimeLabelChange={handleRuntimeLabelChange}
+        />
       </div>
     </div>
   )

@@ -709,15 +709,17 @@ export function AppShell({ children }: AppShellProps) {
                     <Menu size={16} />
                   </button>
                   <div className="min-w-0">
-                    <p className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                      OpenAgents &gt; {activeRouteLabel}
+                    <p className="truncate text-sm font-medium text-[var(--tone-muted)] dark:text-[var(--tone-inverse-muted)]">
+                      OpenAgents <span className="px-1 text-[var(--tone-soft)]">&gt;</span>{' '}
+                      <span className={isChatControlRoute ? 'font-semibold text-[#ef4444]' : 'font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]'}>
+                        {activeRouteLabel}
+                      </span>
                     </p>
-                    <p className="truncate text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                      {activeRouteLabel}
-                    </p>
-                    <p className="truncate text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-                      Local control plane for sessions, tools, and agents
-                    </p>
+                    {!isChatControlRoute && (
+                      <p className="truncate text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                        Local control plane for sessions, tools, and agents
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -728,7 +730,7 @@ export function AppShell({ children }: AppShellProps) {
                       value={routeSearch}
                       onChange={(event) => setRouteSearch(event.target.value)}
                       onKeyDown={handleRouteSearchKeyDown}
-                      placeholder="Search routes"
+                      placeholder={isChatControlRoute ? 'Search' : 'Search routes'}
                       className="w-40 bg-transparent text-[12px] text-[var(--tone-default)] outline-none placeholder:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"
                     />
                     <span className="rounded-full border border-[var(--border)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--tone-soft)]">
@@ -831,7 +833,12 @@ export function AppShell({ children }: AppShellProps) {
             </div>
           </header>
 
-          <main className="px-2 py-3 sm:px-6 sm:py-5">
+          <main
+            className={clsx(
+              'px-2 py-3 sm:px-6 sm:py-5',
+              isChatControlRoute && 'h-[calc(100dvh-74px)] overflow-hidden px-2 pb-3 pt-3 sm:px-6 sm:pb-5 sm:pt-3',
+            )}
+          >
             {beginnerMode && pathname !== '/settings/get-started' && (
               <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 Beginner mode is on. Only the essential routes are visible.
