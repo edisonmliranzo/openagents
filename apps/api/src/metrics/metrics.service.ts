@@ -371,7 +371,7 @@ export class MetricsService {
         periodEnd = new Date('2099-12-31')
     }
 
-    const result = await this.prisma.budgetLimit.upsert({
+    return this.prisma.budgetLimit.upsert({
       where: { userId_budgetType: { userId, budgetType } },
       create: {
         userId,
@@ -390,17 +390,6 @@ export class MetricsService {
         periodEnd,
       },
     })
-
-    // Emit budget limit event
-    this.eventEmitter.emit('metrics.budget.limit.set', {
-      userId,
-      budgetId: result.id,
-      budgetType,
-      limitUsd,
-      alertAtUsd,
-    })
-
-    return result
   }
 
   async deleteBudgetLimit(userId: string, budgetType: string): Promise<void> {
