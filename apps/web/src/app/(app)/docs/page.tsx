@@ -114,7 +114,7 @@ const PRODUCT_DOCS = [
     description: 'Longer-horizon ideas beyond the current self-hosted MVP.',
   },
   {
-    title: 'OpenClaw Parity',
+    title: 'OpenAgents Runtime Parity',
     href: `${REPO_BASE}/blob/main/docs/openclaw-parity.md`,
     description: 'Parity tracking against adjacent agent capabilities.',
   },

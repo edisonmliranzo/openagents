@@ -406,7 +406,7 @@ export function LiveToolPanel({ assistantMode }: LiveToolPanelProps) {
       <div className="border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-            Assistant Cockpit
+            OpenAgents Control
           </p>
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusBadgeClass(
@@ -418,7 +418,7 @@ export function LiveToolPanel({ assistantMode }: LiveToolPanelProps) {
           </span>
         </div>
         <p className="mt-1 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-          Assistant posture, next actions, and execution telemetry for the active thread.
+          Live OpenAgents posture, next actions, and execution telemetry for the active thread.
         </p>
       </div>
 
@@ -686,7 +686,7 @@ export function LiveToolPanel({ assistantMode }: LiveToolPanelProps) {
           <div className="flex items-center gap-2">
             <Workflow size={14} className="text-violet-500" />
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
-              Assistant Context
+              OpenAgents Context
             </p>
           </div>
           <div className="mt-2 space-y-2 text-[11px] text-[var(--muted)] dark:text-[var(--muted)]">

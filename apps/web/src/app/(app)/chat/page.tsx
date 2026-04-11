@@ -109,7 +109,7 @@ export default function ChatPage() {
   const handleRuntimeLabelChange = useCallback((_label: string) => {}, [])
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-96px)] max-w-[1480px] flex-col gap-3">
+    <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-[1700px] flex-col gap-3">
       {(lastError || !gatewayConnected || hasPendingApprovals) && (
         <div className="flex flex-wrap items-center gap-2 px-1">
           {!gatewayConnected && (
@@ -157,12 +157,12 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)_320px]">
-        <aside className="hidden min-h-0 overflow-hidden rounded-[28px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] xl:block">
+      <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[248px_minmax(0,1fr)] min-[1720px]:grid-cols-[248px_minmax(0,1fr)_292px]">
+        <aside className="hidden min-h-0 overflow-hidden rounded-[26px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] xl:block">
           <ConversationList />
         </aside>
 
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 min-w-0 flex-1">
           <ChatWindow
             assistantMode={assistantMode}
             onAssistantModeChange={setAssistantMode}
@@ -174,7 +174,7 @@ export default function ChatPage() {
           />
         </div>
 
-        <aside className="hidden min-h-0 overflow-hidden rounded-[28px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] 2xl:block">
+        <aside className="hidden min-h-0 overflow-hidden rounded-[26px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] min-[1720px]:block">
           <LiveToolPanel assistantMode={assistantMode} />
         </aside>
       </div>

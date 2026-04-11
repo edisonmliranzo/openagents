@@ -64,12 +64,12 @@ export function AgentAvatarPanel({
         : 'ready'
 
   const modeCopy = !gatewayConnected
-    ? 'Reconnect the gateway to wake the avatar.'
+    ? 'Reconnect the gateway to wake OpenAgents.'
     : isStreaming
       ? 'Avatar motion is synced to the active response loop.'
       : latestAgentMessage
-        ? 'The companion is holding context and waiting for the next cue.'
-        : 'Voice shell is idling until the first exchange starts.'
+        ? 'OpenAgents is holding context and waiting for the next cue.'
+        : 'OpenAgents is idling until the first exchange starts.'
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
@@ -80,7 +80,7 @@ export function AgentAvatarPanel({
               Assistant status
             </p>
             <p className="mt-1 text-sm font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-              Execution console
+              OpenAgents presence
             </p>
           </div>
 
@@ -100,7 +100,7 @@ export function AgentAvatarPanel({
         </div>
 
         <p className="mt-2 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-          Live readout of context, tool activity, and response-loop state for the current task.
+          Live readout of OpenAgents context, tool activity, and response-loop state for the current task.
         </p>
       </div>
 

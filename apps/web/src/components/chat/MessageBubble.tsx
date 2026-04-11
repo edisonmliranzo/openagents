@@ -47,7 +47,7 @@ function roleLabel(role: Message['role']) {
   if (role === 'tool') return 'Tool'
   if (role === 'system') return 'System'
   if (role === 'user') return 'You'
-  return 'Neo'
+  return 'OpenAgents'
 }
 
 interface CodeBlock {
@@ -149,7 +149,7 @@ export function MessageBubble({ message }: { message: Message }) {
   if (isUser) {
     return (
       <div className="flex flex-col items-end gap-1">
-        <div className="max-w-[82%] rounded-2xl rounded-br-sm bg-[#f2f4f7] px-4 py-2.5 text-sm text-[#101828] sm:max-w-[68%] dark:bg-[#1e2433] dark:text-white">
+        <div className="oa-user-bubble max-w-[90%] rounded-2xl rounded-br-sm px-4 py-3 text-sm sm:max-w-[80%] 2xl:max-w-[74%]">
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         </div>
         <span className="pr-1 text-[11px] text-[#98a2b3]">
@@ -187,7 +187,7 @@ export function MessageBubble({ message }: { message: Message }) {
   // ── Agent bubble ─────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col items-start gap-1">
-      <div className="w-full max-w-[88%]">
+      <div className="w-full max-w-full xl:max-w-[96%]">
         {thinking.map((block, idx) => (
           <ThinkingBlock key={`thinking-${idx}`} content={block} />
         ))}
