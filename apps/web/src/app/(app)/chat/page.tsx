@@ -45,6 +45,10 @@ export default function ChatPage() {
     createConversation,
     clearError,
   } = useChatStore()
+  const conversationRows = useMemo(
+    () => (Array.isArray(conversations) ? conversations : []),
+    [conversations],
+  )
 
   useEffect(() => {
     void loadConversations()
@@ -61,12 +65,12 @@ export default function ChatPage() {
       if (activeConversationId) return
       if (!conversationsLoaded) return
 
-      if (conversations.length > 0) {
+      if (conversationRows.length > 0) {
         const settings = await sdk.users.getSettings().catch(() => null)
         const preferredConversationId = settings?.lastActiveConversationId ?? null
         const resumeConversationId =
-          conversations.find((conversation) => conversation.id === preferredConversationId)?.id ??
-          conversations[0].id
+          conversationRows.find((conversation) => conversation.id === preferredConversationId)?.id ??
+          conversationRows[0].id
         await selectConversation(resumeConversationId)
         return
       }
@@ -85,7 +89,7 @@ export default function ChatPage() {
     targetConversationId,
     activeConversationId,
     conversationsLoaded,
-    conversations,
+    conversationRows,
     selectConversation,
     createConversation,
   ])
@@ -106,8 +110,8 @@ export default function ChatPage() {
   }, [assistantMode])
 
   const activeConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
-    [conversations, activeConversationId],
+    () => conversationRows.find((conversation) => conversation.id === activeConversationId) ?? null,
+    [conversationRows, activeConversationId],
   )
   const assistantModeDefinition = useMemo(
     () => getAssistantModeDefinition(assistantMode),

@@ -8,6 +8,7 @@ import { useState, useMemo } from 'react'
 function timeAgo(iso: string | null | undefined) {
   if (!iso) return ''
   const ms = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(ms)) return 'unknown'
   const min = Math.floor(ms / 60000)
   if (min < 1) return 'just now'
   if (min < 60) return `${min}m`
@@ -25,14 +26,18 @@ export function ConversationList() {
   const { conversations, activeConversationId, selectConversation, createConversation } =
     useChatStore()
   const [query, setQuery] = useState('')
+  const conversationRows = useMemo(
+    () => (Array.isArray(conversations) ? conversations : []),
+    [conversations],
+  )
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return conversations
-    return conversations.filter((c) =>
+    if (!q) return conversationRows
+    return conversationRows.filter((c) =>
       (c.title ?? 'Untitled task').toLowerCase().includes(q),
     )
-  }, [conversations, query])
+  }, [conversationRows, query])
 
   return (
     <div className="flex h-full flex-col">

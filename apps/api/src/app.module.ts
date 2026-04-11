@@ -40,10 +40,12 @@ import { WorkspacesModule } from './workspaces/workspaces.module'
 import { AgentPresetsModule } from './agent-presets/agent-presets.module'
 import { ArtifactsModule } from './artifacts/artifacts.module'
 import { PacksModule } from './packs/packs.module'
+import { EventsModule } from './events/events.module'
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    EventsModule,
     // BullModule disabled for local dev (requires Redis).
     // Enable when running with Docker: BullModule.forRoot({ redis: process.env.REDIS_URL })
     PrismaModule,

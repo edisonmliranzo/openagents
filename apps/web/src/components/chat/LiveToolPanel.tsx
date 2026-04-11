@@ -23,7 +23,7 @@ interface ToolRecord {
   success: boolean
   output: unknown
   error?: string
-  createdAt: string
+  createdAt: string | number
 }
 
 interface ComputerSessionView {
@@ -34,7 +34,7 @@ interface ComputerSessionView {
   currentUrl: string | null
   textPreview: string
   linkCount: number
-  updatedAt: string
+  updatedAt: string | number
   warning: string | null
 }
 
@@ -49,7 +49,7 @@ interface DeepResearchRun {
   summary: string
   citations: DeepResearchCitation[]
   fetchedPages: number
-  createdAt: string
+  createdAt: string | number
 }
 
 interface LiveToolPanelProps {
@@ -121,8 +121,22 @@ function shortSessionId(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`
 }
 
-function timeAgo(iso: string) {
-  const deltaMs = Date.now() - new Date(iso).getTime()
+function timestampValue(value: unknown) {
+  const ts = new Date(
+    typeof value === 'string' || typeof value === 'number' ? value : '',
+  ).getTime()
+  return Number.isFinite(ts) ? ts : 0
+}
+
+function compareTimestamps(left: unknown, right: unknown, direction: 'asc' | 'desc' = 'asc') {
+  const delta = timestampValue(left) - timestampValue(right)
+  return direction === 'asc' ? delta : -delta
+}
+
+function timeAgo(iso: string | number | null | undefined) {
+  const ts = timestampValue(iso)
+  if (!ts) return 'unknown'
+  const deltaMs = Date.now() - ts
   const deltaMin = Math.max(0, Math.floor(deltaMs / 60000))
   if (deltaMin < 1) return 'just now'
   if (deltaMin < 60) return `${deltaMin}m ago`
@@ -187,13 +201,16 @@ function buildComputerSessions(records: ToolRecord[]) {
       textPreview: clip(textPreview || existing.textPreview, 260),
       linkCount,
       warning,
-      updatedAt: typeof page?.updatedAt === 'string' ? page.updatedAt : record.createdAt,
+      updatedAt:
+        typeof page?.updatedAt === 'string' || typeof page?.updatedAt === 'number'
+          ? page.updatedAt
+          : record.createdAt,
       status: record.tool === 'computer_session_end' ? 'closed' : existing.status,
     }
     sessions.set(sessionId, next)
   }
 
-  return [...sessions.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  return [...sessions.values()].sort((a, b) => compareTimestamps(a.updatedAt, b.updatedAt, 'desc'))
 }
 
 function buildDeepResearchRuns(records: ToolRecord[]) {
@@ -232,7 +249,7 @@ function buildDeepResearchRuns(records: ToolRecord[]) {
     })
   }
 
-  return runs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4)
+  return runs.sort((a, b) => compareTimestamps(a.createdAt, b.createdAt, 'desc')).slice(0, 4)
 }
 
 function statusBadgeClass(status: string | null) {
@@ -363,7 +380,7 @@ export function LiveToolPanel({ assistantMode }: LiveToolPanelProps) {
       ...toolRecordsFromMessages(messages),
       ...toolRecordsFromStream(streamToolEvents, activeConversationId),
     ]
-    return merged.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    return merged.sort((a, b) => compareTimestamps(a.createdAt, b.createdAt))
   }, [messages, streamToolEvents, activeConversationId])
 
   const computerSessions = useMemo(() => buildComputerSessions(records), [records])

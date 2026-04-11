@@ -351,8 +351,11 @@ export function ChatWindow({
       }
 
       if (sessionsResult.status === 'fulfilled') {
+        const sessionRows = Array.isArray(sessionsResult.value?.sessions)
+          ? sessionsResult.value.sessions
+          : []
         nextSession = activeConversationId
-          ? sessionsResult.value.sessions.find((session) => session.id === activeConversationId) ?? null
+          ? sessionRows.find((session) => session.id === activeConversationId) ?? null
           : null
         setActiveSession(nextSession)
       } else if (!activeConversationId) {
