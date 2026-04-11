@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
-import { TriggerEventType, TriggerFilter } from '@openagents/shared'
+import { TriggerAction, TriggerEventType, TriggerFilter } from '@openagents/shared'
+import { NotificationsService } from '../notifications/notifications.service'
+import type { RuntimeEvent } from '../events/runtime-event.types'
 
 @Injectable()
 export class TriggersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async create(
     userId: string,
@@ -120,24 +125,73 @@ export class TriggersService {
     for (const trigger of triggers) {
       const filter = trigger.filter ? JSON.parse(trigger.filter) : null
       const matches = !filter || this.evaluateFilter(filter, payload)
+      const eventRecord = await this.prisma.triggerEvent.create({
+        data: {
+          triggerId: trigger.id,
+          userId: trigger.userId,
+          event: eventType,
+          payload: JSON.stringify(payload),
+          status: matches ? 'processing' : 'not_matched',
+          matchedTrigger: matches ? trigger.id : null,
+          ...(matches ? {} : { processedAt: new Date() }),
+        },
+      })
 
-      if (matches) {
-        await this.prisma.triggerEvent.create({
-          data: {
-            triggerId: trigger.id,
-            userId: trigger.userId,
-            event: eventType,
-            payload: JSON.stringify(payload),
-            status: 'matched',
-            matchedTrigger: trigger.id,
-          },
-        })
-
-        results.push({ triggerId: trigger.id, matched: true })
+      if (!matches) {
+        results.push({ triggerId: trigger.id, matched: false, actionsExecuted: 0 })
+        continue
       }
+
+      const actions = this.parseActions(trigger.actions)
+      const execution = await this.executeActions(trigger.userId, eventType, payload, actions)
+      const failed = execution.errors.length > 0
+
+      await this.prisma.triggerEvent.update({
+        where: { id: eventRecord.id },
+        data: {
+          status: failed ? 'failed' : 'completed',
+          actionsExecuted: execution.executed,
+          error: failed ? execution.errors.join(' ') : null,
+          processedAt: new Date(),
+        },
+      })
+
+      results.push({
+        triggerId: trigger.id,
+        matched: true,
+        actionsExecuted: execution.executed,
+        ...(failed ? { error: execution.errors.join(' ') } : {}),
+      })
     }
 
     return results
+  }
+
+  async evaluateEvent(event: RuntimeEvent) {
+    const eventType = this.toTriggerEventType(event.name)
+    if (!eventType) {
+      return { evaluated: false, matched: 0, reason: 'unsupported_event' as const }
+    }
+
+    const results = await this.processEvent(eventType, {
+      ...(event.payload ?? {}),
+      eventName: event.name,
+      occurredAt: event.occurredAt ?? new Date().toISOString(),
+      conversationId: event.conversationId ?? null,
+      runId: event.runId ?? null,
+      approvalId: event.approvalId ?? null,
+      workflowId: event.workflowId ?? null,
+      resourceType: event.resource?.type ?? null,
+      resourceId: event.resource?.id ?? null,
+      actorType: event.actor?.type ?? null,
+      actorId: event.actor?.id ?? null,
+    })
+
+    return {
+      evaluated: true,
+      matched: results.filter((result) => result.matched).length,
+      total: results.length,
+    }
   }
 
   private evaluateFilter(
@@ -206,5 +260,126 @@ export class TriggersService {
       createdAt: e.createdAt.toISOString(),
       processedAt: e.processedAt?.toISOString(),
     }))
+  }
+
+  private parseActions(raw: string): TriggerAction[] {
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      return Array.isArray(parsed) ? parsed as TriggerAction[] : []
+    } catch {
+      return []
+    }
+  }
+
+  private async executeActions(
+    userId: string,
+    eventType: TriggerEventType,
+    payload: Record<string, unknown>,
+    actions: TriggerAction[],
+  ) {
+    let executed = 0
+    const errors: string[] = []
+
+    for (const action of actions) {
+      try {
+        if (action.type === 'send_message' || action.type === 'create_reminder') {
+          const title = this.asString(action.config.title) ?? `Trigger fired: ${eventType}`
+          const message =
+            this.asString(action.config.message)
+            ?? this.asString(action.config.body)
+            ?? `Trigger ${eventType} matched.`
+          const type = this.asNotificationType(action.config.type)
+          await this.notifications.create(userId, title, message, type)
+          executed += 1
+          continue
+        }
+
+        if (action.type === 'call_webhook') {
+          const url = this.asString(action.config.url)
+          if (!url) {
+            errors.push('Trigger action call_webhook requires config.url.')
+            continue
+          }
+          const headers = this.asHeaderRecord(action.config.headers)
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...headers,
+            },
+            body: JSON.stringify({
+              event: eventType,
+              payload,
+              config: action.config,
+            }),
+          })
+          if (!response.ok) {
+            errors.push(`Webhook action failed with status ${response.status}.`)
+            continue
+          }
+          executed += 1
+          continue
+        }
+
+        errors.push(`Unsupported trigger action: ${action.type}.`)
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : `Trigger action failed: ${action.type}`)
+      }
+    }
+
+    return { executed, errors }
+  }
+
+  private toTriggerEventType(eventName: string): TriggerEventType | null {
+    const supported: TriggerEventType[] = [
+      'email.received',
+      'calendar.event_created',
+      'calendar.event_updated',
+      'calendar.event_reminder',
+      'webhook.received',
+      'file.created',
+      'file.modified',
+      'github.pr_opened',
+      'github.pr_merged',
+      'github.issue_created',
+      'slack.message',
+      'discord.message',
+      'timer.elapsed',
+      'approval.pending',
+      'approval.approved',
+      'approval.denied',
+      'approval.completed',
+      'conversation.started',
+      'conversation.message',
+      'tool.executed',
+      'tool.failed',
+      'workflow.started',
+      'workflow.completed',
+      'workflow.failed',
+      'agent.run.started',
+      'agent.run.completed',
+      'agent.run.failed',
+    ]
+
+    return supported.includes(eventName as TriggerEventType)
+      ? eventName as TriggerEventType
+      : null
+  }
+
+  private asString(value: unknown) {
+    return typeof value === 'string' && value.trim() ? value : null
+  }
+
+  private asNotificationType(value: unknown): 'info' | 'warning' | 'success' | 'error' {
+    return value === 'warning' || value === 'success' || value === 'error' ? value : 'info'
+  }
+
+  private asHeaderRecord(value: unknown): Record<string, string> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    const out: Record<string, string> = {}
+    for (const [key, raw] of Object.entries(value)) {
+      if (typeof raw === 'string') out[key] = raw
+    }
+    return out
   }
 }

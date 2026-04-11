@@ -9,7 +9,9 @@ import {
   DailyMetrics,
   UserMetrics,
   ApprovalMetrics,
+  MetricLogEntry,
 } from '@openagents/shared'
+import type { RuntimeEvent } from '../events/runtime-event.types'
 
 @Injectable()
 export class MetricsService {
@@ -392,6 +394,79 @@ export class MetricsService {
     })
   }
 
+  async recordEvent(event: RuntimeEvent) {
+    const metricType = this.toMetricType(event.name)
+    if (!metricType) {
+      return { recorded: false, reason: 'unsupported_event' as const }
+    }
+
+    const payload = event.payload ?? {}
+    const inputTokens = this.asNumber(payload.inputTokens)
+    const outputTokens = this.asNumber(payload.outputTokens)
+    const explicitTokens = this.asNumber(payload.tokensUsed)
+    const totalTokens =
+      explicitTokens
+      ?? this.asNumber(payload.totalTokens)
+      ?? (inputTokens != null || outputTokens != null
+        ? (inputTokens ?? 0) + (outputTokens ?? 0)
+        : undefined)
+
+    const record = await this.logMetric({
+      userId: event.userId,
+      metricType,
+      action: this.toMetricAction(event.name),
+      provider: this.asString(payload.provider),
+      model: this.asString(payload.model),
+      durationMs: this.asNumber(payload.durationMs),
+      tokensUsed: totalTokens,
+      costUsd: this.asNumber(payload.costUsd),
+      conversationId: event.conversationId ?? this.asString(payload.conversationId),
+      toolName: this.asString(payload.toolName),
+      metadata: {
+        eventName: event.name,
+        occurredAt: event.occurredAt ?? new Date().toISOString(),
+        runId: event.runId ?? null,
+        approvalId: event.approvalId ?? null,
+        workflowId: event.workflowId ?? null,
+        actor: event.actor ?? null,
+        payload,
+      },
+    })
+
+    return { recorded: true, id: record.id }
+  }
+
+  async listMetricLogs(
+    userId: string,
+    options: { take?: number; metricType?: string; action?: string } = {},
+  ): Promise<MetricLogEntry[]> {
+    const entries = await this.prisma.metricLog.findMany({
+      where: {
+        userId,
+        ...(options.metricType ? { metricType: options.metricType } : {}),
+        ...(options.action ? { action: options.action } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Math.max(1, Math.min(options.take ?? 50, 200)),
+    })
+
+    return entries.map((entry) => ({
+      id: entry.id,
+      userId: entry.userId,
+      metricType: entry.metricType,
+      action: entry.action,
+      provider: entry.provider,
+      model: entry.model,
+      durationMs: entry.durationMs,
+      tokensUsed: entry.tokensUsed,
+      costUsd: entry.costUsd,
+      conversationId: entry.conversationId,
+      toolName: entry.toolName,
+      metadata: entry.metadata ? JSON.parse(entry.metadata) : null,
+      createdAt: entry.createdAt.toISOString(),
+    }))
+  }
+
   async deleteBudgetLimit(userId: string, budgetType: string): Promise<void> {
     await this.prisma.budgetLimit.deleteMany({
       where: { userId, budgetType },
@@ -415,5 +490,39 @@ export class MetricsService {
       periodStart: b.periodStart.toISOString(),
       periodEnd: b.periodEnd.toISOString(),
     }))
+  }
+
+  private toMetricType(eventName: string) {
+    if (eventName.startsWith('agent.run.')) return 'agent_run'
+    if (eventName.startsWith('tool.')) return 'tool_call'
+    if (eventName.startsWith('approval.')) return 'approval'
+    if (eventName.startsWith('conversation.')) return 'conversation'
+    if (eventName.startsWith('workflow.')) return 'workflow_run'
+    return null
+  }
+
+  private toMetricAction(eventName: string) {
+    if (eventName.endsWith('.started')) return 'started'
+    if (eventName.endsWith('.completed')) return 'completed'
+    if (eventName.endsWith('.failed')) return 'failed'
+    if (eventName.endsWith('.pending')) return 'pending'
+    if (eventName.endsWith('.approved')) return 'approved'
+    if (eventName.endsWith('.denied')) return 'denied'
+    if (eventName.endsWith('.executed')) return 'completed'
+    if (eventName.endsWith('.message')) return 'message'
+    return eventName.split('.').at(-1) ?? eventName
+  }
+
+  private asNumber(value: unknown) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : undefined
+    }
+    return undefined
+  }
+
+  private asString(value: unknown) {
+    return typeof value === 'string' && value.trim() ? value : undefined
   }
 }

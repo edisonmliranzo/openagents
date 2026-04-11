@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service'
 import type { ConversationRepairIssue, ConversationRepairReport } from '@openagents/shared'
 import { ApprovalsService } from '../approvals/approvals.service'
+import { RuntimeEventsService } from '../events/runtime-events.service'
 
 const STUCK_MESSAGE_WINDOW_MS = 5 * 60 * 1000
 
@@ -10,6 +11,7 @@ export class ConversationsService {
   constructor(
     private prisma: PrismaService,
     private approvals: ApprovalsService,
+    private runtimeEvents: RuntimeEventsService,
   ) {}
 
   async list(userId: string) {
@@ -27,9 +29,20 @@ export class ConversationsService {
   }
 
   async create(userId: string, title?: string) {
-    return this.prisma.conversation.create({
+    const conversation = await this.prisma.conversation.create({
       data: { userId, title: title ?? null },
     })
+    void this.runtimeEvents.publish({
+      name: 'conversation.started',
+      userId,
+      conversationId: conversation.id,
+      actor: { type: 'user', id: userId },
+      resource: { type: 'conversation', id: conversation.id },
+      payload: {
+        title: conversation.title,
+      },
+    })
+    return conversation
   }
 
   async messages(conversationId: string, userId: string) {
