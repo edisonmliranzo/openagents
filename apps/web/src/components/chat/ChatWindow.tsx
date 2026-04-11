@@ -91,7 +91,7 @@ function modeButtonClass(active: boolean) {
 }
 
 function controlButtonClass() {
-  return 'inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-[11px] font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[var(--tone-inverse)]'
+  return 'inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[#e4e7ec] bg-white text-[#667085] transition hover:border-[#f2b7b2] hover:text-[#ef4444] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#2d3347] dark:bg-[#141824] dark:text-[#c9d1e0]'
 }
 
 function getDefaultRuntime(settings?: Pick<UserSettings, 'preferredProvider' | 'preferredModel'> | null) {
@@ -891,58 +891,21 @@ export function ChatWindow({
         : 'OpenAgents ready'
   const sessionLabel = activeSession?.label?.trim() || 'main'
   const runtimeSummary = `${effectiveRuntime.model} / ${effectiveProviderLabel}`
+  const runtimeBadgeLabel = isRuntimeCustomized ? 'Session override' : 'Default runtime'
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-[#e4e7ec] bg-white shadow-[0_22px_56px_rgba(15,23,42,0.08)]">
-      <div className="border-b border-[#eceef4] bg-white px-4 py-3 sm:px-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="oa-brand-badge flex h-10 w-10 items-center justify-center rounded-2xl text-[11px] font-bold text-white">
-                OA
-              </div>
-              <div className="min-w-0">
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">
-                  OpenAgents chat
-                </p>
-                <p className="truncate text-[16px] font-semibold leading-tight text-[#101828]">
-                  {sessionLabel}
-                </p>
-                <p className="truncate text-[12px] text-[#667085]">
-                  {assistantModeDefinition.label} workspace | {runtimeSummary}
-                </p>
-              </div>
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[#e6e8ef] bg-[#f7f8fb] shadow-[0_12px_34px_rgba(15,23,42,0.05)]">
+      <div className="border-b border-[#e8ebf2] bg-[#fbfbfd] px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <div className="min-w-[96px] rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-sm font-medium text-[#101828] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              {sessionLabel}
             </div>
-
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-              <span className={`rounded-full border px-3 py-1 font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
-                {runStatus ?? (isStreaming ? 'running' : 'ready')}
-              </span>
-              <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
-                {isRuntimeCustomized ? 'Session override' : 'Default runtime'}
-              </span>
-              {!beginnerMode && activeConversationId && (
-                <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#98a2b3]">
-                  {shortId(activeConversationId)}
-                </span>
-              )}
-              {pendingApprovals.length > 0 && (
-                <span className="rounded-full border border-[#f2d18b] bg-[#fff8e8] px-3 py-1 font-semibold text-[#b54708]">
-                  {pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} waiting
-                </span>
-              )}
-              {activeHandoffStatus && (
-                <span className="rounded-full border border-[#f3c8c5] bg-[#fff3f2] px-3 py-1 font-semibold text-[#d92d20]">
-                  human handoff {activeHandoffStatus}
-                </span>
-              )}
-              {learnedSkill && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
-                  <BrainCircuit size={12} />
-                  <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
-                  {learnedIntentLabel && <span className="text-[#98a2b3]">{learnedIntentLabel}</span>}
-                </span>
-              )}
+            <div className="max-w-[320px] rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-sm text-[#667085] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <span className="truncate">{runtimeSummary}</span>
+            </div>
+            <div className="max-w-[220px] rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-sm text-[#667085] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <span className="truncate">{runtimeBadgeLabel}</span>
             </div>
           </div>
 
@@ -952,47 +915,78 @@ export function ChatWindow({
               onClick={() => void syncRuntimeState()}
               disabled={runtimeLoading}
               className={controlButtonClass()}
+              title="Refresh runtime"
             >
               <RefreshCw size={12} />
-              Refresh
             </button>
             <button
               type="button"
               onClick={() => setControlsExpanded((current) => !current)}
               className={controlButtonClass()}
+              title={controlsExpanded ? 'Hide details' : 'Show details'}
             >
               {controlsExpanded ? <ChevronUp size={12} /> : <BrainCircuit size={12} />}
-              {controlsExpanded ? 'Hide details' : 'Details'}
             </button>
             <button
               type="button"
               onClick={() => void executeOperatorCommand('/approvals')}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#f2b7b2] bg-[#fff8f7] px-3 py-1.5 text-[11px] font-semibold text-[#ef4444] transition hover:bg-[#fff1ef]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] transition hover:bg-[#fff1ef]"
+              title="Approvals"
             >
               <ShieldCheck size={12} />
-              Approvals
             </button>
             <button
               type="button"
               onClick={focusComposer}
               className={controlButtonClass()}
+              title="Focus composer"
             >
               <Command size={12} />
-              Composer
             </button>
             <button
               type="button"
               onClick={() => void onNewSession()}
-              className="oa-accent-button inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] transition hover:bg-[#fff1ef]"
+              title="New session"
             >
               <MessageSquarePlus size={12} />
-              New session
             </button>
           </div>
         </div>
 
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          <span className={`rounded-full border px-3 py-1 font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
+            {runStatus ?? (isStreaming ? 'running' : 'ready')}
+          </span>
+          <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
+            {assistantModeDefinition.label}
+          </span>
+          {!beginnerMode && activeConversationId && (
+            <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#98a2b3]">
+              {shortId(activeConversationId)}
+            </span>
+          )}
+          {pendingApprovals.length > 0 && (
+            <span className="rounded-full border border-[#f2d18b] bg-[#fff8e8] px-3 py-1 font-semibold text-[#b54708]">
+              {pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} waiting
+            </span>
+          )}
+          {activeHandoffStatus && (
+            <span className="rounded-full border border-[#f3c8c5] bg-[#fff3f2] px-3 py-1 font-semibold text-[#d92d20]">
+              human handoff {activeHandoffStatus}
+            </span>
+          )}
+          {learnedSkill && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
+              <BrainCircuit size={12} />
+              <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
+              {learnedIntentLabel && <span className="text-[#98a2b3]">{learnedIntentLabel}</span>}
+            </span>
+          )}
+        </div>
+
         {!beginnerMode && controlsExpanded && (
-          <div className="mt-4 rounded-[22px] border border-[#eceef4] bg-[#fbfbfd] p-4">
+          <div className="mt-4 rounded-[20px] border border-[#e4e7ec] bg-white p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#98a2b3]">
@@ -1141,61 +1135,38 @@ export function ChatWindow({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface-muted)] px-3 py-3 sm:px-5">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#f6f7fb] px-4 py-4 sm:px-7">
         {visibleMessages.length === 0 ? (
-          <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 pb-6 pt-4">
-            <section className="overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="max-w-[760px]">
-                  <div className="flex items-center gap-3 text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                    <div className="oa-brand-badge flex h-10 w-10 items-center justify-center rounded-2xl text-[11px] font-bold text-white">
-                      OA
-                    </div>
-                    <div>
-                      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                        OpenAgents chat
-                      </p>
-                      <p className="text-[28px] font-semibold leading-tight">Brief OpenAgents with the outcome.</p>
-                    </div>
-                  </div>
-
-                  <p className="mt-4 max-w-[720px] text-sm leading-6 text-[var(--muted)] dark:text-[var(--muted)]">
-                    Give OpenAgents a concrete outcome and keep the first prompt specific. This workspace is designed to keep research, execution, approvals, and follow-through in one lane.
-                  </p>
-                </div>
-
-                <div className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
-                  <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--tone-soft)]">
-                    Mode
-                  </p>
-                  <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[var(--tone-strong)]">
-                    <Sparkles size={14} className="text-[var(--accent)]" />
-                    {assistantModeDefinition.label}
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">{assistantModeDefinition.caption}</p>
-                </div>
+          <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4 pb-6 pt-2">
+            <section className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#344054]">
+                <Sparkles size={15} className="text-[#ef4444]" />
+                OpenAgents
               </div>
+              <p className="mt-3 text-[15px] leading-7 text-[#344054]">
+                Start with a concrete task. Include the goal, the relevant context, and what should happen next.
+              </p>
 
-              <div className="mt-6 grid gap-3 md:grid-cols-2">
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {assistantModeDefinition.starterPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
                     disabled={!gatewayConnected || isStreaming}
                     onClick={() => void handleQuickPrompt(prompt)}
-                    className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-4 text-left text-[13px] font-medium leading-6 text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[var(--tone-inverse)]"
+                    className="rounded-[18px] border border-[#e4e7ec] bg-[#f8fafc] px-4 py-3 text-left text-[13px] font-medium leading-6 text-[#344054] transition hover:border-[#f2b7b2] hover:bg-[#fff8f7] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {prompt}
                   </button>
                 ))}
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center gap-2 text-[11px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+              <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] text-[#98a2b3]">
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#e4e7ec] bg-[#f8fafc] px-2.5 py-1">
                   <Command size={11} />
                   Type / for commands
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#e4e7ec] bg-[#f8fafc] px-2.5 py-1">
                   <BrainCircuit size={11} />
                   {runtimeSummary}
                 </span>
@@ -1204,7 +1175,7 @@ export function ChatWindow({
             </section>
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-[1480px] space-y-4 pb-4 pt-2">
+          <div className="mx-auto w-full max-w-[980px] space-y-6 pb-6 pt-2">
             {visibleMessages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
@@ -1219,7 +1190,7 @@ export function ChatWindow({
         onAdd={handleAddPin}
       />
 
-      <div className="border-t border-[#e4e7ec] bg-white px-4 py-3 dark:border-[#2d3347] dark:bg-[#141824]">
+      <div className="border-t border-[#e4e7ec] bg-[#fbfbfd] px-4 py-3 dark:border-[#2d3347] dark:bg-[#141824] sm:px-6">
         {/* Slash command palette */}
         {slashQuery !== null && (
           <SlashCommandPalette
@@ -1262,7 +1233,7 @@ export function ChatWindow({
         )}
 
         {/* Input box */}
-        <div className="rounded-2xl border border-[#e4e7ec] bg-white shadow-sm dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+        <div className="rounded-[22px] border border-[#e4e7ec] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
           <textarea
             ref={textareaRef}
             value={input}
@@ -1274,14 +1245,14 @@ export function ChatWindow({
               gatewayConnected
                 ? activeHandoffStatus
                   ? 'This session is in human handoff mode.'
-                  : `${assistantModeDefinition.placeholder} (type / for commands)`
+                  : 'Message OpenAgents (Enter to send)'
                 : 'Runtime offline. /help still works locally.'
             }
-            className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-4 pt-3 text-sm text-[#101828] outline-none placeholder:text-[#98a2b3] disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
+            className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-sm text-[#101828] outline-none placeholder:text-[#667085] disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
           />
 
           {/* Bottom toolbar */}
-          <div className="flex items-center justify-between px-3 pb-2.5">
+          <div className="flex items-center justify-between border-t border-[#f2f4f7] px-3 py-2.5">
             <div className="flex items-center gap-1">
               <input
                 ref={fileInputRef}
@@ -1325,7 +1296,7 @@ export function ChatWindow({
                 type="button"
                 onClick={() => void handleSend()}
                 disabled={((!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)) || (Boolean(activeHandoffStatus) && !inputIsCommand)}
-                className="oa-accent-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                className="oa-accent-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
                 aria-label="Send message"
               >
                 <ArrowUp size={15} />
