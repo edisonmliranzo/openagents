@@ -41,27 +41,27 @@ export function ConversationList() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-3 py-3">
         <div>
           <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
             Sessions
           </h2>
-          <p className="mt-0.5 text-[12px] font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-            {filtered.length} active threads
+          <p className="mt-0.5 text-[11px] font-semibold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+            {filtered.length} recent sessions
           </p>
         </div>
         <button
           onClick={() => void createConversation()}
           title="New session"
-          className="oa-soft-button inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition dark:text-[var(--tone-inverse)]"
+          className="oa-soft-button inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[10px] font-semibold transition dark:text-[var(--tone-inverse)]"
         >
-          <MessageSquarePlus size={14} />
+          <MessageSquarePlus size={12} />
           New
         </button>
       </div>
 
-      <div className="shrink-0 px-3 pb-1 pt-2.5">
-        <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2">
+      <div className="shrink-0 px-2.5 pb-1 pt-2.5">
+        <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1.5">
           <Search
             size={12}
             className="shrink-0 text-[var(--tone-soft)] dark:text-[var(--tone-soft)]"
@@ -96,7 +96,7 @@ export function ConversationList() {
               key={c.id}
               onClick={() => void selectConversation(c.id)}
               className={clsx(
-                'group flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-100',
+                'group flex w-full items-start gap-2 rounded-xl border px-2.5 py-2 text-left transition-all duration-100',
                 active
                   ? 'border-[var(--border-strong)] bg-[var(--surface-subtle)] text-[var(--tone-strong)] shadow-sm dark:text-[var(--tone-inverse)]'
                   : 'border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)]',
@@ -115,7 +115,7 @@ export function ConversationList() {
               <div className="min-w-0 flex-1">
                 <p
                   className={clsx(
-                    'truncate text-[12px] font-semibold leading-snug',
+                    'truncate text-[11px] font-semibold leading-snug',
                     active
                       ? 'text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]'
                       : 'text-[var(--tone-default)] group-hover:text-[var(--tone-strong)] dark:text-[var(--tone-inverse)] dark:group-hover:text-[var(--tone-inverse)]',
@@ -123,15 +123,10 @@ export function ConversationList() {
                 >
                   {sessionName}
                 </p>
-                <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                  {shortId(c.id)} · {timeAgo(c.lastMessageAt ?? c.createdAt)}
+                <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                  {shortId(c.id)} | {timeAgo(c.lastMessageAt ?? c.createdAt)}
                 </p>
               </div>
-              {active && (
-                <span className="mt-0.5 inline-flex rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--accent)]">
-                  active
-                </span>
-              )}
             </button>
           )
         })}

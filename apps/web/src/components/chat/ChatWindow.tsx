@@ -32,7 +32,6 @@ import {
   AlertTriangle,
   ArrowUp,
   BrainCircuit,
-  ChevronDown,
   ChevronUp,
   Command,
   Gauge,
@@ -42,8 +41,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
-  Square,
-  User,
 } from 'lucide-react'
 
 interface ChatWindowProps {
@@ -892,118 +889,106 @@ export function ChatWindow({
       : runtimeBusy
         ? 'Updating runtime...'
         : 'OpenAgents ready'
+  const sessionLabel = activeSession?.label?.trim() || 'main'
+  const runtimeSummary = `${effectiveRuntime.model} / ${effectiveProviderLabel}`
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-[#e4e7ec] bg-white shadow-[0_22px_56px_rgba(15,23,42,0.08)]">
-      <div className="border-b border-[#eceef4] bg-white px-4 py-4 sm:px-7">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-[#f2d5d2] bg-[#fff7f5] px-2.5 py-1.5 text-[#101828] shadow-sm">
-              <div className="oa-brand-badge flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold text-white">
+      <div className="border-b border-[#eceef4] bg-white px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="oa-brand-badge flex h-10 w-10 items-center justify-center rounded-2xl text-[11px] font-bold text-white">
                 OA
               </div>
               <div className="min-w-0">
-                <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">
-                  OpenAgents
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">
+                  OpenAgents chat
                 </p>
-                <p className="text-[13px] font-semibold leading-none text-[#101828]">Chat</p>
+                <p className="truncate text-[16px] font-semibold leading-tight text-[#101828]">
+                  {sessionLabel}
+                </p>
+                <p className="truncate text-[12px] text-[#667085]">
+                  {assistantModeDefinition.label} workspace | {runtimeSummary}
+                </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void onNewSession()}
-              className="rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-left text-[15px] font-medium text-[#101828] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd]"
-            >
-              {activeSession?.label?.trim() || 'main'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setControlsExpanded((current) => !current)}
-              className="rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-left text-[14px] text-[#667085] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd]"
-            >
-              {effectiveRuntime.model} · {effectiveProviderLabel}
-            </button>
-            <button
-              type="button"
-              onClick={() => setControlsExpanded((current) => !current)}
-              className="rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-left text-[14px] text-[#667085] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd]"
-            >
-              {isRuntimeCustomized ? 'Session override' : 'Default runtime'}
-            </button>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className={`rounded-full border px-3 py-1 font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
+                {runStatus ?? (isStreaming ? 'running' : 'ready')}
+              </span>
+              <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
+                {isRuntimeCustomized ? 'Session override' : 'Default runtime'}
+              </span>
+              {!beginnerMode && activeConversationId && (
+                <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#98a2b3]">
+                  {shortId(activeConversationId)}
+                </span>
+              )}
+              {pendingApprovals.length > 0 && (
+                <span className="rounded-full border border-[#f2d18b] bg-[#fff8e8] px-3 py-1 font-semibold text-[#b54708]">
+                  {pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} waiting
+                </span>
+              )}
+              {activeHandoffStatus && (
+                <span className="rounded-full border border-[#f3c8c5] bg-[#fff3f2] px-3 py-1 font-semibold text-[#d92d20]">
+                  human handoff {activeHandoffStatus}
+                </span>
+              )}
+              {learnedSkill && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
+                  <BrainCircuit size={12} />
+                  <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
+                  {learnedIntentLabel && <span className="text-[#98a2b3]">{learnedIntentLabel}</span>}
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => void syncRuntimeState()}
               disabled={runtimeLoading}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#e4e7ec] bg-white text-[#667085] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd] disabled:opacity-50"
-              title="Refresh runtime"
+              className={controlButtonClass()}
             >
-              <RefreshCw size={16} />
+              <RefreshCw size={12} />
+              Refresh
             </button>
-            <span className="hidden h-7 w-px bg-[#eceef4] sm:block" />
             <button
               type="button"
               onClick={() => setControlsExpanded((current) => !current)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] shadow-sm transition hover:bg-[#fff1ef]"
-              title={controlsExpanded ? 'Hide details' : 'Show details'}
+              className={controlButtonClass()}
             >
-              {controlsExpanded ? <ChevronUp size={16} /> : <BrainCircuit size={16} />}
+              {controlsExpanded ? <ChevronUp size={12} /> : <BrainCircuit size={12} />}
+              {controlsExpanded ? 'Hide details' : 'Details'}
             </button>
             <button
               type="button"
               onClick={() => void executeOperatorCommand('/approvals')}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] shadow-sm transition hover:bg-[#fff1ef]"
-              title="Approvals"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#f2b7b2] bg-[#fff8f7] px-3 py-1.5 text-[11px] font-semibold text-[#ef4444] transition hover:bg-[#fff1ef]"
             >
-              <ShieldCheck size={16} />
+              <ShieldCheck size={12} />
+              Approvals
             </button>
             <button
               type="button"
               onClick={focusComposer}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#e4e7ec] bg-white text-[#667085] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd]"
-              title="Focus composer"
+              className={controlButtonClass()}
             >
-              <Command size={16} />
+              <Command size={12} />
+              Composer
             </button>
             <button
               type="button"
               onClick={() => void onNewSession()}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] shadow-sm transition hover:bg-[#fff1ef]"
-              title="New session"
+              className="oa-accent-button inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white"
             >
-              <MessageSquarePlus size={16} />
+              <MessageSquarePlus size={12} />
+              New session
             </button>
           </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-          <span className={`rounded-full border px-3 py-1 font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
-            {runStatus ?? (isStreaming ? 'running' : 'ready')}
-          </span>
-          {pendingApprovals.length > 0 && (
-            <span className="rounded-full border border-[#f2d18b] bg-[#fff8e8] px-3 py-1 font-semibold text-[#b54708]">
-              {pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} waiting
-            </span>
-          )}
-          {activeHandoffStatus && (
-            <span className="rounded-full border border-[#f3c8c5] bg-[#fff3f2] px-3 py-1 font-semibold text-[#d92d20]">
-              human handoff {activeHandoffStatus}
-            </span>
-          )}
-          {learnedSkill && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
-              <BrainCircuit size={12} />
-              <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
-              {learnedIntentLabel && <span className="text-[#98a2b3]">{learnedIntentLabel}</span>}
-            </span>
-          )}
-          {!beginnerMode && activeConversationId && (
-            <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#98a2b3]">
-              {shortId(activeConversationId)}
-            </span>
-          )}
         </div>
 
         {!beginnerMode && controlsExpanded && (
@@ -1158,49 +1143,68 @@ export function ChatWindow({
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface-muted)] px-3 py-3 sm:px-5">
         {visibleMessages.length === 0 ? (
-          <div className="flex h-full items-center justify-center py-8">
-            <div className="w-full max-w-[880px] rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
-              <div className="flex items-center gap-2 text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                <div className="oa-brand-badge flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold text-white">
-                  OA
-                </div>
-                <div>
-                  <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-                    OpenAgents chat
+          <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 pb-6 pt-4">
+            <section className="overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-[760px]">
+                  <div className="flex items-center gap-3 text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
+                    <div className="oa-brand-badge flex h-10 w-10 items-center justify-center rounded-2xl text-[11px] font-bold text-white">
+                      OA
+                    </div>
+                    <div>
+                      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                        OpenAgents chat
+                      </p>
+                      <p className="text-[28px] font-semibold leading-tight">Brief OpenAgents with the outcome.</p>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 max-w-[720px] text-sm leading-6 text-[var(--muted)] dark:text-[var(--muted)]">
+                    Give OpenAgents a concrete outcome and keep the first prompt specific. This workspace is designed to keep research, execution, approvals, and follow-through in one lane.
                   </p>
-                  <p className="text-lg font-semibold">Give OpenAgents a clear outcome.</p>
+                </div>
+
+                <div className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+                  <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--tone-soft)]">
+                    Mode
+                  </p>
+                  <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[var(--tone-strong)]">
+                    <Sparkles size={14} className="text-[var(--accent)]" />
+                    {assistantModeDefinition.label}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">{assistantModeDefinition.caption}</p>
                 </div>
               </div>
 
-              <p className="mt-4 text-sm text-[var(--muted)] dark:text-[var(--muted)]">
-                Keep the request concrete. OpenAgents is tuned for session work, approvals, tool use, and repeated operational tasks.
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-2">
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
                 {assistantModeDefinition.starterPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
                     disabled={!gatewayConnected || isStreaming}
                     onClick={() => void handleQuickPrompt(prompt)}
-                    className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-left text-[12px] font-medium text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[var(--tone-inverse)]"
+                    className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-4 text-left text-[13px] font-medium leading-6 text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[var(--tone-inverse)]"
                   >
                     {prompt}
                   </button>
                 ))}
               </div>
 
-              <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+              <div className="mt-6 flex flex-wrap items-center gap-2 text-[11px] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
                 <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
                   <Command size={11} />
-                  Type `/` for commands
+                  Type / for commands
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
+                  <BrainCircuit size={11} />
+                  {runtimeSummary}
                 </span>
                 <span>{gatewayConnected ? 'Runtime connected' : 'Runtime disconnected'}</span>
               </div>
-            </div>
+            </section>
           </div>
         ) : (
-          <div className="mx-auto max-w-[1360px] space-y-3 pb-3 pt-1">
+          <div className="mx-auto w-full max-w-[1480px] space-y-4 pb-4 pt-2">
             {visibleMessages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
@@ -1250,7 +1254,7 @@ export function ChatWindow({
                   className="ml-0.5 text-[#98a2b3] hover:text-[#344054]"
                   aria-label={`Remove ${file.name}`}
                 >
-                  ×
+                  x
                 </button>
               </div>
             ))}
