@@ -318,6 +318,220 @@ Complete system understanding for developers.
 
 ---
 
-## 🚀 COMMUNITY IMPLEMENTATION
+## 🚀 NEW PLATFORM IDEAS
 
-### 29. **Marketplace
+### 31. **Agent Chaining & Composition**
+**Files to create:**
+- `apps/api/src/agent-chains/agent-chains.service.ts` - Chain definitions and routing
+- `apps/api/src/agent-chains/agent-chains.controller.ts` - Chain management endpoints
+- `apps/api/src/agent-chains/agent-chains.module.ts` - Chain module registration
+
+**What it does:**
+Create "parent" agents that delegate to child agents. Handle complex tasks by breaking them into specialized sub-agents with automatic result passing.
+
+### 32. **Vector Database Integration (Knowledge Base)**
+**Files to create:**
+- `apps/api/src/knowledge/knowledge.service.ts` - Document ingestion and embedding
+- `apps/api/src/knowledge/knowledge.controller.ts` - Knowledge base endpoints
+- `apps/api/src/knowledge/knowledge.module.ts` - Vector DB integration
+
+**What it does:**
+RAG-powered knowledge bases attached to agents. Agents can reference your documents, wikis, PDFs with semantic search.
+
+### 33. **Fine-Tuning Pipeline**
+**Files to create:**
+- `apps/api/src/fine-tuning/fine-tuning.service.ts` - Data collection and training
+- `apps/api/src/fine-tuning/fine-tuning.controller.ts` - Training endpoints
+- `apps/api/src/fine-tuning/fine-tuning.module.ts` - Training infrastructure
+
+**What it does:**
+Upload conversation data, train custom fine-tuned models. Domain-specific agents that learn from your usage.
+
+### 34. **Plugin Marketplace**
+**Files to create:**
+- `apps/api/src/plugins/plugins.service.ts` - Plugin registry
+- `apps/api/src/plugins/plugins.controller.ts` - Plugin management
+- `apps/api/src/plugins/plugins.module.ts` - Plugin marketplace config
+
+**What it does:**
+Third-party plugins developers can build and share. Extend platform with community tools and integrations.
+
+### 35. **Team Workspaces**
+**Files to create:**
+- `apps/api/src/workspaces/workspaces.service.ts` - Workspace management
+- `apps/api/src/workspaces/workspaces.controller.ts` - Workspace endpoints
+- `apps/api/src/workspaces/workspaces.module.ts` - Workspace sharing
+
+**What it does:**
+Shared workspaces where multiple users collaborate on agents. Team-based agent development and management.
+
+### 36. **Usage-Based Billing**
+**Files to create:**
+- `apps/api/src/billing/billing.service.ts` - Usage tracking and quotas
+- `apps/api/src/billing/billing.controller.ts` - Billing endpoints
+- `apps/api/src/billing/billing.module.ts` - Billing configuration
+
+**What it does:**
+Per-user quotas, token usage tracking, billing dashboard. Monetization and cost control.
+
+### 37. **A/B Testing for Agents**
+**Files to create:**
+- `apps/api/src/experiments/experiments.service.ts` - Experiment management
+- `apps/api/src/experiments/experiments.controller.ts` - Experiment endpoints
+- `apps/api/src/experiments/experiments.module.ts` - Traffic splitting
+
+**What it does:**
+Run multiple agent versions simultaneously, track performance. Data-driven agent improvement.
+
+### 38. **Sandboxed Tool Execution**
+**Files to create:**
+- `apps/api/src/sandbox/sandbox.service.ts` - Container management
+- `apps/api/src/sandbox/sandbox.controller.ts` - Sandbox endpoints
+- `apps/api/src/sandbox/sandbox.module.ts` - Isolation config
+
+**What it does:**
+Execute tools in isolated containers with resource limits. Security and reliability for untrusted code/tools.
+
+### 39. **Agent Version Control**
+**Files to create:**
+- `apps/api/src/agent-git/agent-git.service.ts` - Commit history and diffs
+- `apps/api/src/agent-git/agent-git.controller.ts` - Version endpoints
+- `apps/api/src/agent-git/agent-git.module.ts` - Git-like versioning
+
+**What it does:**
+Git-style versioning for agents with diffs and rollback. Track changes, collaborate on agent development.
+
+### 40. **Prompt Engineering Studio**
+**Files to create:**
+- `apps/web/src/pages/studio/studio.page.tsx` - Prompt builder interface
+- `apps/web/src/components/prompt-builder/` - Visual prompt components
+- `apps/web/src/hooks/use-prompt-test.ts` - Prompt testing hook
+
+**What it does:**
+Visual studio for building and testing prompts. Non-technical users can customize agent behavior.
+
+### 41. **WebSocket Real-Time API**
+**Files to create:**
+- `apps/api/src/websocket/websocket.gateway.ts` - WebSocket gateway
+- `apps/api/src/websocket/websocket.service.ts` - Connection management
+- `apps/api/src/websocket/websocket.module.ts` - Streaming config
+
+**What it does:**
+Persistent connections for streaming responses. Lower latency, real-time agent interaction.
+
+### 42. **Circuit Breaker for Tools**
+**Files to create:**
+- `apps/api/src/resilience/circuit-breaker.service.ts` - Circuit state management
+- `apps/api/src/resilience/resilience.service.ts` - Fallback routing
+- `apps/api/src/resilience/resilience.module.ts` - Resilience config
+
+**What it does:**
+Auto-disable failing tools, route around them. Resilience when external APIs fail.
+
+### 43. **Custom Embeddings**
+**Files to create:**
+- `apps/api/src/embeddings/embeddings.service.ts` - Custom model serving
+- `apps/api/src/embeddings/embeddings.controller.ts` - Embedding endpoints
+- `apps/api/src/embeddings/embeddings.module.ts` - Model registry
+
+**What it does:**
+Upload your own embedding models. Domain-specific semantic search.
+
+### 44. **Agent Analytics Dashboard**
+**Files to create:**
+- `apps/web/src/pages/analytics/analytics.page.tsx` - Analytics interface
+- `apps/web/src/components/agent-charts/` - Per-agent metrics charts
+- `apps/web/src/hooks/use-agent-analytics.ts` - Analytics data hook
+
+**What it does:**
+Per-agent metrics, cost, latency, usage charts. Understand agent performance.
+
+### 45. **Scheduled/Cron Agents**
+**Files to create:**
+- `apps/api/src/scheduler/scheduler.service.ts` - Cron job management
+- `apps/api/src/scheduler/scheduler.controller.ts` - Schedule endpoints
+- `apps/api/src/scheduler/scheduler.module.ts` - Job queue
+
+**What it does:**
+Agents that run on schedules. Automated recurring tasks with cron expressions.
+
+### 46. **Multi-Modal Inputs**
+**Files to create:**
+- `apps/api/src/multimodal/multimodal.service.ts` - Image/audio processing
+- `apps/api/src/multimodal/multimodal.controller.ts` - Input endpoints
+- `apps/api/src/multimodal/multimodal.module.ts` - Processing pipeline
+
+**What it does:**
+Process images, audio, video inputs. Agents that see, hear, and understand multimedia.
+
+### 47. **Voice Interface**
+**Files to create:**
+- `apps/api/src/voice/voice.service.ts` - Speech synthesis/recognition
+- `apps/api/src/voice/voice.controller.ts` - Voice endpoints
+- `apps/api/src/voice/voice.module.ts` - Audio pipeline
+
+**What it does:**
+Voice-first interaction with agents. Speak to agents, get spoken responses.
+
+### 48. **Agent-to-Agent Communication**
+**Files to create:**
+- `apps/api/src/agent-comm/agent-comm.service.ts` - Agent messaging
+- `apps/api/src/agent-comm/agent-comm.controller.ts` - Communication endpoints
+- `apps/api/src/agent-comm/agent-comm.module.ts` - Message routing
+
+**What it does:**
+Agents communicate with each other. Collaborative problem solving between agents.
+
+### 49. **Observation/Logging UI**
+**Files to create:**
+- `apps/web/src/pages/observability/observability.page.tsx` - Log viewer
+- `apps/web/src/components/log-streamer/` - Real-time log streaming
+- `apps/web/src/hooks/use-logs.ts` - Log aggregation hook
+
+**What it does:**
+Real-time log streaming in UI. Debug agent behavior with live observability.
+
+### 50. **Memory & Context Management**
+**Files to create:**
+- `apps/api/src/context/context.service.ts` - Context window management
+- `apps/api/src/context/context.controller.ts` - Context endpoints
+- `apps/api/src/context/context.module.ts` - Memory optimization
+
+**What it does:**
+Manage long-running conversations. Summarize old messages, maintain context efficiently.
+
+### 51. **Public Marketplace**
+**Files to create:**
+- `apps/api/src/marketplace/marketplace.service.ts` - Listing management
+- `apps/api/src/marketplace/marketplace.controller.ts` - Marketplace endpoints
+- `apps/api/src/marketplace/marketplace.module.ts` - Marketplace config
+
+**What it does:**
+Public marketplace for sharing and discovering agents.
+
+### 52. **Plugin SDK**
+**Files to create:**
+- `packages/plugin-sdk/` - Plugin development kit
+- `apps/api/src/plugin-host/plugin-host.service.ts` - Plugin hosting
+- `apps/api/src/plugin-registry/plugin-registry.service.ts` - Plugin registry
+
+**What it does:**
+Build and share plugins that extend the platform.
+
+### 53. **SSO Integration**
+**Files to create:**
+- `apps/api/src/auth/sso.service.ts` - SSO providers
+- `apps/api/src/auth/saml.service.ts` - SAML integration
+- `apps/api/src/auth/oauth-providers.service.ts` - OAuth providers
+
+**What it does:**
+Enterprise SSO with SAML, OIDC. Connect to your identity provider.
+
+### 54. **Audit Logs Export**
+**Files to create:**
+- `apps/api/src/audit/export.service.ts` - Export formats
+- `apps/api/src/audit/compliance-export.service.ts` - Compliance reports
+- `apps/api/src/audit/archive.service.ts` - Long-term storage
+
+**What it does:**
+Export audit logs for compliance. SOC2, HIPAA, GDPR compliance reporting.
