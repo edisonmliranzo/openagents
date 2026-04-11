@@ -104,6 +104,15 @@ export interface QueryMemoryInput {
   tags?: string[]
   minConfidence?: number
   includeConflicts?: boolean
+  diversify?: boolean
+  temporalDecayDays?: number
+}
+
+export interface QueryMemoryStrategy {
+  diversify: boolean
+  temporalDecayDays: number
+  eventMatches: number
+  factMatches: number
 }
 
 export interface MemoryConflict {
@@ -137,6 +146,7 @@ export interface QueryMemoryResult {
   facts: MemoryFact[]
   conflicts?: MemoryConflict[]
   reviewQueue?: MemoryReviewItem[]
+  strategy: QueryMemoryStrategy
   queriedAt: string
 }
 

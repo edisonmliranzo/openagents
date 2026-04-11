@@ -14,9 +14,9 @@ It can answer questions, research the web, break a goal into steps, write conten
 ## Highlights
 
 - Chat-first assistant workspace for questions, multi-step tasks, approvals, and finished outputs.
-- Web research with citations plus deliverables such as reports, notes, drafts, and simple HTML pages.
+- Web research with citations, automatic `llms.txt` discovery when sites publish it, plus deliverables such as reports, notes, drafts, and simple HTML pages.
 - Tool execution loop with approval gates, dry-run previews, and background worker processing.
-- File-based memory model (`SOUL.md`, `USER.md`, `MEMORY.md`, `HEARTBEAT.md`, `cron.json`) plus local knowledge source sync.
+- File-based memory model (`SOUL.md`, `USER.md`, `MEMORY.md`, `HEARTBEAT.md`, `cron.json`) plus local knowledge source sync and recency-aware memory search.
 - Workflow runs with branch/compare support for replaying and evaluating alternative outputs.
 - Conversation repair and lineage graph endpoints for auditability, provenance, and stuck-run recovery.
 - Gmail and Calendar connectors for search, drafting, availability checks, and event creation.

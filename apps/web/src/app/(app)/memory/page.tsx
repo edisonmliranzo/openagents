@@ -5,9 +5,12 @@ import { sdk } from '@/stores/auth'
 import type {
   MemoryConflict,
   MemoryEntry,
+  MemoryEvent,
+  MemoryFact,
   MemoryFileSummary,
   MemoryReviewItem,
   MemoryType,
+  QueryMemoryResult,
 } from '@openagents/shared'
 import { useUIStore } from '@/stores/ui'
 
@@ -22,10 +25,17 @@ export default function MemoryPage() {
   const [files, setFiles] = useState<MemoryFileSummary[]>([])
   const [conflicts, setConflicts] = useState<MemoryConflict[]>([])
   const [reviewQueue, setReviewQueue] = useState<MemoryReviewItem[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<QueryMemoryResult | null>(null)
+  const [includeFactResults, setIncludeFactResults] = useState(true)
+  const [includeConflictResults, setIncludeConflictResults] = useState(false)
+  const [diversifyResults, setDiversifyResults] = useState(true)
+  const [temporalDecayDays, setTemporalDecayDays] = useState(30)
   const [selectedFile, setSelectedFile] = useState('')
   const [fileContent, setFileContent] = useState('')
   const [fileReadonly, setFileReadonly] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
   const [isFileLoading, setIsFileLoading] = useState(false)
   const [isFileSaving, setIsFileSaving] = useState(false)
   const [isSyncingFiles, setIsSyncingFiles] = useState(false)
@@ -152,6 +162,88 @@ export default function MemoryPage() {
     }
   }
 
+  async function handleSearchMemory() {
+    const query = searchQuery.trim()
+    if (!query) {
+      const message = 'Enter a memory query first'
+      setError(message)
+      addToast('error', message)
+      return
+    }
+
+    setIsSearching(true)
+    setError('')
+    try {
+      const result = await sdk.memory.query({
+        query,
+        includeFacts: includeFactResults,
+        includeConflicts: includeConflictResults,
+        diversify: diversifyResults,
+        temporalDecayDays,
+      })
+      setSearchResults(result)
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to search memory'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  function renderMemoryEventHit(hit: MemoryEvent) {
+    const confidence = hit.effectiveConfidence ?? hit.confidence
+    return (
+      <div key={`event-${hit.id}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+            event
+          </span>
+          <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[11px] font-semibold text-cyan-700">
+            confidence {confidence.toFixed(2)}
+          </span>
+          <span className="text-[11px] text-slate-400">
+            {new Date(hit.updatedAt).toLocaleString()}
+          </span>
+        </div>
+        <p className="mt-2 text-sm text-slate-700">{hit.summary}</p>
+        <p className="mt-1 text-[11px] text-slate-500">
+          {[hit.kind, ...hit.tags].filter(Boolean).join(' • ')}
+        </p>
+      </div>
+    )
+  }
+
+  function renderMemoryFactHit(hit: MemoryFact) {
+    const confidence = hit.effectiveConfidence ?? hit.confidence
+    const secondary = [
+      hit.sourceRef ?? '',
+      hit.freshUntil ? `fresh until ${new Date(hit.freshUntil).toLocaleDateString()}` : '',
+    ]
+      .filter(Boolean)
+      .join(' • ')
+
+    return (
+      <div key={`fact-${hit.id}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+            fact
+          </span>
+          <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[11px] font-semibold text-cyan-700">
+            confidence {confidence.toFixed(2)}
+          </span>
+          <span className="text-[11px] text-slate-400">
+            {new Date(hit.updatedAt).toLocaleString()}
+          </span>
+        </div>
+        <p className="mt-2 text-sm text-slate-700">{hit.entity}.{hit.key}: {hit.value}</p>
+        {secondary && (
+          <p className="mt-1 text-[11px] text-slate-500">{secondary}</p>
+        )}
+      </div>
+    )
+  }
+
   async function handleResolveConflict(id: string, status: 'resolved' | 'ignored') {
     setBusyConflictId(id)
     setError('')
@@ -207,6 +299,168 @@ export default function MemoryPage() {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
+
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Search Memory</h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Query recent memory with diversified recall and recency weighting.
+              </p>
+            </div>
+            {searchResults && (
+              <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">
+                  {searchResults.strategy.eventMatches} event match{searchResults.strategy.eventMatches === 1 ? '' : 'es'}
+                </span>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">
+                  {searchResults.strategy.factMatches} fact match{searchResults.strategy.factMatches === 1 ? '' : 'es'}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="space-y-4 p-4">
+          <div className="grid gap-3 lg:grid-cols-[1.3fr_0.7fr]">
+            <label className="text-xs font-medium text-slate-500">
+              Search query
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void handleSearchMemory()
+                  }
+                }}
+                placeholder="e.g. pricing preferences, recent workflow failures, onboarding notes"
+                className="mt-1 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+              />
+            </label>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-medium text-slate-500">
+                Temporal decay
+                <input
+                  type="number"
+                  min={3}
+                  max={180}
+                  value={temporalDecayDays}
+                  onChange={(event) => {
+                    const parsed = Number.parseInt(event.target.value || '30', 10)
+                    setTemporalDecayDays(Number.isFinite(parsed) ? Math.max(3, Math.min(parsed, 180)) : 30)
+                  }}
+                  className="mt-1 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+                />
+              </label>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => void handleSearchMemory()}
+                  disabled={isSearching}
+                  className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {isSearching ? 'Searching...' : 'Search memory'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3 text-sm text-slate-600">
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={includeFactResults}
+                onChange={(event) => setIncludeFactResults(event.target.checked)}
+              />
+              Include facts
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={includeConflictResults}
+                onChange={(event) => setIncludeConflictResults(event.target.checked)}
+              />
+              Include conflicts
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={diversifyResults}
+                onChange={(event) => setDiversifyResults(event.target.checked)}
+              />
+              Diversify results
+            </label>
+          </div>
+
+          {!searchResults ? (
+            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+              Run a search to inspect memory events and facts without digging through raw files.
+            </p>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Events</h3>
+                  <span className="text-[11px] text-slate-500">
+                    {searchResults.events.length} returned
+                  </span>
+                </div>
+                {searchResults.events.length === 0 ? (
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-xs text-slate-500">
+                    No event matches for this query.
+                  </p>
+                ) : (
+                  searchResults.events.map((event) => renderMemoryEventHit(event))
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Facts</h3>
+                  <span className="text-[11px] text-slate-500">
+                    {searchResults.facts.length} returned
+                  </span>
+                </div>
+                {searchResults.facts.length === 0 ? (
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-xs text-slate-500">
+                    No fact matches for this query.
+                  </p>
+                ) : (
+                  searchResults.facts.map((fact) => renderMemoryFactHit(fact))
+                )}
+              </div>
+
+              {searchResults.conflicts && (
+                <div className="space-y-2 xl:col-span-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900">Conflict context</h3>
+                    <span className="text-[11px] text-slate-500">
+                      {searchResults.conflicts.length} open conflict{searchResults.conflicts.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {searchResults.conflicts.map((conflict) => (
+                      <div key={conflict.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                            {conflict.severity}
+                          </span>
+                          <span className="text-[11px] text-slate-500">{conflict.entity}.{conflict.key}</span>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-600">Existing: {conflict.existingValue}</p>
+                        <p className="mt-1 text-xs text-slate-600">Incoming: {conflict.incomingValue}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
