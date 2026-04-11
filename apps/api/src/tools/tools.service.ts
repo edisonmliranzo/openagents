@@ -14,6 +14,10 @@ import { GithubTool } from './connectors/github.tool'
 import { NotionTool } from './connectors/notion.tool'
 import { LinearTool } from './connectors/linear.tool'
 import { JiraTool } from './connectors/jira.tool'
+import { NewsTool } from './connectors/news.tool'
+import { YoutubeTool } from './connectors/youtube.tool'
+import { MemoryPersonalTool } from './connectors/memory-personal.tool'
+import { ProactiveTool } from './connectors/proactive.tool'
 import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
 import { ConnectorsService } from '../connectors/connectors.service'
 import { McpService } from './mcp.service'
@@ -28,6 +32,8 @@ export interface ToolDefinition {
   source?: 'builtin' | 'mcp'
   serverId?: string
   originalName?: string
+  /** If true, tool is available to the agent but not shown in the UI tools list */
+  hidden?: boolean
 }
 
 @Injectable()
@@ -52,6 +58,10 @@ export class ToolsService {
     private notion: NotionTool,
     private linear: LinearTool,
     private jira: JiraTool,
+    private news: NewsTool,
+    private youtube: YoutubeTool,
+    private memoryPersonal: MemoryPersonalTool,
+    private proactive: ProactiveTool,
     private mcp: McpService,
     ) {
     this.registry = new Map([
@@ -103,6 +113,28 @@ export class ToolsService {
       ['jira_search_issues',    { def: this.withBuiltinSource(this.jira.searchIssuesDef),    execute: (i: any) => this.jira.searchIssues(i) }],
       ['jira_add_comment',      { def: this.withBuiltinSource(this.jira.addCommentDef),      execute: (i: any) => this.jira.addComment(i) }],
       ['jira_list_transitions', { def: this.withBuiltinSource(this.jira.listTransitionsDef), execute: (i: any) => this.jira.listTransitions(i) }],
+      // News & RSS
+      ['news_guardian_search',   { def: this.withBuiltinSource(this.news.guardianSearchDef),   execute: this.news.guardianSearch.bind(this.news) }],
+      ['news_guardian_headlines', { def: this.withBuiltinSource(this.news.guardianHeadlinesDef), execute: this.news.guardianHeadlines.bind(this.news) }],
+      ['rss_fetch',              { def: this.withBuiltinSource(this.news.rssFetchDef),          execute: this.news.rssFetch.bind(this.news) }],
+      ['rss_list_feeds',         { def: this.withBuiltinSource(this.news.rssListFeedsDef),      execute: this.news.rssListFeeds.bind(this.news) }],
+      // YouTube
+      ['youtube_summarize',  { def: this.withBuiltinSource(this.youtube.summarizeDef),  execute: this.youtube.summarize.bind(this.youtube) }],
+      ['youtube_transcript', { def: this.withBuiltinSource(this.youtube.transcriptDef), execute: this.youtube.transcript.bind(this.youtube) }],
+      // Memory & personalization
+      ['memory_save_contact',    { def: this.withBuiltinSource(this.memoryPersonal.saveContactDef),       execute: this.memoryPersonal.saveContact.bind(this.memoryPersonal) }],
+      ['memory_save_preference', { def: this.withBuiltinSource(this.memoryPersonal.savePreferenceDef),    execute: this.memoryPersonal.savePreference.bind(this.memoryPersonal) }],
+      ['memory_save_session',    { def: this.withBuiltinSource(this.memoryPersonal.saveSessionSummaryDef), execute: this.memoryPersonal.saveSessionSummary.bind(this.memoryPersonal) }],
+      ['memory_search',          { def: this.withBuiltinSource(this.memoryPersonal.searchDef),            execute: this.memoryPersonal.search.bind(this.memoryPersonal) }],
+      ['memory_get_profile',     { def: this.withBuiltinSource(this.memoryPersonal.getProfileDef),        execute: this.memoryPersonal.getProfile.bind(this.memoryPersonal) }],
+      ['memory_update_profile',  { def: this.withBuiltinSource(this.memoryPersonal.updateProfileDef),     execute: this.memoryPersonal.updateProfile.bind(this.memoryPersonal) }],
+      // Proactive / Always-on
+      ['proactive_daily_briefing',  { def: this.withBuiltinSource(this.proactive.dailyBriefingDef),  execute: this.proactive.dailyBriefing.bind(this.proactive) }],
+      ['proactive_web_monitor',     { def: this.withBuiltinSource(this.proactive.webMonitorDef),     execute: this.proactive.webMonitor.bind(this.proactive) }],
+      ['proactive_keyword_alert',   { def: this.withBuiltinSource(this.proactive.keywordAlertDef),   execute: this.proactive.keywordAlert.bind(this.proactive) }],
+      ['proactive_uptime_monitor',  { def: this.withBuiltinSource(this.proactive.uptimeMonitorDef),  execute: this.proactive.uptimeMonitor.bind(this.proactive) }],
+      ['proactive_list',            { def: this.withBuiltinSource(this.proactive.listDef),            execute: this.proactive.list.bind(this.proactive) }],
+      ['proactive_pause',           { def: this.withBuiltinSource(this.proactive.pauseDef),           execute: this.proactive.pause.bind(this.proactive) }],
     ])
   }
 
@@ -141,7 +173,7 @@ export class ToolsService {
   }
 
   async getAllDefinitions(): Promise<ToolDefinition[]> {
-    const builtinTools = Array.from(this.registry.values()).map((t) => t.def)
+    const builtinTools = Array.from(this.registry.values()).map((t) => t.def).filter((d) => !d.hidden)
     const mcpTools = await this.mcp.listToolDefinitions()
     return [...builtinTools, ...mcpTools]
   }

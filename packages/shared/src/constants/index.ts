@@ -10,14 +10,14 @@ export const LLM_MODELS = {
     powerful: 'claude-opus-4-6',
   },
   openai: {
-    default: 'gpt-5.1',
-    fast: 'gpt-5.1-mini',
-    powerful: 'gpt-5.1',
+    default: 'gpt-5.4',
+    fast: 'gpt-5.4-mini',
+    powerful: 'gpt-5.4',
   },
   google: {
-    default: 'gemini-3.1-pro',
-    fast: 'gemini-2.0-flash-lite',
-    powerful: 'gemini-3.1-pro',
+    default: 'gemini-2.5-pro',
+    fast: 'gemini-2.5-flash-lite',
+    powerful: 'gemini-3.1-pro-preview',
   },
   ollama: {
     default: 'llama3.2',
@@ -29,27 +29,37 @@ export const LLM_MODELS = {
     fast: 'MiniMax-M2',
     powerful: 'MiniMax-M2.5',
   },
+  perplexity: {
+    default: 'sonar-pro',
+    fast: 'sonar',
+    powerful: 'sonar-reasoning-pro',
+  },
 } as const
 
 export const LLM_MODEL_OPTIONS = {
   anthropic: [
     'claude-opus-4-6',
     'claude-sonnet-4-6',
+    'claude-haiku-4-5',
     'claude-haiku-4-5-20251001',
   ],
   openai: [
+    'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
     'gpt-5.1',
     'gpt-5.1-mini',
-    'gpt-5.1-nano',
     'gpt-4.1',
     'gpt-4.1-mini',
   ],
   google: [
-    'gemini-3.1-pro',
-    'gemini-3.0-pro',
+    'gemini-3.1-pro-preview',
+    'gemini-3-flash-preview',
+    'gemini-3.1-flash-lite-preview',
     'gemini-2.5-pro',
     'gemini-2.5-flash',
     'gemini-2.5-flash-lite',
+    'gemini-flash-latest',
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
   ],
@@ -72,6 +82,7 @@ export const LLM_MODEL_OPTIONS = {
     'minimax-m2.5:cloud',
   ],
   minimax: ['MiniMax-M2', 'MiniMax-M2.5'],
+  perplexity: ['sonar', 'sonar-pro', 'sonar-reasoning-pro', 'sonar-deep-research'],
 } as const
 
 export const LLM_PROVIDER_CAPABILITIES: Record<
@@ -130,6 +141,15 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
     contextProfile: 'standard',
     strengths: ['competitive latency', 'simple model lineup', 'useful secondary provider'],
     cautions: ['fewer tested paths in this codebase', 'requires external API key'],
+  },
+  perplexity: {
+    label: 'Perplexity',
+    bestFor: 'Search-grounded answers, current-events synthesis, and quick research-oriented runs.',
+    toolUse: 'basic',
+    latency: 'balanced',
+    contextProfile: 'large',
+    strengths: ['strong web-grounded answers', 'simple Sonar lineup', 'good for research-heavy prompts'],
+    cautions: ['tool-calling paths are less proven here', 'requires external API key'],
   },
 } as const
 

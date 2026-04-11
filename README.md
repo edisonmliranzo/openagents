@@ -273,7 +273,7 @@ Set real secrets and ports in `infra/docker/.env.prod`:
 - `JWT_SECRET`
 - `JWT_REFRESH_SECRET`
 - `ENCRYPTION_KEY`
-- provider keys if used (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
+- provider keys if used (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, etc.)
 - `WEB_HOST_PORT`, `API_HOST_PORT`, `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT` (if defaults conflict)
 - `FRONTEND_URL`, optional `NEXT_PUBLIC_API_URL`, optional `OPENAGENTS_INTERNAL_API_URL`
 - creator bootstrap email(s): `CREATOR_EMAIL` or `CREATOR_EMAILS`

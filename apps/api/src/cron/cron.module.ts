@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common'
 import { CronController } from './cron.controller'
 import { CronService } from './cron.service'
+import { CronSchedulerService } from './cron-scheduler.service'
+import { AgentModule } from '../agent/agent.module'
 
 @Module({
+  imports: [AgentModule],
   controllers: [CronController],
-  providers: [CronService],
+  providers: [CronService, CronSchedulerService],
   exports: [CronService],
 })
 export class CronModule {}

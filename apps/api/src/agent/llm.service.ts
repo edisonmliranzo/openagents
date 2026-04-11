@@ -5,7 +5,7 @@ import OpenAI from 'openai'
 import type { LLMProvider } from '@openagents/shared'
 import { LLM_MODELS } from '@openagents/shared'
 
-const SUPPORTED_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax']
+const SUPPORTED_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity']
 
 const PROVIDER_LABELS: Record<LLMProvider, string> = {
   anthropic: 'Anthropic',
@@ -13,6 +13,7 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
   google: 'Google Gemini',
   ollama: 'Ollama',
   minimax: 'MiniMax',
+  perplexity: 'Perplexity',
 }
 
 const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
@@ -20,11 +21,13 @@ const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
   openai: ['OPENAI_API_KEY'],
   google: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   minimax: ['MINIMAX_API_KEY'],
+  perplexity: ['PERPLEXITY_API_KEY'],
 }
 
 const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LLMProvider, string>> = {
   google: 'https://generativelanguage.googleapis.com/v1beta/openai',
   minimax: 'https://api.minimaxi.chat/v1',
+  perplexity: 'https://api.perplexity.ai',
 }
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
 const DEFAULT_OLLAMA_ALLOWED_HOSTS = [
@@ -82,6 +85,7 @@ export class LLMService {
       openai: this.readFirstEnv(PROVIDER_ENV_VARS.openai),
       google: this.readFirstEnv(PROVIDER_ENV_VARS.google),
       minimax: this.readFirstEnv(PROVIDER_ENV_VARS.minimax),
+      perplexity: this.readFirstEnv(PROVIDER_ENV_VARS.perplexity),
     }
 
     const configured = (config.get<string>('DEFAULT_LLM_PROVIDER') ?? 'anthropic').trim().toLowerCase()
@@ -122,7 +126,7 @@ export class LLMService {
       return this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient, model, userBaseUrl)
     }
 
-    // openai-compatible providers (openai, google gemini, minimax)
+    // openai-compatible providers (openai, google gemini, minimax, perplexity)
     return this.completeWithKeyRotation(
       (key) => {
         const client = this.createOpenAICompatibleClient(p, key, userBaseUrl)
@@ -242,7 +246,7 @@ export class LLMService {
         }
       }
 
-      // openai-compatible providers (openai, google gemini)
+      // openai-compatible providers (openai, google gemini, minimax, perplexity)
       const client = this.createOpenAICompatibleClient(requestedProvider, apiKey, baseUrl)
       const res = await client.chat.completions.create({
         model: model ?? LLM_MODELS[requestedProvider].default,

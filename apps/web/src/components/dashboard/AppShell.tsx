@@ -9,13 +9,16 @@ import {
   Bell,
   BookOpen,
   Brain,
+  Bug,
   ChevronDown,
   FileText,
   Layers3,
+  Link2,
   LogOut,
   Menu,
   MessageSquare,
   Moon,
+  RefreshCw,
   Search,
   ScrollText,
   Settings2,
@@ -89,6 +92,28 @@ const BASE_NAV_GROUPS: NavGroup[] = [
   },
 ]
 
+const CHAT_CONTROL_NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'Chat',
+    items: [{ label: 'Chat', href: '/chat', icon: MessageSquare }],
+  },
+  {
+    title: 'Control',
+    items: [
+      { label: 'Overview', href: '/control/overview', icon: Activity },
+      { label: 'Channels', href: '/control/channels', icon: Link2 },
+      { label: 'Instances', href: '/control/instances', icon: Layers3 },
+      { label: 'Sessions', href: '/sessions', icon: FileText },
+      { label: 'Usage', href: '/control/usage', icon: Activity },
+      { label: 'Cron Jobs', href: '/control/cron-jobs', icon: Bell },
+    ],
+  },
+  {
+    title: 'Agent',
+    items: [{ label: 'Docs', href: '/docs', icon: BookOpen }],
+  },
+]
+
 const THEME_STORAGE_KEY = 'openagents.dashboard.theme'
 const BEGINNER_MODE_NAV_HREFS = new Set([
   '/settings/get-started',
@@ -149,17 +174,20 @@ export function AppShell({ children }: AppShellProps) {
   const notifRef = useRef<HTMLDivElement | null>(null)
   const profileSyncedRef = useRef(false)
   const isOwnerUser = (user?.role ?? '').toLowerCase() === 'owner'
+  const isChatControlRoute = pathname === '/chat'
+  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? 'v0.1.0'
 
   const navGroups = useMemo<NavGroup[]>(() => {
+    if (isChatControlRoute) return CHAT_CONTROL_NAV_GROUPS
     if (!isOwnerUser) return BASE_NAV_GROUPS
     return [
       ...BASE_NAV_GROUPS,
       {
         title: 'Creator',
         items: [{ label: 'Admin', href: '/control/admin', icon: ShieldCheck }],
-      },
+        },
     ]
-  }, [isOwnerUser])
+  }, [isChatControlRoute, isOwnerUser])
 
   useEffect(() => {
     try {
@@ -352,6 +380,221 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   if (!accessToken) return null
+
+  if (isChatControlRoute) {
+    return (
+      <div className="dashboard-theme relative min-h-[100dvh] bg-[#f5f6fa]">
+        {isMobileNavOpen && (
+          <button
+            type="button"
+            aria-label="Close navigation menu"
+            onClick={() => setIsMobileNavOpen(false)}
+            className="fixed inset-0 z-40 bg-[var(--overlay)] backdrop-blur-[3px] lg:hidden"
+          />
+        )}
+
+        <div className="flex min-h-[100dvh]">
+          <aside
+            className={clsx(
+              'fixed inset-y-0 left-0 z-50 flex w-[258px] flex-col border-r border-[#e8eaf2] bg-[rgba(255,255,255,0.94)] px-3 py-4 transition-transform duration-200 lg:sticky lg:top-0 lg:h-[100dvh] lg:z-10 lg:translate-x-0',
+              isMobileNavOpen ? 'translate-x-0' : '-translate-x-full',
+            )}
+          >
+            <div className="mb-5 flex items-center gap-3 px-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff7068_0%,#ef4444_70%,#d92d20_100%)] text-white shadow-[0_10px_24px_rgba(239,68,68,0.28)]">
+                <Bug size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-[#7b8497]">
+                  Control
+                </p>
+                <p className="truncate text-[15px] font-semibold text-[#101828]">OpenClaw</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileNavOpen(false)}
+                className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[#e7e8ef] bg-white text-[#667085] shadow-sm lg:hidden"
+                aria-label="Close sidebar"
+              >
+                <Menu size={15} />
+              </button>
+            </div>
+
+            <nav className="flex-1 space-y-5 overflow-y-auto px-1">
+              {navGroups.map((group) => (
+                <div key={group.title}>
+                  <div className="mb-2 flex items-center justify-between px-2">
+                    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#667085]">
+                      {group.title}
+                    </p>
+                    <ChevronDown size={13} className="text-[#98a2b3]" />
+                  </div>
+                  <div className="space-y-1">
+                    {group.items.map((item) => {
+                      const active = isActivePath(pathname, item.href)
+                      const Icon = item.icon
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setIsMobileNavOpen(false)}
+                          className={clsx(
+                            'flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-[14px] transition',
+                            active
+                              ? 'border-[#f3c8c5] bg-[#fff3f2] text-[#101828] shadow-[0_6px_18px_rgba(215,38,56,0.08)]'
+                              : 'border-transparent text-[#475467] hover:border-[#eceef4] hover:bg-white hover:text-[#101828]',
+                          )}
+                        >
+                          <Icon size={16} className={active ? 'text-[#ef4444]' : 'text-[#98a2b3]'} />
+                          <span>{item.label}</span>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </nav>
+
+            <div className="mt-4 rounded-[18px] border border-[#e8eaf2] bg-white px-4 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#667085]">
+                    Version
+                  </p>
+                  <p className="mt-1 text-[13px] font-medium text-[#101828]">{appVersion}</p>
+                </div>
+                <span className="inline-flex h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(34,197,94,0.12)]" />
+              </div>
+            </div>
+          </aside>
+
+          <div className="min-w-0 flex-1">
+            <header className="sticky top-0 z-20 border-b border-[#e8eaf2] bg-[rgba(255,255,255,0.82)] px-4 py-3 backdrop-blur-xl sm:px-6">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileNavOpen(true)}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[#e7e8ef] bg-white text-[#475467] shadow-sm lg:hidden"
+                    aria-label="Open sidebar"
+                  >
+                    <Menu size={16} />
+                  </button>
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] text-[#475467]">
+                      <span className="font-medium">OpenClaw</span>
+                      <span className="px-1.5 text-[#98a2b3]">›</span>
+                      <span className="font-semibold text-[#ef4444]">Chat</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <div className="hidden items-center gap-2 rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 shadow-[0_8px_20px_rgba(15,23,42,0.04)] md:flex">
+                    <Search size={14} className="text-[#98a2b3]" />
+                    <input
+                      value={routeSearch}
+                      onChange={(event) => setRouteSearch(event.target.value)}
+                      onKeyDown={handleRouteSearchKeyDown}
+                      placeholder="Search"
+                      className="w-40 bg-transparent text-[13px] text-[#344054] outline-none placeholder:text-[#98a2b3]"
+                    />
+                    <span className="rounded-full border border-[#e4e7ec] px-2 py-0.5 font-mono text-[10px] text-[#98a2b3]">
+                      ⌘K
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsNotificationsOpen((open) => !open)}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e4e7ec] bg-white text-[#ef4444] shadow-sm transition hover:border-[#f2b7b2] hover:bg-[#fff6f5]"
+                    aria-label="Open notifications"
+                  >
+                    <Terminal size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e4e7ec] bg-white text-[#667085] shadow-sm transition hover:border-[#d9deea] hover:bg-[#fbfbfd]"
+                    aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  >
+                    {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void loadNotifications()}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e4e7ec] bg-white text-[#667085] shadow-sm transition hover:border-[#d9deea] hover:bg-[#fbfbfd]"
+                    aria-label="Refresh notifications"
+                  >
+                    <RefreshCw size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    disabled={isSigningOut}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#f2b7b2] bg-[#fff6f5] text-[#ef4444] shadow-sm transition hover:bg-[#fff0ef] disabled:opacity-50"
+                    aria-label="Sign out"
+                  >
+                    <LogOut size={15} />
+                  </button>
+
+                  {isNotificationsOpen && (
+                    <div
+                      ref={notifRef}
+                      className="absolute right-6 top-[62px] z-30 w-[min(92vw,320px)] overflow-hidden rounded-[22px] border border-[#e4e7ec] bg-white shadow-[0_18px_44px_rgba(15,23,42,0.12)]"
+                    >
+                      <div className="flex items-center justify-between border-b border-[#eef0f5] px-4 py-3">
+                        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#667085]">
+                          Notifications
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void handleMarkAllRead()}
+                          className="text-[11px] font-semibold text-[#ef4444]"
+                        >
+                          Mark all read
+                        </button>
+                      </div>
+                      <div className="max-h-[320px] overflow-y-auto">
+                        {isNotificationsLoading && notifications.length === 0 && (
+                          <p className="px-4 py-4 text-sm text-[#667085]">Loading...</p>
+                        )}
+                        {!isNotificationsLoading && notifications.length === 0 && (
+                          <p className="px-4 py-4 text-sm text-[#667085]">No notifications.</p>
+                        )}
+                        {notifications.map((notification) => (
+                          <button
+                            key={notification.id}
+                            type="button"
+                            onClick={() => void handleMarkNotificationRead(notification.id)}
+                            className={clsx(
+                              'block w-full border-b border-[#eef0f5] px-4 py-3 text-left last:border-b-0',
+                              notification.read ? 'bg-white' : 'bg-[#fff8f7]',
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-sm font-semibold text-[#101828]">{notification.title}</p>
+                              <p className="text-[11px] text-[#98a2b3]">{relativeTime(notification.createdAt)}</p>
+                            </div>
+                            <p className="mt-1 text-xs text-[#667085]">{notification.message}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </header>
+
+            <main className="px-3 py-4 sm:px-6">{children}</main>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="dashboard-theme relative min-h-[100dvh]">

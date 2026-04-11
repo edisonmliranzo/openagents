@@ -36,8 +36,14 @@ import {
   ChevronUp,
   Command,
   Gauge,
+  Mic,
+  MessageSquarePlus,
+  Paperclip,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
+  Square,
+  User,
 } from 'lucide-react'
 
 interface ChatWindowProps {
@@ -60,6 +66,7 @@ const VERBOSE_LEVELS = [
 ] as const
 const REASONING_LEVELS = ['', 'off', 'on', 'stream'] as const
 const RUNTIME_PROVIDERS = Object.keys(LLM_MODEL_OPTIONS) as RuntimeProvider[]
+const OLLAMA_FALLBACK_MODELS = [...(LLM_MODEL_OPTIONS.ollama as unknown as string[])]
 
 function formatIntentLabel(intent: string | undefined) {
   if (!intent) return null
@@ -179,6 +186,28 @@ function formatCommandError(err: unknown, fallback: string) {
   return fallback
 }
 
+function normalizeRuntimeTestError(err: unknown, fallback: string) {
+  const message = formatCommandError(err, fallback)
+  if (/api key.*not configured/i.test(message)) return message
+  if (/authentication/i.test(message)) return message
+  if (/network error|failed to reach api|failed to fetch/i.test(message)) return message
+  if (/no local ollama models found/i.test(message)) return message
+  return message
+}
+
+function sanitizeOllamaModels(models: string[]) {
+  const unique = Array.from(new Set(models.map((model) => model.trim()).filter(Boolean)))
+  const local = unique.filter((model) => {
+    const normalized = model.toLowerCase()
+    return !normalized.includes(':cloud') && !normalized.includes('/cloud') && !normalized.endsWith('-cloud')
+  })
+  const cloud = unique.filter((model) => {
+    const normalized = model.toLowerCase()
+    return normalized.includes(':cloud') || normalized.includes('/cloud') || normalized.endsWith('-cloud')
+  })
+  return [...local, ...cloud]
+}
+
 function formatOperatorStatusReport(args: {
   settings: UserSettings | null
   session: SessionRow | null
@@ -221,6 +250,91 @@ function formatOperatorStatusReport(args: {
   }
 
   return lines.join('\n')
+}
+
+interface AttachedFile {
+  name: string
+  mimeType: string
+  size: number
+  content: string   // text content or base64 data URL for images
+  isImage: boolean
+}
+
+const TEXT_EXTENSIONS = new Set([
+  'txt', 'md', 'markdown', 'json', 'jsonl', 'csv', 'tsv', 'yaml', 'yml',
+  'xml', 'html', 'htm', 'css', 'js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go',
+  'java', 'kt', 'swift', 'c', 'cpp', 'h', 'rs', 'sh', 'bash', 'env',
+  'log', 'sql', 'graphql', 'toml', 'ini', 'cfg', 'conf',
+])
+
+function isTextFile(file: File): boolean {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return file.type.startsWith('text/') || TEXT_EXTENSIONS.has(ext)
+}
+
+function readFileAsAttachment(file: File): Promise<AttachedFile> {
+  return new Promise((resolve, reject) => {
+    const isImage = file.type.startsWith('image/')
+    const reader = new FileReader()
+
+    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`))
+
+    if (isImage) {
+      reader.onload = () => resolve({
+        name: file.name,
+        mimeType: file.type,
+        size: file.size,
+        content: reader.result as string,
+        isImage: true,
+      })
+      reader.readAsDataURL(file)
+    } else if (isTextFile(file)) {
+      reader.onload = () => resolve({
+        name: file.name,
+        mimeType: file.type || 'text/plain',
+        size: file.size,
+        content: reader.result as string,
+        isImage: false,
+      })
+      reader.readAsText(file)
+    } else {
+      // Binary file — include name and size as metadata only
+      resolve({
+        name: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        size: file.size,
+        content: '',
+        isImage: false,
+      })
+    }
+  })
+}
+
+function buildFileBlock(file: AttachedFile): string {
+  const sizeLabel = file.size < 1024
+    ? `${file.size} B`
+    : file.size < 1024 * 1024
+      ? `${(file.size / 1024).toFixed(1)} KB`
+      : `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+
+  if (file.isImage) {
+    return [
+      `[Attached image: ${file.name} (${sizeLabel})]`,
+      `data:${file.mimeType};base64 below:`,
+      file.content,
+    ].join('\n')
+  }
+
+  if (!file.content) {
+    return `[Attached file: ${file.name} (${sizeLabel}, binary — content not readable as text)]`
+  }
+
+  return [
+    `[Attached file: ${file.name} (${sizeLabel})]`,
+    '---',
+    file.content,
+    '---',
+  ].join('\n')
 }
 
 function parseModelCommandArg(arg: string, fallbackProvider: RuntimeProvider) {
@@ -277,10 +391,14 @@ export function ChatWindow({
   const [activeSession, setActiveSession] = useState<SessionRow | null>(null)
   const [runtimeLoading, setRuntimeLoading] = useState(false)
   const [runtimeBusy, setRuntimeBusy] = useState<string | null>(null)
+  const [ollamaModels, setOllamaModels] = useState<string[]>([])
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState<string>('')
   const [operatorMessages, setOperatorMessages] = useState<Message[]>([])
   const [controlsExpanded, setControlsExpanded] = useState(false)
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const learnedIntentLabel = formatIntentLabel(learnedSkill?.intent)
   const beginnerMode = Boolean(runtimeSettings?.beginnerMode)
   const assistantModeDefinition = useMemo(
@@ -316,12 +434,23 @@ export function ChatWindow({
   }, [effectiveRuntime.provider])
 
   const providerModelOptions = useMemo(
-    () =>
-      withCurrentOption(
-        LLM_MODEL_OPTIONS[activeProvider],
+    () => {
+      const baseOptions = activeProvider === 'ollama'
+        ? (() => {
+            const merged = [...ollamaModels]
+            for (const model of OLLAMA_FALLBACK_MODELS) {
+              if (!merged.includes(model)) merged.push(model)
+            }
+            return merged.length > 0 ? merged : OLLAMA_FALLBACK_MODELS
+          })()
+        : [...LLM_MODEL_OPTIONS[activeProvider]]
+
+      return withCurrentOption(
+        baseOptions,
         runtimeSettings?.preferredModel?.trim() || LLM_MODELS[activeProvider].default,
-      ),
-    [activeProvider, runtimeSettings?.preferredModel],
+      )
+    },
+    [activeProvider, ollamaModels, runtimeSettings?.preferredModel],
   )
 
   const sessionProvider = activeSession?.modelProvider ?? runtimeSettings?.preferredProvider ?? null
@@ -334,15 +463,25 @@ export function ChatWindow({
   const reasoningOptions = withCurrentOption(REASONING_LEVELS, reasoningValue)
   const pendingApprovalTools = pendingApprovals.map((approval) => approval.toolName)
 
+  const loadOllamaModels = useCallback(async (baseUrl?: string) => {
+    try {
+      const result = await sdk.agent.listOllamaModels(baseUrl || undefined)
+      setOllamaModels(sanitizeOllamaModels(result.models ?? []))
+    } catch {
+      setOllamaModels([])
+    }
+  }, [])
+
   const syncRuntimeState = useCallback(async () => {
     setRuntimeLoading(true)
     let nextSettings: UserSettings | null = null
     let nextSession: SessionRow | null = null
 
     try {
-      const [settingsResult, sessionsResult] = await Promise.allSettled([
+      const [settingsResult, sessionsResult, llmKeysResult] = await Promise.allSettled([
         sdk.users.getSettings(),
         sdk.sessions.list({ limit: 200, includeGlobal: true }),
+        sdk.users.getLlmKeys(),
       ])
 
       if (settingsResult.status === 'fulfilled') {
@@ -360,6 +499,11 @@ export function ChatWindow({
         setActiveSession(nextSession)
       } else if (!activeConversationId) {
         setActiveSession(null)
+      }
+
+      if (llmKeysResult.status === 'fulfilled') {
+        const ollamaKey = (llmKeysResult.value ?? []).find((key) => key.provider === 'ollama')
+        setOllamaBaseUrl(ollamaKey?.baseUrl?.trim() || '')
       }
 
       return { settings: nextSettings, session: nextSession }
@@ -401,6 +545,11 @@ export function ChatWindow({
   }, [syncRuntimeState])
 
   useEffect(() => {
+    if (activeProvider !== 'ollama') return
+    void loadOllamaModels(ollamaBaseUrl || undefined)
+  }, [activeProvider, loadOllamaModels, ollamaBaseUrl])
+
+  useEffect(() => {
     onRuntimeLabelChange(formatRuntimeLabel(runtimeSettings, activeSession))
   }, [activeSession, onRuntimeLabelChange, runtimeSettings])
 
@@ -415,6 +564,22 @@ export function ChatWindow({
   async function updateRuntimeSettings(provider: RuntimeProvider, model: string, source: string) {
     setRuntimeBusy(source)
     try {
+      const runtimeTest = await sdk.agent.testLlmConnection({
+        provider,
+        model,
+        ...(provider === 'ollama' && ollamaBaseUrl.trim() ? { baseUrl: ollamaBaseUrl.trim() } : {}),
+      })
+      if (!runtimeTest.ok) {
+        appendOperatorMessage(
+          normalizeRuntimeTestError(
+            runtimeTest.error,
+            `Failed to switch runtime to ${provider} / ${model}.`,
+          ),
+          'error',
+        )
+        return
+      }
+
       const updated = await sdk.users.updateSettings({
         preferredProvider: provider,
         preferredModel: model,
@@ -619,9 +784,10 @@ export function ChatWindow({
 
   async function dispatchMessage(rawText: string) {
     const displayContent = rawText.trim()
-    if (!displayContent || isStreaming) return
+    if (!displayContent && attachedFiles.length === 0) return
+    if (isStreaming) return
 
-    const parsed = parseSlashCommand(displayContent)
+    const parsed = displayContent ? parseSlashCommand(displayContent) : null
     if (parsed && isOperatorCommandId(parsed.id)) {
       setSlashQuery(null)
       setInput('')
@@ -633,14 +799,38 @@ export function ChatWindow({
 
     setSlashQuery(null)
     setInput('')
-    const expanded = expandSlashCommand(displayContent)
+
+    const files = attachedFiles
+    setAttachedFiles([])
+
+    const fileBlocks = files.map(buildFileBlock).join('\n\n')
+    const userText = displayContent || '(see attached file)'
+    const expanded = expandSlashCommand(userText)
     const pinned = buildPinnedContextBlock(pinnedItems)
-    const content = buildAssistantModePrompt(assistantMode, expanded + pinned)
-    await sendMessage(content, { displayContent })
+
+    const contextPrefix = fileBlocks ? `${fileBlocks}\n\n` : ''
+    const content = buildAssistantModePrompt(assistantMode, contextPrefix + expanded + pinned)
+
+    const fileNames = files.length > 0 ? ` [${files.map((f) => f.name).join(', ')}]` : ''
+    const displayWithFiles = displayContent ? `${displayContent}${fileNames}` : fileNames.trim()
+
+    await sendMessage(content, { displayContent: displayWithFiles || displayContent })
   }
 
   async function handleSend() {
     await dispatchMessage(input)
+  }
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    // reset input so same file can be re-attached if removed
+    e.target.value = ''
+    const results = await Promise.allSettled(files.map(readFileAsAttachment))
+    const loaded = results
+      .filter((r): r is PromiseFulfilledResult<AttachedFile> => r.status === 'fulfilled')
+      .map((r) => r.value)
+    setAttachedFiles((prev) => [...prev, ...loaded])
   }
 
   async function handleQuickPrompt(prompt: string) {
@@ -704,118 +894,115 @@ export function ChatWindow({
         : 'Assistant ready'
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--surface)]">
-      <div className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2.5">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[30px] border border-[#e4e7ec] bg-white shadow-[0_22px_56px_rgba(15,23,42,0.08)]">
+      <div className="border-b border-[#eceef4] bg-white px-4 py-4 sm:px-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
-            {ASSISTANT_MODE_DEFINITIONS.map((definition) => (
-              <button
-                key={definition.id}
-                type="button"
-                onClick={() => onAssistantModeChange(definition.id)}
-                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${modeButtonClass(
-                  assistantMode === definition.id,
-                )}`}
-              >
-                {definition.label}
-              </button>
-            ))}
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void onNewSession()}
+              className="rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-left text-[15px] font-medium text-[#101828] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd]"
+            >
+              {activeSession?.label?.trim() || 'main'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setControlsExpanded((current) => !current)}
+              className="rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-left text-[14px] text-[#667085] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd]"
+            >
+              {effectiveRuntime.model} · {effectiveProviderLabel}
+            </button>
+            <button
+              type="button"
+              onClick={() => setControlsExpanded((current) => !current)}
+              className="rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-left text-[14px] text-[#667085] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd]"
+            >
+              {isRuntimeCustomized ? 'Session override' : 'Default runtime'}
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
-              {runStatus ?? (isStreaming ? 'running' : 'ready')}
-            </span>
-            {pendingApprovals.length > 0 && (
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                {pendingApprovals.length} approvals waiting
-              </span>
-            )}
-            {activeHandoffStatus && (
-              <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
-                human handoff {activeHandoffStatus}
-              </span>
-            )}
-            {learnedSkill && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-                <BrainCircuit size={12} />
-                <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
-                {learnedIntentLabel && (
-                  <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] capitalize">
-                    {learnedIntentLabel}
-                  </span>
-                )}
-              </span>
-            )}
-            {!beginnerMode && (
-              <button
-                type="button"
-                onClick={() => setControlsExpanded((current) => !current)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-[11px] font-semibold text-[var(--tone-default)] transition hover:bg-[var(--surface-subtle)] dark:text-[var(--tone-inverse)]"
-                aria-expanded={controlsExpanded}
-              >
-                {controlsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                {controlsExpanded ? 'Hide details' : 'Details'}
-              </button>
-            )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void syncRuntimeState()}
+              disabled={runtimeLoading}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#e4e7ec] bg-white text-[#667085] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd] disabled:opacity-50"
+              title="Refresh runtime"
+            >
+              <RefreshCw size={16} />
+            </button>
+            <span className="hidden h-7 w-px bg-[#eceef4] sm:block" />
+            <button
+              type="button"
+              onClick={() => setControlsExpanded((current) => !current)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] shadow-sm transition hover:bg-[#fff1ef]"
+              title={controlsExpanded ? 'Hide details' : 'Show details'}
+            >
+              {controlsExpanded ? <ChevronUp size={16} /> : <BrainCircuit size={16} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => void executeOperatorCommand('/approvals')}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] shadow-sm transition hover:bg-[#fff1ef]"
+              title="Approvals"
+            >
+              <ShieldCheck size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={focusComposer}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#e4e7ec] bg-white text-[#667085] shadow-sm transition hover:border-[#d0d5dd] hover:bg-[#fbfbfd]"
+              title="Focus composer"
+            >
+              <Command size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => void onNewSession()}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-[15px] border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] shadow-sm transition hover:bg-[#fff1ef]"
+              title="New session"
+            >
+              <MessageSquarePlus size={16} />
+            </button>
           </div>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[var(--muted)] dark:text-[var(--muted)]">
-          {!beginnerMode && (
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 font-mono uppercase tracking-[0.12em] text-[var(--tone-soft)]">
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          <span className={`rounded-full border px-3 py-1 font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
+            {runStatus ?? (isStreaming ? 'running' : 'ready')}
+          </span>
+          {pendingApprovals.length > 0 && (
+            <span className="rounded-full border border-[#f2d18b] bg-[#fff8e8] px-3 py-1 font-semibold text-[#b54708]">
+              {pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} waiting
+            </span>
+          )}
+          {activeHandoffStatus && (
+            <span className="rounded-full border border-[#f3c8c5] bg-[#fff3f2] px-3 py-1 font-semibold text-[#d92d20]">
+              human handoff {activeHandoffStatus}
+            </span>
+          )}
+          {learnedSkill && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
+              <BrainCircuit size={12} />
+              <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
+              {learnedIntentLabel && <span className="text-[#98a2b3]">{learnedIntentLabel}</span>}
+            </span>
+          )}
+          {!beginnerMode && activeConversationId && (
+            <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#98a2b3]">
               {shortId(activeConversationId)}
             </span>
-          )}
-          {!beginnerMode && activeSession?.label?.trim() && (
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-              {activeSession.label.trim()}
-            </span>
-          )}
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-            {effectiveRuntime.model}
-          </span>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-            {effectiveProviderLabel}
-          </span>
-          {beginnerMode && (
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-              beginner mode
-            </span>
-          )}
-          {!beginnerMode && isRuntimeCustomized && (
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-              customized runtime
-            </span>
-          )}
-          {!beginnerMode && thinkingValue && (
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-              think {thinkingValue}
-            </span>
-          )}
-          {!beginnerMode && verboseValue && (
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-              verbose {verboseValue}
-            </span>
-          )}
-          {!beginnerMode && reasoningValue && (
-            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1">
-              reasoning {reasoningValue}
-            </span>
-          )}
-          {!beginnerMode && typeof activeSession?.totalTokens === 'number' && activeSession.totalTokens > 0 && (
-            <span>{activeSession.totalTokens} tokens</span>
           )}
         </div>
 
         {!beginnerMode && controlsExpanded && (
-          <div className="mt-3 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="mt-4 rounded-[22px] border border-[#eceef4] bg-[#fbfbfd] p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#98a2b3]">
                   Session details
                 </p>
-                <p className="mt-1 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                <p className="mt-1 text-xs text-[#667085]">
                   Runtime defaults plus per-session thinking, verbose, and reasoning controls.
                 </p>
               </div>
@@ -824,37 +1011,24 @@ export function ChatWindow({
                   type="button"
                   onClick={() => void executeOperatorCommand('/status')}
                   disabled={runtimeLoading || isStreaming}
-                  className={controlButtonClass()}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#475467] transition hover:bg-[#f8fafc] disabled:opacity-50"
                 >
                   <Gauge size={12} />
                   Status
                 </button>
                 <button
                   type="button"
-                  onClick={() => void executeOperatorCommand('/approvals')}
-                  disabled={runtimeLoading}
-                  className={controlButtonClass()}
-                >
-                  <ShieldCheck size={12} />
-                  Approvals
-                </button>
-                <button
-                  type="button"
                   onClick={() => void syncRuntimeState()}
                   disabled={runtimeLoading}
-                  className={controlButtonClass()}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#475467] transition hover:bg-[#f8fafc] disabled:opacity-50"
                 >
                   <RefreshCw size={12} />
-                  Refresh runtime
+                  Refresh
                 </button>
               </div>
             </div>
 
-            <p className="mt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
-              Runtime controls
-            </p>
-
-            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               <label className="space-y-1">
                 <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
                   Default provider
@@ -1030,72 +1204,129 @@ export function ChatWindow({
         onAdd={handleAddPin}
       />
 
-      <div className="border-t border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 sm:px-4">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--muted)] dark:text-[var(--muted)]">
-          <div className="flex flex-wrap items-center gap-2">
-            <span>
-              {assistantModeDefinition.label} mode.
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5">
-              <Command size={10} />
-              / commands
-            </span>
-            <span>{assistantStatusText}</span>
-          </div>
+      <div className="border-t border-[#e4e7ec] bg-white px-4 py-3 dark:border-[#2d3347] dark:bg-[#141824]">
+        {/* Slash command palette */}
+        {slashQuery !== null && (
+          <SlashCommandPalette
+            query={slashQuery}
+            onSelect={(cmd) => {
+              setInput(cmd.template)
+              setSlashQuery(null)
+              focusComposer()
+            }}
+            onClose={() => setSlashQuery(null)}
+          />
+        )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
-            <button
-              type="button"
-              onClick={() => void handleEscalate()}
-              disabled={!activeConversationId || Boolean(activeHandoffStatus) || isStreaming}
-              className="shrink-0 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <AlertTriangle size={12} />
+        {/* File attachment chips */}
+        {attachedFiles.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {attachedFiles.map((file, idx) => (
+              <div
+                key={`${file.name}-${idx}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-2 py-1 text-[11px] text-[#344054] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#c9d1e0]"
+              >
+                {file.isImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={file.content} alt={file.name} className="h-5 w-5 rounded object-cover" />
+                ) : (
+                  <Paperclip size={11} className="shrink-0 text-[#98a2b3]" />
+                )}
+                <span className="max-w-[140px] truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                  className="ml-0.5 text-[#98a2b3] hover:text-[#344054]"
+                  aria-label={`Remove ${file.name}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Input box */}
+        <div className="rounded-2xl border border-[#e4e7ec] bg-white shadow-sm dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={handleInputChange}
+            onKeyDown={handleKey}
+            disabled={isStreaming}
+            rows={1}
+            placeholder={
+              gatewayConnected
+                ? activeHandoffStatus
+                  ? 'This session is in human handoff mode.'
+                  : `${assistantModeDefinition.placeholder} (type / for commands)`
+                : 'Runtime offline. /help still works locally.'
+            }
+            className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-4 pt-3 text-sm text-[#101828] outline-none placeholder:text-[#98a2b3] disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
+          />
+
+          {/* Bottom toolbar */}
+          <div className="flex items-center justify-between px-3 pb-2.5">
+            <div className="flex items-center gap-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+                accept="*/*"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isStreaming}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#667085] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#1e2433]"
+                aria-label="Attach file"
+              >
+                <Paperclip size={16} />
+              </button>
+              <button
+                type="button"
+                disabled
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] opacity-40"
+                aria-label="Voice input"
+              >
+                <Mic size={16} />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
+              <button
+                type="button"
+                onClick={() => void handleEscalate()}
+                disabled={!activeConversationId || Boolean(activeHandoffStatus) || isStreaming}
+                className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400"
+              >
+                <AlertTriangle size={11} />
                 Need human
-              </span>
-            </button>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSend()}
+                disabled={((!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)) || (Boolean(activeHandoffStatus) && !inputIsCommand)}
+                className="oa-accent-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                aria-label="Send message"
+              >
+                <ArrowUp size={15} />
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="relative flex w-full items-end gap-2 rounded-[20px] border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-2">
-            {slashQuery !== null && (
-              <SlashCommandPalette
-                query={slashQuery}
-                onSelect={(cmd) => {
-                  setInput(cmd.template)
-                  setSlashQuery(null)
-                  focusComposer()
-                }}
-                onClose={() => setSlashQuery(null)}
-              />
-            )}
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKey}
-              disabled={isStreaming}
-              rows={1}
-              placeholder={
-                gatewayConnected
-                  ? activeHandoffStatus
-                    ? 'This session is in human handoff mode.'
-                    : `${assistantModeDefinition.placeholder} (type / for commands)`
-                  : 'Runtime offline. /help still works locally.'
-              }
-              className="max-h-40 min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-sm text-[var(--tone-strong)] outline-none placeholder:text-[var(--tone-soft)] disabled:cursor-not-allowed disabled:text-[var(--tone-soft)] dark:text-[var(--tone-inverse)]"
-            />
-            <button
-              type="button"
-              onClick={() => void handleSend()}
-              disabled={!input.trim() || isStreaming || (!gatewayConnected && !inputIsCommand) || (Boolean(activeHandoffStatus) && !inputIsCommand)}
-              className="oa-accent-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-35"
-              aria-label="Send message"
-            >
-              <ArrowUp size={16} />
-            </button>
+        {/* Status line */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#98a2b3]">
+          <span>{assistantModeDefinition.label} mode</span>
+          <span className="inline-flex items-center gap-1">
+            <Command size={10} />
+            / commands
+          </span>
+          <span>{assistantStatusText}</span>
         </div>
       </div>
     </div>

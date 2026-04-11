@@ -335,6 +335,7 @@ export class NanobotService {
       || normalized === 'google'
       || normalized === 'ollama'
       || normalized === 'minimax'
+      || normalized === 'perplexity'
     ) {
       return normalized
     }

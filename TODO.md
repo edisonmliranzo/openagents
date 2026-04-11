@@ -1,0 +1,5 @@
+- [ ] Add research module with POST /research/plan-and-act endpoint
+- [ ] Implement service flow: deep research draft + plan + approval policy check + act
+- [ ] Wire module into app.module.ts
+- [ ] Run FULL curl tests (happy path + policy-blocked + invalid input)
+- [ ] Update TODO.md with completion status
