@@ -29,7 +29,6 @@ import {
 import { PinnedContext, buildPinnedContextBlock, type PinnedItem } from './PinnedContext'
 import { ResponsePresets } from './ResponsePresets'
 import {
-  AlertTriangle,
   ArrowUp,
   BrainCircuit,
   ChevronUp,
@@ -213,7 +212,6 @@ function formatOperatorStatusReport(args: {
   activeConversationId: string | null
   pendingApprovals: number
   pendingApprovalTools: string[]
-  activeHandoffStatus: string | null
   runStatus: string | null
   messageCount: number
 }) {
@@ -234,7 +232,6 @@ function formatOperatorStatusReport(args: {
     `verbose: ${verbose}`,
     `reasoning: ${reasoning}`,
     `run: ${args.runStatus ?? 'ready'}`,
-    `handoff: ${args.activeHandoffStatus ?? 'none'}`,
     `approvals: ${args.pendingApprovals > 0 ? `${args.pendingApprovals} pending` : 'none pending'}`,
     `tokens: ${tokenCount}`,
     `messages loaded: ${args.messageCount}`,
@@ -381,8 +378,6 @@ export function ChatWindow({
     learnedSkill,
     runStatus,
     pendingApprovals,
-    activeHandoff,
-    escalateToHuman,
   } = useChatStore()
   const [input, setInput] = useState('')
   const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([])
@@ -405,10 +400,6 @@ export function ChatWindow({
     () => getAssistantModeDefinition(assistantMode),
     [assistantMode],
   )
-  const activeHandoffStatus =
-    activeHandoff && (activeHandoff.status === 'open' || activeHandoff.status === 'claimed')
-      ? activeHandoff.status
-      : null
 
   const visibleMessages = useMemo(
     () =>
@@ -639,7 +630,6 @@ export function ChatWindow({
           activeConversationId,
           pendingApprovals: pendingApprovals.length,
           pendingApprovalTools,
-          activeHandoffStatus,
           runStatus,
           messageCount: messages.length,
         }),
@@ -662,27 +652,6 @@ export function ChatWindow({
           }),
         ].join('\n'),
       )
-      return true
-    }
-
-    if (parsed.id === 'human') {
-      if (!activeConversationId) {
-        appendOperatorMessage('No active session selected.', 'error')
-        return true
-      }
-      if (activeHandoffStatus) {
-        appendOperatorMessage(`This session is already in human handoff mode (${activeHandoffStatus}).`, 'error')
-        return true
-      }
-
-      try {
-        await escalateToHuman(
-          parsed.arg || `Operator requested from ${assistantModeDefinition.label.toLowerCase()} mode.`,
-        )
-        appendOperatorMessage('Escalated the current session to a human operator.')
-      } catch (err) {
-        appendOperatorMessage(formatCommandError(err, 'Failed to escalate the current session.'), 'error')
-      }
       return true
     }
 
@@ -837,11 +806,6 @@ export function ChatWindow({
     await dispatchMessage(prompt)
   }
 
-  async function handleEscalate() {
-    if (!activeConversationId || isStreaming || activeHandoffStatus) return
-    await escalateToHuman(`Operator requested from ${assistantModeDefinition.label.toLowerCase()} mode.`)
-  }
-
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const val = e.target.value
     setInput(val)
@@ -887,9 +851,7 @@ export function ChatWindow({
   )
   const assistantStatusText = isStreaming
     ? 'OpenAgents is working...'
-    : activeHandoffStatus
-      ? `Waiting on a human operator (${activeHandoffStatus}).`
-      : runtimeBusy
+    : runtimeBusy
         ? 'Updating runtime...'
         : 'OpenAgents ready'
   const sessionLabel = activeSession?.label?.trim() || 'main'
@@ -976,11 +938,6 @@ export function ChatWindow({
           {pendingApprovals.length > 0 && (
             <span className="rounded-full border border-[#f2d18b] bg-[#fff8e8] px-3 py-1 font-semibold text-[#b54708]">
               {pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} waiting
-            </span>
-          )}
-          {activeHandoffStatus && (
-            <span className="rounded-full border border-[#f3c8c5] bg-[#fff3f2] px-3 py-1 font-semibold text-[#d92d20]">
-              human handoff {activeHandoffStatus}
             </span>
           )}
           {learnedSkill && (
@@ -1250,9 +1207,7 @@ export function ChatWindow({
             rows={1}
             placeholder={
               gatewayConnected
-                ? activeHandoffStatus
-                  ? 'This session is in human handoff mode.'
-                  : 'Message OpenAgents (Enter to send)'
+                ? 'Message OpenAgents (Enter to send)'
                 : 'Runtime offline. /help still works locally.'
             }
             className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-base text-[#101828] outline-none placeholder:text-[#667085] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:text-white"
@@ -1292,17 +1247,8 @@ export function ChatWindow({
               {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
               <button
                 type="button"
-                onClick={() => void handleEscalate()}
-                disabled={!activeConversationId || Boolean(activeHandoffStatus) || isStreaming}
-                className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400"
-              >
-                <AlertTriangle size={11} />
-                <span className="hidden sm:inline">Need human</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => void handleSend()}
-                disabled={((!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)) || (Boolean(activeHandoffStatus) && !inputIsCommand)}
+                disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
                 className="oa-accent-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
                 aria-label="Send message"
               >
