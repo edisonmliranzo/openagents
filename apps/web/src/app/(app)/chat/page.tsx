@@ -157,12 +157,12 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 gap-3 overflow-hidden xl:grid-cols-[220px_minmax(0,1fr)] min-[1760px]:grid-cols-[220px_minmax(0,1fr)_272px]">
-        <aside className="hidden min-h-0 overflow-hidden rounded-[22px] border border-[#e6e8ef] bg-white shadow-[0_12px_34px_rgba(15,23,42,0.05)] xl:block">
+      <div className="grid h-full min-h-0 flex-1 gap-3 overflow-hidden xl:grid-cols-[220px_minmax(0,1fr)] min-[1760px]:grid-cols-[220px_minmax(0,1fr)_272px]">
+        <aside className="hidden h-full min-h-0 max-h-full overflow-hidden rounded-[22px] border border-[#e6e8ef] bg-white shadow-[0_12px_34px_rgba(15,23,42,0.05)] xl:block">
           <ConversationList />
         </aside>
 
-        <div className="min-h-0 overflow-hidden">
+        <div className="h-full min-h-0 overflow-hidden">
           <ChatWindow
             assistantMode={assistantMode}
             onAssistantModeChange={setAssistantMode}
@@ -174,7 +174,7 @@ export default function ChatPage() {
           />
         </div>
 
-        <aside className="hidden min-h-0 overflow-hidden rounded-[22px] border border-[#e6e8ef] bg-white shadow-[0_12px_34px_rgba(15,23,42,0.05)] min-[1760px]:block">
+        <aside className="hidden h-full min-h-0 max-h-full overflow-hidden rounded-[22px] border border-[#e6e8ef] bg-white shadow-[0_12px_34px_rgba(15,23,42,0.05)] min-[1760px]:block">
           <LiveToolPanel assistantMode={assistantMode} />
         </aside>
       </div>
