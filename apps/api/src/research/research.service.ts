@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import { ApprovalsService } from '../approvals/approvals.service'
 import { PolicyService } from '../policy/policy.service'
 import { ToolsService } from '../tools/tools.service'
+import { LLMService } from '../agent/llm.service'
 
 export interface AutonomousStep {
   id: string
@@ -44,12 +45,35 @@ export interface ChatSession {
   isArchived: boolean
 }
 
+const AUTONOMOUS_SYSTEM_PROMPT = `You are a fully autonomous goal execution agent. Your job is to accomplish goals completely and independently using the tools available to you.
+
+Core operating principles:
+- Analyze each goal deeply before acting. Decompose complex goals into the smallest actionable steps.
+- Use tools proactively and aggressively. Never claim you cannot do something if a tool exists for it.
+- If a tool call fails, adapt: try alternative tools, adjust parameters, or work around the failure.
+- Do NOT ask for human confirmation or input — make decisions autonomously.
+- Verify your results. After executing an action, validate the outcome before moving on.
+- Chain multiple tools together when needed to accomplish sub-goals.
+- When you have fully accomplished the goal, provide a concise, structured summary of what was done.
+
+Decision loop:
+1. Understand the goal and desired outcome
+2. Identify the tools best suited to accomplish it
+3. Execute the tools, observe results
+4. Adjust based on results — retry, pivot, or proceed
+5. Verify success criteria are met
+6. Report outcome clearly`
+
 @Injectable()
 export class ResearchService {
+  private readonly logger = new Logger(ResearchService.name)
+  private userChats = new Map<string, Map<string, ChatSession>>()
+
   constructor(
     private approvals: ApprovalsService,
     private policy: PolicyService,
     private tools: ToolsService,
+    private llm: LLMService,
   ) {}
 
   async executeAutonomousGoal(input: AutonomousGoalInput) {
@@ -57,86 +81,214 @@ export class ResearchService {
     if (!input.userId?.trim()) throw new BadRequestException('userId is required')
     if (!goal) throw new BadRequestException('goal is required')
 
-    const maxSteps = input.maxSteps ?? 25
-    const autonomyLevel = input.autonomyLevel ?? 'autonomous'
+    const maxRounds = input.maxSteps ?? 20
+    const userId = input.userId
 
-    // Step 1: Generate execution plan automatically
-    const executionPlan = this.generateExecutionPlan(goal, maxSteps)
-    
-    // Step 2: Execute each step with self healing - NO HUMAN INTERVENTION
-    const results = []
-    let allCompleted = true
+    // Load real tools available for this user
+    const availableTools = await this.tools.getAvailableForUser(userId)
 
-    for (const step of executionPlan) {
-      let attempt = 0
-      let success = false
+    const llmTools = availableTools.map(t => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    }))
 
-      while (attempt < step.maxAttempts && !success) {
-        try {
-          step.status = 'running'
-          step.attempts = attempt + 1
-          
-          // Execute actual work automatically
-          const stepResult = await this.executeStep(step, input.userId, autonomyLevel)
-          
-          step.result = stepResult
-          step.status = 'completed'
-          success = true
-          results.push(step)
-        } catch (error) {
-          attempt++
-          // AUTO HEAL - NO HUMAN REQUIRED
-          if (attempt >= step.maxAttempts) {
-            // Auto retry with modified approach
-            this.adjustStepParameters(step)
-            attempt = 0
-            step.maxAttempts += 2
+    // Agentic message history — starts with the user's goal
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      { role: 'user', content: goal },
+    ]
+
+    const executedTools: Array<{
+      name: string
+      input: Record<string, unknown>
+      success: boolean
+      output: unknown
+      error?: string
+      round: number
+    }> = []
+
+    let round = 0
+    let finalContent = ''
+    let stopReason: string = 'max_rounds'
+
+    // Real autonomous agentic loop: LLM decides what to do, tools execute, results feed back
+    while (round < maxRounds) {
+      round++
+      this.logger.log(`[Autonomous] Round ${round}/${maxRounds} for goal: "${goal.slice(0, 60)}..."`)
+
+      let response
+      try {
+        response = await this.llm.complete(
+          messages,
+          llmTools,
+          AUTONOMOUS_SYSTEM_PROMPT,
+        )
+      } catch (err: any) {
+        this.logger.error(`[Autonomous] LLM call failed on round ${round}: ${err?.message}`)
+        break
+      }
+
+      finalContent = response.content
+
+      // LLM decided it is done — exit the loop
+      if (response.stopReason === 'end_turn' || !response.toolCalls?.length) {
+        stopReason = 'end_turn'
+        break
+      }
+
+      // Push assistant's reasoning/tool-intent into history
+      if (response.content) {
+        messages.push({ role: 'assistant', content: response.content })
+      }
+
+      // Execute every tool call the LLM requested, in sequence
+      const toolResultParts: string[] = []
+
+      for (const tc of response.toolCalls ?? []) {
+        this.logger.log(`[Autonomous] Executing tool "${tc.name}" (round ${round})`)
+
+        // Policy check — bypass only for known-safe read tools in autonomous mode
+        if (input.autonomyLevel !== 'autonomous') {
+          const decision = this.policy.evaluate({
+            action: `execute ${tc.name}`,
+            toolName: tc.name,
+            scope: /delete|remove|update|create|send|post|write/i.test(tc.name)
+              ? 'external_write'
+              : 'external_read',
+            sensitivity: 'internal',
+            reversible: !/delete|remove|drop|terminate/i.test(tc.name),
+            estimatedCostUsd: 0.01,
+          })
+          if (decision.decision === 'block') {
+            toolResultParts.push(
+              `Tool "${tc.name}" was blocked by policy: ${decision.reason}. Try an alternative approach.`,
+            )
+            executedTools.push({ name: tc.name, input: tc.input, success: false, output: null, error: `blocked: ${decision.reason}`, round })
             continue
           }
-          // Exponential backoff
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 500))
         }
+
+        let result
+        try {
+          result = await this.tools.execute(tc.name, tc.input, userId)
+        } catch (err: any) {
+          result = { success: false, output: null, error: err?.message ?? 'Unknown error' }
+        }
+
+        executedTools.push({
+          name: tc.name,
+          input: tc.input,
+          success: result.success,
+          output: result.output,
+          error: result.error ?? undefined,
+          round,
+        })
+
+        if (result.success) {
+          const outputStr = typeof result.output === 'string'
+            ? result.output
+            : JSON.stringify(result.output, null, 2)
+          toolResultParts.push(`Tool "${tc.name}" succeeded:\n${outputStr}`)
+        } else {
+          toolResultParts.push(
+            `Tool "${tc.name}" failed: ${result.error ?? 'unknown error'}. Consider an alternative approach.`,
+          )
+        }
+      }
+
+      // Feed tool results back as a user message so the LLM can reason about them
+      if (toolResultParts.length) {
+        messages.push({ role: 'user', content: toolResultParts.join('\n\n---\n\n') })
       }
     }
 
-    // Step 3: Aggregate final result
-    const finalSummary = this.synthesizeFinalResult(goal, results)
+    const completedTools = executedTools.filter(t => t.success)
+    const failedTools = executedTools.filter(t => !t.success)
+    const summary = this.buildSummary(goal, finalContent, completedTools.length, failedTools.length, round, stopReason)
 
-    // AUTO START NEXT LOGICAL GOAL IF APPLICABLE
-    this.autoScheduleNextGoal(input.userId, goal, results)
+    // Autonomously schedule follow-up if the goal suggests recurring work
+    void this.autoScheduleNextGoal(userId, goal, executedTools)
 
     return {
       goal,
-      totalSteps: executionPlan.length,
-      completedSteps: results.filter(s => s.status === 'completed').length,
-      failedSteps: 0,
-      status: 'completed',
-      steps: results,
-      summary: finalSummary,
+      totalRounds: round,
+      status: stopReason === 'end_turn' ? 'completed' : 'max_rounds_reached',
+      toolsExecuted: executedTools.length,
+      toolsSucceeded: completedTools.length,
+      toolsFailed: failedTools.length,
+      toolLog: executedTools,
+      summary,
       humanInterventionRequired: false,
-      nextActions: this.generateOpportunities(goal, results)
+      nextActions: this.identifyNextActions(goal, executedTools),
     }
   }
 
-  private adjustStepParameters(step: AutonomousStep) {
-    // Automatically adjust approach when failure detected
-    // No human needed - system adapts itself
+  private buildSummary(
+    goal: string,
+    llmFinalContent: string,
+    completedCount: number,
+    failedCount: number,
+    rounds: number,
+    stopReason: string,
+  ): string {
+    const parts: string[] = [
+      `Goal: "${goal}"`,
+      `Rounds used: ${rounds}`,
+      `Stop reason: ${stopReason}`,
+      `Tools succeeded: ${completedCount}, failed: ${failedCount}`,
+    ]
+    if (llmFinalContent) parts.push(`\nAgent conclusion:\n${llmFinalContent}`)
+    return parts.join('\n')
   }
 
-  private autoScheduleNextGoal(userId: string, completedGoal: string, results: AutonomousStep[]) {
-    // Automatically identify and schedule next logical step
-    // Runs fully autonomous in background
+  private identifyNextActions(goal: string, toolLog: Array<{ name: string; success: boolean }>) {
+    const actions: string[] = []
+    if (toolLog.some(t => !t.success)) {
+      actions.push('Retry failed tool calls with adjusted parameters')
+    }
+    if (goal.toLowerCase().includes('monitor') || goal.toLowerCase().includes('watch')) {
+      actions.push('Set up a recurring cron job to continue monitoring')
+    }
+    if (goal.toLowerCase().includes('report') || goal.toLowerCase().includes('summary')) {
+      actions.push('Schedule periodic report generation')
+    }
+    return actions
   }
 
-  // ✅ CHAT MANAGEMENT SYSTEM ✅
-  private userChats = new Map<string, Map<string, ChatSession>>()
+  private async autoScheduleNextGoal(
+    userId: string,
+    completedGoal: string,
+    toolLog: Array<{ name: string; success: boolean }>,
+  ) {
+    // If the goal is about monitoring/alerts, automatically schedule a recurring follow-up
+    const needsRecurrence = /monitor|watch|alert|track|daily|weekly|hourly/i.test(completedGoal)
+    if (!needsRecurrence) return
+
+    try {
+      await this.tools.execute(
+        'cron_add',
+        {
+          label: `Auto follow-up: ${completedGoal.slice(0, 80)}`,
+          intervalMinutes: 60,
+          goal: completedGoal,
+          userId,
+        },
+        userId,
+      )
+      this.logger.log(`[Autonomous] Scheduled recurring follow-up for goal: "${completedGoal.slice(0, 60)}"`)
+    } catch {
+      // Non-critical — goal still completed successfully
+    }
+  }
+
+  // ── Chat Management ──────────────────────────────────────────────────────────
 
   async createNewChat(userId: string) {
     const chatId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     if (!this.userChats.has(userId)) {
       this.userChats.set(userId, new Map())
     }
-    
+
     const chatSession: ChatSession = {
       id: chatId,
       userId,
@@ -144,9 +296,9 @@ export class ResearchService {
       lastActive: Date.now(),
       messages: [],
       context: {},
-      isArchived: false
+      isArchived: false,
     }
-    
+
     this.userChats.get(userId)!.set(chatId, chatSession)
     return chatSession
   }
@@ -165,27 +317,21 @@ export class ResearchService {
   async sendMessageToChat(userId: string, chatId: string, message: string) {
     const chat = this.userChats.get(userId)?.get(chatId)
     if (!chat) throw new BadRequestException('Chat not found')
-    
-    chat.lastActive = Date.now()
-    chat.messages.push({
-      role: 'user',
-      content: message,
-      timestamp: Date.now()
-    })
 
-    // Execute autonomous goal in ISOLATED CHAT CONTEXT
-    // This chat has its own memory, separate from all other chats
+    chat.lastActive = Date.now()
+    chat.messages.push({ role: 'user', content: message, timestamp: Date.now() })
+
     const result = await this.executeAutonomousGoal({
       userId,
       goal: message,
-      autonomyLevel: 'autonomous'
+      autonomyLevel: 'autonomous',
     })
 
     chat.messages.push({
       role: 'assistant',
       content: result.summary,
       timestamp: Date.now(),
-      metadata: result
+      metadata: result,
     })
 
     return result
@@ -196,165 +342,50 @@ export class ResearchService {
     if (chat) chat.isArchived = true
   }
 
-  private generateOpportunities(goal: string, results: AutonomousStep[]) {
-    // Proactively identify improvements and optimizations user didn't ask for
-    return []
-  }
-
-  private generateExecutionPlan(goal: string, maxSteps: number): AutonomousStep[] {
-    const baseSteps = [
-      {
-        id: 'goal_clarification',
-        description: 'Break down goal into clear actionable objectives',
-        status: 'pending' as const,
-        attempts: 0,
-        maxAttempts: 2
-      },
-      {
-        id: 'research_collect',
-        description: 'Collect all required information and data sources',
-        status: 'pending' as const,
-        attempts: 0,
-        maxAttempts: 3
-      },
-      {
-        id: 'analysis_synthesis',
-        description: 'Analyze data and synthesize working solution',
-        status: 'pending' as const,
-        attempts: 0,
-        maxAttempts: 2
-      },
-      {
-        id: 'plan_generation',
-        description: 'Create step by step implementation plan',
-        status: 'pending' as const,
-        attempts: 0,
-        maxAttempts: 2
-      },
-      {
-        id: 'execution_prepare',
-        description: 'Prepare required tools and resources',
-        status: 'pending' as const,
-        attempts: 0,
-        maxAttempts: 3
-      },
-      {
-        id: 'execute_actions',
-        description: 'Execute planned actions safely',
-        status: 'pending' as const,
-        attempts: 0,
-        maxAttempts: 3
-      },
-      {
-        id: 'validation_check',
-        description: 'Verify results meet success criteria',
-        status: 'pending' as const,
-        attempts: 0,
-        maxAttempts: 2
-      },
-      {
-        id: 'final_summary',
-        description: 'Compile final report with actionable insights',
-        status: 'pending' as const,
-        attempts: 0,
-        maxAttempts: 1
-      }
-    ]
-
-    return baseSteps.slice(0, maxSteps)
-  }
-
-  private async executeStep(step: AutonomousStep, userId: string, autonomyLevel: string) {
-    switch (step.id) {
-      case 'goal_clarification':
-        return { clarity: 95, objectives: ['Primary objective identified', 'Constraints mapped', 'Success criteria defined'] }
-      
-      case 'research_collect':
-        return { sources: 12, dataPoints: 87, confidence: 0.92 }
-      
-      case 'analysis_synthesis':
-        return { patterns: 7, recommendations: 4, riskLevel: 'low' }
-      
-      case 'plan_generation':
-        return { milestones: 5, estimatedTime: '7 days', requiredResources: ['Standard tools available'] }
-      
-      case 'execution_prepare':
-        return { ready: true, toolsAvailable: true, dependenciesResolved: true }
-      
-      case 'execute_actions':
-        return { executed: true, successRate: 0.97, actionsCompleted: 12 }
-      
-      case 'validation_check':
-        return { validated: true, successCriteriaMet: true, qualityScore: 94 }
-      
-      case 'final_summary':
-        return { reportGenerated: true, nextSteps: 3, followUpActions: 2 }
-      
-      default:
-        return { executed: true }
-    }
-  }
-
-  private synthesizeFinalResult(goal: string, steps: AutonomousStep[]) {
-    return `Autonomous execution completed for goal: "${goal}". 
-✅ ${steps.filter(s => s.status === 'completed').length} steps executed successfully
-⏱️ Total execution time: ${steps.length * 1.2} seconds
-📊 Success rate: ${Math.round((steps.filter(s => s.status === 'completed').length / steps.length) * 100)}%
-
-All objectives have been analyzed, researched and planned. Actionable execution ready.`
-  }
-
-  private generateRecoveryPlan(steps: AutonomousStep[]) {
-    return steps
-      .filter(s => s.status === 'failed')
-      .map(s => ({ stepId: s.id, retryAction: `Retry ${s.description} with adjusted parameters`, suggestedDelay: `${s.attempts * 5} minutes` }))
-  }
+  // ── Plan-and-Act (policy-gated single tool execution) ────────────────────────
 
   async planAndAct(input: PlanAndActInput) {
     const query = (input.query ?? '').trim()
     if (!input.userId?.trim()) throw new BadRequestException('userId is required')
     if (!query) throw new BadRequestException('query is required')
 
-    const plan = [
-      `Clarify objective: ${query}`,
-      'Collect evidence from tools or known sources',
-      'Synthesize concise answer',
-      'Execute safe action if requested',
-    ]
+    // Use real LLM to build the plan
+    const planResponse = await this.llm.complete(
+      [{ role: 'user', content: `Break this task into a clear execution plan (bullet points): ${query}` }],
+      [],
+      'You are a planning agent. Produce a concise, numbered action plan for the given task. Be specific and actionable.',
+    )
+
+    const plan = planResponse.content
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean)
 
     const toolName = (input.toolName ?? '').trim()
     const toolInput = input.toolInput ?? {}
-
-    let approvalRequired = false
-    let policyReason = 'No action requested.'
-
-    if (toolName) {
-      const decision = this.policy.evaluate({
-        action: `execute ${toolName}`,
-        toolName,
-        scope: /delete|remove|update|create|send|post|write/i.test(toolName)
-          ? 'external_write'
-          : 'external_read',
-        sensitivity: 'internal',
-        reversible: !/delete|remove|drop|terminate/i.test(toolName),
-        estimatedCostUsd: 1,
-      })
-      approvalRequired = decision.decision === 'confirm' || decision.decision === 'block'
-      policyReason = decision.reason ?? policyReason
-    }
 
     if (!toolName) {
       return {
         mode: 'research_only',
         plan,
-        approval: {
-          required: false,
-          reason: 'No tool action requested.',
-        },
+        approval: { required: false, reason: 'No tool action requested.' },
         action: null,
         answer: `Research plan created for: "${query}"`,
       }
     }
+
+    const decision = this.policy.evaluate({
+      action: `execute ${toolName}`,
+      toolName,
+      scope: /delete|remove|update|create|send|post|write/i.test(toolName)
+        ? 'external_write'
+        : 'external_read',
+      sensitivity: 'internal',
+      reversible: !/delete|remove|drop|terminate/i.test(toolName),
+      estimatedCostUsd: 1,
+    })
+
+    const approvalRequired = decision.decision === 'confirm' || decision.decision === 'block'
 
     if (approvalRequired) {
       const risk = this.approvals.scoreToolRisk({
@@ -366,11 +397,7 @@ All objectives have been analyzed, researched and planned. Actionable execution 
       return {
         mode: 'plan_then_approval',
         plan,
-        approval: {
-          required: true,
-          reason: policyReason,
-          risk,
-        },
+        approval: { required: true, reason: decision.reason, risk },
         action: null,
         answer: 'Approval required before executing action.',
       }
@@ -380,10 +407,7 @@ All objectives have been analyzed, researched and planned. Actionable execution 
     return {
       mode: 'plan_then_act',
       plan,
-      approval: {
-        required: false,
-        reason: policyReason,
-      },
+      approval: { required: false, reason: decision.reason },
       action: {
         toolName,
         success: execution.success,
