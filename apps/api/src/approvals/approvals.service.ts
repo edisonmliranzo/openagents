@@ -190,7 +190,13 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
 
   async create(dto: CreateApprovalDto) {
     const created = await this.prisma.approval.create({
-      data: { ...dto, toolInput: JSON.stringify(dto.toolInput) },
+      data: {
+        conversationId: dto.conversationId,
+        messageId: dto.messageId,
+        userId: dto.userId,
+        toolName: dto.toolName,
+        toolInput: JSON.stringify(dto.toolInput),
+      },
     })
     const approval = this.toApprovalView(created, dto)
     await this.mission.publish({
