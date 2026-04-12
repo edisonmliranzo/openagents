@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common'
-import { UsersModule } from '../users/users.module'
-import { NanobotModule } from '../nanobot/nanobot.module'
 import { AgentVersionsController } from './agent-versions.controller'
 import { AgentVersionsService } from './agent-versions.service'
+import { PrismaModule } from '../prisma/prisma.module'
 
 @Module({
-  imports: [UsersModule, NanobotModule],
+  imports: [PrismaModule],
   controllers: [AgentVersionsController],
   providers: [AgentVersionsService],
   exports: [AgentVersionsService],
