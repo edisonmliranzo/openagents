@@ -108,6 +108,25 @@ export type NanobotSubagentRole = 'planner' | 'executor' | 'critic' | 'telemetry
 export type NanobotSubagentStatus = 'queued' | 'running' | 'done' | 'error'
 export type NanobotSpecialistRole = 'planner' | 'researcher' | 'builder' | 'operator' | 'reviewer'
 export type NanobotDelegationStatus = 'delegated' | 'accepted' | 'completed' | 'failed'
+export type NanobotDomainRole = 'frontend' | 'backend' | 'api' | 'database' | 'devops' | 'testing' | 'security'
+
+export interface NanobotDomainAgent {
+  domain: NanobotDomainRole
+  label: string
+  objective: string
+  output: string | null
+  status: 'running' | 'done' | 'error'
+  durationMs: number | null
+}
+
+export interface NanobotDomainCrewResult {
+  task: string
+  domains: NanobotDomainRole[]
+  agents: NanobotDomainAgent[]
+  synthesis: string
+  parallelized: boolean
+  durationMs: number
+}
 
 export interface NanobotPersonaProfile {
   id: string

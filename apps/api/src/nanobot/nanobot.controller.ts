@@ -16,6 +16,8 @@ import {
 } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { NanobotService } from './nanobot.service'
+import { NanobotDomainCrewService } from './agent/nanobot-domain-crew.service'
+import type { NanobotDomainRole } from './types'
 
 class UpdateNanobotConfigDto {
   @IsOptional()
@@ -139,6 +141,29 @@ class ExecuteSpecialistRunDto {
   @IsOptional()
   @IsBoolean()
   force?: boolean
+}
+
+class DomainCrewDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4000)
+  task: string
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  domains?: string[]
+
+  @IsOptional()
+  @IsString()
+  conversationId?: string
+}
+
+class DetectDomainsDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4000)
+  task: string
 }
 
 class VoiceTranscribeDto {
@@ -268,7 +293,10 @@ class SkillChatDto {
 @UseGuards(JwtAuthGuard)
 @Controller('nanobot')
 export class NanobotController {
-  constructor(private nanobot: NanobotService) {}
+  constructor(
+    private nanobot: NanobotService,
+    private domainCrew: NanobotDomainCrewService,
+  ) {}
 
   @Get('health')
   health(@Req() req: any) {
@@ -408,6 +436,25 @@ export class NanobotController {
   @Get('subagents/runs/:runId')
   specialistRunStatus(@Req() req: any, @Param('runId') runId: string) {
     return this.nanobot.specialistRunStatus(req.user.id, runId)
+  }
+
+  // ── Domain crew: parallel domain-specific agents ────────────────────────
+  @Post('domain-crew')
+  runDomainCrew(@Req() req: any, @Body() dto: DomainCrewDto) {
+    const domains = (dto.domains ?? []).filter((d): d is NanobotDomainRole =>
+      ['frontend', 'backend', 'api', 'database', 'devops', 'testing', 'security'].includes(d),
+    )
+    return this.domainCrew.run({
+      userId: req.user.id,
+      task: dto.task,
+      domains: domains.length > 0 ? domains : undefined,
+      conversationId: dto.conversationId,
+    })
+  }
+
+  @Post('domain-crew/detect')
+  detectDomains(@Body() dto: DetectDomainsDto) {
+    return { domains: this.domainCrew.detectDomains(dto.task) }
   }
 
   @Post('voice/transcribe')
