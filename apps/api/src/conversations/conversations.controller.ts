@@ -9,7 +9,6 @@ import { ConversationsService } from './conversations.service'
 import { AgentService } from '../agent/agent.service'
 import { NanobotLoopService } from '../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../nanobot/config/nanobot-config.service'
-import { HandoffsService } from '../handoffs/handoffs.service'
 
 const SKILL_COMMAND_PATTERN = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
 const ADAPTIVE_SKILL_INTENT_PATTERN =
@@ -33,7 +32,6 @@ export class ConversationsController {
     private agent: AgentService,
     private nanobotLoop: NanobotLoopService,
     private nanobotConfig: NanobotConfigService,
-    private handoffs: HandoffsService,
   ) {}
 
   @Get()
@@ -78,13 +76,6 @@ export class ConversationsController {
     }
 
     try {
-      const activeHandoff = await this.handoffs.getActiveForConversation(req.user.id, conversationId)
-      if (activeHandoff) {
-        throw new Error(
-          `Conversation is in human handoff mode (${activeHandoff.status}). Return handoff to agent before continuing.`,
-        )
-      }
-
       const message = dto.content ?? ''
       const isSkillCommand = SKILL_COMMAND_PATTERN.test(message)
       const isAdaptiveSkillIntent =

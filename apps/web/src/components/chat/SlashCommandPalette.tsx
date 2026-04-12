@@ -13,7 +13,6 @@ import {
   Search,
   ShieldCheck,
   Tag,
-  UserRound,
   Workflow,
   Zap,
 } from 'lucide-react'
@@ -44,7 +43,6 @@ const CMD = {
   REASONING: 'reasoning',
   LABEL: 'label',
   APPROVALS: 'approvals',
-  HUMAN: 'human',
   HELP: 'help',
 } as const
 
@@ -67,7 +65,6 @@ export const OPERATOR_COMMANDS: SlashCommand[] = [
   { id: CMD.REASONING,  label: '/reasoning',  description: 'Set reasoning visibility for the current session',     icon: <Workflow size={14} />,   template: '/reasoning ' },
   { id: CMD.LABEL,      label: '/label',      description: 'Rename the current session label',                     icon: <Tag size={14} />,        template: '/label ' },
   { id: CMD.APPROVALS,  label: '/approvals',  description: 'Summarize pending approvals',                          icon: <ShieldCheck size={14} />, template: '/approvals' },
-  { id: CMD.HUMAN,      label: '/human',      description: 'Escalate the current session to a human',             icon: <UserRound size={14} />,  template: '/human ' },
   { id: CMD.HELP,       label: '/help',       description: 'Show OpenAgents command help',                         icon: <BadgeInfo size={14} />,  template: '/help' },
 ]
 
@@ -104,14 +101,13 @@ export function buildOperatorCommandHelpText() {
   return [
     'OpenAgents commands',
     '/new: start a fresh session',
-    '/status: show runtime, session, approvals, and handoff state',
+    '/status: show runtime, session, and approval state',
     '/model [provider] <model>: update the default provider/model',
     '/think <inherit|off|minimal|low|medium|high|xhigh|on>: set per-session thinking',
     '/verbose <inherit|off|on|full>: set per-session verbosity',
     '/reasoning <inherit|off|on|stream>: set per-session reasoning visibility',
     '/label <name|clear>: update the current session label',
     '/approvals: summarize pending approvals for this session',
-    '/human [reason]: escalate the active session to a human operator',
     '/help: show this command list',
   ].join('\n')
 }

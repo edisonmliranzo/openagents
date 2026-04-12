@@ -283,10 +283,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ lastError: 'No active conversation selected.' })
       return
     }
-    if (activeHandoff && (activeHandoff.status === 'open' || activeHandoff.status === 'claimed')) {
-      set({ lastError: `Conversation is in human handoff mode (${activeHandoff.status}).` })
-      return
-    }
 
     const userVisibleContent = options?.displayContent?.trim() || content.trim()
 
