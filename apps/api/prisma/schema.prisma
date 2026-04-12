@@ -66,6 +66,56 @@ model User {
   workspaceMemoryEntries WorkspaceMemoryEntry[]
   packs            Pack[]
   packInstalls     PackInstall[]
+  anomalies        Anomaly[]
+  anomalyAlerts    AnomalyAlert[]
+  anomalyConfigs   AnomalyConfig[]
+  agentVersions    AgentVersion[]
+}
+
+model Anomaly {
+  id              String   @id @default(cuid())
+  userId          String
+  type            String
+  severity        String
+  status          String   @default("detected")
+  description     String
+  metrics         Json
+  recommendations Json
+  detectedAt      DateTime @default(now())
+  resolvedAt      DateTime?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([detectedAt])
+}
+
+model AnomalyAlert {
+  id         String  @id @default(cuid())
+  userId     String
+  anomalyId  String?
+  channel    String
+  target     String
+  enabled    Boolean @default(true)
+  threshold  Float   @default(1.0)
+  createdAt  DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+model AnomalyConfig {
+  userId             String   @id
+  enabled            Boolean  @default(true)
+  sensitivity        String   @default("medium")
+  alertChannels      Json     @default("[]")
+  ignoredPatterns    Json     @default("[]")
+  baselineWindowDays Int      @default(7)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model RefreshToken {
@@ -1120,6 +1170,23 @@ model Pack {
   @@unique([userId, slug])
   @@index([visibility, updatedAt])
   @@index([workspaceId, updatedAt])
+}
+
+model AgentVersion {
+  id             String   @id @default(cuid())
+  userId         String
+  agentId        String
+  version        Int
+  note           String?
+  settings       Json
+  runtimeConfig  Json
+  skills         Json
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, agentId, version])
+  @@unique([userId, agentId, version])
 }
 
 model PackInstall {

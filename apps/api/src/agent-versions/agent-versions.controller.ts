@@ -1,56 +1,64 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
-import type { CreateAgentVersionInput } from '@openagents/shared'
-import { JwtAuthGuard } from '../auth/guards/jwt.guard'
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common'
 import { AgentVersionsService } from './agent-versions.service'
+import {
+  AgentVersionSnapshot,
+  CreateAgentVersionInput,
+  AgentVersionDiffResult,
+  AgentVersionRollbackResult,
+  AgentVersionSettingsSnapshot
+} from '@openagents/shared'
 
-class CreateAgentVersionDto implements CreateAgentVersionInput {
-  @IsOptional()
-  @IsString()
-  @MaxLength(280)
-  note?: string
-}
-
-class DiffAgentVersionDto {
-  @IsString()
-  @MinLength(4)
-  from!: string
-
-  @IsString()
-  @MinLength(4)
-  to!: string
-}
-
-@ApiTags('agent-versions')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('agent-versions')
 export class AgentVersionsController {
-  constructor(private versions: AgentVersionsService) {}
+  constructor(private readonly agentVersionsService: AgentVersionsService) {}
 
-  @Get()
-  list(@Req() req: any) {
-    return this.versions.list(req.user.id)
+  @Post(':agentId')
+  async createVersion(
+    @Param('agentId') agentId: string,
+    @Body() body: { userId: string; input: CreateAgentVersionInput; snapshot: AgentVersionSettingsSnapshot },
+  ): Promise<AgentVersionSnapshot> {
+    return this.agentVersionsService.createVersion(body.userId, agentId, body.input, body.snapshot)
   }
 
-  @Get('diff')
-  diff(@Req() req: any, @Query() query: DiffAgentVersionDto) {
-    return this.versions.diff(req.user.id, query.from, query.to)
+  @Get(':agentId')
+  async getVersions(
+    @Param('agentId') agentId: string,
+    @Query('userId') userId: string,
+    @Query('limit') limit?: number,
+  ): Promise<AgentVersionSnapshot[]> {
+    return this.agentVersionsService.getVersions(userId, agentId, limit)
   }
 
-  @Get(':id')
-  get(@Req() req: any, @Param('id') id: string) {
-    return this.versions.get(req.user.id, id)
+  @Get(':agentId/latest')
+  async getLatestVersion(
+    @Param('agentId') agentId: string,
+    @Query('userId') userId: string,
+  ): Promise<AgentVersionSnapshot | null> {
+    return this.agentVersionsService.getLatestVersion(userId, agentId)
   }
 
-  @Post()
-  create(@Req() req: any, @Body() dto: CreateAgentVersionDto) {
-    return this.versions.create(req.user.id, dto)
+  @Get('/id/:id')
+  async getVersion(
+    @Param('id') id: string,
+    @Query('userId') userId: string,
+  ): Promise<AgentVersionSnapshot> {
+    return this.agentVersionsService.getVersion(userId, id)
   }
 
-  @Post(':id/rollback')
-  rollback(@Req() req: any, @Param('id') id: string) {
-    return this.versions.rollback(req.user.id, id)
+  @Get('compare/:fromId/:toId')
+  async compareVersions(
+    @Param('fromId') fromId: string,
+    @Param('toId') toId: string,
+  ): Promise<AgentVersionDiffResult> {
+    return this.agentVersionsService.compareVersions(fromId, toId)
+  }
+
+  @Post(':agentId/rollback/:versionId')
+  async rollbackToVersion(
+    @Param('agentId') agentId: string,
+    @Param('versionId') versionId: string,
+    @Body() body: { userId: string },
+  ): Promise<AgentVersionRollbackResult> {
+    return this.agentVersionsService.rollbackToVersion(body.userId, agentId, versionId)
   }
 }
