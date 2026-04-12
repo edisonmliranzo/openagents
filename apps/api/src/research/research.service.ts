@@ -27,6 +27,23 @@ export interface PlanAndActInput {
   toolInput?: Record<string, unknown>
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp: number
+  metadata?: unknown
+}
+
+export interface ChatSession {
+  id: string
+  userId: string
+  createdAt: number
+  lastActive: number
+  messages: ChatMessage[]
+  context: Record<string, unknown>
+  isArchived: boolean
+}
+
 @Injectable()
 export class ResearchService {
   constructor(
@@ -109,6 +126,74 @@ export class ResearchService {
   private autoScheduleNextGoal(userId: string, completedGoal: string, results: AutonomousStep[]) {
     // Automatically identify and schedule next logical step
     // Runs fully autonomous in background
+  }
+
+  // ✅ CHAT MANAGEMENT SYSTEM ✅
+  private userChats = new Map<string, Map<string, ChatSession>>()
+
+  async createNewChat(userId: string) {
+    const chatId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    if (!this.userChats.has(userId)) {
+      this.userChats.set(userId, new Map())
+    }
+    
+    const chatSession: ChatSession = {
+      id: chatId,
+      userId,
+      createdAt: Date.now(),
+      lastActive: Date.now(),
+      messages: [],
+      context: {},
+      isArchived: false
+    }
+    
+    this.userChats.get(userId)!.set(chatId, chatSession)
+    return chatSession
+  }
+
+  async getUserChats(userId: string) {
+    if (!this.userChats.has(userId)) return []
+    return Array.from(this.userChats.get(userId)!.values())
+      .filter(c => !c.isArchived)
+      .sort((a, b) => b.lastActive - a.lastActive)
+  }
+
+  async getChatHistory(userId: string, chatId: string) {
+    return this.userChats.get(userId)?.get(chatId) ?? null
+  }
+
+  async sendMessageToChat(userId: string, chatId: string, message: string) {
+    const chat = this.userChats.get(userId)?.get(chatId)
+    if (!chat) throw new BadRequestException('Chat not found')
+    
+    chat.lastActive = Date.now()
+    chat.messages.push({
+      role: 'user',
+      content: message,
+      timestamp: Date.now()
+    })
+
+    // Execute autonomous goal in ISOLATED CHAT CONTEXT
+    // This chat has its own memory, separate from all other chats
+    const result = await this.executeAutonomousGoal({
+      userId,
+      goal: message,
+      autonomyLevel: 'autonomous'
+    })
+
+    chat.messages.push({
+      role: 'assistant',
+      content: result.summary,
+      timestamp: Date.now(),
+      metadata: result
+    })
+
+    return result
+  }
+
+  async archiveChat(userId: string, chatId: string) {
+    const chat = this.userChats.get(userId)?.get(chatId)
+    if (chat) chat.isArchived = true
   }
 
   private generateOpportunities(goal: string, results: AutonomousStep[]) {
