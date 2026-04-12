@@ -35,6 +35,7 @@ import {
   ChevronUp,
   Command,
   Gauge,
+  LayoutList,
   Mic,
   MessageSquarePlus,
   Paperclip,
@@ -49,6 +50,7 @@ interface ChatWindowProps {
   gatewayConnected: boolean
   onNewSession: () => Promise<void> | void
   onRuntimeLabelChange: (label: string) => void
+  onOpenMobileSessions?: () => void
 }
 
 type RuntimeProvider = keyof typeof LLM_MODEL_OPTIONS
@@ -369,6 +371,7 @@ export function ChatWindow({
   gatewayConnected,
   onNewSession,
   onRuntimeLabelChange,
+  onOpenMobileSessions,
 }: ChatWindowProps) {
   const {
     messages,
@@ -896,25 +899,37 @@ export function ChatWindow({
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[#e6e8ef] bg-[#f7f8fb] shadow-[0_12px_34px_rgba(15,23,42,0.05)]">
       <div className="border-b border-[#e8ebf2] bg-[#fbfbfd] px-4 py-3 sm:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-            <div className="min-w-[96px] rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-sm font-medium text-[#101828] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-              {sessionLabel}
+        <div className="flex items-center justify-between gap-2">
+          {/* Session + runtime info — scrollable on mobile */}
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="shrink-0 rounded-[14px] border border-[#e4e7ec] bg-white px-3 py-2 text-sm font-medium text-[#101828] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <span className="line-clamp-1 max-w-[140px]">{sessionLabel}</span>
             </div>
-            <div className="max-w-[320px] rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-sm text-[#667085] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-              <span className="truncate">{runtimeSummary}</span>
+            <div className="hidden shrink-0 rounded-[14px] border border-[#e4e7ec] bg-white px-3 py-2 text-sm text-[#667085] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:block">
+              <span className="line-clamp-1 max-w-[200px]">{runtimeSummary}</span>
             </div>
-            <div className="max-w-[220px] rounded-[14px] border border-[#e4e7ec] bg-white px-4 py-2 text-sm text-[#667085] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-              <span className="truncate">{runtimeBadgeLabel}</span>
+            <div className="hidden shrink-0 rounded-[14px] border border-[#e4e7ec] bg-white px-3 py-2 text-sm text-[#667085] shadow-[0_1px_2px_rgba(16,24,40,0.04)] md:block">
+              <span>{runtimeBadgeLabel}</span>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Action buttons — non-wrapping */}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {onOpenMobileSessions && (
+              <button
+                type="button"
+                onClick={onOpenMobileSessions}
+                className={`${controlButtonClass()} xl:hidden`}
+                title="Sessions"
+              >
+                <LayoutList size={14} />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void syncRuntimeState()}
               disabled={runtimeLoading}
-              className={controlButtonClass()}
+              className={`${controlButtonClass()} hidden sm:inline-flex`}
               title="Refresh runtime"
             >
               <RefreshCw size={12} />
@@ -922,7 +937,7 @@ export function ChatWindow({
             <button
               type="button"
               onClick={() => setControlsExpanded((current) => !current)}
-              className={controlButtonClass()}
+              className={`${controlButtonClass()} hidden sm:inline-flex`}
               title={controlsExpanded ? 'Hide details' : 'Show details'}
             >
               {controlsExpanded ? <ChevronUp size={12} /> : <BrainCircuit size={12} />}
@@ -930,18 +945,10 @@ export function ChatWindow({
             <button
               type="button"
               onClick={() => void executeOperatorCommand('/approvals')}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] transition hover:bg-[#fff1ef]"
+              className="hidden h-10 w-10 items-center justify-center rounded-2xl border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] transition hover:bg-[#fff1ef] sm:inline-flex"
               title="Approvals"
             >
               <ShieldCheck size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={focusComposer}
-              className={controlButtonClass()}
-              title="Focus composer"
-            >
-              <Command size={12} />
             </button>
             <button
               type="button"
@@ -954,7 +961,7 @@ export function ChatWindow({
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden text-[11px]">
           <span className={`rounded-full border px-3 py-1 font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
             {runStatus ?? (isStreaming ? 'running' : 'ready')}
           </span>
@@ -1190,7 +1197,7 @@ export function ChatWindow({
         onAdd={handleAddPin}
       />
 
-      <div className="border-t border-[#e4e7ec] bg-[#fbfbfd] px-4 py-3 dark:border-[#2d3347] dark:bg-[#141824] sm:px-6">
+      <div className="border-t border-[#e4e7ec] bg-[#fbfbfd] px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-[#2d3347] dark:bg-[#141824] sm:px-6">
         {/* Slash command palette */}
         {slashQuery !== null && (
           <SlashCommandPalette
@@ -1248,7 +1255,7 @@ export function ChatWindow({
                   : 'Message OpenAgents (Enter to send)'
                 : 'Runtime offline. /help still works locally.'
             }
-            className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-sm text-[#101828] outline-none placeholder:text-[#667085] disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
+            className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-base text-[#101828] outline-none placeholder:text-[#667085] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:text-white"
           />
 
           {/* Bottom toolbar */}
@@ -1290,7 +1297,7 @@ export function ChatWindow({
                 className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400"
               >
                 <AlertTriangle size={11} />
-                Need human
+                <span className="hidden sm:inline">Need human</span>
               </button>
               <button
                 type="button"
