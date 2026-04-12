@@ -22,7 +22,7 @@ function shortId(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`
 }
 
-export function ConversationList() {
+export function ConversationList({ onSelect }: { onSelect?: () => void } = {}) {
   const { conversations, activeConversationId, selectConversation, createConversation } =
     useChatStore()
   const [query, setQuery] = useState('')
@@ -94,7 +94,7 @@ export function ConversationList() {
           return (
             <button
               key={c.id}
-              onClick={() => void selectConversation(c.id)}
+              onClick={() => { void selectConversation(c.id); onSelect?.() }}
               className={clsx(
                 'group flex w-full items-start gap-2 rounded-xl border px-2.5 py-2 text-left transition-all duration-100',
                 active

@@ -10,6 +10,7 @@ import {
 } from '@/components/chat/assistantModes'
 import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
+import { ConversationList } from '@/components/chat/ConversationList'
 import { storageGet, storageSet } from '@/lib/storage'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
@@ -102,12 +103,27 @@ export default function ChatPage() {
     [assistantMode],
   )
 
+  const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
   const gatewayConnected = gatewayStatus === 'connected'
   const hasPendingApprovals = pendingApprovals.length > 0
   const handleRuntimeLabelChange = useCallback((_label: string) => {}, [])
 
   return (
     <div className="mx-auto flex h-full min-h-0 w-full flex-col gap-3 overflow-hidden">
+      {/* Mobile sessions drawer */}
+      {mobileSessionsOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Close sessions"
+            onClick={() => setMobileSessionsOpen(false)}
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm xl:hidden"
+          />
+          <div className="fixed inset-y-0 left-0 z-50 flex w-[min(85vw,300px)] flex-col overflow-hidden border-r border-[#e4e7ec] bg-white shadow-[4px_0_24px_rgba(15,23,42,0.12)] xl:hidden dark:border-[#2d3347] dark:bg-[#141824]">
+            <ConversationList onSelect={() => setMobileSessionsOpen(false)} />
+          </div>
+        </>
+      )}
       {(lastError || !gatewayConnected || hasPendingApprovals) && (
         <div className="flex flex-wrap items-center gap-2 px-1">
           {!gatewayConnected && (
@@ -161,9 +177,11 @@ export default function ChatPage() {
           onAssistantModeChange={setAssistantMode}
           gatewayConnected={gatewayConnected}
           onNewSession={async () => {
+            setMobileSessionsOpen(false)
             await createConversation()
           }}
           onRuntimeLabelChange={handleRuntimeLabelChange}
+          onOpenMobileSessions={() => setMobileSessionsOpen(true)}
         />
       </div>
     </div>
