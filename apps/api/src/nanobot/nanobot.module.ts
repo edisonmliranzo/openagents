@@ -25,6 +25,7 @@ import { NanobotRoleEngineService } from './agent/nanobot-role-engine.service'
 import { NanobotAliveStateService } from './agent/nanobot-alive-state.service'
 import { NanobotSubagentService } from './agent/nanobot-subagent.service'
 import { NanobotOrchestrationService } from './agent/nanobot-orchestration.service'
+import { NanobotDomainCrewService } from './agent/nanobot-domain-crew.service'
 import { NanobotVoiceService } from './agent/nanobot-voice.service'
 import { NanobotBuiltinToolsService } from './agent/tools/nanobot-builtin-tools.service'
 import { NanobotProviderRouterService } from './providers/nanobot-provider-router.service'
@@ -65,6 +66,7 @@ import { NanobotTrustService } from './trust/nanobot-trust.service'
     NanobotAliveStateService,
     NanobotSubagentService,
     NanobotOrchestrationService,
+    NanobotDomainCrewService,
     NanobotVoiceService,
     NanobotBuiltinToolsService,
     NanobotProviderRouterService,
