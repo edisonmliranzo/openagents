@@ -9,9 +9,11 @@ import type {
   CreateLocalKnowledgeSourceInput,
   LocalKnowledgeSource,
   LocalKnowledgeSyncResult,
+  MemoryEntry,
   MemoryConflict,
   MemoryEvent,
   MemoryEventKind,
+  MemoryType,
   MemoryFact,
   MemoryReviewItem,
   NanobotAutonomySchedule,
@@ -97,6 +99,7 @@ interface TieredRankedCandidate<T> {
 
 const DECAY_WORKER_INTERVAL_MS = 6 * 60 * 60 * 1000 // every 6 hours
 const DECAY_PRUNE_THRESHOLD = 0.04 // remove facts with effective confidence below this
+const MAX_AGENT_MEMORY_ITEMS = 36
 
 @Injectable()
 export class MemoryService implements OnModuleInit, OnModuleDestroy {
@@ -189,6 +192,71 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
       ...row,
       tags: this.parseTags(row.tags, row.id),
     }))
+  }
+
+  async getAgentContextEntries(userId: string, limit = MAX_AGENT_MEMORY_ITEMS): Promise<MemoryEntry[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 120))
+    const [rows, factsRaw, eventsRaw] = await Promise.all([
+      this.prisma.memory.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: safeLimit,
+      }),
+      this.prisma.memoryFact.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: safeLimit,
+      }),
+      this.prisma.memoryEvent.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: safeLimit,
+      }),
+    ])
+
+    const entries: MemoryEntry[] = rows.map((row) => ({
+      ...row,
+      type: (row.type === 'preference' || row.type === 'summary' ? row.type : 'fact') as MemoryType,
+      tags: this.parseTags(row.tags, row.id),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    }))
+
+    for (const fact of factsRaw.map((row) => this.toMemoryFact(row))) {
+      if ((fact.effectiveConfidence ?? fact.confidence) < LOW_CONFIDENCE_REVIEW_THRESHOLD) continue
+      entries.push({
+        id: `fact:${fact.id}`,
+        userId,
+        type: fact.entity.startsWith('preference:') ? 'preference' : 'fact',
+        content: this.renderFactForContext(fact),
+        tags: [fact.entity, fact.key].filter(Boolean).slice(0, 6),
+        createdAt: fact.createdAt,
+        updatedAt: fact.updatedAt,
+      })
+    }
+
+    for (const event of eventsRaw.map((row) => this.toMemoryEvent(row))) {
+      if ((event.effectiveConfidence ?? event.confidence) < LOW_CONFIDENCE_REVIEW_THRESHOLD) continue
+      entries.push({
+        id: `event:${event.id}`,
+        userId,
+        type: 'summary',
+        content: this.renderEventForContext(event),
+        tags: [event.kind, ...event.tags].slice(0, 6),
+        createdAt: event.createdAt,
+        updatedAt: event.updatedAt,
+      })
+    }
+
+    const deduped = new Map<string, MemoryEntry>()
+    for (const entry of entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
+      const key = `${entry.type}:${this.normalizeMemoryKey(entry.content)}`
+      if (!key || deduped.has(key)) continue
+      deduped.set(key, entry)
+      if (deduped.size >= safeLimit) break
+    }
+
+    return [...deduped.values()]
   }
 
   async upsert(userId: string, type: 'fact' | 'preference' | 'summary', content: string, tags: string[] = []) {
@@ -710,7 +778,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
   async syncFiles(userId: string) {
     const userDir = await this.ensureUserDir(userId)
 
-    const [profile, settings, memories, cronJobs, conversations] = await Promise.all([
+    const [profile, settings, contextEntries, cronJobs, conversations] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: userId },
         select: { id: true, email: true, name: true, createdAt: true },
@@ -720,11 +788,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
         update: {},
         create: { userId },
       }),
-      this.prisma.memory.findMany({
-        where: { userId },
-        orderBy: { updatedAt: 'desc' },
-        take: 200,
-      }),
+      this.getAgentContextEntries(userId, 200),
       this.prisma.cronJob.findMany({
         where: { userId },
         orderBy: { updatedAt: 'desc' },
@@ -770,7 +834,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     const memoryDoc = [
       '# MEMORY',
       '',
-      ...memories.map((entry) => `- [${entry.type}] ${entry.content}`),
+      ...contextEntries.map((entry) => `- [${entry.type}] ${entry.content}`),
     ].join('\n')
 
     const heartbeatDoc = [
@@ -859,24 +923,55 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     return sections.join('\n\n')
   }
 
-  /**
-   * Extract useful long-term memories from a conversation turn.
-   * MVP: simple heuristic extraction (no LLM call, to save tokens).
-   * Later: use LLM to extract structured facts.
-   */
   async extractAndStore(userId: string, userMessage: string, agentReply: string) {
-    // MVP: detect preference statements
-    const preferencePatterns = [
-      /I (prefer|like|love|hate|always|never|usually) (.+)/i,
-      /my (name|email|timezone|language|role|company) is (.+)/i,
-    ]
+    const message = userMessage.replace(/\s+/g, ' ').trim().slice(0, 2_000)
+    const reply = agentReply.replace(/\s+/g, ' ').trim().slice(0, 2_000)
+    if (!message) return
 
-    for (const pattern of preferencePatterns) {
-      const match = userMessage.match(pattern)
-      if (match) {
-        await this.upsert(userId, 'preference', userMessage.trim(), ['auto-extracted'])
-        break
-      }
+    let changed = false
+
+    for (const profile of this.extractProfileFacts(message)) {
+      await this.upsertFact(userId, {
+        entity: 'user_profile',
+        key: profile.key,
+        value: profile.value,
+        confidence: 0.95,
+      })
+      changed = true
+    }
+
+    for (const preference of this.extractPreferenceFacts(message)) {
+      await this.upsertFact(userId, {
+        entity: `preference:${preference.category}`,
+        key: this.normalizeMemoryKey(preference.value).slice(0, 180) || preference.category,
+        value: preference.value,
+        confidence: 0.88,
+      })
+      changed = true
+    }
+
+    for (const contact of this.extractContactFacts(message)) {
+      await this.upsertFact(userId, {
+        entity: `contact:${contact.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}`,
+        key: 'profile',
+        value: `${contact.name} - ${contact.context}`,
+        confidence: 0.86,
+      })
+      changed = true
+    }
+
+    if (this.shouldStoreConversationEvent(message, reply)) {
+      await this.writeEvent(userId, {
+        kind: 'conversation',
+        summary: this.buildConversationEventSummary(message, reply),
+        tags: this.extractConversationTags(message, reply),
+        confidence: 0.82,
+      })
+      changed = true
+    }
+
+    if (changed) {
+      await this.syncFiles(userId)
     }
   }
 
@@ -1379,7 +1474,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
   private async ensureCoreMemoryFiles(userId: string) {
     const userDir = await this.ensureUserDir(userId)
 
-    const [profile, settings, memories, cronJobs] = await Promise.all([
+    const [profile, settings, contextEntries, cronJobs] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: userId },
         select: { id: true, email: true, name: true, createdAt: true },
@@ -1392,11 +1487,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
           preferredModel: true,
         },
       }),
-      this.prisma.memory.findMany({
-        where: { userId },
-        orderBy: { updatedAt: 'desc' },
-        take: 200,
-      }),
+      this.getAgentContextEntries(userId, 200),
       this.prisma.cronJob.findMany({
         where: { userId },
         orderBy: { updatedAt: 'desc' },
@@ -1431,7 +1522,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     const memoryDoc = [
       '# MEMORY',
       '',
-      ...memories.map((entry) => `- [${entry.type}] ${entry.content}`),
+      ...contextEntries.map((entry) => `- [${entry.type}] ${entry.content}`),
     ].join('\n')
 
     const heartbeatDoc = [
@@ -1978,5 +2069,159 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     if (!raw) return null
     const date = new Date(raw)
     return Number.isFinite(date.getTime()) ? date.toISOString() : null
+  }
+
+  private renderFactForContext(fact: MemoryFact) {
+    if (fact.entity === 'user_profile') return `Profile ${fact.key}: ${fact.value}`
+    if (fact.entity.startsWith('preference:')) {
+      const category = fact.entity.slice('preference:'.length) || 'general'
+      return `Preference (${category}): ${fact.value}`
+    }
+    if (fact.entity.startsWith('contact:')) return `Contact: ${fact.value}`
+    return `${fact.entity}.${fact.key}: ${fact.value}`
+  }
+
+  private renderEventForContext(event: MemoryEvent) {
+    return `${event.kind}: ${event.summary}`
+  }
+
+  private extractProfileFacts(message: string): Array<{ key: string; value: string }> {
+    if (this.containsSensitiveMemoryContent(message)) return []
+
+    const candidates: Array<{ key: string; value: string }> = []
+    const patterns: Array<{ regex: RegExp; key: string }> = [
+      { regex: /\bmy name is ([^.!?\n,]{2,80})/i, key: 'name' },
+      { regex: /\bcall me ([^.!?\n,]{2,80})/i, key: 'preferred_name' },
+      { regex: /\bmy email is ([^\s,;]+@[^\s,;]+\.[^\s,;]+)/i, key: 'email' },
+      { regex: /\bmy time ?zone is ([^.!?\n,]{2,80})/i, key: 'timezone' },
+      { regex: /\bmy language is ([^.!?\n,]{2,80})/i, key: 'language' },
+      { regex: /\bmy role is ([^.!?\n,]{2,80})/i, key: 'role' },
+      { regex: /\bmy job title is ([^.!?\n,]{2,80})/i, key: 'job_title' },
+      { regex: /\bmy company is ([^.!?\n,]{2,120})/i, key: 'company' },
+      { regex: /\bi(?:'m| am) based in ([^.!?\n,]{2,120})/i, key: 'location' },
+      { regex: /\bi live in ([^.!?\n,]{2,120})/i, key: 'location' },
+    ]
+
+    for (const pattern of patterns) {
+      const match = message.match(pattern.regex)
+      const value = match?.[1]?.trim()
+      if (!value) continue
+      candidates.push({ key: pattern.key, value })
+    }
+
+    return this.dedupeMemoryPairs(candidates)
+  }
+
+  private extractPreferenceFacts(message: string): Array<{ category: string; value: string }> {
+    if (this.containsSensitiveMemoryContent(message)) return []
+
+    const lower = message.toLowerCase()
+    const candidates: Array<{ category: string; value: string }> = []
+    const explicitPatterns: Array<{ regex: RegExp; category: string; prefix?: string }> = [
+      { regex: /\bi prefer ([^.!?\n]{3,180})/i, category: 'general' },
+      { regex: /\bplease always ([^.!?\n]{3,180})/i, category: 'workflow', prefix: 'always ' },
+      { regex: /\bplease keep ([^.!?\n]{3,180})/i, category: 'communication', prefix: 'keep ' },
+      { regex: /\bplease use ([^.!?\n]{3,180})/i, category: 'communication', prefix: 'use ' },
+      { regex: /\bdo not ([^.!?\n]{3,180})/i, category: 'workflow', prefix: 'avoid ' },
+      { regex: /\bdon't ([^.!?\n]{3,180})/i, category: 'workflow', prefix: 'avoid ' },
+      { regex: /\beverything should be ([^.!?\n]{3,180})/i, category: 'branding', prefix: '' },
+      { regex: /\bcall (?:it|this) ([^.!?\n]{2,120})/i, category: 'branding', prefix: 'use name ' },
+    ]
+
+    for (const pattern of explicitPatterns) {
+      const match = message.match(pattern.regex)
+      const value = match?.[1]?.trim()
+      if (!value) continue
+      candidates.push({
+        category: pattern.category,
+        value: `${pattern.prefix ?? ''}${value}`.trim(),
+      })
+    }
+
+    if (/\bbullet(?:ed)? lists?\b/i.test(message)) {
+      candidates.push({ category: 'communication', value: 'prefers bullet lists' })
+    }
+    if (/\bconcise|short|brief\b/i.test(message) && /\bresponse|reply|answer|message|keep\b/i.test(message)) {
+      candidates.push({ category: 'communication', value: 'prefers concise responses' })
+    }
+    if (/\bdetailed|in depth|thorough\b/i.test(message) && /\bresponse|reply|answer|explain\b/i.test(message)) {
+      candidates.push({ category: 'communication', value: 'prefers detailed explanations when needed' })
+    }
+    if (/\bno emoji|without emoji|dont use emoji|don't use emoji\b/i.test(lower)) {
+      candidates.push({ category: 'communication', value: 'prefers no emojis' })
+    }
+    if (/\bopenagents\b/i.test(message) && /\bbrand|name|call|everything should be\b/i.test(message)) {
+      candidates.push({ category: 'branding', value: 'use OpenAgents branding consistently' })
+    }
+
+    return this.dedupeMemoryPairs(candidates)
+  }
+
+  private extractContactFacts(message: string): Array<{ name: string; context: string }> {
+    if (this.containsSensitiveMemoryContent(message)) return []
+
+    const match = message.match(
+      /\b([A-Z][a-z]+(?: [A-Z][a-z]+)?)\s+is\s+my\s+([^.!?\n]{2,120})/i,
+    )
+    if (!match) return []
+
+    const name = match[1]?.trim()
+    const context = match[2]?.trim()
+    if (!name || !context) return []
+    return [{ name, context }]
+  }
+
+  private shouldStoreConversationEvent(message: string, reply: string) {
+    if (this.containsSensitiveMemoryContent(message) || this.containsSensitiveMemoryContent(reply)) return false
+    if (message.length < 24 || reply.length < 24) return false
+    if (/^(hi|hello|thanks|thank you|ok|okay|yes|no|cool|great)\b/i.test(message)) return false
+    return /\b(fix|update|change|rename|deploy|push|build|implement|debug|remember|save|configure|create|make)\b/i.test(message)
+  }
+
+  private buildConversationEventSummary(message: string, reply: string) {
+    const request = this.clipMemoryText(message, 220)
+    const outcome = this.clipMemoryText(reply, 260)
+    return `User request: ${request}${outcome ? ` | Assistant response: ${outcome}` : ''}`
+  }
+
+  private extractConversationTags(message: string, reply: string) {
+    const tags = new Set<string>(['auto-session'])
+    const combined = `${message} ${reply}`.toLowerCase()
+    const tagRules: Array<[RegExp, string]> = [
+      [/\bchat\b/, 'chat'],
+      [/\bmemory\b/, 'memory'],
+      [/\bdeploy|vps\b/, 'deploy'],
+      [/\bbrand|rename|openagents\b/, 'branding'],
+      [/\bui|layout|scroll|sidebar|session\b/, 'ui'],
+      [/\bapi|backend|server\b/, 'backend'],
+    ]
+
+    for (const [pattern, tag] of tagRules) {
+      if (pattern.test(combined)) tags.add(tag)
+    }
+
+    return [...tags].slice(0, 8)
+  }
+
+  private containsSensitiveMemoryContent(value: string) {
+    return /\b(password|passcode|api key|secret key|access token|refresh token|seed phrase|private key|mnemonic|otp|2fa code)\b/i.test(value)
+  }
+
+  private dedupeMemoryPairs<T extends { value: string }>(items: T[]) {
+    const deduped = new Map<string, T>()
+    for (const item of items) {
+      const key = this.normalizeMemoryKey(item.value)
+      if (!key || deduped.has(key)) continue
+      deduped.set(key, item)
+    }
+    return [...deduped.values()]
+  }
+
+  private clipMemoryText(value: string, limit: number) {
+    const normalized = value.replace(/\s+/g, ' ').trim()
+    if (!normalized) return ''
+    if (normalized.length <= limit) return normalized
+    if (limit <= 3) return normalized.slice(0, limit)
+    return `${normalized.slice(0, limit - 3).trimEnd()}...`
   }
 }
