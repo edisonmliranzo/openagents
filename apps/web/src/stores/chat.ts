@@ -138,21 +138,21 @@ function formatStreamingStatus(status: string | null, data?: Record<string, unkn
 
   switch (status) {
     case 'thinking':
-      return 'Thinking through the request...'
+      return 'Working...'
     case 'planning':
-      return 'Planning the fastest safe path...'
+      return 'Working...'
     case 'executing':
-      return 'Executing the plan...'
+      return 'Working...'
     case 'running_tool':
-      return `Running ${toolName}...`
+      return `Using ${toolName}...`
     case 'retrying_tool': {
       const attempt = Number.isFinite(Number(data?.attempt)) ? Number(data?.attempt) : null
-      return attempt ? `Retrying ${toolName} (attempt ${attempt})...` : `Retrying ${toolName}...`
+      return attempt ? `Retrying ${toolName}...` : `Retrying ${toolName}...`
     }
     case 'verifying':
-      return 'Verifying the result before replying...'
+      return 'Finalizing...'
     case 'waiting_approval':
-      return `Waiting for approval${toolName !== 'tool' ? `: ${toolName}` : '...'}`
+      return toolName !== 'tool' ? `Approval needed: ${toolName}` : 'Approval needed'
     default:
       return ''
   }
