@@ -40,7 +40,7 @@ export function ConversationList() {
   }, [conversationRows, query])
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-3 py-3">
         <div>
           <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--tone-soft)] dark:text-[var(--tone-soft)]">
@@ -75,7 +75,7 @@ export function ConversationList() {
         </div>
       </div>
 
-      <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-3 pt-1.5">
+      <div className="oa-scroll-panel min-h-0 flex-1 space-y-1 overflow-y-scroll overscroll-contain px-2 pb-3 pt-1.5">
         {filtered.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <MessageSquare
