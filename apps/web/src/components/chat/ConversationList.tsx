@@ -75,7 +75,7 @@ export function ConversationList() {
         </div>
       </div>
 
-      <div className="oa-scroll-panel min-h-0 flex-1 space-y-1 overflow-y-scroll overscroll-contain px-2 pb-3 pt-1.5">
+      <div className="oa-scroll-panel min-h-0 flex-1 space-y-1 overflow-y-scroll overscroll-contain px-2 pb-3 pl-2 pt-1.5 pr-1">
         {filtered.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <MessageSquare
