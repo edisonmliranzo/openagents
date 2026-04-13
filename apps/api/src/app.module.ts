@@ -42,6 +42,7 @@ import { ArtifactsModule } from './artifacts/artifacts.module'
 import { PacksModule } from './packs/packs.module'
 import { ResearchModule } from './research/research.module'
 import { AnomalyModule } from './anomaly/anomaly.module'
+import { CollaborationModule } from './collaboration/collaboration.module'
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { AnomalyModule } from './anomaly/anomaly.module'
     PacksModule,
     ResearchModule,
     AnomalyModule,
+    CollaborationModule,
   ],
 })
 export class AppModule {}
