@@ -158,6 +158,31 @@ function formatStreamingStatus(status: string | null, data?: Record<string, unkn
   }
 }
 
+function deriveConversationTitle(value: string) {
+  const firstLine =
+    value
+      .split(/\r?\n/)
+      .map((line) =>
+        line
+          .replace(/^[-*#>\s`]+/, '')
+          .replace(/^\d+[.)]\s+/, '')
+          .trim(),
+      )
+      .find(Boolean) ?? ''
+  const normalized = firstLine.replace(/\s+/g, ' ').replace(/^["'`]+|["'`]+$/g, '').trim()
+  if (!normalized) return null
+  if (normalized.length <= 80) return normalized
+  return `${normalized.slice(0, 77).trimEnd()}...`
+}
+
+function sortConversationsByRecentActivity(conversations: Conversation[]) {
+  return [...conversations].sort((left, right) => {
+    const leftTime = Date.parse(left.lastMessageAt ?? left.createdAt)
+    const rightTime = Date.parse(right.lastMessageAt ?? right.createdAt)
+    return rightTime - leftTime
+  })
+}
+
 interface ChatState {
   conversations: Conversation[]
   conversationsLoading: boolean
@@ -287,10 +312,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const userVisibleContent = options?.displayContent?.trim() || content.trim()
+    const startedAt = new Date().toISOString()
+    const optimisticTitle = deriveConversationTitle(userVisibleContent)
 
     // Optimistically add user message
     const tempId = `temp-${Date.now()}`
     set((s) => ({
+      conversations: sortConversationsByRecentActivity(
+        s.conversations.map((conversation) =>
+          conversation.id === activeConversationId
+            ? {
+                ...conversation,
+                title: conversation.title?.trim() || optimisticTitle || conversation.title,
+                lastMessageAt: startedAt,
+              }
+            : conversation,
+        ),
+      ),
       messages: [
         ...s.messages,
         {
@@ -299,7 +337,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           role: 'user',
           content: userVisibleContent,
           status: 'done',
-          createdAt: new Date().toISOString(),
+          createdAt: startedAt,
         } as Message,
       ],
       streamToolEvents: [],
@@ -322,7 +360,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           role: 'agent',
           content: formatStreamingStatus('thinking'),
           status: 'streaming',
-          createdAt: new Date().toISOString(),
+          createdAt: startedAt,
         } as Message,
       ],
     }))
