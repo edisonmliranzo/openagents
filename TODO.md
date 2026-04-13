@@ -1,5 +1,16 @@
-- [ ] Add research module with POST /research/plan-and-act endpoint
-- [ ] Implement service flow: deep research draft + plan + approval policy check + act
-- [ ] Wire module into app.module.ts
-- [ ] Run FULL curl tests (happy path + policy-blocked + invalid input)
-- [ ] Update TODO.md with completion status
+- [x] Add research module with POST /research/plan-and-act endpoint
+- [x] Implement service flow: deep research draft + plan + approval policy check + act
+- [x] Wire module into app.module.ts
+- [x] Run FULL curl tests (happy path + policy-blocked + invalid input)
+- [x] Add multi-agent collaboration types to shared package
+- [x] Implement CollaborationService with team management, blackboard, negotiation, consensus
+- [x] Create CollaborationController with full REST API
+- [x] Wire CollaborationModule into app.module.ts
+- [x] Create comprehensive architecture documentation (docs/multi-agent-architecture.md)
+- [ ] Add Prisma schema for collaboration entities (teams, blackboard entries, negotiations, consensus rounds)
+- [ ] Add database migrations for collaboration tables
+- [ ] Integrate collaboration service with existing agent system
+- [ ] Add WebSocket support for real-time agent communication
+- [ ] Implement distributed memory synchronization across agents
+- [ ] Add hierarchical task network planning for complex task decomposition
+- [ ] Implement learning from feedback for agent improvement

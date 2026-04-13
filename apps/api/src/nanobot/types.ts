@@ -326,14 +326,21 @@ export interface NanobotMarketplaceImportInput {
 }
 
 export type NanobotOrchestrationStage = 'planning' | 'executing' | 'reviewing' | 'done' | 'error'
-export type NanobotOrchestrationTaskStatus = 'queued' | 'running' | 'done' | 'error'
+export type NanobotOrchestrationTaskStatus = 'queued' | 'waiting' | 'running' | 'done' | 'error' | 'skipped'
+export type NanobotOrchestrationTaskRole = 'planner' | 'executor' | 'reviewer' | 'subtask'
 
 export interface NanobotOrchestrationTask {
   id: string
-  role: 'planner' | 'executor' | 'reviewer'
+  role: NanobotOrchestrationTaskRole
   label: string
   status: NanobotOrchestrationTaskStatus
   notes: string[]
+  /** IDs of tasks that must be done before this task can start */
+  dependsOn: string[]
+  /** Output produced by this task — fed into dependent tasks as context */
+  output: string | null
+  /** Number of times this task has been retried */
+  retries: number
   updatedAt: string
 }
 
@@ -355,6 +362,13 @@ export interface NanobotOrchestrationRun {
   createdAt: string
   updatedAt: string
   completedAt: string | null
+}
+
+/** Input for adding a dynamic subtask to a running orchestration */
+export interface NanobotAddSubtaskInput {
+  label: string
+  /** IDs of tasks in this run that must complete before this subtask starts */
+  dependsOn?: string[]
 }
 
 export interface NanobotVoiceTranscriptionInput {
