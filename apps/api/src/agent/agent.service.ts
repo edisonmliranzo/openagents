@@ -152,6 +152,21 @@ export class AgentService {
       },
     })
 
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { title: true },
+    })
+    const conversationNeedsTitle = !conversation?.title
+    const fallbackConversationTitle = conversationNeedsTitle
+      ? this.deriveConversationTitle(userMessage)
+      : null
+    if (conversationNeedsTitle && fallbackConversationTitle) {
+      await this.prisma.conversation.update({
+        where: { id: conversationId },
+        data: { title: fallbackConversationTitle },
+      })
+    }
+
     // 2. Create agent run record
     const run = await this.prisma.agentRun.create({
       data: { conversationId, status: 'thinking' },
@@ -753,9 +768,8 @@ export class AgentService {
             )
           })
 
-        // 10. Auto-title: set conversation title from first exchange if not yet set
-        const conv = await this.prisma.conversation.findUnique({ where: { id: conversationId } })
-        if (conv && !conv.title) {
+        // 10. Auto-title: refine a newly seeded conversation title after the first exchange
+        if (conversationNeedsTitle) {
           this.autoTitle(
             conversationId,
             userMessage,
@@ -763,6 +777,7 @@ export class AgentService {
             activeUserApiKey,
             activeUserBaseUrl,
             activeModel,
+            fallbackConversationTitle,
           ).catch((e) => this.logger.error('Auto-title failed', e))
         }
 
@@ -1356,6 +1371,7 @@ export class AgentService {
     userApiKey?: string,
     userBaseUrl?: string,
     model?: string,
+    currentTitle?: string | null,
   ) {
     const prompt = firstMessage.length > 120 ? firstMessage.slice(0, 120) + '...' : firstMessage
     const response = await this.llm.complete(
@@ -1373,10 +1389,29 @@ export class AgentService {
       model,
     )
     if (response.content) {
-      await this.prisma.conversation.update({
-        where: { id: conversationId },
-        data: { title: response.content.trim().slice(0, 80) },
+      const nextTitle = response.content.trim().slice(0, 80)
+      if (!nextTitle || nextTitle === currentTitle) return
+      await this.prisma.conversation.updateMany({
+        where: { id: conversationId, title: currentTitle ?? null },
+        data: { title: nextTitle },
       })
     }
+  }
+
+  private deriveConversationTitle(value: string) {
+    const firstLine =
+      value
+        .split(/\r?\n/)
+        .map((line) =>
+          line
+            .replace(/^[-*#>\s`]+/, '')
+            .replace(/^\d+[.)]\s+/, '')
+            .trim(),
+        )
+        .find(Boolean) ?? ''
+    const normalized = firstLine.replace(/\s+/g, ' ').replace(/^["'`]+|["'`]+$/g, '').trim()
+    if (!normalized) return null
+    if (normalized.length <= 80) return normalized
+    return `${normalized.slice(0, 77).trimEnd()}...`
   }
 }
