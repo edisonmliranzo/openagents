@@ -7,6 +7,51 @@
 
 export type ReasoningStrategy = 'chain-of-thought' | 'tree-of-thought' | 'graph-of-thought' | 'react' | 'plan-and-solve'
 
+export type AgentContext = {
+  agentId: string
+  sessionId?: string
+  taskId?: string
+  chainId?: string
+}
+
+export type EvaluationCriterion =
+  | 'accuracy'
+  | 'completeness'
+  | 'relevance'
+  | 'quality'
+  | 'clarity'
+  | 'grounding'
+  | 'safety'
+
+export type ReflectionEvaluatorResult = {
+  name: string
+  dimension: EvaluationCriterion
+  score: number // 0-100 score for the evaluator
+  confidence: number
+  findings: string[]
+}
+
+export type AgentBehaviorAdjustment = {
+  id: string
+  agentId: string
+  category: 'prompting' | 'reasoning' | 'execution' | 'escalation'
+  action: string
+  description: string
+  strength: number
+  createdAt: string
+  sourceFeedbackId?: string
+}
+
+export type AgentBehaviorProfile = {
+  agentId: string
+  preferredReasoningStrategy?: ReasoningStrategy
+  verificationThreshold: number
+  escalationThreshold: number
+  maxRetryDepth: number
+  activeAdjustments: AgentBehaviorAdjustment[]
+  lastUpdated: string
+}
+
 export type ReasoningStep = {
   id: string
   content: string
@@ -96,6 +141,7 @@ export type SelfReflection = {
     weaknesses: string[]
     improvementSuggestions: string[]
     confidence: number
+    evaluatorBreakdown: ReflectionEvaluatorResult[]
   }
   reasoning: string
   timestamp: string
@@ -112,6 +158,8 @@ export type LearningFeedback = {
   timestamp: string
   metadata?: Record<string, unknown>
 }
+
+export type LearningFeedbackInput = Omit<LearningFeedback, 'id' | 'timestamp'>
 
 export type AdaptiveMemory = {
   id: string
@@ -150,6 +198,8 @@ export type UncertaintyQuantification = {
   confidenceInterval: [number, number]
   sources: string[]
   timestamp: string
+  knowledgeCoverage?: number
+  metadata?: Record<string, unknown>
 }
 
 export type ReasoningContext = {
@@ -198,6 +248,7 @@ export interface CreateReasoningChainInput {
   context?: Partial<ReasoningContext>
   maxSteps?: number
   qualityThreshold?: number
+  agentContext?: AgentContext
 }
 
 export interface AddReasoningStepInput {
@@ -209,13 +260,10 @@ export interface AddReasoningStepInput {
 
 export interface EvaluateOutputInput {
   output: string
-  criteria: {
-    accuracy?: boolean
-    completeness?: boolean
-    relevance?: boolean
-    quality?: boolean
-  }
+  criteria: Partial<Record<EvaluationCriterion, boolean>>
   context?: string
+  agentContext?: AgentContext
+  outputType?: 'final-answer' | 'intermediate-output' | 'tool-result'
 }
 
 export interface GetMetaCognitiveStateInput {
@@ -225,9 +273,10 @@ export interface GetMetaCognitiveStateInput {
 }
 
 export interface ProcessFeedbackInput {
-  feedback: LearningFeedback
+  feedback: LearningFeedbackInput
   applyImmediately?: boolean
   updateMemory?: boolean
+  agentContext?: AgentContext
 }
 
 export interface AdaptiveLearningInput {
@@ -245,6 +294,7 @@ export interface UncertaintyAnalysisInput {
   output: string
   context: string
   knowledgeBase: KnowledgeGraph
+  agentContext?: AgentContext
 }
 
 export interface CognitiveLoadInput {
@@ -252,6 +302,15 @@ export interface CognitiveLoadInput {
   currentTask?: string
   taskComplexity?: number
   timePressure?: number
+  taskCompleted?: boolean
+  recoveryMinutes?: number
+}
+
+export interface AdaptiveMemoryRetrievalInput {
+  agentId: string
+  query: string
+  tags?: string[]
+  limit?: number
 }
 
 // Response types
@@ -277,12 +336,19 @@ export interface MetaCognitiveResponse {
     cognitiveOverload: boolean
     knowledgeGaps: string[]
   }
+  behaviorProfile: AgentBehaviorProfile
+  history?: {
+    reflections: SelfReflection[]
+    uncertainties: UncertaintyQuantification[]
+    feedback: LearningFeedback[]
+  }
 }
 
 export interface LearningResponse {
-  updatedMemory: AdaptiveMemory
+  updatedMemory: AdaptiveMemory | null
   newPatterns: Array<{ trigger: string; response: string }>
   performanceImprovement: number
+  appliedAdjustments: AgentBehaviorAdjustment[]
 }
 
 export interface UncertaintyResponse {
@@ -299,6 +365,14 @@ export interface CognitiveLoadResponse {
     speedImpact: number
     qualityImpact: number
   }
+}
+
+export interface AdaptiveMemoryRetrievalResponse {
+  matches: Array<{
+    memory: AdaptiveMemory['memories'][number]
+    score: number
+  }>
+  suggestedPatterns: AdaptiveMemory['patterns']
 }
 
 export interface ThoughtTreeResponse {
