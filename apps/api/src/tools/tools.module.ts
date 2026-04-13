@@ -19,6 +19,10 @@ import { NewsTool } from './connectors/news.tool'
 import { YoutubeTool } from './connectors/youtube.tool'
 import { MemoryPersonalTool } from './connectors/memory-personal.tool'
 import { ProactiveTool } from './connectors/proactive.tool'
+import { ShellTool } from './connectors/shell.tool'
+import { CodeExecutionTool } from './connectors/code-execution.tool'
+import { ImageGenerationTool } from './connectors/image-generation.tool'
+import { AudioGenerationTool } from './connectors/audio-generation.tool'
 import { CronModule } from '../cron/cron.module'
 import { ConnectorsModule } from '../connectors/connectors.module'
 import { MemoryModule } from '../memory/memory.module'
@@ -50,6 +54,10 @@ import { ToolsInternalController } from './tools.internal.controller'
     YoutubeTool,
     MemoryPersonalTool,
     ProactiveTool,
+    ShellTool,
+    CodeExecutionTool,
+    ImageGenerationTool,
+    AudioGenerationTool,
     McpService,
     PromptGuardService,
     OutboundGuardService,
