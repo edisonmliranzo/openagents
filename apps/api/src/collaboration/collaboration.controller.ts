@@ -20,7 +20,8 @@ import type {
   ChallengeEntryInput,
   StartConsensusInput,
   CastVoteInput,
-} from '@openagents/shared'
+  MessageType,
+} from './collaboration.types'
 
 @Controller('collaboration')
 export class CollaborationController {
@@ -271,7 +272,7 @@ export class CollaborationController {
   recordActivity(
     @Param('teamId') teamId: string,
     @Body() activity: {
-      messageType?: string
+      messageType?: MessageType
       negotiationStarted?: boolean
       consensusStarted?: boolean
       taskCompleted?: boolean

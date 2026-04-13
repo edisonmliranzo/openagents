@@ -21,4 +21,4 @@ export * from './voice'
 export * from './zk-proofs'
 export * from './dry-run'
 export * from './agent-version'
-export * from './multi-agent'
+// multi-agent types live in collaboration.ts to avoid duplicate exports
