@@ -392,6 +392,8 @@ export function ChatWindow({
   const [operatorMessages, setOperatorMessages] = useState<Message[]>([])
   const [controlsExpanded, setControlsExpanded] = useState(false)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
+  const [modelPickerOpen, setModelPickerOpen] = useState(false)
+  const modelPickerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -548,6 +550,17 @@ export function ChatWindow({
   useEffect(() => {
     setOperatorMessages([])
   }, [activeConversationId])
+
+  useEffect(() => {
+    if (!modelPickerOpen) return
+    const handler = (e: MouseEvent) => {
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setModelPickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [modelPickerOpen])
 
   function focusComposer() {
     requestAnimationFrame(() => textareaRef.current?.focus())
@@ -1174,11 +1187,85 @@ export function ChatWindow({
                   </button>
                 </div>
 
-                {/* Right: model label + send */}
+                {/* Right: model picker + send */}
                 <div className="flex items-center gap-2">
-                  <span className="hidden rounded-full border border-[#e4e7ec] px-2.5 py-1 text-[11px] font-medium text-[#98a2b3] sm:block">
-                    {runtimeSummary}
-                  </span>
+                  {/* Model selector */}
+                  <div ref={modelPickerRef} className="relative hidden sm:block">
+                    <button
+                      type="button"
+                      onClick={() => setModelPickerOpen((o) => !o)}
+                      disabled={Boolean(runtimeBusy) || runtimeLoading}
+                      className={clsx(
+                        'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition',
+                        modelPickerOpen
+                          ? 'border-[#f3c8c5] bg-[#fff8f7] text-[#ef4444]'
+                          : 'border-[#e4e7ec] bg-[#f8fafc] text-[#667085] hover:border-[#f3c8c5] hover:bg-[#fff8f7] hover:text-[#ef4444]',
+                        (Boolean(runtimeBusy) || runtimeLoading) && 'opacity-50 cursor-not-allowed',
+                      )}
+                      title="Switch model"
+                    >
+                      {runtimeBusy ? (
+                        <RefreshCw size={10} className="animate-spin" />
+                      ) : (
+                        <BrainCircuit size={10} />
+                      )}
+                      <span className="max-w-[140px] truncate">{runtimeSummary}</span>
+                      <ChevronUp size={9} className={clsx('transition-transform', modelPickerOpen ? 'rotate-180' : '')} />
+                    </button>
+
+                    {modelPickerOpen && (
+                      <div className="absolute bottom-full right-0 z-50 mb-2 w-72 overflow-hidden rounded-[18px] border border-[#e4e7ec] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+                        <div className="border-b border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
+                          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">Model</p>
+                        </div>
+
+                        {/* Provider tabs */}
+                        <div className="flex gap-1 overflow-x-auto px-3 pt-3 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                          {RUNTIME_PROVIDERS.map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => void updateRuntimeSettings(p, LLM_MODELS[p].default, 'provider')}
+                              className={clsx(
+                                'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition',
+                                activeProvider === p
+                                  ? 'bg-[#fff8f7] text-[#ef4444] border border-[#f3c8c5]'
+                                  : 'text-[#667085] hover:bg-[#f8fafc] border border-transparent',
+                              )}
+                            >
+                              {LLM_PROVIDER_CAPABILITIES[p].label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Model list */}
+                        <div className="max-h-52 overflow-y-auto px-2 pb-3 pt-1">
+                          {providerModelOptions.map((model) => {
+                            const active = (runtimeSettings?.preferredModel?.trim() || LLM_MODELS[activeProvider].default) === model
+                            return (
+                              <button
+                                key={model}
+                                type="button"
+                                onClick={() => { void updateRuntimeSettings(activeProvider, model, 'model'); setModelPickerOpen(false) }}
+                                className={clsx(
+                                  'flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-[12px] transition',
+                                  active
+                                    ? 'bg-[#fff8f7] font-semibold text-[#ef4444]'
+                                    : 'text-[#344054] hover:bg-[#f8fafc] dark:text-[#c9d1e0] dark:hover:bg-[#232837]',
+                                )}
+                              >
+                                <span className="truncate">{model}</span>
+                                {active && (
+                                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ef4444]" />
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => void handleSend()}
