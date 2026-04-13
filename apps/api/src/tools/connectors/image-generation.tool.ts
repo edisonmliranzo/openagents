@@ -141,7 +141,7 @@ export class ImageGenerationTool {
         response_format: response_format as any,
       })
 
-      const images = response.data.map((img) => ({
+      const images = (response.data ?? []).map((img) => ({
         url: img.url ?? null,
         b64_json: img.b64_json ?? null,
         revised_prompt: img.revised_prompt ?? null,
