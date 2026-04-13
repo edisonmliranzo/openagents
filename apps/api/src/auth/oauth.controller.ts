@@ -87,7 +87,7 @@ export class OAuthController {
     @Param('provider') provider: string,
   ): Promise<{ accessToken?: string; success: boolean }> {
     const accessToken = await this.oauthService.refreshAccessToken(req.user.id, provider as any)
-    return { accessToken, success: !!accessToken }
+    return { accessToken: accessToken ?? undefined, success: !!accessToken }
   }
 
   /**

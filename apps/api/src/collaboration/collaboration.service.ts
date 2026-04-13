@@ -30,7 +30,7 @@ import type {
   CastVoteInput,
   BlackboardEntryType,
   MessageType,
-} from '@openagents/shared'
+} from './collaboration.types'
 
 interface TeamState {
   team: AgentTeam
@@ -224,7 +224,7 @@ export class CollaborationService {
     const challenge: Challenge = {
       id: `challenge_${randomUUID()}`,
       challengingAgentId: input.challengingAgentId,
-      entryId: input.entryId,
+      entryId,
       reason: input.reason.slice(0, 2000),
       alternativeProposal: input.alternativeProposal?.slice(0, 5000),
       createdAt: new Date().toISOString(),
