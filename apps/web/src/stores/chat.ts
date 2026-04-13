@@ -244,6 +244,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamToolEvents: [],
         runStatus: null,
         learnedSkill: null,
+        isStreaming: false,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
@@ -265,6 +266,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamToolEvents: [],
         runStatus: null,
         learnedSkill: null,
+        isStreaming: false,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
@@ -391,6 +393,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (data.event === 'message' && data.data?.role === 'agent') {
             sawAgentMessage = true
             set((s) => ({
+              isStreaming: false,
+              runStatus: 'done',
+              lastError: null,
               messages: s.messages.map((m) =>
                 m.id === agentTempId ? { ...m, content: data.data.content, status: 'done' } : m,
               ),
