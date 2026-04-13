@@ -392,7 +392,7 @@ export function AppShell({ children }: AppShellProps) {
           />
         )}
 
-        <div className="flex min-h-[100dvh]">
+        <div className="flex h-[100dvh] min-h-[100dvh]">
           <aside
             className={clsx(
               'fixed inset-y-0 left-0 z-50 flex w-[236px] flex-col border-r border-[#e8eaf2] bg-[rgba(255,255,255,0.9)] px-3 py-4 transition-transform duration-200 lg:sticky lg:top-0 lg:h-[100dvh] lg:z-10 lg:translate-x-0',
@@ -467,8 +467,8 @@ export function AppShell({ children }: AppShellProps) {
             </div>
           </aside>
 
-          <div className="min-w-0 flex-1">
-            <header className="sticky top-0 z-20 border-b border-[#e8eaf2] bg-[rgba(255,255,255,0.82)] px-4 py-3 backdrop-blur-xl sm:px-6">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <header className="sticky top-0 z-20 shrink-0 border-b border-[#e8eaf2] bg-[rgba(255,255,255,0.82)] px-4 py-3 backdrop-blur-xl sm:px-6">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
                   <button
@@ -588,7 +588,7 @@ export function AppShell({ children }: AppShellProps) {
               </div>
             </header>
 
-            <main className="px-3 py-4 sm:px-6">{children}</main>
+            <main className="flex min-h-0 flex-1 overflow-hidden px-3 pb-3 pt-3 sm:px-4">{children}</main>
           </div>
         </div>
       </div>
