@@ -126,12 +126,12 @@ export default function ChatPage() {
       )}
 
       {/* Desktop persistent chat history sidebar */}
-      <aside className="hidden lg:flex w-[232px] shrink-0 flex-col overflow-hidden rounded-[18px] border border-[#e6e8ef] bg-white shadow-[0_4px_16px_rgba(15,23,42,0.04)] dark:border-[#2d3347] dark:bg-[#141824]">
+      <aside className="hidden lg:flex w-[240px] shrink-0 flex-col overflow-hidden border-r border-[#e6e8ef] bg-white dark:border-[#2d3347] dark:bg-[#141824]">
         <ConversationList />
       </aside>
 
       {/* Main chat area */}
-      <div className="flex min-w-0 flex-1 flex-col gap-2 lg:pl-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
         {(lastError || !gatewayConnected || hasPendingApprovals) && (
           <div className="flex flex-wrap items-center gap-2">
             {!gatewayConnected && (
