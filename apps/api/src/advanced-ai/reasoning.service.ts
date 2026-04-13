@@ -15,6 +15,7 @@ import type {
   ThoughtTreeResponse,
   KnowledgeGraphResponse,
 } from '@openagents/shared'
+import { ReflectionService } from './reflection.service'
 
 interface ReasoningState {
   chains: Map<string, ReasoningChain>
@@ -28,6 +29,7 @@ interface ReasoningState {
 @Injectable()
 export class ReasoningService {
   private readonly logger = new Logger(ReasoningService.name)
+  constructor(private readonly reflectionService: ReflectionService) {}
   private readonly state: ReasoningState = {
     chains: new Map(),
     trees: new Map(),
@@ -54,6 +56,7 @@ export class ReasoningService {
         maxSteps: input.maxSteps || 20,
         qualityThreshold: input.qualityThreshold || 0.7,
         context: input.context,
+        agentContext: input.agentContext,
       },
     }
 
@@ -115,6 +118,45 @@ export class ReasoningService {
     chain.finalAnswer = finalAnswer.slice(0, 10000)
     chain.completedAt = new Date().toISOString()
     chain.qualityScore = this.calculateQualityScore(chain)
+
+    const agentContext = this.getChainAgentContext(chain, chainId)
+    const reflection = this.reflectionService.evaluateOutput({
+      output: chain.finalAnswer,
+      criteria: {
+        accuracy: true,
+        completeness: true,
+        relevance: true,
+        quality: true,
+      },
+      context: chain.problem,
+      agentContext,
+      outputType: 'final-answer',
+    })
+
+    chain.metadata = {
+      ...chain.metadata,
+      completionReflectionId: reflection.reflection.id,
+    }
+
+    if (agentContext?.agentId && reflection.reflection.assessment.score < 70) {
+      this.reflectionService.processFeedback({
+        feedback: {
+          source: 'self',
+          feedbackType: 'corrective',
+          content: `Reasoning chain ${chainId} completed with reflection score ${reflection.reflection.assessment.score}. ${reflection.improvements.join(' ')}`.trim(),
+          targetComponent: 'output',
+          priority: reflection.reflection.assessment.score < 50 ? 'high' : 'medium',
+          metadata: {
+            ...agentContext,
+            chainId,
+            reflectionId: reflection.reflection.id,
+          },
+        },
+        updateMemory: true,
+        applyImmediately: true,
+        agentContext,
+      })
+    }
 
     return {
       chain,
@@ -200,7 +242,9 @@ export class ReasoningService {
     const tree = this.state.trees.get(treeId)
     if (!tree) throw new NotFoundException(`Thought tree "${treeId}" not found`)
 
-    const nodes = path.map(id => tree.nodes.find((n: ThoughtNode) => n.id === id)).filter(Boolean)
+    const nodes = path
+      .map(id => tree.nodes.find((n: ThoughtNode) => n.id === id))
+      .filter((node): node is ThoughtNode => Boolean(node))
     if (nodes.length !== path.length) {
       throw new BadRequestException('Invalid path: some nodes not found')
     }
@@ -328,7 +372,7 @@ export class ReasoningService {
     } else if (complexity < 0.7) {
       recommendedStrategy = 'tree-of-thought'
       estimatedSteps = Math.ceil(wordCount / 30)
-      if (context?.cognitiveState?.cognitiveLoad > 0.8) {
+      if ((context?.cognitiveState?.cognitiveLoad ?? 0) > 0.8) {
         riskFactors.push('High cognitive load detected')
       }
     } else {
@@ -483,11 +527,23 @@ export class ReasoningService {
         break
       case 'best-first':
         // Prioritize highest confidence paths
-        tree.nodes.sort((a, b) => b.confidence - a.confidence)
+        tree.nodes.sort((a: ThoughtNode, b: ThoughtNode) => b.confidence - a.confidence)
         break
       case 'monte-carlo':
         // Random exploration with bias toward promising paths
         break
+    }
+  }
+
+  private getChainAgentContext(chain: ReasoningChain, chainId: string): CreateReasoningChainInput['agentContext'] | undefined {
+    const metadataAgentContext = chain.metadata?.agentContext as CreateReasoningChainInput['agentContext'] | undefined
+    if (!metadataAgentContext?.agentId) {
+      return undefined
+    }
+
+    return {
+      ...metadataAgentContext,
+      chainId: metadataAgentContext.chainId ?? chainId,
     }
   }
 

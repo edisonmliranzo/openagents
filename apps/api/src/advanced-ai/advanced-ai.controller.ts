@@ -1,15 +1,16 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger'
 import { AuthGuard } from '@nestjs/passport'
 import { ReasoningService } from './reasoning.service'
 import { ReflectionService } from './reflection.service'
 import type {
+  AdaptiveMemoryRetrievalInput,
+  AdaptiveMemoryRetrievalResponse,
   CreateReasoningChainInput,
   AddReasoningStepInput,
   EvaluateOutputInput,
   GetMetaCognitiveStateInput,
   ProcessFeedbackInput,
-  AdaptiveLearningInput,
   UncertaintyAnalysisInput,
   CognitiveLoadInput,
   ReasoningChainResponse,
@@ -62,7 +63,7 @@ export class AdvancedAIController {
   async getReasoningChain(@Param('chainId') chainId: string): Promise<any> {
     const chain = this.reasoningService.getReasoningChain(chainId)
     if (!chain) {
-      throw new Error('Reasoning chain not found')
+      throw new NotFoundException('Reasoning chain not found')
     }
     return chain
   }
@@ -177,7 +178,7 @@ export class AdvancedAIController {
   async getReflection(@Param('reflectionId') reflectionId: string): Promise<any> {
     const reflection = this.reflectionService.getReflection(reflectionId)
     if (!reflection) {
-      throw new Error('Reflection not found')
+      throw new NotFoundException('Reflection not found')
     }
     return reflection
   }
@@ -202,8 +203,11 @@ export class AdvancedAIController {
   @ApiQuery({ name: 'includeHistory', required: false, description: 'Include historical data' })
   @ApiQuery({ name: 'historyLimit', required: false, description: 'Limit historical data' })
   @ApiResponse({ status: 200, description: 'Meta-cognitive state retrieved successfully' })
-  async getMetaCognitiveState(@Query() query: GetMetaCognitiveStateInput): Promise<MetaCognitiveResponse> {
-    return this.reflectionService.getMetaCognitiveState(query)
+  async getMetaCognitiveState(
+    @Param('agentId') agentId: string,
+    @Query() query: Omit<GetMetaCognitiveStateInput, 'agentId'>,
+  ): Promise<MetaCognitiveResponse> {
+    return this.reflectionService.getMetaCognitiveState({ agentId, ...query })
   }
 
   // ── Learning and Feedback Endpoints ──────────────────────────────────────────
@@ -240,6 +244,17 @@ export class AdvancedAIController {
     return this.reflectionService.addMemoryExperience(agentId, body)
   }
 
+  @Post('learning/memory/:agentId/retrieve')
+  @ApiOperation({ summary: 'Retrieve relevant adaptive memories for an agent' })
+  @ApiParam({ name: 'agentId', description: 'ID of the agent' })
+  @ApiResponse({ status: 200, description: 'Relevant memories retrieved successfully' })
+  async retrieveRelevantMemories(
+    @Param('agentId') agentId: string,
+    @Body() body: Omit<AdaptiveMemoryRetrievalInput, 'agentId'>,
+  ): Promise<AdaptiveMemoryRetrievalResponse> {
+    return this.reflectionService.retrieveRelevantMemories({ ...body, agentId })
+  }
+
   @Get('learning/memory/:agentId')
   @ApiOperation({ summary: 'Get adaptive memory for an agent' })
   @ApiParam({ name: 'agentId', description: 'ID of the agent' })
@@ -248,7 +263,7 @@ export class AdvancedAIController {
   async getAdaptiveMemory(@Param('agentId') agentId: string): Promise<any> {
     const memory = this.reflectionService.getAdaptiveMemory(agentId)
     if (!memory) {
-      throw new Error('Memory not found')
+      throw new NotFoundException('Memory not found')
     }
     return memory
   }
