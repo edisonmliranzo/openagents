@@ -28,6 +28,7 @@ import {
 } from './SlashCommandPalette'
 import { PinnedContext, buildPinnedContextBlock, type PinnedItem } from './PinnedContext'
 import { ResponsePresets } from './ResponsePresets'
+import clsx from 'clsx'
 import {
   ArrowUp,
   BrainCircuit,
@@ -1099,175 +1100,213 @@ export function ChatWindow({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[#f6f7fb] px-4 py-4 sm:px-7">
-        {visibleMessages.length === 0 ? (
-          <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4 pb-6 pt-2">
-            <section className="rounded-[22px] border border-[#e4e7ec] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-              <div className="flex items-center gap-2 text-sm font-semibold text-[#344054]">
-                <Sparkles size={15} className="text-[#ef4444]" />
-                OpenAgents
-              </div>
-              <p className="mt-3 text-[15px] leading-7 text-[#344054]">
-                Start with a concrete task. Include the goal, the relevant context, and what should happen next.
-              </p>
+      {visibleMessages.length === 0 ? (
+        /* ── Landing / empty state — centered MiniMax-style layout ── */
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-[#f7f8fb] px-4 py-10 dark:bg-[#0f1117]">
+          <h1 className="mb-2 text-center text-[26px] font-bold leading-snug text-[#101828] dark:text-white sm:text-[30px]">
+            OpenAgents,{' '}
+            <span className="text-[#ef4444]">making work autonomous.</span>
+          </h1>
+          <p className="mb-8 text-center text-[13px] text-[#98a2b3]">
+            Give it a goal — it will plan, use tools, and report back.
+          </p>
 
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {assistantModeDefinition.starterPrompts.map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    disabled={!gatewayConnected || isStreaming}
-                    onClick={() => void handleQuickPrompt(prompt)}
-                    className="rounded-[18px] border border-[#e4e7ec] bg-[#f8fafc] px-4 py-3 text-left text-[13px] font-medium leading-6 text-[#344054] transition hover:border-[#f2b7b2] hover:bg-[#fff8f7] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {prompt}
+          {/* Input card */}
+          <div className="relative w-full max-w-2xl">
+            {slashQuery !== null && (
+              <SlashCommandPalette
+                query={slashQuery}
+                onSelect={(cmd) => { setInput(cmd.template); setSlashQuery(null); focusComposer() }}
+                onClose={() => setSlashQuery(null)}
+              />
+            )}
+
+            <div className="rounded-[28px] border border-[#e4e7ec] bg-white shadow-[0_8px_32px_rgba(15,23,42,0.08)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+              {/* File chips */}
+              {attachedFiles.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-5 pt-4">
+                  {attachedFiles.map((file, idx) => (
+                    <div key={`${file.name}-${idx}`} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-2 py-1 text-[11px] text-[#344054] dark:border-[#2d3347] dark:bg-[#141824]">
+                      {file.isImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={file.content} alt={file.name} className="h-5 w-5 rounded object-cover" />
+                      ) : (
+                        <Paperclip size={11} className="shrink-0 text-[#98a2b3]" />
+                      )}
+                      <span className="max-w-[140px] truncate">{file.name}</span>
+                      <button type="button" onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))} className="ml-0.5 text-[#98a2b3] hover:text-[#344054]" aria-label={`Remove ${file.name}`}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={handleInputChange}
+                onKeyDown={handleKey}
+                disabled={isStreaming}
+                rows={3}
+                placeholder={gatewayConnected ? assistantModeDefinition.placeholder : 'Runtime offline. /help still works locally.'}
+                className="max-h-48 min-h-[96px] w-full resize-none bg-transparent px-5 pt-5 text-[15px] text-[#101828] outline-none placeholder:text-[#b0b8cc] disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
+              />
+
+              <div className="flex items-center justify-between border-t border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
+                {/* Left: attach + mode chip */}
+                <div className="flex items-center gap-1.5">
+                  <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="*/*" />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isStreaming} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#667085] disabled:opacity-40" aria-label="Attach file">
+                    <Paperclip size={15} />
                   </button>
+                  {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const modes: AssistantMode[] = ['assist', 'plan', 'execute', 'autopilot']
+                      const idx = modes.indexOf(assistantMode)
+                      onAssistantModeChange(modes[(idx + 1) % modes.length])
+                    }}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-[#f8fafc] px-2.5 text-[11px] font-semibold text-[#475467] transition hover:border-[#f3c8c5] hover:bg-[#fff8f7] hover:text-[#ef4444]"
+                    title="Cycle assistant mode"
+                  >
+                    <Sparkles size={10} />
+                    {assistantModeDefinition.label}
+                  </button>
+                </div>
+
+                {/* Right: model label + send */}
+                <div className="flex items-center gap-2">
+                  <span className="hidden rounded-full border border-[#e4e7ec] px-2.5 py-1 text-[11px] font-medium text-[#98a2b3] sm:block">
+                    {runtimeSummary}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleSend()}
+                    disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
+                    className="oa-accent-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label="Send message"
+                  >
+                    <ArrowUp size={15} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Mode chips */}
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {ASSISTANT_MODE_DEFINITIONS.map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => onAssistantModeChange(mode.id)}
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12px] font-medium transition shadow-[0_1px_2px_rgba(16,24,40,0.04)]',
+                  assistantMode === mode.id
+                    ? 'border-[#f3c8c5] bg-[#fff8f7] text-[#ef4444]'
+                    : 'border-[#e4e7ec] bg-white text-[#344054] hover:border-[#f3c8c5] hover:bg-[#fff8f7] hover:text-[#ef4444] dark:bg-[#1a1f2e] dark:text-[#c9d1e0] dark:border-[#2d3347]',
+                )}
+              >
+                {mode.label}
+                <span className="hidden text-[#98a2b3] sm:inline">— {mode.caption}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Quick starter prompts */}
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {assistantModeDefinition.starterPrompts.slice(0, 3).map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                disabled={!gatewayConnected || isStreaming}
+                onClick={() => void handleQuickPrompt(prompt)}
+                className="max-w-[260px] truncate rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-[11px] text-[#667085] transition hover:border-[#f3c8c5] hover:text-[#ef4444] disabled:opacity-50 dark:bg-[#1a1f2e] dark:text-[#8892a4] dark:border-[#2d3347]"
+                title={prompt}
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* ── Active chat — messages + bottom input bar ── */
+        <>
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[#f6f7fb] px-4 py-4 sm:px-7 dark:bg-[#0f1117]">
+            <div className="mx-auto w-full max-w-[980px] space-y-6 pb-6 pt-2">
+              {visibleMessages.map((message) => (
+                <MessageBubble key={message.id} message={message} />
+              ))}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          <PinnedContext items={pinnedItems} onRemove={handleRemovePin} onAdd={handleAddPin} />
+
+          <div className="border-t border-[#e4e7ec] bg-[#fbfbfd] px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-[#2d3347] dark:bg-[#141824] sm:px-6">
+            {slashQuery !== null && (
+              <SlashCommandPalette
+                query={slashQuery}
+                onSelect={(cmd) => { setInput(cmd.template); setSlashQuery(null); focusComposer() }}
+                onClose={() => setSlashQuery(null)}
+              />
+            )}
+
+            {attachedFiles.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {attachedFiles.map((file, idx) => (
+                  <div key={`${file.name}-${idx}`} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-2 py-1 text-[11px] text-[#344054] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#c9d1e0]">
+                    {file.isImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={file.content} alt={file.name} className="h-5 w-5 rounded object-cover" />
+                    ) : (
+                      <Paperclip size={11} className="shrink-0 text-[#98a2b3]" />
+                    )}
+                    <span className="max-w-[140px] truncate">{file.name}</span>
+                    <button type="button" onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))} className="ml-0.5 text-[#98a2b3] hover:text-[#344054]" aria-label={`Remove ${file.name}`}>x</button>
+                  </div>
                 ))}
               </div>
+            )}
 
-              <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] text-[#98a2b3]">
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#e4e7ec] bg-[#f8fafc] px-2.5 py-1">
-                  <Command size={11} />
-                  Type / for commands
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#e4e7ec] bg-[#f8fafc] px-2.5 py-1">
-                  <BrainCircuit size={11} />
-                  {runtimeSummary}
-                </span>
-                <span>{gatewayConnected ? 'Runtime connected' : 'Runtime disconnected'}</span>
-              </div>
-            </section>
-          </div>
-        ) : (
-          <div className="mx-auto w-full max-w-[980px] space-y-6 pb-6 pt-2">
-            {visibleMessages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
-            <div ref={bottomRef} />
-          </div>
-        )}
-      </div>
-
-      <PinnedContext
-        items={pinnedItems}
-        onRemove={handleRemovePin}
-        onAdd={handleAddPin}
-      />
-
-      <div className="border-t border-[#e4e7ec] bg-[#fbfbfd] px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-[#2d3347] dark:bg-[#141824] sm:px-6">
-        {/* Slash command palette */}
-        {slashQuery !== null && (
-          <SlashCommandPalette
-            query={slashQuery}
-            onSelect={(cmd) => {
-              setInput(cmd.template)
-              setSlashQuery(null)
-              focusComposer()
-            }}
-            onClose={() => setSlashQuery(null)}
-          />
-        )}
-
-        {/* File attachment chips */}
-        {attachedFiles.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {attachedFiles.map((file, idx) => (
-              <div
-                key={`${file.name}-${idx}`}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-2 py-1 text-[11px] text-[#344054] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#c9d1e0]"
-              >
-                {file.isImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={file.content} alt={file.name} className="h-5 w-5 rounded object-cover" />
-                ) : (
-                  <Paperclip size={11} className="shrink-0 text-[#98a2b3]" />
-                )}
-                <span className="max-w-[140px] truncate">{file.name}</span>
-                <button
-                  type="button"
-                  onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
-                  className="ml-0.5 text-[#98a2b3] hover:text-[#344054]"
-                  aria-label={`Remove ${file.name}`}
-                >
-                  x
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Input box */}
-        <div className="rounded-[22px] border border-[#e4e7ec] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKey}
-            disabled={isStreaming}
-            rows={1}
-            placeholder={
-              gatewayConnected
-                ? 'Message OpenAgents (Enter to send)'
-                : 'Runtime offline. /help still works locally.'
-            }
-            className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-base text-[#101828] outline-none placeholder:text-[#667085] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:text-white"
-          />
-
-          {/* Bottom toolbar */}
-          <div className="flex items-center justify-between border-t border-[#f2f4f7] px-3 py-2.5">
-            <div className="flex items-center gap-1">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileSelect}
-                accept="*/*"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
+            <div className="rounded-[22px] border border-[#e4e7ec] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={handleInputChange}
+                onKeyDown={handleKey}
                 disabled={isStreaming}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#667085] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#1e2433]"
-                aria-label="Attach file"
-              >
-                <Paperclip size={16} />
-              </button>
-              <button
-                type="button"
-                disabled
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] opacity-40"
-                aria-label="Voice input"
-              >
-                <Mic size={16} />
-              </button>
+                rows={1}
+                placeholder={gatewayConnected ? 'Message OpenAgents (Enter to send)' : 'Runtime offline. /help still works locally.'}
+                className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-base text-[#101828] outline-none placeholder:text-[#667085] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:text-white"
+              />
+              <div className="flex items-center justify-between border-t border-[#f2f4f7] px-3 py-2.5 dark:border-[#2d3347]">
+                <div className="flex items-center gap-1">
+                  <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="*/*" />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isStreaming} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#667085] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#1e2433]" aria-label="Attach file">
+                    <Paperclip size={16} />
+                  </button>
+                  <button type="button" disabled className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] opacity-40" aria-label="Voice input">
+                    <Mic size={16} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
+                  <button type="button" onClick={() => void handleSend()} disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)} className="oa-accent-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Send message">
+                    <ArrowUp size={15} />
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
-              <button
-                type="button"
-                onClick={() => void handleSend()}
-                disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
-                className="oa-accent-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
-                aria-label="Send message"
-              >
-                <ArrowUp size={15} />
-              </button>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#98a2b3]">
+              <span>{assistantModeDefinition.label} mode</span>
+              <span className="inline-flex items-center gap-1"><Command size={10} />/ commands</span>
+              <span>{assistantStatusText}</span>
             </div>
           </div>
-        </div>
-
-        {/* Status line */}
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#98a2b3]">
-          <span>{assistantModeDefinition.label} mode</span>
-          <span className="inline-flex items-center gap-1">
-            <Command size={10} />
-            / commands
-          </span>
-          <span>{assistantStatusText}</span>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   )
 }
