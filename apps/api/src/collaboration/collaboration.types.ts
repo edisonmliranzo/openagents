@@ -1,144 +1,35 @@
-export type WorkspaceRole = 'owner' | 'admin' | 'editor' | 'viewer'
+/**
+ * Local types for the collaboration module.
+ * These are self-contained and do not depend on @openagents/shared
+ * to avoid conflicts with the multi-agent types in that package.
+ */
 
-export interface WorkspaceSettings {
-  allowMemberInvites: boolean
-  requireApprovalForNewMembers: boolean
-  defaultMemberRole: WorkspaceRole
-  sharedMemoryEnabled: boolean
-  sharedAgentsEnabled: boolean
-}
+export type BlackboardEntryType =
+  | 'observation'
+  | 'hypothesis'
+  | 'fact'
+  | 'decision'
+  | 'task'
+  | 'question'
+  | 'result'
+  | 'plan'
+  | 'constraint'
+  | 'artifact'
 
-export interface WorkspaceMember {
-  id: string
-  workspaceId: string
-  userId: string
-  role: WorkspaceRole
-  permissions: string[]
-  invitedByUserId?: string
-  joinedAt: string
-}
-
-export interface WorkspaceInvitation {
-  id: string
-  workspaceId: string
-  email: string
-  role: WorkspaceRole
-  invitedBy: string
-  expiresAt: string
-  status: 'pending' | 'accepted' | 'declined' | 'expired'
-  createdAt: string
-  updatedAt: string
-}
-
-export interface WorkspaceConversationShare {
-  id: string
-  workspaceId: string
-  conversationId: string
-  title: string
-  sharedByUserId: string
-  createdAt: string
-}
-
-export interface WorkspaceWorkflowShare {
-  id: string
-  workspaceId: string
-  workflowId: string
-  name: string
-  sharedByUserId: string
-  createdAt: string
-}
-
-export interface WorkspaceArtifactShare {
-  id: string
-  workspaceId: string
-  artifactId: string
-  title: string
-  sharedByUserId: string
-  createdAt: string
-}
-
-export interface WorkspaceMemoryEntry {
-  id: string
-  workspaceId: string
-  createdByUserId: string
-  type: 'fact' | 'summary' | 'note'
-  title: string
-  content: string
-  tags: string[]
-  sourceRef?: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface Workspace {
-  id: string
-  name: string
-  description?: string
-  ownerId: string
-  members: WorkspaceMember[]
-  invitations: WorkspaceInvitation[]
-  conversations: WorkspaceConversationShare[]
-  workflows: WorkspaceWorkflowShare[]
-  artifacts: WorkspaceArtifactShare[]
-  memory: WorkspaceMemoryEntry[]
-  settings: WorkspaceSettings
-  createdAt: string
-  updatedAt: string
-}
-
-export interface CreateWorkspaceInput {
-  name: string
-  description?: string
-  settings?: Partial<WorkspaceSettings>
-}
-
-export interface UpdateWorkspaceInput {
-  name?: string
-  description?: string | null
-  settings?: Partial<WorkspaceSettings>
-}
-
-export interface CreateWorkspaceInvitationInput {
-  email: string
-  role?: WorkspaceRole
-  expiresInDays?: number
-}
-
-export interface CreateWorkspaceMemoryEntryInput {
-  type?: 'fact' | 'summary' | 'note'
-  title: string
-  content: string
-  tags?: string[]
-  sourceRef?: string
-}
-
-export interface WorkspaceChange {
-  id: string
-  workspaceId: string
-  userId: string
-  entityType: 'agent' | 'artifact' | 'memory' | 'workflow' | 'settings'
-  entityId: string
-  changeType: 'create' | 'update' | 'delete' | 'share'
-  previousValue?: Record<string, unknown>
-  newValue: Record<string, unknown>
-  message?: string
-  timestamp: string
-}
-
-export interface PresenceInfo {
-  userId: string
-  workspaceId: string
-  lastActiveAt: string
-  currentEntity?: {
-    type: string
-    id: string
-    name: string
-  }
-  cursor?: {
-    line: number
-    column: number
-  }
-}
+export type MessageType =
+  | 'inform'
+  | 'request'
+  | 'propose'
+  | 'accept'
+  | 'reject'
+  | 'query'
+  | 'confirm'
+  | 'report'
+  | 'challenge'
+  | 'coordinate'
+  | 'sync'
+  | 'alert'
+  | 'answer'
 
 export interface QualityThresholds {
   minConfidence: number
@@ -150,12 +41,12 @@ export interface QualityThresholds {
 export interface CollaborationProtocol {
   id: string
   teamId: string
-  communicationStyle: 'broadcast' | 'direct' | 'hybrid'
-  decisionMaking: 'consensus' | 'majority' | 'authority' | 'unanimous'
-  conflictResolution: 'negotiation' | 'arbitration' | 'voting' | 'escalation'
+  communicationStyle: 'broadcast' | 'direct' | 'hybrid' | 'synchronous' | 'asynchronous'
+  decisionMaking: 'consensus' | 'majority' | 'authority' | 'unanimous' | 'hierarchical' | 'autonomous'
+  conflictResolution: 'negotiation' | 'arbitration' | 'voting' | 'escalation' | 'merge'
   synchronizationInterval: number
   maxParallelTasks: number
-  taskAssignmentStrategy: 'skill-based' | 'round-robin' | 'load-balanced' | 'random'
+  taskAssignmentStrategy: 'skill-based' | 'round-robin' | 'load-balanced' | 'random' | 'auction'
   qualityThresholds: QualityThresholds
 }
 
@@ -166,14 +57,18 @@ export interface AgentRole {
   capabilities: string[]
   responsibilities: string[]
   permissions: string[]
+  constraints?: string[]
   priority?: number
+  maxConcurrentTasks?: number
+  specialization?: string
 }
 
 export interface AgentTeamMember {
   agentId: string
   roleId: string
-  status: 'idle' | 'active' | 'busy' | 'offline'
+  status: 'idle' | 'active' | 'busy' | 'offline' | 'error'
   currentTaskId?: string
+  currentTask?: string
   completedTasks: number
   failedTasks: number
   joinedAt: string
@@ -190,8 +85,6 @@ export interface Challenge {
   resolved: boolean
   resolution?: string
 }
-
-export type BlackboardEntryType = 'fact' | 'hypothesis' | 'decision' | 'task' | 'resource' | 'update'
 
 export interface BlackboardEntry {
   id: string
@@ -242,9 +135,12 @@ export interface AgentTeam {
 
 export interface Tradeoff {
   aspect: string
-  gain: string
-  loss: string
-  severity: 'low' | 'medium' | 'high'
+  gain?: string
+  loss?: string
+  severity?: 'low' | 'medium' | 'high'
+  benefit?: string
+  cost?: string
+  priority?: number
 }
 
 export interface NegotiationProposal {
@@ -262,10 +158,10 @@ export interface NegotiationProposal {
 }
 
 export interface NegotiationOutcome {
-  type: 'consensus' | 'compromise' | 'arbitration' | 'deadlock'
+  type: 'consensus' | 'compromise' | 'arbitration' | 'deadlock' | 'majority' | 'merge'
   selectedProposalId?: string
   rationale: string
-  concessions: string[]
+  concessions: string[] | Array<{ agentId: string; originalPosition: string; concededPosition: string; reason: string }>
   resolvedAt: string
 }
 
@@ -278,7 +174,7 @@ export interface NegotiationSession {
   proposals: NegotiationProposal[]
   currentRound: number
   maxRounds: number
-  status: 'active' | 'resolved' | 'deadlocked' | 'cancelled'
+  status: 'active' | 'resolved' | 'deadlocked' | 'cancelled' | 'abandoned'
   outcome?: NegotiationOutcome
   createdAt: string
   updatedAt: string
@@ -292,7 +188,7 @@ export interface DissentingOpinion {
 
 export interface ConsensusResult {
   agreement: number
-  decision: 'accepted' | 'rejected'
+  decision: 'accepted' | 'rejected' | 'inconclusive'
   rationale: string
   dissentingOpinions: DissentingOpinion[]
   reachedAt: string
@@ -315,13 +211,11 @@ export interface ConsensusRound {
   round: number
   maxRounds: number
   threshold: number
-  status: 'active' | 'reached' | 'failed' | 'cancelled'
+  status: 'active' | 'reached' | 'failed' | 'cancelled' | 'timeout'
   result?: ConsensusResult
   createdAt: string
   updatedAt: string
 }
-
-export type MessageType = 'negotiation' | 'consensus' | 'delegation' | 'update' | 'error'
 
 export interface AgentMessage {
   id: string
@@ -335,6 +229,8 @@ export interface AgentMessage {
   requiresAck: boolean
   acknowledged: boolean
   metadata?: Record<string, unknown>
+  inReplyTo?: string
+  relatesTo?: string
   createdAt: string
 }
 
@@ -362,42 +258,34 @@ export interface TaskDelegation {
   completedAt?: string
 }
 
-export interface TeamCollaborationMetrics {
-  messagesExchanged: number
-  negotiationsHeld: number
-  consensusRounds: number
-  averageAgreementTime: number
-  conflictRate: number
-}
-
-export interface TeamProductivityMetrics {
-  tasksCompleted: number
-  tasksFailed: number
-  averageTaskDuration: number
-  handoffsCompleted: number
-}
-
-export interface TeamQualityMetrics {
-  averageConfidence: number
-  endorsementRate: number
-  challengeRate: number
-  reviewPassRate: number
-}
-
-export interface TeamEfficiencyMetrics {
-  resourceUtilization: number
-  parallelismFactor: number
-  idleTime: number
-  reworkRate: number
-}
-
 export interface TeamMetrics {
   teamId: string
   period: { start: string; end: string }
-  collaboration: TeamCollaborationMetrics
-  productivity: TeamProductivityMetrics
-  quality: TeamQualityMetrics
-  efficiency: TeamEfficiencyMetrics
+  collaboration: {
+    messagesExchanged: number
+    negotiationsHeld: number
+    consensusRounds: number
+    averageAgreementTime: number
+    conflictRate: number
+  }
+  productivity: {
+    tasksCompleted: number
+    tasksFailed: number
+    averageTaskDuration: number
+    handoffsCompleted: number
+  }
+  quality: {
+    averageConfidence: number
+    endorsementRate: number
+    challengeRate: number
+    reviewPassRate: number
+  }
+  efficiency: {
+    resourceUtilization: number
+    parallelismFactor: number
+    idleTime: number
+    reworkRate: number
+  }
 }
 
 // ── Input types ───────────────────────────────────────────────────────────────

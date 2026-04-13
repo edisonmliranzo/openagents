@@ -219,7 +219,7 @@ export class CollaborationService {
 
   challengeEntry(teamId: string, entryId: string, input: Omit<ChallengeEntryInput, 'entryId'>): Challenge {
     const entry = this.findBlackboardEntry(teamId, entryId)
-    if (!entry) throw new NotFoundException(`Entry "${input.entryId}" not found`)
+    if (!entry) throw new NotFoundException(`Entry "${entryId}" not found`)
 
     const challenge: Challenge = {
       id: `challenge_${randomUUID()}`,
@@ -642,6 +642,7 @@ export class CollaborationService {
 
     return [this.sendTeamMessage(teamId, {
       ...input,
+      senderAgentId: input.senderAgentId,
       recipientAgentIds: recipientIds.slice(0, 50),
     })]
   }

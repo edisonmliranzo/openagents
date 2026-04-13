@@ -110,8 +110,7 @@ export class CollaborationController {
     @Body('reason') reason: string,
     @Body('alternativeProposal') alternativeProposal?: string,
   ) {
-    return this.collaborationService.challengeEntry({
-      entryId,
+    return this.collaborationService.challengeEntry(teamId, entryId, {
       challengingAgentId,
       reason,
       alternativeProposal,
