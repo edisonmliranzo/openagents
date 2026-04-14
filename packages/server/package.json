@@ -10,8 +10,6 @@
   "dependencies": {
     "@fastify/cors": "^8.5.0",
     "@fastify/multipart": "^8.1.0",
-    "@jsonwebtoken/fastify": "^9.0.0",
-    "@openagents/shared": " workspace:*",
     "fastify": "^4.25.0",
     "fastify-plugin": "^4.5.1",
     "ws": "^8.16.0"
