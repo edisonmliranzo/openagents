@@ -44,6 +44,7 @@ import { ResearchModule } from './research/research.module'
 import { AnomalyModule } from './anomaly/anomaly.module'
 import { CollaborationModule } from './collaboration/collaboration.module'
 import { AdvancedAIModule } from './advanced-ai/advanced-ai.module'
+import { CodeEditorModule } from './code-editor/code-editor.module'
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { AdvancedAIModule } from './advanced-ai/advanced-ai.module'
     AnomalyModule,
     CollaborationModule,
     AdvancedAIModule,
+    CodeEditorModule,
   ],
 })
 export class AppModule {}
