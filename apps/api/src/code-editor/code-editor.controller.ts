@@ -1,8 +1,5 @@
-import { Controller, Post, Get, Body, Query, Res, HttpStatus } from '@nestjs/common'
+import { Controller, Post, Get, Body, Query } from '@nestjs/common'
 import { ApiTags, ApiOperation } from '@nestjs/swagger'
-import { Response } from 'express'
-import { spawn } from 'child_process'
-import { createClient } from '@openagents/shared'
 
 @ApiTags('code-editor')
 @Controller('code-editor')
@@ -99,7 +96,7 @@ export class CodeEditorController {
 
           return {
             name,
-            type: isDir ? 'directory' : 'file',
+            type: (isDir ? 'directory' : 'file') as 'file' | 'directory',
             path: `${targetPath}/${name}`,
             size: isNaN(size) ? undefined : size,
           }
@@ -195,12 +192,17 @@ export class CodeEditorController {
     return new Promise((resolve) => {
       const child = spawn(cmd, args, {
         cwd: this.workDir,
-        timeout: 30000,
         shell: false,
       })
 
       let stdout = ''
       let stderr = ''
+      let timedOut = false
+
+      const timeout = setTimeout(() => {
+        timedOut = true
+        child.kill()
+      }, 30000)
 
       child.stdout?.on('data', (data) => {
         stdout += data.toString()
@@ -211,14 +213,16 @@ export class CodeEditorController {
       })
 
       child.on('close', (code) => {
+        clearTimeout(timeout)
         resolve({
           stdout: stdout.slice(0, 100000),
-          stderr: stderr.slice(0, 10000),
-          exitCode: code || 0,
+          stderr: timedOut ? 'Execution timed out after 30 seconds' : stderr.slice(0, 10000),
+          exitCode: timedOut ? 1 : code || 0,
         })
       })
 
       child.on('error', (error) => {
+        clearTimeout(timeout)
         resolve({
           stdout: '',
           stderr: error.message,
