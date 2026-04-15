@@ -23,4 +23,5 @@ export * from './dry-run'
 export * from './agent-version'
 export * from './advanced-ai'
 export * from './oauth'
+export * from './analytics'
 // multi-agent types live in collaboration.ts to avoid duplicate exports

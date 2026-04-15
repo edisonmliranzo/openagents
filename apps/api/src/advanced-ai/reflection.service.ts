@@ -28,6 +28,50 @@ import type {
 
 type ReflectionAssessment = SelfReflection['assessment']
 
+const COMMON_STOP_WORDS = new Set([
+  'about',
+  'after',
+  'again',
+  'also',
+  'been',
+  'before',
+  'being',
+  'between',
+  'could',
+  'does',
+  'from',
+  'have',
+  'into',
+  'just',
+  'more',
+  'only',
+  'over',
+  'same',
+  'some',
+  'such',
+  'than',
+  'that',
+  'their',
+  'them',
+  'then',
+  'there',
+  'these',
+  'they',
+  'this',
+  'those',
+  'through',
+  'under',
+  'very',
+  'what',
+  'when',
+  'where',
+  'which',
+  'while',
+  'with',
+  'would',
+  'your',
+])
+
 interface ReflectionState {
   reflections: Map<string, SelfReflection>
   metaCognitiveStates: Map<string, MetaCognitiveState>
@@ -62,21 +106,23 @@ export class ReflectionService {
   }
 
   evaluateOutput(input: EvaluateOutputInput): ReflectionResponse {
+    const output = this.requireNonEmptyText(input.output, 'output', 10000)
+    const context = this.normalizeOptionalText(input.context, 8000)
     const reflectionId = `reflection_${randomUUID()}`
     const now = new Date().toISOString()
     const criteria = this.normalizeCriteria(input.criteria)
-    const assessment = this.analyzeOutputQuality(input.output, criteria, input.context)
+    const assessment = this.analyzeOutputQuality(output, criteria, context)
 
     const reflection: SelfReflection = {
       id: reflectionId,
-      targetOutput: input.output.slice(0, 5000),
+      targetOutput: output.slice(0, 5000),
       reflectionType: this.determineReflectionType(criteria, assessment.evaluatorBreakdown),
       assessment,
       reasoning: this.generateReflectionReasoning(assessment),
       timestamp: now,
       metadata: {
         criteria,
-        context: input.context,
+        context,
         outputType: input.outputType ?? 'final-answer',
         ...input.agentContext,
       },
@@ -85,7 +131,9 @@ export class ReflectionService {
     this.state.reflections.set(reflectionId, reflection)
     this.pruneReflections()
 
-    this.logger.log(`Generated reflection ${reflectionId} for ${input.agentContext?.agentId ?? 'anonymous-agent'}`)
+    this.logger.log(
+      `Generated reflection ${reflectionId} for ${input.agentContext?.agentId ?? 'anonymous-agent'}`,
+    )
 
     return {
       reflection,
@@ -98,15 +146,18 @@ export class ReflectionService {
     return this.state.reflections.get(reflectionId) ?? null
   }
 
-  getReflectionHistory(agentId: string, limit = 50): SelfReflection[] {
+  getReflectionHistory(agentId: string, limit: number | string = 50): SelfReflection[] {
+    const normalizedAgentId = this.normalizeIdentifier(agentId, 'agentId')
+    const normalizedLimit = this.normalizeLimit(limit, 50, 200)
+
     return [...this.state.reflections.values()]
-      .filter(reflection => reflection.metadata?.agentId === agentId)
+      .filter((reflection) => reflection.metadata?.agentId === normalizedAgentId)
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-      .slice(0, Math.min(limit, 200))
+      .slice(0, normalizedLimit)
   }
 
   getMetaCognitiveState(input: GetMetaCognitiveStateInput): MetaCognitiveResponse {
-    const agentId = input.agentId
+    const agentId = this.normalizeIdentifier(input.agentId, 'agentId')
 
     let state = this.state.metaCognitiveStates.get(agentId)
     if (!state) {
@@ -116,14 +167,16 @@ export class ReflectionService {
 
     this.updateMetaCognitiveState(state, agentId)
 
-    const historyLimit = Math.min(input.historyLimit ?? 10, 50)
+    const historyLimit = this.normalizeLimit(input.historyLimit, 10, 50)
+    const includeHistory = this.coerceBoolean(input.includeHistory)
+    const behaviorProfile = this.getOrCreateBehaviorProfile(agentId)
 
     return {
       state,
-      recommendations: this.generateMetaCognitiveRecommendations(state),
+      recommendations: this.generateMetaCognitiveRecommendations(state, behaviorProfile),
       riskAssessment: this.assessMetaCognitiveRisks(state),
-      behaviorProfile: this.getOrCreateBehaviorProfile(agentId),
-      history: input.includeHistory
+      behaviorProfile,
+      history: includeHistory
         ? {
             reflections: this.getRecentReflections(agentId, historyLimit),
             uncertainties: this.getRecentUncertainties(agentId, historyLimit),
@@ -134,11 +187,17 @@ export class ReflectionService {
   }
 
   processFeedback(input: ProcessFeedbackInput): LearningResponse {
+    const feedbackContent = this.requireNonEmptyText(
+      input.feedback.content,
+      'feedback.content',
+      4000,
+    )
     const feedbackId = `feedback_${randomUUID()}`
     const now = new Date().toISOString()
 
     const feedback: LearningFeedback = {
       ...input.feedback,
+      content: feedbackContent,
       id: feedbackId,
       timestamp: now,
       metadata: {
@@ -158,7 +217,9 @@ export class ReflectionService {
     const appliedAdjustments = input.applyImmediately ? this.applyFeedbackImmediately(feedback) : []
     const performanceImprovement = this.calculatePerformanceImprovement(feedback)
 
-    this.logger.log(`Processed feedback ${feedbackId} for ${feedback.metadata?.agentId ?? 'anonymous-agent'}`)
+    this.logger.log(
+      `Processed feedback ${feedbackId} for ${feedback.metadata?.agentId ?? 'anonymous-agent'}`,
+    )
 
     return {
       updatedMemory,
@@ -168,32 +229,39 @@ export class ReflectionService {
     }
   }
 
-  getLearningHistory(agentId: string, limit = 100): LearningFeedback[] {
+  getLearningHistory(agentId: string, limit: number | string = 100): LearningFeedback[] {
+    const normalizedAgentId = this.normalizeIdentifier(agentId, 'agentId')
+    const normalizedLimit = this.normalizeLimit(limit, 100, 500)
+
     return [...this.state.feedback.values()]
-      .filter(feedback => feedback.metadata?.agentId === agentId)
+      .filter((feedback) => feedback.metadata?.agentId === normalizedAgentId)
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-      .slice(0, Math.min(limit, 500))
+      .slice(0, normalizedLimit)
   }
 
   getAdaptiveMemory(agentId: string): AdaptiveMemory | null {
-    return this.state.memories.get(agentId) ?? null
+    return this.state.memories.get(this.normalizeIdentifier(agentId, 'agentId')) ?? null
   }
 
-  addMemoryExperience(agentId: string, experience: {
-    content: string
-    type: 'experience' | 'lesson' | 'pattern' | 'mistake'
-    tags?: string[]
-  }): AdaptiveMemory {
-    const memory = this.getOrCreateMemory(agentId)
+  addMemoryExperience(
+    agentId: string,
+    experience: {
+      content: string
+      type: 'experience' | 'lesson' | 'pattern' | 'mistake'
+      tags?: string[]
+    },
+  ): AdaptiveMemory {
+    const normalizedAgentId = this.normalizeIdentifier(agentId, 'agentId')
+    const memory = this.getOrCreateMemory(normalizedAgentId)
 
     const memoryEntry: AdaptiveMemory['memories'][number] = {
       id: `memory_entry_${randomUUID()}`,
-      content: experience.content.slice(0, 2000),
+      content: this.requireNonEmptyText(experience.content, 'experience.content', 2000),
       type: experience.type,
       timestamp: new Date().toISOString(),
       relevance: 1,
       emotionalValence: experience.type === 'mistake' ? -0.5 : 0.5,
-      tags: experience.tags ?? [],
+      tags: this.normalizeTags(experience.tags),
     }
 
     memory.memories.push(memoryEntry)
@@ -207,12 +275,10 @@ export class ReflectionService {
   }
 
   retrieveRelevantMemories(input: AdaptiveMemoryRetrievalInput): AdaptiveMemoryRetrievalResponse {
-    const query = input.query.trim()
-    if (!query) {
-      throw new BadRequestException('Memory retrieval query must not be empty')
-    }
+    const agentId = this.normalizeIdentifier(input.agentId, 'agentId')
+    const query = this.requireNonEmptyText(input.query, 'query', 500)
 
-    const memory = this.state.memories.get(input.agentId)
+    const memory = this.state.memories.get(agentId)
     if (!memory) {
       return {
         matches: [],
@@ -221,8 +287,8 @@ export class ReflectionService {
     }
 
     const queryTokens = this.tokenize(query)
-    const tagSet = new Set<string>((input.tags ?? []).map((tag: string) => tag.toLowerCase()))
-    const limit = Math.min(input.limit ?? 5, 20)
+    const tagSet = new Set<string>(this.normalizeTags(input.tags))
+    const limit = this.normalizeLimit(input.limit, 5, 20)
 
     const matches: AdaptiveMemoryRetrievalResponse['matches'] = memory.memories
       .map((entry: AdaptiveMemory['memories'][number]) => ({
@@ -230,15 +296,22 @@ export class ReflectionService {
         score: this.calculateMemoryMatchScore(entry, queryTokens, tagSet),
       }))
       .filter((match: AdaptiveMemoryRetrievalResponse['matches'][number]) => match.score > 0)
-      .sort((a: AdaptiveMemoryRetrievalResponse['matches'][number], b: AdaptiveMemoryRetrievalResponse['matches'][number]) => b.score - a.score)
+      .sort(
+        (
+          a: AdaptiveMemoryRetrievalResponse['matches'][number],
+          b: AdaptiveMemoryRetrievalResponse['matches'][number],
+        ) => b.score - a.score,
+      )
       .slice(0, limit)
 
     const suggestedPatterns: AdaptiveMemoryRetrievalResponse['suggestedPatterns'] = memory.patterns
-      .filter((pattern: AdaptiveMemory['patterns'][number]) => this.calculatePatternMatchScore(pattern, queryTokens) > 0)
-      .sort(
-        (a: AdaptiveMemory['patterns'][number], b: AdaptiveMemory['patterns'][number]) =>
-          this.calculatePatternMatchScore(b, queryTokens) - this.calculatePatternMatchScore(a, queryTokens),
-      )
+      .map((pattern: AdaptiveMemory['patterns'][number]) => ({
+        pattern,
+        score: this.calculatePatternMatchScore(pattern, queryTokens),
+      }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(({ pattern }) => pattern)
       .slice(0, limit)
 
     return {
@@ -248,13 +321,18 @@ export class ReflectionService {
   }
 
   analyzeUncertainty(input: UncertaintyAnalysisInput): UncertaintyResponse {
+    const output = this.requireNonEmptyText(input.output, 'output', 10000)
+    const context = this.requireNonEmptyText(input.context, 'context', 8000)
     const now = new Date().toISOString()
-    const knowledgeCoverage = this.calculateKnowledgeCoverage(input.output, input.knowledgeBase)
+    const knowledgeCoverage = this.calculateKnowledgeCoverage(output, input.knowledgeBase)
     const epistemic = this.calculateEpistemicUncertainty(knowledgeCoverage)
-    const aleatoric = this.calculateAleatoricUncertainty(input.output, input.context)
+    const aleatoric = this.calculateAleatoricUncertainty(output, context)
     const total = Math.min(1, epistemic + aleatoric)
-    const confidenceInterval: [number, number] = [Math.max(0, 1 - total - 0.1), Math.min(1, 1 - total + 0.1)]
-    const sources = this.identifyUncertaintySources(input.output, input.context, knowledgeCoverage)
+    const confidenceInterval: [number, number] = [
+      Math.max(0, 1 - total - 0.1),
+      Math.min(1, 1 - total + 0.1),
+    ]
+    const sources = this.identifyUncertaintySources(output, context, knowledgeCoverage)
 
     const quantification: UncertaintyQuantification = {
       epistemic,
@@ -266,7 +344,7 @@ export class ReflectionService {
       knowledgeCoverage,
       metadata: {
         ...input.agentContext,
-        outputExcerpt: input.output.slice(0, 200),
+        outputExcerpt: output.slice(0, 200),
       },
     }
 
@@ -283,26 +361,33 @@ export class ReflectionService {
   }
 
   updateCognitiveLoad(input: CognitiveLoadInput): CognitiveLoadResponse {
-    const agentId = input.agentId
+    const agentId = this.normalizeIdentifier(input.agentId, 'agentId')
     const now = new Date().toISOString()
     const load = this.getOrCreateCognitiveLoad(agentId, now)
+    const taskComplexity = this.normalizeUnitInterval(input.taskComplexity, 'taskComplexity')
+    const timePressure = this.normalizeUnitInterval(input.timePressure, 'timePressure')
+    const recoveryMinutes = this.normalizeNonNegativeNumber(
+      input.recoveryMinutes,
+      'recoveryMinutes',
+    )
+    const currentTask = this.normalizeOptionalText(input.currentTask, 1000)
 
-    this.applyCognitiveLoadDecay(load, now, input.recoveryMinutes)
+    this.applyCognitiveLoadDecay(load, now, recoveryMinutes)
 
-    if (input.currentTask) {
+    if (currentTask) {
       load.workingMemoryUsage = Math.min(1, load.workingMemoryUsage + 0.18)
       load.processingSpeed = Math.max(0.5, load.processingSpeed - 0.08)
       load.attentionSpan += 1
     }
 
-    if (typeof input.taskComplexity === 'number') {
-      load.workingMemoryUsage = Math.min(1, load.workingMemoryUsage + (input.taskComplexity * 0.25))
-      load.stressLevel = Math.min(1, load.stressLevel + (input.taskComplexity * 0.18))
+    if (typeof taskComplexity === 'number') {
+      load.workingMemoryUsage = Math.min(1, load.workingMemoryUsage + taskComplexity * 0.25)
+      load.stressLevel = Math.min(1, load.stressLevel + taskComplexity * 0.18)
     }
 
-    if (typeof input.timePressure === 'number') {
-      load.fatigueLevel = Math.min(1, load.fatigueLevel + (input.timePressure * 0.08))
-      load.stressLevel = Math.min(1, load.stressLevel + (input.timePressure * 0.25))
+    if (typeof timePressure === 'number') {
+      load.fatigueLevel = Math.min(1, load.fatigueLevel + timePressure * 0.08)
+      load.stressLevel = Math.min(1, load.stressLevel + timePressure * 0.25)
     }
 
     if (input.taskCompleted) {
@@ -323,7 +408,7 @@ export class ReflectionService {
   }
 
   getBehaviorProfile(agentId: string): AgentBehaviorProfile {
-    return this.getOrCreateBehaviorProfile(agentId)
+    return this.getOrCreateBehaviorProfile(this.normalizeIdentifier(agentId, 'agentId'))
   }
 
   private analyzeOutputQuality(
@@ -332,9 +417,12 @@ export class ReflectionService {
     context?: string,
   ): ReflectionAssessment {
     const requestedDimensions = this.getRequestedCriteria(criteria)
-    const evaluatorBreakdown = requestedDimensions.map(dimension => this.evaluateDimension(dimension, output, context))
+    const evaluatorBreakdown = requestedDimensions.map((dimension) =>
+      this.evaluateDimension(dimension, output, context),
+    )
     const score = Math.round(
-      evaluatorBreakdown.reduce((sum, evaluator) => sum + evaluator.score, 0) / evaluatorBreakdown.length,
+      evaluatorBreakdown.reduce((sum, evaluator) => sum + evaluator.score, 0) /
+        evaluatorBreakdown.length,
     )
 
     return {
@@ -357,7 +445,9 @@ export class ReflectionService {
     return normalized
   }
 
-  private getRequestedCriteria(criteria: Partial<Record<EvaluationCriterion, boolean>>): EvaluationCriterion[] {
+  private getRequestedCriteria(
+    criteria: Partial<Record<EvaluationCriterion, boolean>>,
+  ): EvaluationCriterion[] {
     return Object.entries(criteria)
       .filter(([, enabled]) => Boolean(enabled))
       .map(([dimension]) => dimension as EvaluationCriterion)
@@ -403,9 +493,17 @@ export class ReflectionService {
       score += 6
       findings.push('Uses concrete details instead of purely generic phrasing')
     }
+    if (this.containsEvidenceMarkers(output)) {
+      score += 6
+      findings.push('Includes concrete anchors such as citations, code, or structured evidence')
+    }
     if (context && overlap > 0.2) {
       score += 8
       findings.push('Stays aligned with the supplied context')
+    }
+    if (this.containsUnsupportedAbsoluteClaims(output) && !this.containsEvidenceMarkers(output)) {
+      score -= 10
+      findings.push('Makes high-certainty claims without enough supporting evidence')
     }
 
     return {
@@ -447,7 +545,7 @@ export class ReflectionService {
 
   private evaluateRelevance(output: string, context?: string): ReflectionEvaluatorResult {
     const overlap = this.calculateTokenOverlap(output, context ?? '')
-    const score = context ? this.clampScore(45 + (overlap * 55)) : 70
+    const score = context ? this.clampScore(45 + overlap * 55) : 70
     const findings = context
       ? overlap >= 0.2
         ? ['Response meaningfully overlaps with the task context']
@@ -467,13 +565,17 @@ export class ReflectionService {
     let score = 68
     const findings: string[] = []
 
-    if (/(\n- |\n\* |\n\d+\. )/.test(output)) {
+    if (this.hasStructuredFormatting(output)) {
       score += 10
       findings.push('Uses explicit structure to organize the response')
     }
     if (output.length > 160) {
       score += 8
       findings.push('Provides enough detail for a substantive answer')
+    }
+    if (/\b(next step|action items?|implementation|example)\b/i.test(output)) {
+      score += 6
+      findings.push('Includes actionable guidance instead of only abstract commentary')
     }
     if (/[.!?]$/.test(output.trim())) {
       score += 4
@@ -482,21 +584,31 @@ export class ReflectionService {
       score -= 20
       findings.push('Contains placeholder-style language')
     }
+    if (/(.)\1{6,}/.test(output)) {
+      score -= 8
+      findings.push('Contains repetitive phrasing that weakens polish')
+    }
 
     return {
       name: 'ResponseQualityEvaluator',
       dimension: 'quality',
       score: this.clampScore(score),
       confidence: 0.76,
-      findings: findings.length > 0 ? findings : ['Output quality is acceptable but not distinctive'],
+      findings:
+        findings.length > 0 ? findings : ['Output quality is acceptable but not distinctive'],
     }
   }
 
   private evaluateClarity(output: string): ReflectionEvaluatorResult {
-    const sentences = output.split(/[.!?]+/).map(sentence => sentence.trim()).filter(Boolean)
-    const averageSentenceLength = sentences.length > 0
-      ? sentences.reduce((sum, sentence) => sum + sentence.split(/\s+/).length, 0) / sentences.length
-      : output.split(/\s+/).length
+    const sentences = output
+      .split(/[.!?]+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean)
+    const averageSentenceLength =
+      sentences.length > 0
+        ? sentences.reduce((sum, sentence) => sum + sentence.split(/\s+/).length, 0) /
+          sentences.length
+        : output.split(/\s+/).length
 
     let score = 80
     const findings: string[] = []
@@ -524,7 +636,7 @@ export class ReflectionService {
 
   private evaluateGrounding(output: string, context?: string): ReflectionEvaluatorResult {
     const overlap = this.calculateTokenOverlap(output, context ?? '')
-    let score = context ? 42 + (overlap * 58) : 60
+    let score = context ? 42 + overlap * 58 : 60
     const findings: string[] = []
 
     if (/`[^`]+`/.test(output) || /"[^"]+"/.test(output)) {
@@ -556,6 +668,13 @@ export class ReflectionService {
       score -= 35
       findings[0] = 'Contains potentially unsafe or high-risk language'
     }
+    if (
+      /\b(api[_-]?key|password|secret|token)\b/i.test(output) &&
+      /(=|:)\s*['"]?[A-Za-z0-9_\-]{8,}/.test(output)
+    ) {
+      score -= 25
+      findings[0] = 'Contains secret-like material that should not be exposed directly'
+    }
 
     return {
       name: 'SafetyEvaluator',
@@ -568,24 +687,26 @@ export class ReflectionService {
 
   private collectStrengths(evaluatorBreakdown: ReflectionEvaluatorResult[]): string[] {
     return evaluatorBreakdown
-      .filter(result => result.score >= 75)
-      .map(result => result.findings[0] ?? `Strong ${result.dimension}`)
+      .filter((result) => result.score >= 75)
+      .map((result) => result.findings[0] ?? `Strong ${result.dimension}`)
       .filter((value, index, values) => values.indexOf(value) === index)
       .slice(0, 5)
   }
 
   private collectWeaknesses(evaluatorBreakdown: ReflectionEvaluatorResult[]): string[] {
     return evaluatorBreakdown
-      .filter(result => result.score < 60)
-      .map(result => result.findings[0] ?? `Needs better ${result.dimension}`)
+      .filter((result) => result.score < 60)
+      .map((result) => result.findings[0] ?? `Needs better ${result.dimension}`)
       .filter((value, index, values) => values.indexOf(value) === index)
       .slice(0, 5)
   }
 
-  private generateImprovementSuggestions(evaluatorBreakdown: ReflectionEvaluatorResult[]): string[] {
+  private generateImprovementSuggestions(
+    evaluatorBreakdown: ReflectionEvaluatorResult[],
+  ): string[] {
     const suggestions = evaluatorBreakdown
-      .filter(result => result.score < 70)
-      .map(result => {
+      .filter((result) => result.score < 70)
+      .map((result) => {
         switch (result.dimension) {
           case 'accuracy':
             return 'Verify claims against a concrete source or explicitly state unresolved gaps'
@@ -614,8 +735,13 @@ export class ReflectionService {
     criteria: Partial<Record<EvaluationCriterion, boolean>>,
     evaluatorBreakdown: ReflectionEvaluatorResult[],
   ): SelfReflection['reflectionType'] {
-    const requestedPrimaryTypes: SelfReflection['reflectionType'][] = ['accuracy', 'completeness', 'relevance', 'quality']
-    const requested = requestedPrimaryTypes.filter(type => criteria[type])
+    const requestedPrimaryTypes: SelfReflection['reflectionType'][] = [
+      'accuracy',
+      'completeness',
+      'relevance',
+      'quality',
+    ]
+    const requested = requestedPrimaryTypes.filter((type) => criteria[type])
     if (requested.length === 1) {
       return requested[0]
     }
@@ -640,10 +766,23 @@ export class ReflectionService {
     return `Assessment ${assessment.score}/100 with ${assessment.confidence.toFixed(2)} confidence. Weakest dimensions: ${weakestDimensions || 'none'}.`
   }
 
-  private calculateAssessmentConfidence(output: string, evaluatorBreakdown: ReflectionEvaluatorResult[]): number {
-    const evaluatorConfidence = evaluatorBreakdown.reduce((sum, result) => sum + result.confidence, 0) / evaluatorBreakdown.length
-    const lengthConfidence = Math.min(1, 0.45 + (output.length / 2500))
-    return Math.min(1, Number(((evaluatorConfidence * 0.7) + (lengthConfidence * 0.3)).toFixed(2)))
+  private calculateAssessmentConfidence(
+    output: string,
+    evaluatorBreakdown: ReflectionEvaluatorResult[],
+  ): number {
+    const evaluatorConfidence =
+      evaluatorBreakdown.reduce((sum, result) => sum + result.confidence, 0) /
+      evaluatorBreakdown.length
+    const lengthConfidence = Math.min(1, 0.45 + output.length / 2500)
+    const coverageConfidence = Math.min(1, 0.55 + evaluatorBreakdown.length * 0.08)
+    return Math.min(
+      1,
+      Number(
+        (evaluatorConfidence * 0.55 + lengthConfidence * 0.2 + coverageConfidence * 0.25).toFixed(
+          2,
+        ),
+      ),
+    )
   }
 
   private initializeMetaCognitiveState(): MetaCognitiveState {
@@ -667,9 +806,11 @@ export class ReflectionService {
 
     if (recentReflections.length > 0) {
       const averageReflectionConfidence =
-        recentReflections.reduce((sum, reflection) => sum + reflection.assessment.confidence, 0) / recentReflections.length
+        recentReflections.reduce((sum, reflection) => sum + reflection.assessment.confidence, 0) /
+        recentReflections.length
       const averageReflectionScore =
-        recentReflections.reduce((sum, reflection) => sum + (reflection.assessment.score / 100), 0) / recentReflections.length
+        recentReflections.reduce((sum, reflection) => sum + reflection.assessment.score / 100, 0) /
+        recentReflections.length
       const calibrationGap = Math.abs(averageReflectionConfidence - averageReflectionScore)
 
       state.selfAwareness = this.clampUnit(1 - calibrationGap)
@@ -677,45 +818,56 @@ export class ReflectionService {
 
     if (currentLoad) {
       state.cognitiveLoad = this.clampUnit(
-        (currentLoad.workingMemoryUsage * 0.45) +
-        (currentLoad.fatigueLevel * 0.2) +
-        (currentLoad.stressLevel * 0.25) +
-        (Math.max(0, 1 - currentLoad.processingSpeed) * 0.1),
+        currentLoad.workingMemoryUsage * 0.45 +
+          currentLoad.fatigueLevel * 0.2 +
+          currentLoad.stressLevel * 0.25 +
+          Math.max(0, 1 - currentLoad.processingSpeed) * 0.1,
       )
     }
 
     if (recentUncertainties.length > 0) {
       state.uncertainty = this.clampUnit(
-        recentUncertainties.reduce((sum, uncertainty) => sum + uncertainty.total, 0) / recentUncertainties.length,
+        recentUncertainties.reduce((sum, uncertainty) => sum + uncertainty.total, 0) /
+          recentUncertainties.length,
       )
     }
 
-    const recentScore = recentReflections.length > 0
-      ? recentReflections.reduce((sum, reflection) => sum + reflection.assessment.score, 0) / recentReflections.length / 100
-      : 0.65
+    const recentScore =
+      recentReflections.length > 0
+        ? recentReflections.reduce((sum, reflection) => sum + reflection.assessment.score, 0) /
+          recentReflections.length /
+          100
+        : 0.65
     state.confidence = this.clampUnit(
-      (recentScore * 0.55) +
-      ((1 - state.uncertainty) * 0.25) +
-      (behaviorProfile.verificationThreshold * 0.1) -
-      (state.cognitiveLoad * 0.15),
+      recentScore * 0.55 +
+        (1 - state.uncertainty) * 0.25 +
+        behaviorProfile.verificationThreshold * 0.1 -
+        state.cognitiveLoad * 0.15,
     )
 
     state.learningRate = this.clampUnit(
-      0.08 + (Math.min(5, recentFeedback.length) * 0.04) + (behaviorProfile.activeAdjustments.length * 0.01),
+      0.08 +
+        Math.min(5, recentFeedback.length) * 0.04 +
+        behaviorProfile.activeAdjustments.length * 0.01,
     )
 
     state.knowledgeGaps = this.extractKnowledgeGaps(recentUncertainties, recentFeedback)
     state.lastUpdated = new Date().toISOString()
   }
 
-  private generateMetaCognitiveRecommendations(state: MetaCognitiveState): string[] {
+  private generateMetaCognitiveRecommendations(
+    state: MetaCognitiveState,
+    behaviorProfile: AgentBehaviorProfile,
+  ): string[] {
     const recommendations: string[] = []
 
     if (state.selfAwareness < 0.55) {
       recommendations.push('Calibrate confidence against recent output scores before proceeding')
     }
     if (state.uncertainty > 0.65) {
-      recommendations.push('Pause for clarification or collect more evidence before answering decisively')
+      recommendations.push(
+        'Pause for clarification or collect more evidence before answering decisively',
+      )
     }
     if (state.cognitiveLoad > 0.75) {
       recommendations.push('Reduce scope or serialize the next steps to prevent overload')
@@ -723,11 +875,25 @@ export class ReflectionService {
     if (state.knowledgeGaps.length > 0) {
       recommendations.push(`Resolve knowledge gaps first: ${state.knowledgeGaps.join(', ')}`)
     }
+    if (behaviorProfile.activeAdjustments.length > 0) {
+      recommendations.push(
+        'Apply the most recent behavior adjustment before starting another long reasoning cycle',
+      )
+    }
+    if (behaviorProfile.preferredReasoningStrategy) {
+      recommendations.push(
+        `Prefer ${behaviorProfile.preferredReasoningStrategy} when the task is ambiguous or multi-step`,
+      )
+    }
 
-    return recommendations
+    return recommendations.length > 0
+      ? recommendations
+      : ['Current calibration looks stable; proceed and keep monitoring confidence drift']
   }
 
-  private assessMetaCognitiveRisks(state: MetaCognitiveState): MetaCognitiveResponse['riskAssessment'] {
+  private assessMetaCognitiveRisks(
+    state: MetaCognitiveState,
+  ): MetaCognitiveResponse['riskAssessment'] {
     return {
       overconfidence: state.confidence > 0.85 && state.selfAwareness < 0.55,
       underconfidence: state.confidence < 0.35 && state.selfAwareness > 0.7,
@@ -738,7 +904,7 @@ export class ReflectionService {
 
   private getRecentReflections(agentId: string, limit: number): SelfReflection[] {
     return [...this.state.reflections.values()]
-      .filter(reflection => reflection.metadata?.agentId === agentId)
+      .filter((reflection) => reflection.metadata?.agentId === agentId)
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
       .slice(0, limit)
   }
@@ -751,13 +917,14 @@ export class ReflectionService {
 
   private getRecentFeedback(agentId: string, limit: number): LearningFeedback[] {
     return [...this.state.feedback.values()]
-      .filter(feedback => feedback.metadata?.agentId === agentId)
+      .filter((feedback) => feedback.metadata?.agentId === agentId)
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
       .slice(0, limit)
   }
 
   private updateMemoryFromFeedback(feedback: LearningFeedback): AdaptiveMemory | null {
-    const agentId = typeof feedback.metadata?.agentId === 'string' ? feedback.metadata.agentId : null
+    const agentId =
+      typeof feedback.metadata?.agentId === 'string' ? feedback.metadata.agentId : null
     if (!agentId) {
       return null
     }
@@ -782,7 +949,8 @@ export class ReflectionService {
   }
 
   private applyFeedbackImmediately(feedback: LearningFeedback): AgentBehaviorAdjustment[] {
-    const agentId = typeof feedback.metadata?.agentId === 'string' ? feedback.metadata.agentId : null
+    const agentId =
+      typeof feedback.metadata?.agentId === 'string' ? feedback.metadata.agentId : null
     if (!agentId) {
       return []
     }
@@ -793,59 +961,72 @@ export class ReflectionService {
 
     if (feedback.feedbackType !== 'positive') {
       behaviorProfile.verificationThreshold = this.clampUnit(
-        behaviorProfile.verificationThreshold + (priorityWeight * 0.05),
+        behaviorProfile.verificationThreshold + priorityWeight * 0.05,
       )
-      adjustments.push(this.createBehaviorAdjustment(agentId, {
-        category: 'reasoning',
-        action: 'raise_verification_threshold',
-        description: 'Require stronger verification before finalizing responses',
-        strength: priorityWeight,
-        sourceFeedbackId: feedback.id,
-      }))
+      adjustments.push(
+        this.createBehaviorAdjustment(agentId, {
+          category: 'reasoning',
+          action: 'raise_verification_threshold',
+          description: 'Require stronger verification before finalizing responses',
+          strength: priorityWeight,
+          sourceFeedbackId: feedback.id,
+        }),
+      )
 
       behaviorProfile.escalationThreshold = this.clampUnit(
-        behaviorProfile.escalationThreshold - (priorityWeight * 0.06),
+        behaviorProfile.escalationThreshold - priorityWeight * 0.06,
       )
-      adjustments.push(this.createBehaviorAdjustment(agentId, {
-        category: 'escalation',
-        action: 'lower_escalation_threshold',
-        description: 'Escalate or seek clarification earlier on uncertain tasks',
-        strength: priorityWeight,
-        sourceFeedbackId: feedback.id,
-      }))
+      adjustments.push(
+        this.createBehaviorAdjustment(agentId, {
+          category: 'escalation',
+          action: 'lower_escalation_threshold',
+          description: 'Escalate or seek clarification earlier on uncertain tasks',
+          strength: priorityWeight,
+          sourceFeedbackId: feedback.id,
+        }),
+      )
     }
 
     if (feedback.targetComponent === 'behavior') {
-      behaviorProfile.maxRetryDepth = Math.max(1, behaviorProfile.maxRetryDepth - (feedback.priority === 'critical' ? 1 : 0))
-      adjustments.push(this.createBehaviorAdjustment(agentId, {
-        category: 'execution',
-        action: 'reduce_retry_depth',
-        description: 'Avoid repeating failing execution patterns without new evidence',
-        strength: priorityWeight,
-        sourceFeedbackId: feedback.id,
-      }))
+      behaviorProfile.maxRetryDepth = Math.max(
+        1,
+        behaviorProfile.maxRetryDepth - (feedback.priority === 'critical' ? 1 : 0),
+      )
+      adjustments.push(
+        this.createBehaviorAdjustment(agentId, {
+          category: 'execution',
+          action: 'reduce_retry_depth',
+          description: 'Avoid repeating failing execution patterns without new evidence',
+          strength: priorityWeight,
+          sourceFeedbackId: feedback.id,
+        }),
+      )
     }
 
     const preferredStrategy = this.inferPreferredReasoningStrategy(feedback.content)
     if (preferredStrategy) {
       behaviorProfile.preferredReasoningStrategy = preferredStrategy
-      adjustments.push(this.createBehaviorAdjustment(agentId, {
-        category: 'reasoning',
-        action: 'prefer_reasoning_strategy',
-        description: `Bias future work toward ${preferredStrategy}`,
-        strength: Math.max(0.4, priorityWeight),
-        sourceFeedbackId: feedback.id,
-      }))
+      adjustments.push(
+        this.createBehaviorAdjustment(agentId, {
+          category: 'reasoning',
+          action: 'prefer_reasoning_strategy',
+          description: `Bias future work toward ${preferredStrategy}`,
+          strength: Math.max(0.4, priorityWeight),
+          sourceFeedbackId: feedback.id,
+        }),
+      )
     }
 
     if (feedback.feedbackType === 'positive' && feedback.targetComponent === 'output') {
-      adjustments.push(this.createBehaviorAdjustment(agentId, {
-        category: 'prompting',
-        action: 'reinforce_output_pattern',
-        description: 'Preserve the current response pattern as a successful template',
-        strength: priorityWeight,
-        sourceFeedbackId: feedback.id,
-      }))
+      adjustments.push(
+        this.createBehaviorAdjustment(agentId, {
+          category: 'prompting',
+          action: 'reinforce_output_pattern',
+          description: 'Preserve the current response pattern as a successful template',
+          strength: priorityWeight,
+          sourceFeedbackId: feedback.id,
+        }),
+      )
     }
 
     if (adjustments.length > 0) {
@@ -859,18 +1040,21 @@ export class ReflectionService {
   }
 
   private calculatePerformanceImprovement(feedback: LearningFeedback): number {
-    const baseImprovement = feedback.priority === 'critical'
-      ? 0.14
-      : feedback.priority === 'high'
-        ? 0.1
-        : feedback.priority === 'medium'
-          ? 0.06
-          : 0.03
+    const baseImprovement =
+      feedback.priority === 'critical'
+        ? 0.14
+        : feedback.priority === 'high'
+          ? 0.1
+          : feedback.priority === 'medium'
+            ? 0.06
+            : 0.03
 
     return feedback.feedbackType === 'positive' ? baseImprovement : -baseImprovement
   }
 
-  private extractNewPatterns(feedback: LearningFeedback): Array<{ trigger: string; response: string }> {
+  private extractNewPatterns(
+    feedback: LearningFeedback,
+  ): Array<{ trigger: string; response: string }> {
     return [
       {
         trigger: `${feedback.targetComponent}:${feedback.feedbackType}`,
@@ -879,7 +1063,10 @@ export class ReflectionService {
     ]
   }
 
-  private extractPatternsFromExperience(memory: AdaptiveMemory, entry: AdaptiveMemory['memories'][number]): void {
+  private extractPatternsFromExperience(
+    memory: AdaptiveMemory,
+    entry: AdaptiveMemory['memories'][number],
+  ): void {
     const existingPattern = memory.patterns.find(
       (pattern: AdaptiveMemory['patterns'][number]) => pattern.trigger === entry.type,
     )
@@ -893,9 +1080,10 @@ export class ReflectionService {
       return
     }
 
-    const nextSuccessRate = entry.type === 'mistake'
-      ? Math.max(0, existingPattern.successRate - 0.1)
-      : Math.min(1, existingPattern.successRate + 0.05)
+    const nextSuccessRate =
+      entry.type === 'mistake'
+        ? Math.max(0, existingPattern.successRate - 0.1)
+        : Math.min(1, existingPattern.successRate + 0.05)
 
     existingPattern.response = entry.content.slice(0, 200)
     existingPattern.successRate = nextSuccessRate
@@ -907,14 +1095,20 @@ export class ReflectionService {
   }
 
   private calculateAleatoricUncertainty(output: string, context: string): number {
-    const hedgingMatches = output.match(/\b(maybe|perhaps|possibly|depends|unclear|roughly)\b/gi) ?? []
+    const hedgingMatches =
+      output.match(/\b(maybe|perhaps|possibly|depends|unclear|roughly)\b/gi) ?? []
     const questionMarks = output.match(/\?/g)?.length ?? 0
     const contextPenalty = context.trim().length < 40 ? 0.06 : 0
 
-    return this.clampUnit(0.08 + (hedgingMatches.length * 0.07) + (questionMarks * 0.04) + contextPenalty)
+    return this.clampUnit(
+      0.08 + hedgingMatches.length * 0.07 + questionMarks * 0.04 + contextPenalty,
+    )
   }
 
-  private calculateKnowledgeCoverage(output: string, knowledgeBase: UncertaintyAnalysisInput['knowledgeBase']): number {
+  private calculateKnowledgeCoverage(
+    output: string,
+    knowledgeBase: UncertaintyAnalysisInput['knowledgeBase'],
+  ): number {
     if (!knowledgeBase?.nodes?.length) {
       return 0.2
     }
@@ -924,18 +1118,25 @@ export class ReflectionService {
       return 0.2
     }
 
-    const knowledgeTokens = knowledgeBase.nodes.reduce<Set<string>>((tokens, node: UncertaintyAnalysisInput['knowledgeBase']['nodes'][number]) => {
-      for (const token of this.tokenize(node.content)) {
-        tokens.add(token)
-      }
-      return tokens
-    }, new Set<string>())
+    const knowledgeTokens = knowledgeBase.nodes.reduce<Set<string>>(
+      (tokens, node: UncertaintyAnalysisInput['knowledgeBase']['nodes'][number]) => {
+        for (const token of this.tokenize(node.content)) {
+          tokens.add(token)
+        }
+        return tokens
+      },
+      new Set<string>(),
+    )
 
-    const overlap = [...outputTokens].filter(token => knowledgeTokens.has(token)).length
+    const overlap = [...outputTokens].filter((token) => knowledgeTokens.has(token)).length
     return this.clampUnit(overlap / outputTokens.size)
   }
 
-  private identifyUncertaintySources(output: string, context: string, knowledgeCoverage: number): string[] {
+  private identifyUncertaintySources(
+    output: string,
+    context: string,
+    knowledgeCoverage: number,
+  ): string[] {
     const sources: string[] = []
 
     if (knowledgeCoverage < 0.45) {
@@ -955,10 +1156,14 @@ export class ReflectionService {
     const strategies: string[] = []
 
     if ((quantification.knowledgeCoverage ?? 1) < 0.5) {
-      strategies.push('Consult additional knowledge or a stronger source of truth before final output')
+      strategies.push(
+        'Consult additional knowledge or a stronger source of truth before final output',
+      )
     }
     if (quantification.aleatoric > 0.4) {
-      strategies.push('Present outcomes as ranges or scenarios rather than as a single definitive claim')
+      strategies.push(
+        'Present outcomes as ranges or scenarios rather than as a single definitive claim',
+      )
     }
     if (quantification.total > 0.7) {
       strategies.push('Escalate early or request clarification before taking irreversible action')
@@ -988,13 +1193,17 @@ export class ReflectionService {
       recommendations.push('Schedule recovery time before attempting another high-complexity task')
     }
     if (load.stressLevel > 0.7) {
-      recommendations.push('Escalate uncertainty sooner instead of continuing to grind through ambiguity')
+      recommendations.push(
+        'Escalate uncertainty sooner instead of continuing to grind through ambiguity',
+      )
     }
 
     return recommendations
   }
 
-  private calculatePerformanceImpact(load: CognitiveLoad): CognitiveLoadResponse['performanceImpact'] {
+  private calculatePerformanceImpact(
+    load: CognitiveLoad,
+  ): CognitiveLoadResponse['performanceImpact'] {
     return {
       accuracyImpact: Number((-load.workingMemoryUsage * 0.3).toFixed(2)),
       speedImpact: Number((-load.fatigueLevel * 0.2).toFixed(2)),
@@ -1005,7 +1214,9 @@ export class ReflectionService {
   private pruneReflections(): void {
     if (this.state.reflections.size <= this.state.maxReflections) return
 
-    const sorted = [...this.state.reflections.entries()].sort((a, b) => a[1].timestamp.localeCompare(b[1].timestamp))
+    const sorted = [...this.state.reflections.entries()].sort((a, b) =>
+      a[1].timestamp.localeCompare(b[1].timestamp),
+    )
     const overflow = this.state.reflections.size - this.state.maxReflections
 
     for (let index = 0; index < overflow; index += 1) {
@@ -1016,7 +1227,9 @@ export class ReflectionService {
   private pruneMemories(): void {
     if (this.state.memories.size <= this.state.maxMemories) return
 
-    const sorted = [...this.state.memories.entries()].sort((a, b) => a[1].lastUpdated.localeCompare(b[1].lastUpdated))
+    const sorted = [...this.state.memories.entries()].sort((a, b) =>
+      a[1].lastUpdated.localeCompare(b[1].lastUpdated),
+    )
     const overflow = this.state.memories.size - this.state.maxMemories
 
     for (let index = 0; index < overflow; index += 1) {
@@ -1027,18 +1240,16 @@ export class ReflectionService {
   private pruneMemoryEntries(memory: AdaptiveMemory): void {
     if (memory.memories.length > 200) {
       memory.memories = memory.memories
-        .sort(
-          (a: AdaptiveMemory['memories'][number], b: AdaptiveMemory['memories'][number]) =>
-            b.timestamp.localeCompare(a.timestamp),
+        .sort((a: AdaptiveMemory['memories'][number], b: AdaptiveMemory['memories'][number]) =>
+          b.timestamp.localeCompare(a.timestamp),
         )
         .slice(0, 200)
     }
 
     if (memory.patterns.length > 50) {
       memory.patterns = memory.patterns
-        .sort(
-          (a: AdaptiveMemory['patterns'][number], b: AdaptiveMemory['patterns'][number]) =>
-            b.lastUsed.localeCompare(a.lastUsed),
+        .sort((a: AdaptiveMemory['patterns'][number], b: AdaptiveMemory['patterns'][number]) =>
+          b.lastUsed.localeCompare(a.lastUsed),
         )
         .slice(0, 50)
     }
@@ -1047,7 +1258,9 @@ export class ReflectionService {
   private pruneFeedback(): void {
     if (this.state.feedback.size <= this.state.maxFeedback) return
 
-    const sorted = [...this.state.feedback.entries()].sort((a, b) => a[1].timestamp.localeCompare(b[1].timestamp))
+    const sorted = [...this.state.feedback.entries()].sort((a, b) =>
+      a[1].timestamp.localeCompare(b[1].timestamp),
+    )
     const overflow = this.state.feedback.size - this.state.maxFeedback
 
     for (let index = 0; index < overflow; index += 1) {
@@ -1118,16 +1331,16 @@ export class ReflectionService {
 
   private applyCognitiveLoadDecay(load: CognitiveLoad, now: string, recoveryMinutes = 0): void {
     const elapsedMs = Math.max(0, Date.parse(now) - Date.parse(load.timestamp))
-    const elapsedMinutes = (elapsedMs / 60000) + Math.max(0, recoveryMinutes)
+    const elapsedMinutes = elapsedMs / 60000 + Math.max(0, recoveryMinutes)
     if (elapsedMinutes <= 0) {
       return
     }
 
     const decay = Math.min(0.6, elapsedMinutes * 0.02)
     load.workingMemoryUsage = Math.max(0.1, load.workingMemoryUsage - decay)
-    load.fatigueLevel = Math.max(0, load.fatigueLevel - (decay * 0.7))
-    load.stressLevel = Math.max(0, load.stressLevel - (decay * 0.8))
-    load.processingSpeed = Math.min(1, load.processingSpeed + (decay * 0.25))
+    load.fatigueLevel = Math.max(0, load.fatigueLevel - decay * 0.7)
+    load.stressLevel = Math.max(0, load.stressLevel - decay * 0.8)
+    load.processingSpeed = Math.min(1, load.processingSpeed + decay * 0.25)
     load.attentionSpan = Math.max(0, load.attentionSpan - Math.ceil(elapsedMinutes / 30))
   }
 
@@ -1163,19 +1376,21 @@ export class ReflectionService {
     tags: Set<string>,
   ): number {
     const contentTokens = this.tokenize(entry.content)
-    const overlap = queryTokens.size === 0
-      ? 0
-      : [...queryTokens].filter(token => contentTokens.has(token)).length / queryTokens.size
+    const overlap =
+      queryTokens.size === 0
+        ? 0
+        : [...queryTokens].filter((token) => contentTokens.has(token)).length / queryTokens.size
 
     const entryTags = new Set<string>(entry.tags.map((tag: string) => tag.toLowerCase()))
-    const tagOverlap = tags.size === 0
-      ? 0
-      : [...tags].filter(tag => entryTags.has(tag)).length / tags.size
+    const tagOverlap =
+      tags.size === 0 ? 0 : [...tags].filter((tag) => entryTags.has(tag)).length / tags.size
 
     const ageDays = Math.max(0, (Date.now() - Date.parse(entry.timestamp)) / 86400000)
-    const recencyScore = 1 / (1 + (ageDays / 30))
+    const recencyScore = 1 / (1 + ageDays / 30)
 
-    return Number(((overlap * 0.5) + (tagOverlap * 0.2) + (entry.relevance * 0.2) + (recencyScore * 0.1)).toFixed(3))
+    return Number(
+      (overlap * 0.5 + tagOverlap * 0.2 + entry.relevance * 0.2 + recencyScore * 0.1).toFixed(3),
+    )
   }
 
   private calculatePatternMatchScore(
@@ -1185,9 +1400,10 @@ export class ReflectionService {
     if (queryTokens.size === 0) return 0
 
     const triggerTokens = this.tokenize(`${pattern.trigger} ${pattern.response}`)
-    const overlap = [...queryTokens].filter(token => triggerTokens.has(token)).length / queryTokens.size
+    const overlap =
+      [...queryTokens].filter((token) => triggerTokens.has(token)).length / queryTokens.size
 
-    return overlap + (pattern.successRate * 0.2)
+    return overlap + pattern.successRate * 0.2
   }
 
   private calculateTokenOverlap(left: string, right: string): number {
@@ -1198,7 +1414,7 @@ export class ReflectionService {
       return 0
     }
 
-    const overlap = [...leftTokens].filter(token => rightTokens.has(token)).length
+    const overlap = [...leftTokens].filter((token) => rightTokens.has(token)).length
     return overlap / Math.max(leftTokens.size, rightTokens.size)
   }
 
@@ -1207,13 +1423,25 @@ export class ReflectionService {
       value
         .toLowerCase()
         .split(/\W+/)
-        .map(token => token.trim())
-        .filter(token => token.length > 2),
+        .map((token) => token.trim())
+        .filter((token) => token.length > 2 && !COMMON_STOP_WORDS.has(token)),
     )
   }
 
   private containsHedging(value: string): boolean {
     return /\b(maybe|perhaps|possibly|i think|i believe|unclear|not sure)\b/i.test(value)
+  }
+
+  private containsEvidenceMarkers(value: string): boolean {
+    return /\[[^\]]+\]\([^)]+\)|`[^`]+`|https?:\/\/|according to\b|for example\b/i.test(value)
+  }
+
+  private containsUnsupportedAbsoluteClaims(value: string): boolean {
+    return /\b(always|never|definitely|guaranteed|prove[sd]?|certainly)\b/i.test(value)
+  }
+
+  private hasStructuredFormatting(value: string): boolean {
+    return /(\n- |\n\* |\n\d+\. )/.test(value)
   }
 
   private clampScore(value: number): number {
@@ -1222,6 +1450,93 @@ export class ReflectionService {
 
   private clampUnit(value: number): number {
     return Math.max(0, Math.min(1, Number(value.toFixed(2))))
+  }
+
+  private normalizeIdentifier(value: unknown, fieldName: string): string {
+    return this.requireNonEmptyText(value, fieldName, 200)
+  }
+
+  private requireNonEmptyText(value: unknown, fieldName: string, maxLength: number): string {
+    if (typeof value !== 'string') {
+      throw new BadRequestException(`${fieldName} must be a string`)
+    }
+
+    const normalized = value.trim()
+    if (!normalized) {
+      throw new BadRequestException(`${fieldName} must not be empty`)
+    }
+
+    return normalized.slice(0, maxLength)
+  }
+
+  private normalizeOptionalText(value: unknown, maxLength: number): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined
+    }
+
+    const normalized = value.trim()
+    return normalized ? normalized.slice(0, maxLength) : undefined
+  }
+
+  private normalizeTags(tags?: string[]): string[] {
+    return [
+      ...new Set(
+        (tags ?? [])
+          .filter((tag): tag is string => typeof tag === 'string')
+          .map((tag) => tag.trim().toLowerCase())
+          .filter(Boolean)
+          .slice(0, 20),
+      ),
+    ]
+  }
+
+  private normalizeLimit(value: unknown, fallback: number, max: number): number {
+    if (value === undefined || value === null || value === '') {
+      return fallback
+    }
+
+    const numericValue = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(numericValue)) {
+      throw new BadRequestException('Limit must be a valid number')
+    }
+
+    return Math.max(1, Math.min(max, Math.floor(numericValue)))
+  }
+
+  private coerceBoolean(value: unknown): boolean {
+    if (typeof value === 'boolean') {
+      return value
+    }
+    if (typeof value === 'string') {
+      return value.trim().toLowerCase() === 'true'
+    }
+    return false
+  }
+
+  private normalizeUnitInterval(value: unknown, fieldName: string): number | undefined {
+    if (value === undefined || value === null || value === '') {
+      return undefined
+    }
+
+    const numericValue = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(numericValue)) {
+      throw new BadRequestException(`${fieldName} must be a valid number`)
+    }
+
+    return this.clampUnit(numericValue)
+  }
+
+  private normalizeNonNegativeNumber(value: unknown, fieldName: string): number | undefined {
+    if (value === undefined || value === null || value === '') {
+      return undefined
+    }
+
+    const numericValue = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(numericValue)) {
+      throw new BadRequestException(`${fieldName} must be a valid number`)
+    }
+
+    return Math.max(0, numericValue)
   }
 
   private getPriorityWeight(priority: LearningFeedback['priority']): number {
@@ -1242,11 +1557,15 @@ export class ReflectionService {
   private inferPreferredReasoningStrategy(content: string): ReasoningStrategy | undefined {
     const normalized = content.toLowerCase()
 
-    if (normalized.includes('tree-of-thought') || /\btree\b/.test(normalized)) return 'tree-of-thought'
-    if (normalized.includes('graph-of-thought') || /\bgraph\b/.test(normalized)) return 'graph-of-thought'
+    if (normalized.includes('tree-of-thought') || /\btree\b/.test(normalized))
+      return 'tree-of-thought'
+    if (normalized.includes('graph-of-thought') || /\bgraph\b/.test(normalized))
+      return 'graph-of-thought'
     if (normalized.includes('react')) return 'react'
-    if (normalized.includes('plan-and-solve') || normalized.includes('plan and solve')) return 'plan-and-solve'
-    if (normalized.includes('chain-of-thought') || /\bchain\b/.test(normalized)) return 'chain-of-thought'
+    if (normalized.includes('plan-and-solve') || normalized.includes('plan and solve'))
+      return 'plan-and-solve'
+    if (normalized.includes('chain-of-thought') || /\bchain\b/.test(normalized))
+      return 'chain-of-thought'
 
     return undefined
   }

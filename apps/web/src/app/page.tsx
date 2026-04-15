@@ -10,6 +10,12 @@ import {
   ShieldCheck,
   Sparkles,
   Wrench,
+  Bot,
+  Zap,
+  Lock,
+  BarChart3,
+  Users,
+  Brain,
 } from 'lucide-react'
 import { OPENAGENTS_REPO_WEB_URL } from '@openagents/shared'
 import InstallQuickStart from '@/components/marketing/InstallQuickStart'
@@ -42,6 +48,39 @@ const FEATURE_CARDS: FeatureCard[] = [
     title: 'Tools + Connectors',
     detail: 'Extend the assistant with workflows, MCP tools, Gmail, Calendar, and internal APIs.',
     icon: Wrench,
+  },
+]
+
+const ENTERPRISE_FEATURES = [
+  {
+    title: 'Multi-Agent Collaboration',
+    detail: 'Deploy specialized agents that work together on complex tasks with automatic coordination.',
+    icon: Bot,
+  },
+  {
+    title: 'Advanced Analytics',
+    detail: 'Real-time monitoring, cost tracking, and performance insights with predictive analytics.',
+    icon: BarChart3,
+  },
+  {
+    title: 'Enterprise Security',
+    detail: 'Zero-trust architecture, end-to-end encryption, and SOC2/HIPAA compliance ready.',
+    icon: Lock,
+  },
+  {
+    title: 'Team Collaboration',
+    detail: 'Shared workspaces, role-based access, and collaborative agent development.',
+    icon: Users,
+  },
+  {
+    title: 'AI-Powered Optimization',
+    detail: 'Self-improving agents with automatic performance tuning and cost optimization.',
+    icon: Brain,
+  },
+  {
+    title: 'Instant Deployment',
+    detail: 'One-click deployment with auto-scaling, high availability, and global CDN.',
+    icon: Zap,
   },
 ]
 
@@ -308,6 +347,37 @@ export default function RootPage() {
               </article>
             )
           })}
+        </section>
+
+        <section className="mt-14">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/35 bg-indigo-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-indigo-200 mb-4">
+              <Bot size={13} />
+              Enterprise Grade
+            </div>
+            <h2 className="text-3xl font-semibold text-white">Powerful Enterprise Features</h2>
+            <p className="mt-3 text-base text-slate-300 max-w-2xl mx-auto">
+              Built for teams and organizations that demand security, scalability, and control.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {ENTERPRISE_FEATURES.map((item) => {
+              const Icon = item.icon
+              return (
+                <article
+                  key={item.title}
+                  className="rounded-2xl border border-white/10 bg-slate-950/55 p-6 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-indigo-300/35 hover:bg-slate-950/70"
+                >
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/20 mb-4">
+                    <Icon size={20} className="text-indigo-300" />
+                  </div>
+                  <h3 className="text-base font-semibold text-white">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.detail}</p>
+                </article>
+              )
+            })}
+          </div>
         </section>
 
         <section className="mt-8 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
