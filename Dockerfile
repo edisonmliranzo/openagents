@@ -18,6 +18,8 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY apps/mobile/package.json apps/mobile/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/server/package.json packages/server/package.json
 
 RUN pnpm install --frozen-lockfile
 
