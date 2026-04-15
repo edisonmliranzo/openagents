@@ -45,6 +45,8 @@ import { AnomalyModule } from './anomaly/anomaly.module'
 import { CollaborationModule } from './collaboration/collaboration.module'
 import { AdvancedAIModule } from './advanced-ai/advanced-ai.module'
 import { AnalyticsModule } from './analytics/analytics.module'
+import { SecurityModule } from './security/security.module'
+import { OrchestrationModule } from './orchestration/orchestration.module'
 
 @Module({
   imports: [
@@ -96,6 +98,8 @@ import { AnalyticsModule } from './analytics/analytics.module'
     CollaborationModule,
     AdvancedAIModule,
     AnalyticsModule,
+    SecurityModule,
+    OrchestrationModule,
   ],
 })
 export class AppModule {}

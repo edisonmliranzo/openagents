@@ -24,4 +24,5 @@ export * from './agent-version'
 export * from './advanced-ai'
 export * from './oauth'
 export * from './analytics'
+export * from './security'
 // multi-agent types live in collaboration.ts to avoid duplicate exports
