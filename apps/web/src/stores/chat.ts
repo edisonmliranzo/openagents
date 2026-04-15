@@ -16,6 +16,15 @@ function formatAgentError(raw: string) {
   return value
 }
 
+export interface ChatToolStreamEvent {
+  conversationId: string
+  tool: string
+  success: boolean
+  output: unknown
+  error?: string
+  createdAt: string | number
+}
+
 interface ChatState {
   conversations: Conversation[]
   activeConversationId: string | null
@@ -25,6 +34,10 @@ interface ChatState {
   gatewayStatus: 'connecting' | 'connected' | 'disconnected'
   gatewayMessage: string
   lastError: string | null
+  streamToolEvents: ChatToolStreamEvent[]
+  runStatus: string | null
+  activeHandoff: { status: string } | null
+  learnedSkill: { skillId: string } | null
 
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
@@ -45,6 +58,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   gatewayStatus: 'connecting',
   gatewayMessage: 'connecting...',
   lastError: null,
+  streamToolEvents: [],
+  runStatus: null,
+  activeHandoff: null,
+  learnedSkill: null,
 
   async loadConversations() {
     try {
