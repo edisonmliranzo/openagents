@@ -20,7 +20,3 @@ export * from './predictive-scaling'
 export * from './voice'
 export * from './zk-proofs'
 export * from './dry-run'
-export * from './agent-version'
-export * from './advanced-ai'
-export * from './oauth'
-// multi-agent types live in collaboration.ts to avoid duplicate exports

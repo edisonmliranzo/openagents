@@ -3,8 +3,21 @@ import { persist } from 'zustand/middleware'
 import { createSDK } from '@openagents/sdk'
 import type { User } from '@openagents/shared'
 
+const DEFAULT_API_BASE_URL = 'http://localhost:3001'
+
+function resolveApiBaseUrl() {
+  const configured = (process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL).trim()
+  if (!configured) return DEFAULT_API_BASE_URL
+  if (typeof window === 'undefined') return configured
+
+  // Always use the current web origin in the browser.
+  // Next.js proxies /api requests to the real backend, which avoids
+  // first-run CORS and remote-host base URL issues for new installs.
+  return window.location.origin
+}
+
 const sdk = createSDK({
-  baseUrl: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001',
+  baseUrl: resolveApiBaseUrl(),
   onTokenRefresh: (tokens) => {
     useAuthStore.setState({
       accessToken: tokens.accessToken,
@@ -21,6 +34,11 @@ const sdk = createSDK({
 })
 
 export { sdk }
+
+function authCookieSuffix(maxAgeSeconds: number) {
+  const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; secure' : ''
+  return `path=/; max-age=${maxAgeSeconds}; samesite=lax${secure}`
+}
 
 interface AuthState {
   hydrated: boolean
@@ -67,7 +85,7 @@ export const useAuthStore = create<AuthState>()(
         const result = await sdk.auth.login({ email, password })
         sdk.client.setTokens(result.tokens)
         if (typeof document !== 'undefined') {
-          document.cookie = 'openagents-authed=1; path=/; max-age=604800'
+          document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
         }
         set({
           user: result.user,
@@ -82,7 +100,7 @@ export const useAuthStore = create<AuthState>()(
         const result = await sdk.auth.register({ email, password, name })
         sdk.client.setTokens(result.tokens)
         if (typeof document !== 'undefined') {
-          document.cookie = 'openagents-authed=1; path=/; max-age=604800'
+          document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
         }
         set({
           user: result.user,
@@ -97,7 +115,7 @@ export const useAuthStore = create<AuthState>()(
         try { await sdk.auth.logout() } catch {}
         sdk.client.clearTokens()
         if (typeof document !== 'undefined') {
-          document.cookie = 'openagents-authed=; path=/; max-age=0'
+          document.cookie = `openagents-authed=; ${authCookieSuffix(0)}`
         }
         set({ user: null, accessToken: null, refreshToken: null, tokenExpiresIn: null, hydrated: true })
       },
@@ -105,7 +123,7 @@ export const useAuthStore = create<AuthState>()(
       clear() {
         sdk.client.clearTokens()
         if (typeof document !== 'undefined') {
-          document.cookie = 'openagents-authed=; path=/; max-age=0'
+          document.cookie = `openagents-authed=; ${authCookieSuffix(0)}`
         }
         set({ user: null, accessToken: null, refreshToken: null, tokenExpiresIn: null, hydrated: true })
       },
@@ -131,17 +149,35 @@ export const useAuthStore = create<AuthState>()(
       },
       onRehydrateStorage: (state) => {
         state?.setHydrated(false)
-        return (rehydratedState) => {
+        return (rehydratedState, error) => {
+          if (error) {
+            sdk.client.clearTokens()
+            if (typeof document !== 'undefined') {
+              document.cookie = `openagents-authed=; ${authCookieSuffix(0)}`
+            }
+            state?.setUser(null)
+            state?.setHydrated(true)
+            return
+          }
+
           if (rehydratedState?.accessToken && rehydratedState?.refreshToken) {
             sdk.client.setTokens({
               accessToken: rehydratedState.accessToken,
               refreshToken: rehydratedState.refreshToken,
               expiresIn: rehydratedState.tokenExpiresIn ?? 0,
             })
+            if (typeof document !== 'undefined') {
+              document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
+            }
           } else {
             sdk.client.clearTokens()
+            if (typeof document !== 'undefined') {
+              document.cookie = `openagents-authed=; ${authCookieSuffix(0)}`
+            }
           }
-          rehydratedState?.setHydrated(true)
+
+          // Always finish hydration even when persisted state is missing/invalid.
+          state?.setHydrated(true)
         }
       },
     },

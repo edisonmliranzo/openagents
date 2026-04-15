@@ -1,120 +1,47 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { sdk } from '@/stores/auth'
-import type { SessionRow } from '@openagents/shared'
+import type { PlatformFleetSnapshot } from '@openagents/shared'
 
-interface InstanceHealthRow {
-  id: string
-  label: string
-  status: 'ok' | 'warn'
-  details: string
-  updatedAt: string
-}
-
-function timeAgo(epochMs: number | null | undefined) {
-  if (!epochMs) return 'n/a'
-  const deltaMs = Date.now() - epochMs
-  const deltaMin = Math.max(0, Math.floor(deltaMs / 60000))
-  if (deltaMin < 1) return 'just now'
-  if (deltaMin < 60) return `${deltaMin}m ago`
-  const deltaHours = Math.floor(deltaMin / 60)
-  if (deltaHours < 24) return `${deltaHours}h ago`
-  return `${Math.floor(deltaHours / 24)}d ago`
+function statusClass(status: 'healthy' | 'degraded' | 'offline') {
+  if (status === 'healthy') return 'bg-emerald-100 text-emerald-700'
+  if (status === 'degraded') return 'bg-amber-100 text-amber-700'
+  return 'bg-red-100 text-red-700'
 }
 
 export default function InstancesPage() {
-  const [sessions, setSessions] = useState<SessionRow[]>([])
-  const [conversationCount, setConversationCount] = useState(0)
-  const [pendingApprovals, setPendingApprovals] = useState(0)
+  const [snapshot, setSnapshot] = useState<PlatformFleetSnapshot | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const loadData = useCallback(async () => {
+  const load = useCallback(async () => {
     setIsLoading(true)
     setError('')
     try {
-      const [sessionsResult, conversations, approvals] = await Promise.all([
-        sdk.sessions.list({ activeMinutes: 240, includeGlobal: true, includeUnknown: true, limit: 300 }),
-        sdk.conversations.list(),
-        sdk.approvals.list('pending'),
-      ])
-      setSessions(sessionsResult.sessions)
-      setConversationCount(conversations.length)
-      setPendingApprovals(approvals.length)
+      const result = await sdk.platform.fleet()
+      setSnapshot(result)
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to load instances')
+      setError(err?.message ?? 'Failed to load fleet snapshot')
     } finally {
       setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    void loadData()
-  }, [loadData])
-
-  const activeDirectSessions = useMemo(
-    () => sessions.filter((session) => session.kind === 'direct'),
-    [sessions],
-  )
-
-  const newestSessionUpdate = useMemo(
-    () =>
-      activeDirectSessions.reduce(
-        (latest, row) => Math.max(latest, row.updatedAt ?? 0),
-        0,
-      ),
-    [activeDirectSessions],
-  )
-
-  const instanceRows = useMemo<InstanceHealthRow[]>(() => {
-    const nowIso = new Date().toISOString()
-    return [
-      {
-        id: 'gateway-api',
-        label: 'Gateway API',
-        status: 'ok',
-        details: `${sessions.length} session entries indexed`,
-        updatedAt: nowIso,
-      },
-      {
-        id: 'chat-runtime',
-        label: 'Chat Runtime',
-        status: activeDirectSessions.length > 0 ? 'ok' : 'warn',
-        details: `${activeDirectSessions.length} direct sessions active`,
-        updatedAt: newestSessionUpdate ? new Date(newestSessionUpdate).toISOString() : nowIso,
-      },
-      {
-        id: 'approval-worker',
-        label: 'Approval Worker',
-        status: pendingApprovals > 10 ? 'warn' : 'ok',
-        details:
-          pendingApprovals > 0
-            ? `${pendingApprovals} approvals pending action`
-            : 'No approvals are waiting',
-        updatedAt: nowIso,
-      },
-    ]
-  }, [sessions.length, activeDirectSessions, pendingApprovals, newestSessionUpdate])
-
-  const recentSessions = useMemo(
-    () =>
-      [...activeDirectSessions]
-        .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
-        .slice(0, 8),
-    [activeDirectSessions],
-  )
+    void load()
+  }, [load])
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Instances</h1>
-          <p className="mt-1 text-sm text-slate-500">Runtime health and recent session instance activity.</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Managed Runtime Fleet</h1>
+          <p className="mt-1 text-sm text-slate-500">Health status for API, runtime, scheduler, channels, and control plane.</p>
         </div>
         <button
           type="button"
-          onClick={() => void loadData()}
+          onClick={() => void load()}
           disabled={isLoading}
           className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
         >
@@ -122,73 +49,69 @@ export default function InstancesPage() {
         </button>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-4">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Conversations</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">{conversationCount}</p>
-          <p className="mt-1 text-xs text-slate-500">Known user conversation threads</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Nodes</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">{snapshot?.summary.nodes ?? 0}</p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Active Sessions</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">{activeDirectSessions.length}</p>
-          <p className="mt-1 text-xs text-slate-500">Direct sessions with recent updates</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Healthy</p>
+          <p className="mt-2 text-3xl font-semibold text-emerald-700">{snapshot?.summary.healthy ?? 0}</p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pending Approvals</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">{pendingApprovals}</p>
-          <p className="mt-1 text-xs text-slate-500">Tool actions requiring user confirmation</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Degraded</p>
+          <p className="mt-2 text-3xl font-semibold text-amber-700">{snapshot?.summary.degraded ?? 0}</p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Offline</p>
+          <p className="mt-2 text-3xl font-semibold text-red-700">{snapshot?.summary.offline ?? 0}</p>
         </article>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
+      <section className="grid gap-4 md:grid-cols-4">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Service Status</h2>
-          <p className="mt-1 text-sm text-slate-500">Core dashboard services and inferred health.</p>
-          <div className="mt-4 space-y-3">
-            {instanceRows.map((row) => (
-              <div key={row.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{row.label}</p>
-                    <p className="mt-1 text-xs text-slate-500">{row.details}</p>
-                  </div>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      row.status === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {row.status === 'ok' ? 'healthy' : 'attention'}
-                  </span>
-                </div>
-                <p className="mt-2 text-[11px] text-slate-400">Updated {timeAgo(new Date(row.updatedAt).getTime())}</p>
-              </div>
-            ))}
-          </div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Active Sessions</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">{snapshot?.summary.activeSessions ?? 0}</p>
         </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pending Approvals</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">{snapshot?.summary.pendingApprovals ?? 0}</p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Stale Cron Jobs</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">{snapshot?.summary.staleCronJobs ?? 0}</p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Failing Cron Jobs</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">{snapshot?.summary.failingCronJobs ?? 0}</p>
+        </article>
+      </section>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Recent Session Instances</h2>
-          <p className="mt-1 text-sm text-slate-500">Most recently updated direct sessions.</p>
-          <div className="mt-4 space-y-2">
-            {recentSessions.length === 0 && (
-              <p className="text-sm text-slate-500">{isLoading ? 'Loading instances...' : 'No active sessions yet.'}</p>
-            )}
-            {recentSessions.map((session) => (
-              <div key={session.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-mono text-xs font-semibold text-red-600">{session.key}</p>
-                    <p className="mt-1 text-xs text-slate-500">{session.model ?? 'unknown model'}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-mono text-xs text-slate-700">{session.totalTokens ?? 0} tk</p>
-                    <p className="text-[11px] text-slate-400">{timeAgo(session.updatedAt)}</p>
-                  </div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Node Status</h2>
+        <div className="mt-4 space-y-3">
+          {(snapshot?.nodes ?? []).map((node) => (
+            <article key={node.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{node.label}</p>
+                  <p className="mt-1 text-xs text-slate-500">{node.details}</p>
+                  <p className="mt-1 text-[11px] text-slate-400">{new Date(node.updatedAt).toLocaleString()}</p>
                 </div>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusClass(node.status)}`}>
+                  {node.status}
+                </span>
               </div>
-            ))}
-          </div>
-        </article>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {Object.entries(node.metrics).map(([key, value]) => (
+                  <span key={key} className="rounded bg-white px-2 py-1 font-mono text-[10px] text-slate-600">
+                    {key}: {value === null ? 'n/a' : String(value)}
+                  </span>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
       {error && (
@@ -199,3 +122,4 @@ export default function InstancesPage() {
     </div>
   )
 }
+

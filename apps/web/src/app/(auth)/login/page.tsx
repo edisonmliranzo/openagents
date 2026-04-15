@@ -16,6 +16,26 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  function toErrorMessage(err: unknown, fallback: string) {
+    if (!err || typeof err !== 'object') return fallback
+    const message = (err as { message?: unknown }).message
+    if (typeof message !== 'string' || !message.trim()) return fallback
+
+    try {
+      const parsed = JSON.parse(message) as { message?: string | string[] }
+      if (Array.isArray(parsed.message) && parsed.message.length > 0) {
+        return parsed.message[0] ?? fallback
+      }
+      if (typeof parsed.message === 'string' && parsed.message.trim()) {
+        return parsed.message
+      }
+    } catch {
+      // message is not JSON
+    }
+
+    return message
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -41,38 +61,56 @@ export default function LoginPage() {
       } else {
         await safeRegister(email, password, name || undefined)
       }
-      router.push('/chat')
+      const nextPath =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('next')
+          : null
+      router.push(nextPath && nextPath.startsWith('/') ? nextPath : '/chat')
     } catch (err: any) {
-      setError(err.message ?? (mode === 'login' ? 'Login failed' : 'Registration failed'))
+      setError(toErrorMessage(err, mode === 'login' ? 'Login failed' : 'Registration failed'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-sm space-y-5 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+    <div className="auth-theme flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-6">
+      <div className="oa-card-elevated w-full max-w-sm space-y-5 rounded-[28px] p-8">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-sm font-bold text-white">*</span>
-          <span className="text-xs font-bold tracking-wide text-slate-900">OPENAGENTS</span>
+          <span className="oa-brand-badge inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-white">
+            OA
+          </span>
+          <span className="text-xs font-bold tracking-wide text-[var(--tone-strong)]">
+            OPENAGENTS
+          </span>
         </div>
 
         {/* Tab toggle */}
-        <div className="flex rounded-lg border border-slate-200 p-1">
+        <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
           <button
             type="button"
-            onClick={() => { setMode('login'); setError('') }}
+            onClick={() => {
+              setMode('login')
+              setError('')
+            }}
             className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-              mode === 'login' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              mode === 'login'
+                ? 'oa-brand-badge text-white shadow-sm'
+                : 'text-[var(--muted)] hover:text-[var(--tone-strong)]'
             }`}
           >
             Sign in
           </button>
           <button
             type="button"
-            onClick={() => { setMode('register'); setError('') }}
+            onClick={() => {
+              setMode('register')
+              setError('')
+            }}
             className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-              mode === 'register' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              mode === 'register'
+                ? 'oa-brand-badge text-white shadow-sm'
+                : 'text-[var(--muted)] hover:text-[var(--tone-strong)]'
             }`}
           >
             Register
@@ -88,7 +126,8 @@ export default function LoginPage() {
               placeholder="Name (optional)"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-slate-800 placeholder-slate-400 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
+              autoComplete="name"
+              className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
             />
           )}
 
@@ -98,7 +137,8 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-slate-800 placeholder-slate-400 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
+            autoComplete="email"
+            className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
           />
 
           <input
@@ -107,18 +147,34 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-slate-800 placeholder-slate-400 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
           />
+
+          {mode === 'register' && (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Use 12+ characters with uppercase, lowercase, number, and symbol.
+            </p>
+          )}
 
           <button
             type="submit"
             disabled={loading}
-            className="h-11 w-full rounded-lg bg-red-500 font-semibold text-white transition hover:bg-red-600 disabled:opacity-50"
+            className="oa-accent-button h-11 w-full rounded-xl font-semibold text-white transition disabled:opacity-50"
           >
             {loading
-              ? (mode === 'login' ? 'Signing in...' : 'Creating account...')
-              : (mode === 'login' ? 'Sign in' : 'Create account')}
+              ? mode === 'login'
+                ? 'Signing in...'
+                : 'Creating account...'
+              : mode === 'login'
+                ? 'Sign in'
+                : 'Create account'}
           </button>
+
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Safety tip: OpenAgents never asks for your password, refresh token, or one-time code in
+            chat.
+          </p>
         </form>
       </div>
     </div>
