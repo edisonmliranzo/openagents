@@ -1,7 +1,17 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PROTECTED_PREFIXES = ['/chat', '/settings', '/memory', '/audit', '/approvals']
+const PROTECTED_PREFIXES = [
+  '/',
+  '/chat',
+  '/settings',
+  '/memory',
+  '/audit',
+  '/approvals',
+  '/control',
+  '/agent',
+  '/sessions',
+]
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

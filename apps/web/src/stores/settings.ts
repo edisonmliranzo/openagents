@@ -7,7 +7,14 @@ interface SettingsState {
   settings: UserSettings | null
   loading: boolean
   load: () => Promise<void>
-  update: (data: Partial<Pick<UserSettings, 'preferredProvider' | 'preferredModel' | 'customSystemPrompt'>>) => Promise<void>
+  update: (
+    data: Partial<
+      Pick<
+        UserSettings,
+        'preferredProvider' | 'preferredModel' | 'customSystemPrompt' | 'beginnerMode' | 'onboardingCompletedAt'
+      >
+    >,
+  ) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>()(
