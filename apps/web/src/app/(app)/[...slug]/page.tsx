@@ -33,7 +33,7 @@ export default function PlaceholderPage({ params }: PlaceholderPageProps) {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <p className="text-sm text-slate-600">
-          This route is part of the OpenAgents dashboard shell. Tell me which controls you want here next and I
+          This route is part of the OpenClaw-style dashboard shell. Tell me which controls you want here next and I
           will wire the data and actions.
         </p>
       </section>
