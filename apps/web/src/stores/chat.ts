@@ -1,79 +1,14 @@
 import { create } from 'zustand'
 import { sdk } from './auth'
-import type { Conversation, Message, Approval, HumanHandoffTicket } from '@openagents/shared'
-
-type GatewayStatus = 'connecting' | 'connected' | 'disconnected'
-
-export interface ChatToolStreamEvent {
-  id: string
-  conversationId: string
-  tool: string
-  success: boolean
-  output: unknown
-  error?: string
-  attempts?: number
-  recoveredByRetry?: boolean
-  createdAt: string
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-function ensureArrayResponse<T>(value: unknown, label: string) {
-  if (Array.isArray(value)) {
-    return value as T[]
-  }
-  throw new Error(`Received an invalid ${label} response from the API.`)
-}
-
-function ensureConversationResponse(value: unknown) {
-  if (isRecord(value) && typeof value.id === 'string') {
-    return value as unknown as Conversation
-  }
-  throw new Error('Received an invalid conversation response from the API.')
-}
-
-function normalizeApproval(value: unknown): Approval | null {
-  if (
-    isRecord(value) &&
-    typeof value.id === 'string' &&
-    typeof value.toolName === 'string' &&
-    typeof value.status === 'string'
-  ) {
-    return value as unknown as Approval
-  }
-  return null
-}
-
-function normalizeHandoff(value: unknown): HumanHandoffTicket | null {
-  if (
-    isRecord(value) &&
-    typeof value.id === 'string' &&
-    typeof value.conversationId === 'string' &&
-    typeof value.status === 'string'
-  ) {
-    return value as unknown as HumanHandoffTicket
-  }
-  return null
-}
+import type { Conversation, Message, Approval } from '@openagents/shared'
 
 function formatAgentError(raw: string) {
   const value = raw.trim()
   if (!value) return 'Agent request failed.'
 
   const lower = value.toLowerCase()
-  if (lower === 'network error' || lower.includes('network error')) {
-    return 'Model provider network error. Verify your internet/proxy, then retry or switch provider in Settings > Config.'
-  }
   if (lower.includes('invalid x-api-key') || lower.includes('authentication_error')) {
     return 'LLM authentication failed. Add a valid provider key in Settings > Config and retry.'
-  }
-  if (lower.includes('does not support tools')) {
-    return 'Selected model does not support tools. Pick a tools-capable model in Settings > Config and retry.'
-  }
-  if (lower.includes('no local ollama models found') || lower.includes('no ollama models found')) {
-    return 'No Ollama models were found at the configured server URL. Run `ollama pull <model>` and refresh models in Settings > Config.'
   }
   if (lower.includes('api key') && lower.includes('not configured')) {
     return value
@@ -81,268 +16,112 @@ function formatAgentError(raw: string) {
   return value
 }
 
-function extractErrorMessage(message: unknown, fallback: string) {
-  if (typeof message !== 'string') return fallback
-  const trimmed = message.trim()
-  if (!trimmed) return fallback
-
-  try {
-    const parsed = JSON.parse(trimmed) as { message?: string | string[] }
-    if (Array.isArray(parsed.message) && parsed.message.length > 0) {
-      return String(parsed.message[0] ?? fallback)
-    }
-    if (typeof parsed.message === 'string' && parsed.message.trim()) {
-      return parsed.message.trim()
-    }
-  } catch {
-    // Not JSON; use the original message.
-  }
-
-  return trimmed
-}
-
-function deriveGatewayFailure(err: unknown, fallback: string): {
-  gatewayStatus: GatewayStatus
-  gatewayMessage: string
-  lastError: string
-} {
-  const maybeError = err as { status?: unknown; message?: unknown } | null
-  const status = typeof maybeError?.status === 'number' ? maybeError.status : null
-  const message = extractErrorMessage(maybeError?.message, fallback)
-  const offline =
-    status === 0 ||
-    /failed to reach api/i.test(message) ||
-    /network request failed/i.test(message) ||
-    /failed to fetch/i.test(message)
-
-  return {
-    gatewayStatus: offline ? 'disconnected' : 'connected',
-    gatewayMessage: offline ? 'gateway offline (API unreachable)' : 'connected',
-    lastError: message,
-  }
-}
-
-function rememberActiveConversation(conversationId: string) {
-  return sdk.users.updateSettings({ lastActiveConversationId: conversationId }).catch(() => {
-    // Keep the selected conversation active locally even if settings sync fails.
-  })
-}
-
-function formatStreamingStatus(status: string | null, data?: Record<string, unknown>) {
-  if (!status) return ''
-
-  const toolName =
-    typeof data?.tool === 'string' && data.tool.trim()
-      ? data.tool.trim()
-      : 'tool'
-
-  switch (status) {
-    case 'thinking':
-      return 'Working...'
-    case 'planning':
-      return 'Working...'
-    case 'executing':
-      return 'Working...'
-    case 'running_tool':
-      return `Using ${toolName}...`
-    case 'retrying_tool': {
-      const attempt = Number.isFinite(Number(data?.attempt)) ? Number(data?.attempt) : null
-      return attempt ? `Retrying ${toolName}...` : `Retrying ${toolName}...`
-    }
-    case 'verifying':
-      return 'Finalizing...'
-    case 'waiting_approval':
-      return toolName !== 'tool' ? `Approval needed: ${toolName}` : 'Approval needed'
-    default:
-      return ''
-  }
-}
-
-function deriveConversationTitle(value: string) {
-  const firstLine =
-    value
-      .split(/\r?\n/)
-      .map((line) =>
-        line
-          .replace(/^[-*#>\s`]+/, '')
-          .replace(/^\d+[.)]\s+/, '')
-          .trim(),
-      )
-      .find(Boolean) ?? ''
-  const normalized = firstLine.replace(/\s+/g, ' ').replace(/^["'`]+|["'`]+$/g, '').trim()
-  if (!normalized) return null
-  if (normalized.length <= 80) return normalized
-  return `${normalized.slice(0, 77).trimEnd()}...`
-}
-
-function sortConversationsByRecentActivity(conversations: Conversation[]) {
-  return [...conversations].sort((left, right) => {
-    const leftTime = Date.parse(left.lastMessageAt ?? left.createdAt)
-    const rightTime = Date.parse(right.lastMessageAt ?? right.createdAt)
-    return rightTime - leftTime
-  })
-}
-
 interface ChatState {
   conversations: Conversation[]
-  conversationsLoading: boolean
-  conversationsLoaded: boolean
   activeConversationId: string | null
   messages: Message[]
   pendingApprovals: Approval[]
-  activeHandoff: HumanHandoffTicket | null
-  streamToolEvents: ChatToolStreamEvent[]
-  runStatus: string | null
-  learnedSkill: {
-    skillId: string
-    intent?: string
-    createdAt: string
-  } | null
   isStreaming: boolean
-  gatewayStatus: GatewayStatus
+  gatewayStatus: 'connecting' | 'connected' | 'disconnected'
   gatewayMessage: string
   lastError: string | null
 
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
   createConversation: () => Promise<string>
-  sendMessage: (content: string, options?: { displayContent?: string }) => Promise<void>
+  sendMessage: (content: string) => Promise<void>
   approveAction: (approvalId: string) => Promise<void>
   denyAction: (approvalId: string) => Promise<void>
-  refreshActiveHandoff: () => Promise<void>
-  escalateToHuman: (reason?: string) => Promise<void>
   clearError: () => void
   appendStreamChunk: (chunk: string) => void
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
-  conversationsLoading: false,
-  conversationsLoaded: false,
   activeConversationId: null,
   messages: [],
   pendingApprovals: [],
-  activeHandoff: null,
-  streamToolEvents: [],
-  runStatus: null,
-  learnedSkill: null,
   isStreaming: false,
   gatewayStatus: 'connecting',
   gatewayMessage: 'connecting...',
   lastError: null,
 
   async loadConversations() {
-    set({ conversationsLoading: true })
     try {
-      const conversations = ensureArrayResponse<Conversation>(
-        await sdk.conversations.list(),
-        'conversations',
-      )
+      const conversations = await sdk.conversations.list()
       set({
         conversations,
-        conversationsLoading: false,
-        conversationsLoaded: true,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
       })
-    } catch (err: unknown) {
+    } catch (err: any) {
+      const message = err?.message ?? 'Disconnected from gateway.'
       set({
-        ...deriveGatewayFailure(err, 'Failed to load conversations.'),
-        conversationsLoading: false,
-        conversationsLoaded: true,
+        gatewayStatus: 'disconnected',
+        gatewayMessage: 'disconnected (1006): no reason',
+        lastError: message,
       })
     }
   },
 
   async selectConversation(id) {
     try {
-      const [messagesResult, activeHandoffResult] = await Promise.all([
-        sdk.conversations.messages(id),
-        sdk.handoffs.getActive(id),
-      ])
-      const messages = ensureArrayResponse<Message>(messagesResult, 'messages')
+      const messages = await sdk.conversations.messages(id)
       set({
         activeConversationId: id,
         messages,
-        activeHandoff: normalizeHandoff(activeHandoffResult),
-        streamToolEvents: [],
-        runStatus: null,
-        learnedSkill: null,
-        isStreaming: false,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
       })
-      void rememberActiveConversation(id)
-    } catch (err: unknown) {
-      set(deriveGatewayFailure(err, 'Failed to load conversation.'))
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to load conversation'
+      set({
+        gatewayStatus: 'disconnected',
+        gatewayMessage: 'disconnected (1006): no reason',
+        lastError: message,
+      })
     }
   },
 
   async createConversation() {
     try {
-      const conv = ensureConversationResponse(await sdk.conversations.create())
+      const conv = await sdk.conversations.create()
       set((s) => ({
         conversations: [conv, ...s.conversations],
         activeConversationId: conv.id,
         messages: [],
-        activeHandoff: null,
-        streamToolEvents: [],
-        runStatus: null,
-        learnedSkill: null,
-        isStreaming: false,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: null,
       }))
-      void rememberActiveConversation(conv.id)
       return conv.id
-    } catch (err: unknown) {
-      set(deriveGatewayFailure(err, 'Failed to create conversation.'))
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to create conversation'
+      set({
+        gatewayStatus: 'disconnected',
+        gatewayMessage: 'disconnected (1006): no reason',
+        lastError: message,
+      })
       throw err
     }
   },
 
-  async sendMessage(content, options) {
-    const { activeConversationId, activeHandoff } = get()
+  async sendMessage(content) {
+    const { activeConversationId } = get()
     if (!activeConversationId) {
       set({ lastError: 'No active conversation selected.' })
       return
     }
 
-    const userVisibleContent = options?.displayContent?.trim() || content.trim()
-    const startedAt = new Date().toISOString()
-    const optimisticTitle = deriveConversationTitle(userVisibleContent)
-
     // Optimistically add user message
     const tempId = `temp-${Date.now()}`
     set((s) => ({
-      conversations: sortConversationsByRecentActivity(
-        s.conversations.map((conversation) =>
-          conversation.id === activeConversationId
-            ? {
-                ...conversation,
-                title: conversation.title?.trim() || optimisticTitle || conversation.title,
-                lastMessageAt: startedAt,
-              }
-            : conversation,
-        ),
-      ),
       messages: [
         ...s.messages,
-        {
-          id: tempId,
-          conversationId: activeConversationId,
-          role: 'user',
-          content: userVisibleContent,
-          status: 'done',
-          createdAt: startedAt,
-        } as Message,
+        { id: tempId, conversationId: activeConversationId, role: 'user', content, status: 'done', createdAt: new Date().toISOString() } as Message,
       ],
-      streamToolEvents: [],
-      runStatus: 'thinking',
-      learnedSkill: null,
       isStreaming: true,
       gatewayStatus: 'connected',
       gatewayMessage: 'connected',
@@ -354,14 +133,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       messages: [
         ...s.messages,
-        {
-          id: agentTempId,
-          conversationId: activeConversationId,
-          role: 'agent',
-          content: formatStreamingStatus('thinking'),
-          status: 'streaming',
-          createdAt: startedAt,
-        } as Message,
+        { id: agentTempId, conversationId: activeConversationId, role: 'agent', content: '', status: 'streaming', createdAt: new Date().toISOString() } as Message,
       ],
     }))
 
@@ -385,7 +157,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
             set((s) => ({
               lastError: friendlyMessage,
-              runStatus: 'error',
               messages: s.messages.map((m) =>
                 m.id === agentTempId ? { ...m, content: friendlyMessage, status: 'error' } : m,
               ),
@@ -393,112 +164,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
             return
           }
 
-          if (data.event === 'status') {
-            const nextStatus = typeof data.data?.status === 'string' ? data.data.status : null
-            const learnedSkillId = typeof data.data?.learnedSkill === 'string'
-              ? data.data.learnedSkill.trim()
-              : ''
-            const learnedIntent = typeof data.data?.learnedIntent === 'string'
-              ? data.data.learnedIntent.trim()
-              : ''
-            if (nextStatus) {
-              const statusText = formatStreamingStatus(
-                nextStatus,
-                data.data && typeof data.data === 'object'
-                  ? (data.data as Record<string, unknown>)
-                  : undefined,
-              )
-              set((s) => ({
-                runStatus: nextStatus,
-                messages: s.messages.map((m) =>
-                  m.id === agentTempId && !sawAgentMessage && m.status === 'streaming'
-                    ? { ...m, content: statusText || m.content }
-                    : m,
-                ),
-              }))
-            }
-            if (learnedSkillId) {
-              set({
-                learnedSkill: {
-                  skillId: learnedSkillId,
-                  ...(learnedIntent ? { intent: learnedIntent } : {}),
-                  createdAt: new Date().toISOString(),
-                },
-              })
-            }
-          }
-
           if (data.event === 'message' && data.data?.role === 'agent') {
             sawAgentMessage = true
             set((s) => ({
-              isStreaming: false,
-              runStatus: 'done',
-              lastError: null,
               messages: s.messages.map((m) =>
                 m.id === agentTempId ? { ...m, content: data.data.content, status: 'done' } : m,
               ),
             }))
           }
-
-          if (data.event === 'tool_result') {
-            const toolName = typeof data.data?.tool === 'string' ? data.data.tool : 'tool'
-            const result = data.data?.result as { success?: unknown; output?: unknown; error?: unknown } | undefined
-            const success = Boolean(result?.success)
-            const output = result?.output ?? null
-            const error = typeof result?.error === 'string' ? result.error : undefined
-            const attempts = Number.isFinite(Number(data.data?.attempts)) ? Number(data.data?.attempts) : undefined
-            const recoveredByRetry = typeof data.data?.recoveredByRetry === 'boolean'
-              ? data.data.recoveredByRetry
-              : undefined
-            const event: ChatToolStreamEvent = {
-              id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              conversationId: activeConversationId,
-              tool: toolName,
-              success,
-              output,
-              ...(error ? { error } : {}),
-              ...(attempts ? { attempts } : {}),
-              ...(typeof recoveredByRetry === 'boolean' ? { recoveredByRetry } : {}),
-              createdAt: new Date().toISOString(),
-            }
-            set((s) => ({
-              streamToolEvents: [...s.streamToolEvents.slice(-79), event],
-            }))
-          }
-
           if (data.event === 'approval_required') {
             sawApprovalRequest = true
-            const approval = normalizeApproval(data.data?.approval)
-            const approvalMessage =
-              typeof data.data?.message?.content === 'string' && data.data.message.content.trim()
-                ? data.data.message.content.trim()
-                : approval?.toolName
-                  ? `Approval requested for ${approval.toolName}. Review the pending action to continue.`
-                  : 'Approval requested. Review the pending action to continue.'
-
-            set((s) => ({
-              runStatus: 'waiting_approval',
-              pendingApprovals: approval
-                ? s.pendingApprovals.some((item) => item.id === approval.id)
-                  ? s.pendingApprovals
-                  : [...s.pendingApprovals, approval]
-                : s.pendingApprovals,
-              messages: s.messages.map((m) =>
-                m.id === agentTempId
-                  ? { ...m, content: approvalMessage, status: 'done' }
-                  : m,
-              ),
-            }))
+            set((s) => ({ pendingApprovals: [...s.pendingApprovals, data.data.approval] }))
           }
         } catch {}
       })
 
       // Reload messages to get server-side IDs
-      const messages = ensureArrayResponse<Message>(
-        await sdk.conversations.messages(activeConversationId),
-        'messages',
-      )
-      const activeHandoff = normalizeHandoff(await sdk.handoffs.getActive(activeConversationId))
+      const messages = await sdk.conversations.messages(activeConversationId)
 
       let nextMessages = messages
       if (streamError) {
@@ -522,46 +204,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       } else if (!sawAgentMessage && !sawApprovalRequest) {
         streamError = 'Agent returned no reply. Check provider settings and try again.'
-        const latestUser = [...messages].reverse().find((m) => m.role === 'user')
-        const latestAgentAfterUser = [...messages]
-          .reverse()
-          .find((m) => m.role === 'agent' && (!latestUser || m.createdAt >= latestUser.createdAt))
-
-        if (!latestAgentAfterUser) {
-          nextMessages = [
-            ...messages,
-            {
-              id: `agent-empty-${Date.now()}`,
-              conversationId: activeConversationId,
-              role: 'agent',
-              content: streamError,
-              status: 'error',
-              createdAt: new Date().toISOString(),
-            } as Message,
-          ]
-        }
       }
 
       set({
         messages: nextMessages,
-        activeHandoff,
         isStreaming: false,
-        runStatus: streamError ? 'error' : sawApprovalRequest ? 'waiting_approval' : 'done',
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
         lastError: streamError,
       })
-    } catch (err: unknown) {
-      const failure = deriveGatewayFailure(err, 'Failed while streaming agent response.')
+    } catch (err: any) {
+      const message = err?.message ?? 'disconnected (1006): no reason'
       set((s) => ({
         isStreaming: false,
-        runStatus: 'error',
-        gatewayStatus: failure.gatewayStatus,
-        gatewayMessage: failure.gatewayMessage,
-        lastError: failure.lastError,
+        gatewayStatus: 'disconnected',
+        gatewayMessage: 'disconnected (1006): no reason',
+        lastError: message,
         messages: s.messages.map((m) =>
           m.id === agentTempId
-            ? { ...m, content: failure.lastError, status: 'error' }
+            ? { ...m, content: message, status: 'error' }
             : m,
         ),
       }))
@@ -595,34 +256,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => ({ pendingApprovals: s.pendingApprovals.filter((a) => a.id !== approvalId), lastError: null }))
     } catch (err: any) {
       set({ lastError: err?.message ?? 'Failed to deny action' })
-    }
-  },
-
-  async refreshActiveHandoff() {
-    const { activeConversationId } = get()
-    if (!activeConversationId) return
-    try {
-      const handoff = normalizeHandoff(await sdk.handoffs.getActive(activeConversationId))
-      set({ activeHandoff: handoff, lastError: null })
-    } catch (err: any) {
-      set({ lastError: err?.message ?? 'Failed to refresh handoff state' })
-    }
-  },
-
-  async escalateToHuman(reason?: string) {
-    const { activeConversationId } = get()
-    if (!activeConversationId) {
-      set({ lastError: 'No active conversation selected.' })
-      return
-    }
-    try {
-      const handoff = normalizeHandoff(await sdk.handoffs.create({
-        conversationId: activeConversationId,
-        ...(reason?.trim() ? { reason: reason.trim() } : {}),
-      }))
-      set({ activeHandoff: handoff, lastError: null })
-    } catch (err: any) {
-      set({ lastError: err?.message ?? 'Failed to escalate conversation' })
     }
   },
 

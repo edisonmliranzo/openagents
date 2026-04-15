@@ -4,13 +4,10 @@ import { useUIStore } from '@/stores/ui'
 import type { ToastType } from '@/stores/ui'
 
 const COLORS: Record<ToastType, string> = {
-  info: 'border-[var(--status-info-border)] bg-[var(--status-info-bg)] text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]',
-  success:
-    'border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-text)] dark:text-[var(--status-success-text)]',
-  warning:
-    'border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)] dark:text-[var(--status-warning-text)]',
-  error:
-    'border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-text)] dark:text-[var(--status-danger-text)]',
+  info: 'bg-slate-800 text-white',
+  success: 'bg-emerald-600 text-white',
+  warning: 'bg-amber-500 text-white',
+  error: 'bg-red-600 text-white',
 }
 
 export function ToastContainer() {
@@ -24,16 +21,16 @@ export function ToastContainer() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`oa-toast flex max-w-sm items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${COLORS[t.type]}`}
+          className={`flex max-w-sm items-center justify-between gap-3 rounded-lg px-4 py-3 shadow-lg ${COLORS[t.type]}`}
         >
           <span className="text-sm">{t.message}</span>
           <button
             type="button"
             onClick={() => removeToast(t.id)}
-            className="shrink-0 text-current/70 transition hover:text-current"
+            className="shrink-0 text-white/70 hover:text-white"
             aria-label="Dismiss"
           >
-            x
+            ✕
           </button>
         </div>
       ))}

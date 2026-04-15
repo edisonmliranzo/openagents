@@ -1,28 +1,24 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import {
-  ASSISTANT_MODE_STORAGE_KEY,
-  getAssistantModeDefinition,
-  isAssistantMode,
-  type AssistantMode,
-} from '@/components/chat/assistantModes'
 import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
-import { ConversationList } from '@/components/chat/ConversationList'
-import { storageGet, storageSet } from '@/lib/storage'
-import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
+import { RefreshCw, Braces, ScanSearch } from 'lucide-react'
+
+function shortId(value?: string | null) {
+  if (!value) return 'session'
+  if (value.length <= 12) return value
+  return `${value.slice(0, 6)}...${value.slice(-4)}`
+}
 
 export default function ChatPage() {
   const searchParams = useSearchParams()
   const targetConversationId = searchParams.get('conversation')
   const autoCreatedRef = useRef(false)
-  const [assistantMode, setAssistantMode] = useState<AssistantMode>('assist')
   const {
     conversations,
-    conversationsLoaded,
     activeConversationId,
     pendingApprovals,
     gatewayStatus,
@@ -33,10 +29,6 @@ export default function ChatPage() {
     createConversation,
     clearError,
   } = useChatStore()
-  const conversationRows = useMemo(
-    () => (Array.isArray(conversations) ? conversations : []),
-    [conversations],
-  )
 
   useEffect(() => {
     void loadConversations()
@@ -50,15 +42,9 @@ export default function ChatPage() {
       }
 
       if (activeConversationId) return
-      if (!conversationsLoaded) return
 
-      if (conversationRows.length > 0) {
-        const settings = await sdk.users.getSettings().catch(() => null)
-        const preferredConversationId = settings?.lastActiveConversationId ?? null
-        const resumeConversationId =
-          conversationRows.find((conversation) => conversation.id === preferredConversationId)?.id ??
-          conversationRows[0].id
-        await selectConversation(resumeConversationId)
+      if (conversations.length > 0) {
+        await selectConversation(conversations[0].id)
         return
       }
 
@@ -67,7 +53,7 @@ export default function ChatPage() {
         try {
           await createConversation()
         } catch {
-          // Keep disconnected state banner.
+          // keep disconnected state banner
         }
       }
     }
@@ -75,121 +61,116 @@ export default function ChatPage() {
   }, [
     targetConversationId,
     activeConversationId,
-    conversationsLoaded,
-    conversationRows,
+    conversations,
     selectConversation,
     createConversation,
   ])
 
-  useEffect(() => {
-    void activeConversationId
-  }, [activeConversationId])
-
-  useEffect(() => {
-    const stored = storageGet<string>(ASSISTANT_MODE_STORAGE_KEY, '')
-    if (stored && isAssistantMode(stored)) setAssistantMode(stored)
-  }, [])
-
-  useEffect(() => {
-    storageSet(ASSISTANT_MODE_STORAGE_KEY, assistantMode)
-  }, [assistantMode])
-
   const activeConversation = useMemo(
-    () => conversationRows.find((conversation) => conversation.id === activeConversationId) ?? null,
-    [conversationRows, activeConversationId],
-  )
-  const assistantModeDefinition = useMemo(
-    () => getAssistantModeDefinition(assistantMode),
-    [assistantMode],
+    () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
+    [conversations, activeConversationId],
   )
 
-  const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
-  const gatewayConnected = gatewayStatus === 'connected'
-  const hasPendingApprovals = pendingApprovals.length > 0
-  const handleRuntimeLabelChange = useCallback((_label: string) => {}, [])
+  const statusText =
+    gatewayStatus === 'connected'
+      ? 'connected'
+      : gatewayMessage || 'disconnected (1006): no reason'
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden">
-      {/* Mobile sessions drawer */}
-      {mobileSessionsOpen && (
-        <>
-          <button
-            type="button"
-            aria-label="Close sessions"
-            onClick={() => setMobileSessionsOpen(false)}
-            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm lg:hidden"
-          />
-          <div className="fixed inset-y-0 left-0 z-50 flex w-[min(85vw,280px)] flex-col overflow-hidden border-r border-[#e4e7ec] bg-white shadow-[4px_0_24px_rgba(15,23,42,0.12)] lg:hidden dark:border-[#2d3347] dark:bg-[#141824]">
-            <ConversationList onSelect={() => setMobileSessionsOpen(false)} />
+    <div className="-m-6 flex h-[calc(100vh-56px)] flex-col bg-slate-50">
+      <div className="flex h-full flex-col px-6 py-4">
+        <header className="mb-3 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Chat</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Direct gateway chat session for quick interventions.
+            </p>
           </div>
-        </>
-      )}
 
-      {/* Desktop persistent chat history sidebar */}
-      <aside className="hidden lg:flex w-[240px] shrink-0 flex-col overflow-hidden border-r border-[#e6e8ef] bg-white dark:border-[#2d3347] dark:bg-[#141824]">
-        <ConversationList />
-      </aside>
+          <div className="flex items-center gap-2">
+            <span
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
+                gatewayStatus === 'connected'
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border border-red-200 bg-red-50 text-red-600'
+              }`}
+            >
+              {statusText}
+            </span>
 
-      {/* Main chat area */}
-      <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
-        {(lastError || !gatewayConnected || hasPendingApprovals) && (
-          <div className="flex flex-wrap items-center gap-2">
-            {!gatewayConnected && (
-              <div className="rounded-full border border-[#f3c8c5] bg-[#fff3f2] px-3 py-1.5 text-xs font-semibold text-[#d92d20]">
-                {gatewayMessage ?? 'Assistant offline'}
-              </div>
-            )}
-            {lastError && (
-              <button
-                type="button"
-                onClick={clearError}
-                className="rounded-full border border-[#f3c8c5] bg-[#fff8f7] px-3 py-1.5 text-xs font-semibold text-[#d92d20]"
-              >
-                {lastError} | Dismiss
-              </button>
-            )}
-            {hasPendingApprovals && (
-              <div className="rounded-full border border-[#f2d18b] bg-[#fff8e8] px-3 py-1.5 text-xs font-semibold text-[#b54708]">
-                {pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} waiting
-              </div>
-            )}
-            <div className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-xs font-semibold text-[#475467]">
-              {assistantModeDefinition.label}
+            <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500">
+              {activeConversation?.title ?? shortId(activeConversationId)}
             </div>
-            {activeConversation && (
-              <div className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-xs font-semibold text-[#475467]">
-                {activeConversation.title ?? 'main'}
-              </div>
-            )}
+
             <button
               type="button"
               onClick={() => void loadConversations()}
-              className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-xs font-semibold text-[#475467]"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-slate-700"
+              title="Reconnect"
             >
-              Refresh sessions
+              <RefreshCw size={14} />
+            </button>
+
+            <div className="mx-1 h-6 w-px bg-slate-200" />
+
+            <button
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400"
+              title="JSON view"
+            >
+              <Braces size={14} />
+            </button>
+
+            <button
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400"
+              title="Inspect"
+            >
+              <ScanSearch size={14} />
             </button>
           </div>
-        )}
+        </header>
 
-        {hasPendingApprovals && (
-          <div className="space-y-2">
+        <div className="space-y-2">
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+            {gatewayStatus === 'connected'
+              ? 'Connected to gateway.'
+              : 'Disconnected from gateway.'}
+          </div>
+
+          {(lastError || gatewayStatus === 'disconnected') && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+              {lastError ?? gatewayMessage}
+            </div>
+          )}
+
+          {lastError && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={clearError}
+                className="text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+        </div>
+
+        {pendingApprovals.length > 0 && (
+          <div className="mt-3 space-y-2">
             {pendingApprovals.map((approval) => (
               <ApprovalBanner key={approval.id} approval={approval} />
             ))}
           </div>
         )}
 
-        <div className="h-full min-h-0 flex-1 overflow-hidden">
+        <div className="mt-3 min-h-0 flex-1">
           <ChatWindow
-            assistantMode={assistantMode}
-            onAssistantModeChange={setAssistantMode}
-            gatewayConnected={gatewayConnected}
+            gatewayConnected={gatewayStatus === 'connected'}
             onNewSession={async () => {
-              setMobileSessionsOpen(false)
               await createConversation()
             }}
-            onRuntimeLabelChange={handleRuntimeLabelChange}
-            onOpenMobileSessions={() => setMobileSessionsOpen(true)}
           />
         </div>
       </div>

@@ -1,12 +1,12 @@
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors'
 import multipart from '@fastify/multipart'
-import jwt from '@jsonwebtoken/fastify'
+import jwt from '@fastify/jwt'
 import { createServer, IncomingMessage, Server as HttpServer } from 'http'
 import { WebSocketServer, WebSocket } from 'ws'
 
 import type { User } from '@openagents/db/schema'
-import { authMiddleware, createAuthPlugin } from './auth'
+import { createAuthPlugin } from './auth'
 import { websocketHandler } from './websocket'
 import { apiRoutes } from './routes'
 
@@ -24,7 +24,7 @@ export interface Context {
 
 declare module 'fastify' {
   interface FastifyRequest {
-    context: Context
+    agentContext: Context
   }
 }
 
@@ -84,7 +84,7 @@ export class ApiServer {
 
   private async startServer(): Promise<void> {
     this.server = createServer(async (req, res) => {
-      await this.app.server.emit('request', req, res)
+      this.app.server.emit('request', req, res)
     })
 
     await new Promise<void>((resolve) => {
@@ -144,7 +144,8 @@ export async function createApp(config: Partial<ServerConfig> = {}): Promise<Api
   return server
 }
 
-if (require.main === module) {
+const isMain = import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`
+if (isMain) {
   createApp({
     port: parseInt(process.env.PORT || '3001', 10),
     host: process.env.HOST || '0.0.0.0',

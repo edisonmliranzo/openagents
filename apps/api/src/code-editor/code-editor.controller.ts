@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Body, Query } from '@nestjs/common'
 import { ApiTags, ApiOperation } from '@nestjs/swagger'
+import { spawn } from 'node:child_process'
 
 @ApiTags('code-editor')
 @Controller('code-editor')
@@ -204,15 +205,15 @@ export class CodeEditorController {
         child.kill()
       }, 30000)
 
-      child.stdout?.on('data', (data) => {
+      child.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
       })
 
-      child.stderr?.on('data', (data) => {
+      child.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
       })
 
-      child.on('close', (code) => {
+      child.on('close', (code: number | null) => {
         clearTimeout(timeout)
         resolve({
           stdout: stdout.slice(0, 100000),
@@ -221,7 +222,7 @@ export class CodeEditorController {
         })
       })
 
-      child.on('error', (error) => {
+      child.on('error', (error: Error) => {
         clearTimeout(timeout)
         resolve({
           stdout: '',
