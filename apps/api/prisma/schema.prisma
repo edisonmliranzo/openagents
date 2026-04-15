@@ -507,15 +507,24 @@ model DeviceInstall {
 }
 
 model AuditLog {
-  id           String   @id @default(cuid())
-  userId       String
-  action       String
-  resourceType String
-  resourceId   String
-  metadata     String?  // JSON string
-  createdAt    DateTime @default(now())
+  id          String      @id @default(cuid())
+  userId      String
+  category    String
+  action      String
+  resource    String
+  severity    String
+  description String
+  ipAddress   String?
+  userAgent   String?
+  metadata    String?
+  timestamp   DateTime    @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([category])
+  @@index([severity])
+  @@index([timestamp])
 }
 
 model Notification {
