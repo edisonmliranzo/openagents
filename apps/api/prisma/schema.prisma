@@ -1212,3 +1212,56 @@ model PackInstall {
   @@unique([packId, userId])
   @@index([userId, createdAt])
 }
+
+// ========== Self-Improving Learning System ==========
+
+model LearningInteraction {
+  id        String   @id @default(cuid())
+  userId    String
+  input     String
+  output    String
+  context   String?
+  channel   String?
+  model     String?
+  success   Boolean?
+  feedback  Int?
+  timestamp DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+  @@index([userId, success])
+}
+
+model LearnedPattern {
+  id         String   @id @default(cuid())
+  userId     String
+  pattern    String
+  type       String   // preference | behavior | context | skill
+  frequency  Int      @default(1)
+  confidence Float    @default(0.3)
+  examples   String   @default("[]")  // JSON array stored as string
+  metadata   String?  // JSON stored as string
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pattern, type])
+  @@index([userId, confidence])
+  @@index([userId, frequency])
+}
+
+model LearningStats {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  totalInteractions  Int       @default(0)
+  learningScore      Float     @default(10)
+  lastActiveAt       DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, lastActiveAt])
+}

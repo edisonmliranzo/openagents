@@ -47,6 +47,7 @@ import { AdvancedAIModule } from './advanced-ai/advanced-ai.module'
 import { AnalyticsModule } from './analytics/analytics.module'
 import { SecurityModule } from './security/security.module'
 import { OrchestrationModule } from './orchestration/orchestration.module'
+import { LearningModule } from './learning/learning.module'
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { OrchestrationModule } from './orchestration/orchestration.module'
     AnalyticsModule,
     SecurityModule,
     OrchestrationModule,
+    LearningModule,
   ],
 })
 export class AppModule {}
