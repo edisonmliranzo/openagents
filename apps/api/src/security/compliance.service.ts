@@ -183,7 +183,7 @@ export class ComplianceService {
     // Check audit logging
     const recentAuditLogs = await this.prisma.auditLog.count({
       where: {
-        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        timestamp: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       },
     })
     if (recentAuditLogs === 0) {

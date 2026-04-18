@@ -115,7 +115,7 @@ export class LearningService implements OnModuleInit {
           data: {
             frequency: newFrequency,
             confidence: newConfidence,
-            examples,
+            examples: JSON.stringify(examples),
             updatedAt: new Date(),
           },
         });
@@ -128,8 +128,8 @@ export class LearningService implements OnModuleInit {
             type: pattern.type,
             frequency: 1,
             confidence: this.MIN_CONFIDENCE,
-            examples: [pattern.example],
-            metadata: pattern.metadata,
+            examples: JSON.stringify([pattern.example]),
+            metadata: pattern.metadata ? JSON.stringify(pattern.metadata) : null,
           },
         });
 

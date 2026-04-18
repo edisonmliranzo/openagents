@@ -17,7 +17,7 @@ export class AuditService {
       data: {
         userId,
         action,
-        resourceType,
+        resource: resourceType,
         resourceId,
         metadata: metadata ? JSON.stringify(metadata) : null,
       },
@@ -37,7 +37,7 @@ export class AuditService {
     return this.log(
       event.userId,
       event.name.replace(/\./g, '_'),
-      resourceType,
+      resource: resourceType,
       resourceId,
       {
         occurredAt: event.occurredAt ?? new Date().toISOString(),
@@ -54,7 +54,7 @@ export class AuditService {
   async list(userId: string, take = 50) {
     const entries = await this.prisma.auditLog.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { timestamp: 'desc' },
       take,
     })
     return entries.map((e) => ({
