@@ -1,12 +1,11 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards, UseInterceptors } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
+import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { Roles } from '../auth/decorators/roles.decorator'
 import { RolesGuard } from '../auth/guards/roles.guard'
 import { AnalyticsService } from './analytics.service'
 import { Request } from 'express'
 import { User } from '@prisma/client'
-import { CacheInterceptor } from '@nestjs/cache-manager'
 
 @ApiTags('Analytics')
 @Controller('analytics')
@@ -16,8 +15,7 @@ export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get('summary')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get comprehensive analytics summary' })
   @ApiResponse({ status: 200, description: 'Analytics summary retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -29,8 +27,7 @@ export class AnalyticsController {
   }
 
   @Get('tokens')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get token usage metrics' })
   @ApiResponse({ status: 200, description: 'Token metrics retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -42,8 +39,7 @@ export class AnalyticsController {
   }
 
   @Get('costs')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get cost analysis' })
   @ApiResponse({ status: 200, description: 'Cost analysis retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -55,8 +51,7 @@ export class AnalyticsController {
   }
 
   @Get('performance')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get performance metrics' })
   @ApiResponse({ status: 200, description: 'Performance metrics retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -68,8 +63,7 @@ export class AnalyticsController {
   }
 
   @Get('trends')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get usage trends' })
   @ApiResponse({ status: 200, description: 'Usage trends retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -81,8 +75,7 @@ export class AnalyticsController {
   }
 
   @Get('predictions')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get predictive analytics' })
   @ApiResponse({ status: 200, description: 'Predictive analytics retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -94,8 +87,7 @@ export class AnalyticsController {
   }
 
   @Get('alerts')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get analytics alerts' })
   @ApiResponse({ status: 200, description: 'Analytics alerts retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -105,7 +97,7 @@ export class AnalyticsController {
   }
 
   @Post('alerts/acknowledge/:alertId')
-  @Roles('user', 'admin')
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Acknowledge an alert' })
   @ApiResponse({ status: 200, description: 'Alert acknowledged successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -118,8 +110,7 @@ export class AnalyticsController {
   }
 
   @Get('reports')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get analytics reports' })
   @ApiResponse({ status: 200, description: 'Analytics reports retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -129,7 +120,7 @@ export class AnalyticsController {
   }
 
   @Post('reports/generate')
-  @Roles('user', 'admin')
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Generate a custom report' })
   @ApiResponse({ status: 200, description: 'Report generated successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -142,8 +133,7 @@ export class AnalyticsController {
   }
 
   @Get('dashboards')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get user dashboards' })
   @ApiResponse({ status: 200, description: 'Dashboards retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -153,7 +143,7 @@ export class AnalyticsController {
   }
 
   @Post('dashboards/create')
-  @Roles('user', 'admin')
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Create a new dashboard' })
   @ApiResponse({ status: 200, description: 'Dashboard created successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -166,7 +156,7 @@ export class AnalyticsController {
   }
 
   @Post('dashboards/:dashboardId/widgets')
-  @Roles('user', 'admin')
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Add widget to dashboard' })
   @ApiResponse({ status: 200, description: 'Widget added successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -180,7 +170,7 @@ export class AnalyticsController {
   }
 
   @Get('export')
-  @Roles('user', 'admin')
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Export analytics data' })
   @ApiResponse({ status: 200, description: 'Data exported successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -195,7 +185,6 @@ export class AnalyticsController {
 
   @Get('health')
   @Roles('admin')
-  @UseInterceptors(CacheInterceptor)
   @ApiOperation({ summary: 'Get system health metrics' })
   @ApiResponse({ status: 200, description: 'Health metrics retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -215,8 +204,7 @@ export class AnalyticsController {
   }
 
   @Get('usage-limits')
-  @Roles('user', 'admin')
-  @UseInterceptors(CacheInterceptor)
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get usage limits and quotas' })
   @ApiResponse({ status: 200, description: 'Usage limits retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -231,7 +219,7 @@ export class AnalyticsController {
   }
 
   @Post('optimize')
-  @Roles('user', 'admin')
+  @Roles('member', 'admin')
   @ApiOperation({ summary: 'Get optimization recommendations' })
   @ApiResponse({ status: 200, description: 'Optimization recommendations retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })

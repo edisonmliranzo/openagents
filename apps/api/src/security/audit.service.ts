@@ -317,7 +317,7 @@ export class AuditService {
           type: 'brute_force_attempt',
           description: `Multiple failed login attempts (${login._count.userId}) from ${login.ipAddress}`,
           severity: AuditSeverity.HIGH,
-          ipAddress: login.ipAddress,
+          ipAddress: login.ipAddress ?? undefined,
         })
       }
     }
