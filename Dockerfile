@@ -23,6 +23,8 @@ COPY packages/server/package.json packages/server/package.json
 
 RUN pnpm install --no-frozen-lockfile
 
+# Pass --build-arg CACHEBUST=$(date +%s) to invalidate source copy cache
+ARG CACHEBUST=1
 COPY . .
 
 # Build shared workspace packages once so app builds can consume compiled outputs.
