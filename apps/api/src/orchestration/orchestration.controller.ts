@@ -1,3 +1,4 @@
+import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger'
 import { AuthGuard } from '@nestjs/passport'
@@ -48,10 +49,10 @@ export class OrchestrationController {
     )
 
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'plan_created',
       resource: plan.id,
-      severity: 'low',
+      severity: AuditSeverity.LOW,
       description: `Orchestration plan created: ${createPlanDto.objective}`,
       timestamp: new Date(),
     })
@@ -68,10 +69,10 @@ export class OrchestrationController {
     const plan = this.orchestrationService.getPlanStatus(planId)
 
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'plan_accessed',
       resource: planId,
-      severity: 'low',
+      severity: AuditSeverity.LOW,
       description: `Orchestration plan accessed: ${planId}`,
       timestamp: new Date(),
     })
@@ -86,10 +87,10 @@ export class OrchestrationController {
     const plans = this.orchestrationService.listActivePlans()
 
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'plans_listed',
       resource: 'all',
-      severity: 'low',
+      severity: AuditSeverity.LOW,
       description: 'Listed active orchestration plans',
       timestamp: new Date(),
     })
@@ -106,10 +107,10 @@ export class OrchestrationController {
     await this.orchestrationService.executePlan(planId, userId)
 
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'plan_executed',
       resource: planId,
-      severity: 'medium',
+      severity: AuditSeverity.MEDIUM,
       description: `Orchestration plan executed: ${planId}`,
       timestamp: new Date(),
     })
@@ -124,10 +125,10 @@ export class OrchestrationController {
     const result = this.orchestrationService.cancelPlan(planId, userId)
 
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'plan_cancelled',
       resource: planId,
-      severity: 'medium',
+      severity: AuditSeverity.MEDIUM,
       description: `Orchestration plan cancelled: ${planId}`,
       timestamp: new Date(),
     })
@@ -148,10 +149,10 @@ export class OrchestrationController {
     }
 
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'tasks_accessed',
       resource: planId,
-      severity: 'low',
+      severity: AuditSeverity.LOW,
       description: `Tasks accessed for plan: ${planId}`,
       timestamp: new Date(),
     })
@@ -172,10 +173,10 @@ export class OrchestrationController {
     }
 
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'execution_order_accessed',
       resource: planId,
-      severity: 'low',
+      severity: AuditSeverity.LOW,
       description: `Execution order accessed for plan: ${planId}`,
       timestamp: new Date(),
     })
@@ -193,10 +194,10 @@ export class OrchestrationController {
     const systemStatus = plans.length > 0 ? 'active' : 'idle'
 
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'health_checked',
       resource: 'system',
-      severity: 'low',
+      severity: AuditSeverity.LOW,
       description: 'Orchestration health status checked',
       timestamp: new Date(),
     })
@@ -229,10 +230,10 @@ export class OrchestrationController {
     // For now, we'll just cancel and mark as failed
 
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'plan_deleted',
       resource: planId,
-      severity: 'medium',
+      severity: AuditSeverity.MEDIUM,
       description: `Orchestration plan deleted: ${planId}`,
       timestamp: new Date(),
     })

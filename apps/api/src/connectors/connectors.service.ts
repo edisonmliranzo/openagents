@@ -1,3 +1,4 @@
+import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { BadRequestException, Injectable } from '@nestjs/common'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import type {
@@ -924,20 +925,20 @@ export class ConnectorsService {
     if (input.status === 'down') {
       alerts.push({
         code: 'connector_down',
-        severity: 'critical',
+        severity: AuditSeverity.CRITICAL,
         message: 'Connector is currently down.',
       })
     }
     if (input.failureStreak >= 6) {
       alerts.push({
         code: 'failure_streak_critical',
-        severity: 'critical',
+        severity: AuditSeverity.CRITICAL,
         message: `Connector has failed ${input.failureStreak} times in a row.`,
       })
     } else if (input.failureStreak >= 3) {
       alerts.push({
         code: 'failure_streak_warning',
-        severity: 'warning',
+        severity: AuditSeverity.WARNING,
         message: `Connector has ${input.failureStreak} consecutive failures.`,
       })
     }
@@ -955,13 +956,13 @@ export class ConnectorsService {
       if (hoursRemaining <= 0) {
         alerts.push({
           code: 'token_expired',
-          severity: 'critical',
+          severity: AuditSeverity.CRITICAL,
           message: 'Connector token has expired.',
         })
       } else if (hoursRemaining <= TOKEN_EXPIRY_WARNING_HOURS) {
         alerts.push({
           code: 'token_expiring',
-          severity: 'warning',
+          severity: AuditSeverity.WARNING,
           message: `Connector token expires in ${Math.ceil(hoursRemaining)} hour(s).`,
         })
       }
@@ -970,7 +971,7 @@ export class ConnectorsService {
     if (input.lastFailureAt && (!input.lastSuccessAt || input.lastFailureAt > input.lastSuccessAt)) {
       alerts.push({
         code: 'latest_operation_failed',
-        severity: 'warning',
+        severity: AuditSeverity.WARNING,
         message: 'Most recent connector operation failed.',
       })
     }
@@ -978,7 +979,7 @@ export class ConnectorsService {
     if (input.scopeDiagnostics && input.scopeDiagnostics.grantedScopes.length > 0 && input.scopeDiagnostics.blockedTools.length) {
       alerts.push({
         code: 'missing_scopes',
-        severity: 'warning',
+        severity: AuditSeverity.WARNING,
         message: `Missing scope coverage for ${input.scopeDiagnostics.blockedTools.length} action(s).`,
       })
     }
@@ -991,7 +992,7 @@ export class ConnectorsService {
     ) {
       alerts.push({
         code: 'no_refresh_token',
-        severity: 'warning',
+        severity: AuditSeverity.WARNING,
         message: 'No refresh token is stored for this connector.',
       })
     }
