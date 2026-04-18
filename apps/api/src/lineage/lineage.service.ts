@@ -1,3 +1,4 @@
+import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
@@ -17,7 +18,7 @@ export interface AnomalyAlert {
   recentCount: number
   avgPerSession: number
   ratio: number
-  severity: 'low' | 'medium' | 'high'
+  severity: AuditSeverity.LOW | 'medium' | 'high'
   detectedAt: string
 }
 

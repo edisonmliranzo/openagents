@@ -1,3 +1,4 @@
+import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import type { ConversationRepairIssue, ConversationRepairReport } from '@openagents/shared'
@@ -210,7 +211,7 @@ export class ConversationsService {
     if (pendingApprovals.length > 0) {
       issues.push({
         code: 'pending_approvals',
-        severity: 'info',
+        severity: AuditSeverity.INFO,
         message: `${pendingApprovals.length} approval(s) still waiting on user action.`,
         relatedIds: pendingApprovals.map((approval) => approval.id),
       })
@@ -218,7 +219,7 @@ export class ConversationsService {
     if (unresolvedApprovedApprovals.length > 0) {
       issues.push({
         code: 'approved_actions_not_continued',
-        severity: 'critical',
+        severity: AuditSeverity.CRITICAL,
         message: `${unresolvedApprovedApprovals.length} approved action(s) have not completed.`,
         relatedIds: unresolvedApprovedApprovals.map((approval) => approval.id),
       })
@@ -226,7 +227,7 @@ export class ConversationsService {
     if (waitingRuns.length > 0 && pendingApprovals.length === 0 && unresolvedApprovedApprovals.length === 0) {
       issues.push({
         code: 'orphaned_waiting_runs',
-        severity: 'warning',
+        severity: AuditSeverity.WARNING,
         message: `${waitingRuns.length} run(s) are still waiting for approval, but no matching approvals remain.`,
         relatedIds: waitingRuns.map((run) => run.id),
       })
@@ -234,7 +235,7 @@ export class ConversationsService {
     if (stuckMessages.length > 0) {
       issues.push({
         code: 'stale_streaming_messages',
-        severity: 'warning',
+        severity: AuditSeverity.WARNING,
         message: `${stuckMessages.length} message(s) have been stuck in pending/streaming state.`,
         relatedIds: stuckMessages.map((message) => message.id),
       })
@@ -242,7 +243,7 @@ export class ConversationsService {
     if (latestMessage && (!conversation.lastMessageAt || conversation.lastMessageAt.getTime() !== latestMessage.createdAt.getTime())) {
       issues.push({
         code: 'last_message_at_drift',
-        severity: 'info',
+        severity: AuditSeverity.INFO,
         message: 'Conversation lastMessageAt does not match the latest message timestamp.',
         relatedIds: [latestMessage.id],
       })

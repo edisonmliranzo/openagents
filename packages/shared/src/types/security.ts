@@ -6,6 +6,8 @@
  * Audit event severity levels
  */
 export enum AuditSeverity {
+  INFO = 'info',
+  WARNING = 'warning',
   LOW = 'low',
   MEDIUM = 'medium',
   HIGH = 'high',
@@ -16,6 +18,13 @@ export enum AuditSeverity {
  * Audit event categories
  */
 export enum AuditCategory {
+  ORCHESTRATION = 'orchestration',
+  BACKUP = 'backup',
+  LEARNING = 'learning',
+  REASONING = 'reasoning',
+  EXECUTION = 'execution',
+  ESCALATION = 'escalation',
+  PROMPTING = 'prompting',
   AUTHENTICATION = 'authentication',
   AUTHORIZATION = 'authorization',
   DATA_ACCESS = 'data_access',
@@ -37,6 +46,7 @@ export interface AuditEvent {
   ipAddress?: string
   userAgent?: string
   timestamp?: Date
+  metadata?: Record<string, any>
 }
 
 /**

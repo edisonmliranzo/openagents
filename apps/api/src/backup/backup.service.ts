@@ -1,3 +1,4 @@
+import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { AuditService } from '../security/audit.service'
@@ -106,10 +107,10 @@ export class BackupService implements OnModuleInit {
 
       // Log backup creation
       await this.auditService.logEvent(userId, {
-        category: 'backup',
+        category: AuditCategory.BACKUP,
         action: 'manual_backup_created',
         resource: backupId,
-        severity: 'low',
+        severity: AuditSeverity.LOW,
         description: `Manual backup created successfully: ${backupId}`,
         timestamp: new Date(),
         metadata: { backupType: 'manual', dataSize: backupInfo.dataSize },
@@ -196,10 +197,10 @@ export class BackupService implements OnModuleInit {
 
       // Log successful backup
       await this.auditService.logEvent('system', {
-        category: 'backup',
+        category: AuditCategory.BACKUP,
         action: 'backup_completed',
         resource: backupId,
-        severity: 'low',
+        severity: AuditSeverity.LOW,
         description: `Backup completed successfully: ${backupId}`,
         timestamp: new Date(),
         metadata: { 
@@ -416,10 +417,10 @@ export class BackupService implements OnModuleInit {
 
           // Log cleanup action
           await this.auditService.logEvent('system', {
-            category: 'backup',
+            category: AuditCategory.BACKUP,
             action: 'backup_cleanup',
             resource: dir,
-            severity: 'low',
+            severity: AuditSeverity.LOW,
             description: `Removed backup due to retention policy: ${dir}`,
             timestamp: new Date(),
           })
@@ -465,10 +466,10 @@ export class BackupService implements OnModuleInit {
     
     // Log configuration change
     await this.auditService.logEvent(userId, {
-      category: 'backup',
+      category: AuditCategory.BACKUP,
       action: 'config_updated',
       resource: 'backup_config',
-      severity: 'medium',
+      severity: AuditSeverity.MEDIUM,
       description: 'Backup configuration updated',
       timestamp: new Date(),
       metadata: { config },

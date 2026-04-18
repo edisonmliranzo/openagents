@@ -1,3 +1,4 @@
+import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import {
@@ -377,7 +378,7 @@ export class AnalyticsService {
   /**
    * Detect usage anomalies
    */
-  private async detectAnomalies(userId: string, timeframe: string): Promise<Array<{ type: string; severity: 'low' | 'medium' | 'high'; description: string; value: number }>> {
+  private async detectAnomalies(userId: string, timeframe: string): Promise<Array<{ type: string; severity: AuditSeverity.LOW | 'medium' | 'high'; description: string; value: number }>> {
     const anomalies = []
     
     // Check for sudden spikes in usage
@@ -401,7 +402,7 @@ export class AnalyticsService {
       const change = ((today - yesterday) / yesterday) * 100
 
       if (Math.abs(change) > 50) {
-        const severity: 'low' | 'medium' | 'high' = change > 100 ? 'high' : 'medium'
+        const severity: AuditSeverity.LOW | 'medium' | 'high' = change > 100 ? 'high' : 'medium'
         anomalies.push({
           type: 'usage_spike',
           severity,
@@ -432,7 +433,7 @@ export class AnalyticsService {
       const costChange = ((todayCost - yesterdayCost) / yesterdayCost) * 100
 
       if (Math.abs(costChange) > 30) {
-        const severity: 'low' | 'medium' | 'high' = costChange > 50 ? 'high' : 'medium'
+        const severity: AuditSeverity.LOW | 'medium' | 'high' = costChange > 50 ? 'high' : 'medium'
         anomalies.push({
           type: 'cost_anomaly',
           severity,

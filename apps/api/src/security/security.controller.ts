@@ -1,3 +1,4 @@
+import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common'
 import { EncryptionService } from './encryption.service'
 import { AuditService } from './audit.service'
@@ -113,7 +114,7 @@ export class SecurityController {
     if (suspiciousActivity.length > 0) {
       recommendations.push({
         priority: 'high',
-        category: 'security',
+        category: AuditCategory.SECURITY,
         title: 'Suspicious Activity Detected',
         description: `${suspiciousActivity.length} suspicious activities detected in the last hour`,
       })

@@ -1,3 +1,4 @@
+import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { AuditService } from '../security/audit.service'
@@ -66,10 +67,10 @@ export class OrchestrationService {
     
     // Log orchestration creation
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'plan_created',
       resource: planId,
-      severity: 'low',
+      severity: AuditSeverity.LOW,
       description: `Orchestration plan created for: ${objective}`,
       timestamp: new Date(),
       metadata: { taskCount: tasks.length, planId },
@@ -114,10 +115,10 @@ export class OrchestrationService {
     
     // Log completion
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'plan_completed',
       resource: planId,
-      severity: 'low',
+      severity: AuditSeverity.LOW,
       description: `Orchestration plan ${plan.status}`,
       timestamp: new Date(),
     })
@@ -303,10 +304,10 @@ export class OrchestrationService {
   ): Promise<void> {
     // Log failure
     await this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'task_failed',
       resource: task.id,
-      severity: 'high',
+      severity: AuditSeverity.HIGH,
       description: `Task failed: ${task.error}`,
       timestamp: new Date(),
       metadata: { taskId: task.id, planId: plan.id, error: task.error },
@@ -440,10 +441,10 @@ export class OrchestrationService {
     
     // Log cancellation
     this.auditService.logEvent(userId, {
-      category: 'orchestration',
+      category: AuditCategory.ORCHESTRATION,
       action: 'plan_cancelled',
       resource: planId,
-      severity: 'medium',
+      severity: AuditSeverity.MEDIUM,
       description: 'Orchestration plan cancelled by user',
       timestamp: new Date(),
     })

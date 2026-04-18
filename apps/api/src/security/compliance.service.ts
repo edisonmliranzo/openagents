@@ -1,14 +1,7 @@
+import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { AuditService } from './audit.service'
-
-// Define types locally to avoid import issues
-export enum AuditSeverity {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  CRITICAL = 'critical',
-}
 
 export enum ComplianceFramework {
   SOC2 = 'soc2',
@@ -225,7 +218,7 @@ export class ComplianceService {
     // Log compliance check
     if (userId) {
       await this.auditService.logEvent(userId, {
-        category: 'compliance' as any,
+        category: AuditCategory.COMPLIANCE as any,
         action: 'compliance_assessment',
         resource: framework,
         severity: AuditSeverity.LOW,
