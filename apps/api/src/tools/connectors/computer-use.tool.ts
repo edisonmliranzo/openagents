@@ -183,7 +183,7 @@ export class ComputerUseTool implements OnModuleDestroy {
     const modeRequest = this.resolveModeInput(input.mode)
     const resolvedMode = await this.resolveSessionMode(modeRequest)
     if (!resolvedMode.ok) {
-      return { success: false, output: null, error: resolvedMode.error }
+      return { success: false, output: null, error: (resolvedMode as { ok: false; error: string }).error }
     }
 
     const session: ComputerSessionState = {
