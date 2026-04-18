@@ -21,7 +21,7 @@ COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/server/package.json packages/server/package.json
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 COPY . .
 
