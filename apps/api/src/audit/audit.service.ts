@@ -16,9 +16,11 @@ export class AuditService {
     return this.prisma.auditLog.create({
       data: {
         userId,
+        category: 'system',
         action,
-        resource: resourceType,
-        resourceId,
+        resource: `${resourceType}:${resourceId}`,
+        severity: 'low',
+        description: action,
         metadata: metadata ? JSON.stringify(metadata) : null,
       },
     })
@@ -37,7 +39,7 @@ export class AuditService {
     return this.log(
       event.userId,
       event.name.replace(/\./g, '_'),
-      resource: resourceType,
+      resourceType,
       resourceId,
       {
         occurredAt: event.occurredAt ?? new Date().toISOString(),

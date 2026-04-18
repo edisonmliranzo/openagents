@@ -18,7 +18,7 @@ export interface AnomalyAlert {
   recentCount: number
   avgPerSession: number
   ratio: number
-  severity: AuditSeverity.LOW | 'medium' | 'high'
+  severity: 'low' | 'medium' | 'high'
   detectedAt: string
 }
 
