@@ -1,13 +1,25 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import { ModuleRef } from '@nestjs/core'
 import type { ToolResult } from '@openagents/shared'
 import type { ToolDefinition } from '../tools.service'
-import { ParallelAgentService } from '../../agent/parallel-agent.service'
 
 @Injectable()
-export class ParallelAgentTool {
+export class ParallelAgentTool implements OnModuleInit {
   private readonly logger = new Logger(ParallelAgentTool.name)
+  // Lazily resolved to break the AgentModule <-> ToolsModule circular dep
+  private parallelAgentService: any
 
-  constructor(private readonly parallelAgent: ParallelAgentService) {}
+  constructor(private readonly moduleRef: ModuleRef) {}
+
+  async onModuleInit() {
+    try {
+      // Lazy resolution — ParallelAgentService lives in AgentModule which imports ToolsModule
+      const { ParallelAgentService } = await import('../../agent/parallel-agent.service')
+      this.parallelAgentService = this.moduleRef.get(ParallelAgentService, { strict: false })
+    } catch {
+      this.logger.warn('ParallelAgentService not available — parallel_agent_run tool will be disabled')
+    }
+  }
 
   get def(): ToolDefinition {
     return {
@@ -42,11 +54,15 @@ export class ParallelAgentTool {
       return { success: false, output: null, error: 'tasks must be a non-empty array' }
     }
 
-    const max = Math.min(input.tasks.length, 8) // cap at 8 parallel branches
+    if (!this.parallelAgentService) {
+      return { success: false, output: null, error: 'ParallelAgentService not available' }
+    }
+
+    const max = Math.min(input.tasks.length, 8)
     const tasks = input.tasks.slice(0, max)
 
     try {
-      const output = await this.parallelAgent.runParallel({
+      const output = await this.parallelAgentService.runParallel({
         userId,
         parentConversationId: `tool_parallel_${Date.now()}`,
         tasks,

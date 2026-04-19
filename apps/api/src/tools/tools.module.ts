@@ -2,7 +2,6 @@ import { Module, forwardRef } from '@nestjs/common'
 import { ToolsService } from './tools.service'
 import { ToolsController } from './tools.controller'
 import { ParallelAgentTool } from './connectors/parallel-agent.tool'
-import { AgentModule } from '../agent/agent.module'
 import { GmailTool } from './connectors/gmail.tool'
 import { CalendarTool } from './connectors/calendar.tool'
 import { WebFetchTool } from './connectors/web-fetch.tool'
@@ -47,7 +46,7 @@ import { PolicyModule } from '../policy/policy.module'
 import { ToolsInternalController } from './tools.internal.controller'
 
 @Module({
-  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule, forwardRef(() => AgentModule)],
+  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule],
   providers: [
     ToolsService,
     GmailTool,
