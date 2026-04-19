@@ -512,11 +512,11 @@ model DeviceInstall {
 model AuditLog {
   id          String      @id @default(cuid())
   userId      String
-  category    String
+  category    String      @default("system")
   action      String
-  resource    String
-  severity    String
-  description String
+  resource    String      @default("")
+  severity    String      @default("low")
+  description String      @default("")
   ipAddress   String?
   userAgent   String?
   metadata    String?

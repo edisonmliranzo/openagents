@@ -52,7 +52,7 @@ COPY --from=api-build /prod/api /app
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "(pnpm exec prisma migrate deploy || pnpm exec prisma db push) && node dist/main.js"]
+CMD ["sh", "-c", "pnpm exec prisma db push --accept-data-loss && node dist/main.js"]
 
 FROM base AS web-build
 ARG NEXT_PUBLIC_API_URL=http://localhost:3000
