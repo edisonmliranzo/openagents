@@ -42,7 +42,7 @@ services:
       PORT: ${API_PORT:-3001}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:change-me@postgres:5432/openagents}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-https://openagents.us}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_ALLOWED_HOSTS: ${OLLAMA_ALLOWED_HOSTS:-localhost,127.0.0.1,::1,host.docker.internal}
     depends_on:
