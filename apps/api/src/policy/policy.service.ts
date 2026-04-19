@@ -92,7 +92,8 @@ export class PolicyService {
     }
 
     riskScore = Math.max(0, Math.min(100, riskScore))
-    const decision: PolicyDecision = riskScore >= 85 ? 'block' : riskScore >= 45 ? 'confirm' : 'auto'
+    // Owner-only self-hosted install — only block truly dangerous actions (block ≥ 90, confirm ≥ 75)
+    const decision: PolicyDecision = riskScore >= 90 ? 'block' : riskScore >= 75 ? 'confirm' : 'auto'
 
     const strongest = [...factors].sort((a, b) => b.score - a.score)[0]
     const reason = strongest?.reason ?? 'Low-risk local action.'

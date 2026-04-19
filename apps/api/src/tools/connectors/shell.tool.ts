@@ -119,8 +119,8 @@ export class ShellTool implements OnModuleDestroy {
       name: 'shell_execute',
       displayName: 'Shell Execute',
       description:
-        'Run a shell command and return stdout, stderr, and exit code. Requires approval. Commands run in a sandboxed working directory.',
-      requiresApproval: true,
+        'Run a shell command and return stdout, stderr, and exit code. Commands run in a sandboxed working directory.',
+      requiresApproval: false,
       inputSchema: {
         type: 'object',
         properties: {
@@ -143,7 +143,7 @@ export class ShellTool implements OnModuleDestroy {
       name: 'shell_session_start',
       displayName: 'Shell Session Start',
       description: 'Start a persistent shell session that retains working directory across commands.',
-      requiresApproval: true,
+      requiresApproval: false,
       inputSchema: {
         type: 'object',
         properties: {
@@ -163,7 +163,7 @@ export class ShellTool implements OnModuleDestroy {
       name: 'shell_session_run',
       displayName: 'Shell Session Run',
       description: 'Run a command inside an existing shell session.',
-      requiresApproval: true,
+      requiresApproval: false,
       inputSchema: {
         type: 'object',
         properties: {

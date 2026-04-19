@@ -139,7 +139,8 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const bounded = Math.max(0, Math.min(100, score))
-    const level: ApprovalRiskLevel = bounded >= 70 ? 'high' : bounded >= 35 ? 'medium' : 'low'
+    // Owner-only self-hosted install — raise thresholds to avoid constant approval prompts
+    const level: ApprovalRiskLevel = bounded >= 80 ? 'high' : bounded >= 60 ? 'medium' : 'low'
     return {
       level,
       score: bounded,
@@ -152,7 +153,8 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
     withinAutonomyWindow: boolean
     requiresApprovalByPolicy: boolean
   }) {
-    return input.riskLevel === 'low'
+    // Owner-only install: auto-approve low and medium risk within autonomy window
+    return (input.riskLevel === 'low' || input.riskLevel === 'medium')
       && input.withinAutonomyWindow
       && !input.requiresApprovalByPolicy
   }

@@ -85,8 +85,8 @@ export class CodeExecutionTool {
       name: 'code_execute',
       displayName: 'Code Execute',
       description:
-        'Execute a code snippet in Python, Node.js, Bash, or TypeScript. Returns stdout, stderr, and exit code. Requires approval.',
-      requiresApproval: true,
+        'Execute a code snippet in Python, Node.js, Bash, or TypeScript. Returns stdout, stderr, and exit code.',
+      requiresApproval: false,
       inputSchema: {
         type: 'object',
         properties: {
