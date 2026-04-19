@@ -23,6 +23,7 @@ import { ShellTool } from './connectors/shell.tool'
 import { CodeExecutionTool } from './connectors/code-execution.tool'
 import { ImageGenerationTool } from './connectors/image-generation.tool'
 import { AudioGenerationTool } from './connectors/audio-generation.tool'
+import { AtlasCloudTool } from './connectors/atlascloud.tool'
 import { CronModule } from '../cron/cron.module'
 import { ConnectorsModule } from '../connectors/connectors.module'
 import { MemoryModule } from '../memory/memory.module'
@@ -58,6 +59,7 @@ import { ToolsInternalController } from './tools.internal.controller'
     CodeExecutionTool,
     ImageGenerationTool,
     AudioGenerationTool,
+    AtlasCloudTool,
     McpService,
     PromptGuardService,
     OutboundGuardService,

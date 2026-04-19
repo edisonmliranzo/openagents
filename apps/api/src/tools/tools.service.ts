@@ -22,6 +22,7 @@ import { ShellTool } from './connectors/shell.tool'
 import { CodeExecutionTool } from './connectors/code-execution.tool'
 import { ImageGenerationTool } from './connectors/image-generation.tool'
 import { AudioGenerationTool } from './connectors/audio-generation.tool'
+import { AtlasCloudTool } from './connectors/atlascloud.tool'
 import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
 import { ConnectorsService } from '../connectors/connectors.service'
 import { McpService } from './mcp.service'
@@ -70,6 +71,7 @@ export class ToolsService {
     private codeExecution: CodeExecutionTool,
     private imageGeneration: ImageGenerationTool,
     private audioGeneration: AudioGenerationTool,
+    private atlasCloud: AtlasCloudTool,
     private mcp: McpService,
     ) {
     this.registry = new Map([
@@ -153,6 +155,7 @@ export class ToolsService {
       // Multimodal generation
       ['image_generate', { def: this.withBuiltinSource(this.imageGeneration.def), execute: this.imageGeneration.generate.bind(this.imageGeneration) }],
       ['audio_generate', { def: this.withBuiltinSource(this.audioGeneration.def), execute: this.audioGeneration.generate.bind(this.audioGeneration) }],
+      ['atlascloud_image_generate', { def: this.withBuiltinSource(this.atlasCloud.def), execute: this.atlasCloud.generate.bind(this.atlasCloud) }],
     ])
   }
 
@@ -281,7 +284,7 @@ export class ToolsService {
     if (/(web_|gmail_|calendar_|bybit_get_|deep_research|computer_)/i.test(value)) return 'external_read' as const
     if (/(cron_add|cron_remove)/i.test(value)) return 'system_mutation' as const
     if (/(shell_execute|shell_session_run|code_execute)/i.test(value)) return 'system_mutation' as const
-    if (/(image_generate|audio_generate)/i.test(value)) return 'external_write' as const
+    if (/(image_generate|audio_generate|atlascloud_image_generate)/i.test(value)) return 'external_write' as const
     return 'local' as const
   }
 
@@ -296,6 +299,7 @@ export class ToolsService {
     if (value.startsWith('shell_')) effects.push('Executes shell commands on the host system')
     if (value === 'code_execute') effects.push('Executes code in an isolated process on the host system')
     if (value === 'image_generate') effects.push('Calls external image generation API; may incur cost')
+    if (value === 'atlascloud_image_generate') effects.push('Calls AtlasCloud AI image generation API; may incur cost')
     if (value === 'audio_generate') effects.push('Calls external TTS API; may incur cost')
     if (effects.length === 0) effects.push('Tool-specific side effects depend on runtime inputs')
     return effects
@@ -308,6 +312,7 @@ export class ToolsService {
     if (value.startsWith('web_')) return 0.01
     if (value.includes('bybit')) return 0.02
     if (value === 'image_generate') return 0.04
+    if (value === 'atlascloud_image_generate') return 0.02
     if (value === 'audio_generate') return 0.015
     if (value === 'shell_execute' || value === 'shell_session_run' || value === 'code_execute') return 0.005
     return Object.keys(input).length > 8 ? 0.02 : 0
