@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { sdk } from '@/stores/auth'
 import type { DataLineageRecord, Message } from '@openagents/shared'
 import { Brain, ChevronDown, ChevronRight, Copy } from 'lucide-react'
+import { BranchButton } from '@/components/branch-button'
 
 // Strip <thinking>…</thinking> blocks out of visible content and return them separately.
 function extractThinkingBlocks(raw: string): { thinking: string[]; visible: string } {
@@ -85,7 +86,15 @@ async function copyToClipboard(text: string) {
   document.body.removeChild(textarea)
 }
 
-export function MessageBubble({ message }: { message: Message }) {
+export function MessageBubble({
+  message,
+  conversationId,
+  messageIndex,
+}: {
+  message: Message
+  conversationId?: string
+  messageIndex?: number
+}) {
   const isUser = message.role === 'user'
   const { thinking, visible } = useMemo(
     () => extractThinkingBlocks(message.content ?? ''),
@@ -186,7 +195,7 @@ export function MessageBubble({ message }: { message: Message }) {
 
   // ── Agent bubble ─────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col items-start gap-1.5">
+    <div className="group flex flex-col items-start gap-1.5">
       <div className="w-full max-w-full xl:max-w-[92%]">
         {thinking.map((block, idx) => (
           <ThinkingBlock key={`thinking-${idx}`} content={block} />
@@ -280,29 +289,33 @@ export function MessageBubble({ message }: { message: Message }) {
         </div>
 
         {/* action row */}
-        {(canShowLineage || codeBlocks.length > 0) && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
-            {canShowLineage && (
-              <button
-                type="button"
-                onClick={() => void handleToggleLineage()}
-                className="text-[11px] text-[#98a2b3] transition hover:text-[#667085]"
-              >
-                Why this answer
-              </button>
-            )}
-            {codeBlocks.length > 0 && (
-              <button
-                type="button"
-                onClick={() => void handleCopyAll()}
-                className="inline-flex items-center gap-1 text-[11px] text-[#98a2b3] transition hover:text-[#667085]"
-              >
-                <Copy size={11} />
-                {copiedAll ? 'Copied' : codeBlocks.length > 1 ? 'Copy all code' : 'Copy code'}
-              </button>
-            )}
-          </div>
-        )}
+        <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
+          {canShowLineage && (
+            <button
+              type="button"
+              onClick={() => void handleToggleLineage()}
+              className="text-[11px] text-[#98a2b3] transition hover:text-[#667085]"
+            >
+              Why this answer
+            </button>
+          )}
+          {codeBlocks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleCopyAll()}
+              className="inline-flex items-center gap-1 text-[11px] text-[#98a2b3] transition hover:text-[#667085]"
+            >
+              <Copy size={11} />
+              {copiedAll ? 'Copied' : codeBlocks.length > 1 ? 'Copy all code' : 'Copy code'}
+            </button>
+          )}
+          {conversationId && messageIndex !== undefined && (
+            <BranchButton
+              sessionId={conversationId}
+              messageIndex={messageIndex}
+            />
+          )}
+        </div>
 
         {lineageOpen && (
           <div className="mt-2 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] p-3 text-xs text-[#667085] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#98a2b3]">

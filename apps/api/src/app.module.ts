@@ -48,6 +48,10 @@ import { AnalyticsModule } from './analytics/analytics.module'
 import { SecurityModule } from './security/security.module'
 import { OrchestrationModule } from './orchestration/orchestration.module'
 import { LearningModule } from './learning/learning.module'
+import { WsModule } from './events/ws.module'
+import { ApiKeysModule } from './apikeys/apikeys.module'
+import { ExportModule } from './export/export.module'
+import { AbTestingModule } from './ab-testing/ab-testing.module'
 
 @Module({
   imports: [
@@ -102,6 +106,10 @@ import { LearningModule } from './learning/learning.module'
     SecurityModule,
     OrchestrationModule,
     LearningModule,
+    WsModule,
+    ApiKeysModule,
+    ExportModule,
+    AbTestingModule,
   ],
 })
 export class AppModule {}

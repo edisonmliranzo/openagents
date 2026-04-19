@@ -1321,8 +1321,13 @@ export function ChatWindow({
         <>
           <div className="min-h-0 flex-1 overflow-y-auto bg-[#f6f7fb] px-4 py-4 sm:px-7 dark:bg-[#0f1117]">
             <div className="mx-auto w-full max-w-[980px] space-y-6 pb-6 pt-2">
-              {visibleMessages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
+              {visibleMessages.map((message, idx) => (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  conversationId={activeConversationId ?? undefined}
+                  messageIndex={idx + 1}
+                />
               ))}
               <div ref={bottomRef} />
             </div>

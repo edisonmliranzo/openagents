@@ -128,8 +128,20 @@ function normalizeBudgetStatus(status: BudgetStatus): BudgetStatus {
   }
 }
 
+export interface LiveMetrics {
+  totalSessions: number
+  sessions24h: number
+  totalMessages: number
+  messages24h: number
+  totalMemory: number
+  dailyActivity: Record<string, number>
+  generatedAt: string
+}
+
 export function createMetricsApi(client: OpenAgentsClient) {
   return {
+    live: () => client.get<LiveMetrics>('/api/v1/metrics/live'),
+
     summary: (query: MetricsSummaryQuery = {}) =>
       client.get<MetricsSummary>(`/api/v1/metrics/summary${buildQuery({
         startDate: query.startDate,
