@@ -23,6 +23,18 @@ import { CodeExecutionTool } from './connectors/code-execution.tool'
 import { ImageGenerationTool } from './connectors/image-generation.tool'
 import { AudioGenerationTool } from './connectors/audio-generation.tool'
 import { AtlasCloudTool } from './connectors/atlascloud.tool'
+import { VoiceTranscriptionTool } from './connectors/voice-transcription.tool'
+import { DocumentQATool } from './connectors/document-qa.tool'
+import { KnowledgeBaseTool } from './connectors/knowledge-base.tool'
+import { PdfExtractTool } from './connectors/pdf-extract.tool'
+import { PostgresQueryTool } from './connectors/postgres-query.tool'
+import { SlackSendTool } from './connectors/slack-send.tool'
+import { AirtableTool } from './connectors/airtable.tool'
+import { HubSpotTool } from './connectors/hubspot.tool'
+import { BrowserScreenshotTool } from './connectors/browser-screenshot.tool'
+import { WhatsAppSendTool } from './connectors/whatsapp-send.tool'
+import { TelegramSendTool } from './connectors/telegram-send.tool'
+import { ParallelAgentTool } from './connectors/parallel-agent.tool'
 import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
 import { ConnectorsService } from '../connectors/connectors.service'
 import { McpService } from './mcp.service'
@@ -72,6 +84,18 @@ export class ToolsService {
     private imageGeneration: ImageGenerationTool,
     private audioGeneration: AudioGenerationTool,
     private atlasCloud: AtlasCloudTool,
+    private voiceTranscription: VoiceTranscriptionTool,
+    private documentQA: DocumentQATool,
+    private knowledgeBase: KnowledgeBaseTool,
+    private pdfExtract: PdfExtractTool,
+    private postgresQuery: PostgresQueryTool,
+    private slackSend: SlackSendTool,
+    private airtable: AirtableTool,
+    private hubspot: HubSpotTool,
+    private browserScreenshot: BrowserScreenshotTool,
+    private whatsappSend: WhatsAppSendTool,
+    private telegramSend: TelegramSendTool,
+    private parallelAgent: ParallelAgentTool,
     private mcp: McpService,
     ) {
     this.registry = new Map([
@@ -156,6 +180,21 @@ export class ToolsService {
       ['image_generate', { def: this.withBuiltinSource(this.imageGeneration.def), execute: this.imageGeneration.generate.bind(this.imageGeneration) }],
       ['audio_generate', { def: this.withBuiltinSource(this.audioGeneration.def), execute: this.audioGeneration.generate.bind(this.audioGeneration) }],
       ['atlascloud_image_generate', { def: this.withBuiltinSource(this.atlasCloud.def), execute: this.atlasCloud.generate.bind(this.atlasCloud) }],
+      ['voice_transcribe', { def: this.withBuiltinSource(this.voiceTranscription.def), execute: this.voiceTranscription.transcribe.bind(this.voiceTranscription) }],
+      ['document_qa', { def: this.withBuiltinSource(this.documentQA.def), execute: this.documentQA.answer.bind(this.documentQA) }],
+      ['knowledge_base', { def: this.withBuiltinSource(this.knowledgeBase.def), execute: this.knowledgeBase.execute.bind(this.knowledgeBase) }],
+      // New connectors
+      ['pdf_extract', { def: this.withBuiltinSource(this.pdfExtract.def), execute: this.pdfExtract.extract.bind(this.pdfExtract) }],
+      ['postgres_query', { def: this.withBuiltinSource(this.postgresQuery.def), execute: this.postgresQuery.query.bind(this.postgresQuery) }],
+      ['slack_send', { def: this.withBuiltinSource(this.slackSend.def), execute: this.slackSend.send.bind(this.slackSend) }],
+      ['airtable_query', { def: this.withBuiltinSource(this.airtable.def), execute: this.airtable.query.bind(this.airtable) }],
+      ['hubspot_search', { def: this.withBuiltinSource(this.hubspot.def), execute: this.hubspot.search.bind(this.hubspot) }],
+      ['browser_screenshot', { def: this.withBuiltinSource(this.browserScreenshot.def), execute: this.browserScreenshot.screenshot.bind(this.browserScreenshot) }],
+      // Outbound messaging
+      ['whatsapp_send', { def: this.withBuiltinSource(this.whatsappSend.def), execute: this.whatsappSend.send.bind(this.whatsappSend) }],
+      ['telegram_send', { def: this.withBuiltinSource(this.telegramSend.def), execute: this.telegramSend.send.bind(this.telegramSend) }],
+      // Parallel agent
+      ['parallel_agent_run', { def: this.withBuiltinSource(this.parallelAgent.def), execute: this.parallelAgent.run.bind(this.parallelAgent) }],
     ])
   }
 
@@ -301,6 +340,15 @@ export class ToolsService {
     if (value === 'image_generate') effects.push('Calls external image generation API; may incur cost')
     if (value === 'atlascloud_image_generate') effects.push('Calls AtlasCloud AI image generation API; may incur cost')
     if (value === 'audio_generate') effects.push('Calls external TTS API; may incur cost')
+    if (value === 'voice_transcribe') effects.push('Calls OpenAI Whisper STT API')
+    if (value === 'pdf_extract') effects.push('Fetches and parses a PDF document from a remote URL')
+    if (value === 'postgres_query') effects.push('Executes SQL against a user-configured PostgreSQL database')
+    if (value === 'slack_send') effects.push('Sends a message to a Slack channel or user')
+    if (value === 'airtable_query') effects.push('Reads records from an Airtable base')
+    if (value === 'hubspot_search') effects.push('Searches HubSpot CRM contacts/companies/deals')
+    if (value === 'browser_screenshot') effects.push('Takes a screenshot of a URL using external screenshot API')
+    if (value === 'whatsapp_send') effects.push('Sends outbound WhatsApp message via Meta Cloud API')
+    if (value === 'telegram_send') effects.push('Sends outbound Telegram message via Bot API')
     if (effects.length === 0) effects.push('Tool-specific side effects depend on runtime inputs')
     return effects
   }
@@ -314,6 +362,15 @@ export class ToolsService {
     if (value === 'image_generate') return 0.04
     if (value === 'atlascloud_image_generate') return 0.02
     if (value === 'audio_generate') return 0.015
+    if (value === 'voice_transcribe') return 0.006
+    if (value === 'pdf_extract') return 0.005
+    if (value === 'postgres_query') return 0.002
+    if (value === 'slack_send') return 0
+    if (value === 'airtable_query') return 0.001
+    if (value === 'hubspot_search') return 0.001
+    if (value === 'browser_screenshot') return 0.01
+    if (value === 'whatsapp_send') return 0.001
+    if (value === 'telegram_send') return 0.001
     if (value === 'shell_execute' || value === 'shell_session_run' || value === 'code_execute') return 0.005
     return Object.keys(input).length > 8 ? 0.02 : 0
   }

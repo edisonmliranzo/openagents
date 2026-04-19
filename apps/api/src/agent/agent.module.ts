@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { AgentService } from './agent.service'
 import { AgentController } from './agent.controller'
 import { LLMService } from './llm.service'
+import { ParallelAgentService } from './parallel-agent.service'
 import { ToolsModule } from '../tools/tools.module'
 import { MemoryModule } from '../memory/memory.module'
 import { ApprovalsModule } from '../approvals/approvals.module'
@@ -13,7 +14,7 @@ import { EventsModule } from '../events/events.module'
 @Module({
   imports: [ToolsModule, MemoryModule, ApprovalsModule, UsersModule, AuditModule, NotificationsModule, EventsModule],
   controllers: [AgentController],
-  providers: [AgentService, LLMService],
-  exports: [AgentService, LLMService],
+  providers: [AgentService, LLMService, ParallelAgentService],
+  exports: [AgentService, LLMService, ParallelAgentService],
 })
 export class AgentModule {}

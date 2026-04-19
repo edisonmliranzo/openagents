@@ -2,11 +2,11 @@
 
 import { sdk } from '@/stores/auth'
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import type { AuditLog, Notification, SessionRow, User, UserSettings } from '@openagents/shared'
 import {
   Terminal, ShieldAlert, Zap, Bell, RefreshCw, Brain, Activity,
-  TrendingUp, Clock, CheckCircle2, AlertCircle, Wrench,
+  TrendingUp, Clock, CheckCircle2, AlertCircle, Wrench, BarChart2,
 } from 'lucide-react'
 
 interface OverviewState {
@@ -25,6 +25,17 @@ interface OverviewState {
   trustScore: number | null
   lastHeartbeatAt: string | null
 }
+
+interface LiveMetrics {
+  totalSessions: number
+  sessions24h: number
+  totalMessages: number
+  messages24h: number
+  totalMemory: number
+  dailyActivity: Record<string, number>
+  generatedAt: string
+}
+
 type FeatureTone = 'slate' | 'emerald' | 'amber' | 'rose' | 'indigo'
 interface FeatureCardModel {
   title: string
@@ -83,6 +94,28 @@ function StatCard({
       {/* Decorative blob */}
       <div className="pointer-events-none absolute -bottom-4 -right-4 h-24 w-24 rounded-full bg-white/10" />
     </article>
+  )
+}
+
+function MiniBarChart({ data }: { data: Record<string, number> }) {
+  const entries = Object.entries(data)
+  const max = Math.max(...entries.map(([, v]) => v), 1)
+  return (
+    <div className="flex items-end gap-1 h-12 w-full">
+      {entries.map(([date, count]) => {
+        const pct = Math.max((count / max) * 100, count > 0 ? 8 : 2)
+        const label = date.slice(5)
+        return (
+          <div key={date} className="flex flex-col items-center flex-1 gap-0.5" title={`${date}: ${count}`}>
+            <div
+              className="w-full rounded-sm bg-indigo-400/70 transition-all duration-500"
+              style={{ height: `${pct}%` }}
+            />
+            <span className="text-[9px] text-white/40">{label}</span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -147,6 +180,31 @@ export default function OverviewPage() {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [metrics, setMetrics] = useState<LiveMetrics | null>(null)
+  const [metricsLoading, setMetricsLoading] = useState(true)
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  async function fetchMetrics() {
+    try {
+      const res = await sdk.metrics.live()
+      setMetrics(res)
+      setLastRefresh(new Date())
+    } catch {
+      // silently keep last known metrics
+    } finally {
+      setMetricsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void fetchMetrics()
+    intervalRef.current = setInterval(() => { void fetchMetrics() }, 30_000)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function loadOverview() {
     setIsLoading(true)
@@ -227,109 +285,109 @@ export default function OverviewPage() {
     () => {
       const heartbeatTone: FeatureTone = state.autonomyWithinWindow ? 'emerald' : 'rose'
       return [
-      {
-        title: 'Memory / Brain',
-        description: 'Persistent context and editable memory documents.',
-        href: '/memory',
-        metric: `${formatNumber(state.memoryEntries)} entries`,
-        detail: `${formatNumber(state.memoryFiles)} memory files`,
-        icon: Brain,
-        tone: 'indigo' as const,
-      },
-      {
-        title: 'Persona',
-        description: 'Profile and boundary controls for runtime behavior.',
-        href: '/agent/nanobot',
-        metric: state.personaProfile ? `Profile: ${state.personaProfile}` : 'Profile: n/a',
-        detail: `${formatNumber(state.activeSkills)} active skills`,
-        icon: Activity,
-        tone: 'emerald' as const,
-      },
-      {
-        title: 'Thinking',
-        description: 'Session-level thinking control and execution tuning.',
-        href: '/sessions',
-        metric: `${formatNumber(thinkingSessions)} sessions with thinking`,
-        detail: `Model: ${state.settings?.preferredModel ?? 'default'}`,
-        icon: Terminal,
-        tone: 'amber' as const,
-      },
-      {
-        title: 'Agentic Heartbeat',
-        description: 'Liveness ticks, autonomy windows, and trust signals.',
-        href: '/agent/nanobot',
-        metric: state.lastHeartbeatAt ? `Last heartbeat ${timeAgo(new Date(state.lastHeartbeatAt).getTime())}` : 'No heartbeat yet',
-        detail: state.autonomyWithinWindow == null
-          ? 'Autonomy status unavailable'
-          : state.autonomyWithinWindow
-            ? 'Inside autonomy window'
-            : `Outside autonomy window (${state.autonomyReason ?? 'manual approvals'})`,
-        icon: Zap,
-        tone: heartbeatTone,
-      },
-      {
-        title: 'Trust Score',
-        description: 'Cross-signal score for autonomy, memory, safety, and cost.',
-        href: '/agent/trust',
-        metric: state.trustScore == null ? 'Score unavailable' : `${state.trustScore}/100`,
-        detail: 'Open trust dashboard',
-        icon: ShieldAlert,
-        tone: 'slate' as const,
-      },
-      {
-        title: 'Workflows / Handoffs / Lineage',
-        description: 'Operational automation, escalation, and traceability.',
-        href: '/control/workflows',
-        metric: 'Control-plane automation',
-        detail: 'Open workflow control center',
-        icon: CheckCircle2,
-        tone: 'slate' as const,
-      },
-      {
-        title: 'Dry-Run Preview',
-        description: 'Preflight tools before a live action writes outside the workspace.',
-        href: '/control/dry-run',
-        metric: 'Simulate tool plans',
-        detail: `${formatNumber(state.pendingApprovals)} pending approvals can be previewed before execution`,
-        icon: Terminal,
-        tone: 'amber' as const,
-      },
-      {
-        title: 'Repair Center',
-        description: 'Diagnose stale messages, orphan approvals, and drifted run state.',
-        href: '/control/repair',
-        metric: `${formatNumber(state.pendingApprovals)} live blockers`,
-        detail: 'Scan recent conversations and apply one-click repair actions',
-        icon: Wrench,
-        tone: 'rose' as const,
-      },
-      {
-        title: 'Operator Inbox',
-        description: 'One screen for approvals, handoffs, and active intervention work.',
-        href: '/control/operator',
-        metric: `${formatNumber(state.pendingApprovals)} pending approvals`,
-        detail: `${formatNumber(unreadNotifications)} unread notifications`,
-        icon: ShieldAlert,
-        tone: 'rose' as const,
-      },
-      {
-        title: 'Memory Provenance',
-        description: 'Inspect lineage graphs, memory conflicts, and source freshness.',
-        href: '/control/provenance',
-        metric: `${formatNumber(state.auditLogs.length)} recent audit events`,
-        detail: 'Trace how memory files, tools, and external inputs shaped outputs',
-        icon: Brain,
-        tone: 'indigo' as const,
-      },
-      {
-        title: 'Watcher Workflows',
-        description: 'Run automations from schedules, webhooks, and inbox events.',
-        href: '/control/watchers',
-        metric: `${formatNumber(sessionsUpdatedToday)} sessions active today`,
-        detail: 'Create trigger-driven workflows without opening the raw workflow editor',
-        icon: Bell,
-        tone: 'emerald' as const,
-      },
+        {
+          title: 'Memory / Brain',
+          description: 'Persistent context and editable memory documents.',
+          href: '/memory',
+          metric: `${formatNumber(state.memoryEntries)} entries`,
+          detail: `${formatNumber(state.memoryFiles)} memory files`,
+          icon: Brain,
+          tone: 'indigo' as const,
+        },
+        {
+          title: 'Persona',
+          description: 'Profile and boundary controls for runtime behavior.',
+          href: '/agent/nanobot',
+          metric: state.personaProfile ? `Profile: ${state.personaProfile}` : 'Profile: n/a',
+          detail: `${formatNumber(state.activeSkills)} active skills`,
+          icon: Activity,
+          tone: 'emerald' as const,
+        },
+        {
+          title: 'Thinking',
+          description: 'Session-level thinking control and execution tuning.',
+          href: '/sessions',
+          metric: `${formatNumber(thinkingSessions)} sessions with thinking`,
+          detail: `Model: ${state.settings?.preferredModel ?? 'default'}`,
+          icon: Terminal,
+          tone: 'amber' as const,
+        },
+        {
+          title: 'Agentic Heartbeat',
+          description: 'Liveness ticks, autonomy windows, and trust signals.',
+          href: '/agent/nanobot',
+          metric: state.lastHeartbeatAt ? `Last heartbeat ${timeAgo(new Date(state.lastHeartbeatAt).getTime())}` : 'No heartbeat yet',
+          detail: state.autonomyWithinWindow == null
+            ? 'Autonomy status unavailable'
+            : state.autonomyWithinWindow
+              ? 'Inside autonomy window'
+              : `Outside autonomy window (${state.autonomyReason ?? 'manual approvals'})`,
+          icon: Zap,
+          tone: heartbeatTone,
+        },
+        {
+          title: 'Trust Score',
+          description: 'Cross-signal score for autonomy, memory, safety, and cost.',
+          href: '/agent/trust',
+          metric: state.trustScore == null ? 'Score unavailable' : `${state.trustScore}/100`,
+          detail: 'Open trust dashboard',
+          icon: ShieldAlert,
+          tone: 'slate' as const,
+        },
+        {
+          title: 'Workflows / Handoffs / Lineage',
+          description: 'Operational automation, escalation, and traceability.',
+          href: '/control/workflows',
+          metric: 'Control-plane automation',
+          detail: 'Open workflow control center',
+          icon: CheckCircle2,
+          tone: 'slate' as const,
+        },
+        {
+          title: 'Dry-Run Preview',
+          description: 'Preflight tools before a live action writes outside the workspace.',
+          href: '/control/dry-run',
+          metric: 'Simulate tool plans',
+          detail: `${formatNumber(state.pendingApprovals)} pending approvals can be previewed before execution`,
+          icon: Terminal,
+          tone: 'amber' as const,
+        },
+        {
+          title: 'Repair Center',
+          description: 'Diagnose stale messages, orphan approvals, and drifted run state.',
+          href: '/control/repair',
+          metric: `${formatNumber(state.pendingApprovals)} live blockers`,
+          detail: 'Scan recent conversations and apply one-click repair actions',
+          icon: Wrench,
+          tone: 'rose' as const,
+        },
+        {
+          title: 'Operator Inbox',
+          description: 'One screen for approvals, handoffs, and active intervention work.',
+          href: '/control/operator',
+          metric: `${formatNumber(state.pendingApprovals)} pending approvals`,
+          detail: `${formatNumber(unreadNotifications)} unread notifications`,
+          icon: ShieldAlert,
+          tone: 'rose' as const,
+        },
+        {
+          title: 'Memory Provenance',
+          description: 'Inspect lineage graphs, memory conflicts, and source freshness.',
+          href: '/control/provenance',
+          metric: `${formatNumber(state.auditLogs.length)} recent audit events`,
+          detail: 'Trace how memory files, tools, and external inputs shaped outputs',
+          icon: Brain,
+          tone: 'indigo' as const,
+        },
+        {
+          title: 'Watcher Workflows',
+          description: 'Run automations from schedules, webhooks, and inbox events.',
+          href: '/control/watchers',
+          metric: `${formatNumber(sessionsUpdatedToday)} sessions active today`,
+          detail: 'Create trigger-driven workflows without opening the raw workflow editor',
+          icon: Bell,
+          tone: 'emerald' as const,
+        },
       ]
     },
     [
@@ -350,33 +408,64 @@ export default function OverviewPage() {
     ],
   )
 
+  const m = metrics
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-6">
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Overview</h1>
-          <p className="mt-0.5 text-sm text-slate-500">System snapshot — sessions, approvals, and activity.</p>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {lastRefresh
+              ? `Live metrics — updated ${timeAgo(lastRefresh.getTime())}`
+              : 'System snapshot — sessions, approvals, and activity.'}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadOverview()}
-          disabled={isLoading}
-          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
-          {isLoading ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void fetchMetrics()}
+            disabled={metricsLoading}
+            className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-100 disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={metricsLoading ? 'animate-spin' : ''} />
+            {metricsLoading ? 'Refreshing…' : 'Live Refresh'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadOverview()}
+            disabled={isLoading}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+            {isLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </header>
 
-      {/* Stat cards */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Live Metrics Stat Cards */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard
-          label="Active Sessions"
-          value={formatNumber(state.sessions.length)}
-          sub={`${sessionsUpdatedToday} updated today`}
+          label="Total Sessions"
+          value={m ? formatNumber(m.totalSessions) : (state.sessions.length > 0 ? formatNumber(state.sessions.length) : '—')}
+          sub={m ? `+${m.sessions24h} today` : `${sessionsUpdatedToday} updated today`}
           gradient="bg-gradient-to-br from-indigo-500 to-violet-600"
           icon={Terminal}
+        />
+        <StatCard
+          label="Messages"
+          value={m ? formatNumber(m.totalMessages) : '—'}
+          sub={m ? `+${m.messages24h} today` : 'loading…'}
+          gradient="bg-gradient-to-br from-violet-500 to-purple-600"
+          icon={Zap}
+        />
+        <StatCard
+          label="Memory Entries"
+          value={m ? formatNumber(m.totalMemory) : formatNumber(state.memoryEntries)}
+          sub="stored facts"
+          gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+          icon={Brain}
         />
         <StatCard
           label="Pending Approvals"
@@ -388,13 +477,6 @@ export default function OverviewPage() {
           icon={ShieldAlert}
         />
         <StatCard
-          label="Token Volume"
-          value={formatNumber(totalTokens)}
-          sub="Across all conversations"
-          gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
-          icon={TrendingUp}
-        />
-        <StatCard
           label="Unread Alerts"
           value={formatNumber(unreadNotifications)}
           sub={state.profile?.email ?? 'Unknown user'}
@@ -402,6 +484,58 @@ export default function OverviewPage() {
             ? 'bg-gradient-to-br from-rose-500 to-pink-600'
             : 'bg-gradient-to-br from-slate-500 to-slate-600'}
           icon={Bell}
+        />
+      </section>
+
+      {/* 7-day Activity Chart */}
+      {m && Object.keys(m.dailyActivity).length > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                <BarChart2 size={16} className="text-indigo-500" />
+                Sessions — Last 7 Days
+              </h2>
+              <p className="mt-0.5 text-[11px] text-slate-400">auto-refreshes every 30s</p>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              Generated {new Date(m.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          <div className="flex items-end gap-1 h-16 w-full">
+            {Object.entries(m.dailyActivity).map(([date, count]) => {
+              const max = Math.max(...Object.values(m.dailyActivity), 1)
+              const pct = Math.max((count / max) * 100, count > 0 ? 8 : 2)
+              const label = date.slice(5)
+              return (
+                <div key={date} className="flex flex-col items-center flex-1 gap-0.5" title={`${date}: ${count}`}>
+                  <div
+                    className="w-full rounded-sm bg-indigo-400 transition-all duration-500"
+                    style={{ height: `${pct}%` }}
+                  />
+                  <span className="text-[9px] text-slate-400">{label}</span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Token Volume */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Token Volume"
+          value={formatNumber(totalTokens)}
+          sub="Across all conversations"
+          gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+          icon={TrendingUp}
+        />
+        <StatCard
+          label="Active Sessions"
+          value={formatNumber(state.sessions.length)}
+          sub={`${sessionsUpdatedToday} updated today`}
+          gradient="bg-gradient-to-br from-indigo-500 to-violet-600"
+          icon={Terminal}
         />
       </section>
 

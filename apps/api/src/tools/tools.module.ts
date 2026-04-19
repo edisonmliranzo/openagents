@@ -1,6 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common'
 import { ToolsService } from './tools.service'
 import { ToolsController } from './tools.controller'
+import { ParallelAgentTool } from './connectors/parallel-agent.tool'
+import { AgentModule } from '../agent/agent.module'
 import { GmailTool } from './connectors/gmail.tool'
 import { CalendarTool } from './connectors/calendar.tool'
 import { WebFetchTool } from './connectors/web-fetch.tool'
@@ -24,6 +26,17 @@ import { CodeExecutionTool } from './connectors/code-execution.tool'
 import { ImageGenerationTool } from './connectors/image-generation.tool'
 import { AudioGenerationTool } from './connectors/audio-generation.tool'
 import { AtlasCloudTool } from './connectors/atlascloud.tool'
+import { VoiceTranscriptionTool } from './connectors/voice-transcription.tool'
+import { DocumentQATool } from './connectors/document-qa.tool'
+import { KnowledgeBaseTool } from './connectors/knowledge-base.tool'
+import { PdfExtractTool } from './connectors/pdf-extract.tool'
+import { PostgresQueryTool } from './connectors/postgres-query.tool'
+import { SlackSendTool } from './connectors/slack-send.tool'
+import { AirtableTool } from './connectors/airtable.tool'
+import { HubSpotTool } from './connectors/hubspot.tool'
+import { BrowserScreenshotTool } from './connectors/browser-screenshot.tool'
+import { WhatsAppSendTool } from './connectors/whatsapp-send.tool'
+import { TelegramSendTool } from './connectors/telegram-send.tool'
 import { CronModule } from '../cron/cron.module'
 import { ConnectorsModule } from '../connectors/connectors.module'
 import { MemoryModule } from '../memory/memory.module'
@@ -34,7 +47,7 @@ import { PolicyModule } from '../policy/policy.module'
 import { ToolsInternalController } from './tools.internal.controller'
 
 @Module({
-  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule],
+  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule, forwardRef(() => AgentModule)],
   providers: [
     ToolsService,
     GmailTool,
@@ -60,6 +73,18 @@ import { ToolsInternalController } from './tools.internal.controller'
     ImageGenerationTool,
     AudioGenerationTool,
     AtlasCloudTool,
+    VoiceTranscriptionTool,
+    DocumentQATool,
+    KnowledgeBaseTool,
+    PdfExtractTool,
+    PostgresQueryTool,
+    SlackSendTool,
+    AirtableTool,
+    HubSpotTool,
+    BrowserScreenshotTool,
+    WhatsAppSendTool,
+    TelegramSendTool,
+    ParallelAgentTool,
     McpService,
     PromptGuardService,
     OutboundGuardService,
