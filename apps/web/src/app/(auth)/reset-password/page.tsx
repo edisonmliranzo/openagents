@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { sdk } from '@/stores/auth'
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get('token') ?? ''
@@ -48,6 +48,52 @@ export default function ResetPasswordPage() {
   }
 
   return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {success && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{success}</p>}
+
+      <input
+        type="password"
+        placeholder="New password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+        disabled={!token}
+        autoComplete="new-password"
+        className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
+      />
+
+      <input
+        type="password"
+        placeholder="Confirm new password"
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        required
+        disabled={!token}
+        autoComplete="new-password"
+        className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
+      />
+
+      <button
+        type="submit"
+        disabled={loading || !token}
+        className="oa-accent-button h-11 w-full rounded-xl font-semibold text-white transition disabled:opacity-50"
+      >
+        {loading ? 'Resetting...' : 'Reset password'}
+      </button>
+
+      <Link
+        href="/login"
+        className="block text-center text-sm text-[var(--muted)] hover:text-[var(--tone-strong)]"
+      >
+        Back to sign in
+      </Link>
+    </form>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
     <div className="auth-theme flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-6">
       <div className="oa-card-elevated w-full max-w-sm space-y-5 rounded-[28px] p-8">
         <div className="flex items-center gap-2">
@@ -66,47 +112,9 @@ export default function ResetPasswordPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-          {success && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{success}</p>}
-
-          <input
-            type="password"
-            placeholder="New password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={!token}
-            autoComplete="new-password"
-            className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
-          />
-
-          <input
-            type="password"
-            placeholder="Confirm new password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            required
-            disabled={!token}
-            autoComplete="new-password"
-            className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
-          />
-
-          <button
-            type="submit"
-            disabled={loading || !token}
-            className="oa-accent-button h-11 w-full rounded-xl font-semibold text-white transition disabled:opacity-50"
-          >
-            {loading ? 'Resetting...' : 'Reset password'}
-          </button>
-
-          <Link
-            href="/login"
-            className="block text-center text-sm text-[var(--muted)] hover:text-[var(--tone-strong)]"
-          >
-            Back to sign in
-          </Link>
-        </form>
+        <Suspense fallback={<div className="text-sm text-[var(--muted)]">Loading...</div>}>
+          <ResetPasswordForm />
+        </Suspense>
       </div>
     </div>
   )
