@@ -1,3 +1,4 @@
+// Core types
 export * from './webhook'
 export * from './metrics'
 export * from './summarization'
@@ -25,4 +26,33 @@ export * from './advanced-ai'
 export * from './oauth'
 export * from './analytics'
 export * from './security'
+
 // multi-agent types live in collaboration.ts to avoid duplicate exports
+
+// Phase 9: Core AI Power-Ups
+export * from './tts'
+export * from './delegation'
+export * from './streaming'
+export * from './goals'
+
+// Phase 10: User Experience
+export * from './reactions'
+export * from './pins'
+export * from './templates'
+export * from './conversation-search'
+
+// Phase 11: Integrations
+export * from './google-drive'
+export * from './notion'
+export * from './stripe'
+export * from './monitor'
+export * from './email'
+
+// Phase 12: Developer & Power User
+export * from './scheduler'
+
+// Phase 13: Analytics & Ops
+export * from './replay'
+export * from './multi-user'
+export * from './cost'
+export * from './leaderboard'

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, UseGuards, Req } from '@nestjs/common'
+import { Controller, Post, Get, Body, UseGuards, Req, HttpCode } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsEmail, IsString, MinLength, IsOptional, Matches } from 'class-validator'
 import { AuthService } from './auth.service'
@@ -22,6 +22,24 @@ class LoginDto {
 
 class RefreshDto {
   @IsString() refreshToken: string
+}
+
+class ChangePasswordDto {
+  @IsString() currentPassword: string
+  @IsString()
+  @MinLength(12)
+  newPassword: string
+}
+
+class ForgotPasswordDto {
+  @IsEmail() email: string
+}
+
+class ResetPasswordDto {
+  @IsString() token: string
+  @IsString()
+  @MinLength(12)
+  newPassword: string
 }
 
 @ApiTags('auth')
@@ -56,6 +74,29 @@ export class AuthController {
   @ApiBearerAuth()
   me(@Req() req: any) {
     return req.user
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(200)
+  changePassword(@Body() dto: ChangePasswordDto, @Req() req: any) {
+    return this.auth.changePassword(req.user.id, dto.currentPassword, dto.newPassword)
+  }
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: any) {
+    const proto = req.headers['x-forwarded-proto'] ?? (req.secure ? 'https' : 'http')
+    const host = req.headers['x-forwarded-host'] ?? req.headers.host
+    const baseUrl = `${proto}://${host}`
+    return this.auth.forgotPassword(dto.email, baseUrl)
+  }
+
+  @Post('reset-password')
+  @HttpCode(200)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetPassword(dto.token, dto.newPassword)
   }
 
   private getClientIp(req: any) {
