@@ -5,29 +5,29 @@ export const API_BASE = `/api/${API_VERSION}`
 
 export const LLM_MODELS = {
   anthropic: {
-    default: 'claude-sonnet-4-6',
+    default: 'claude-sonnet-4-5-20250929',
     fast: 'claude-haiku-4-5-20251001',
-    powerful: 'claude-opus-4-6',
+    powerful: 'claude-opus-4-1-20250805',
   },
   openai: {
-    default: 'gpt-5.4',
-    fast: 'gpt-5.4-mini',
-    powerful: 'gpt-5.4',
+    default: 'gpt-4.1',
+    fast: 'gpt-4.1-mini',
+    powerful: 'o3',
   },
   google: {
     default: 'gemini-2.5-pro',
-    fast: 'gemini-2.5-flash-lite',
-    powerful: 'gemini-3.1-pro-preview',
+    fast: 'gemini-2.5-flash',
+    powerful: 'gemini-2.5-pro',
   },
   ollama: {
     default: 'llama3.2',
-    fast: 'phi3',
-    powerful: 'codellama',
+    fast: 'llama3.1:8b',
+    powerful: 'llama3.3:70b',
   },
   minimax: {
-    default: 'MiniMax-M2',
-    fast: 'MiniMax-M2',
-    powerful: 'MiniMax-M2.5',
+    default: 'MiniMax-M2.7',
+    fast: 'MiniMax-M2.7-highspeed',
+    powerful: 'MiniMax-M2.7',
   },
   perplexity: {
     default: 'sonar-pro',
@@ -38,51 +38,81 @@ export const LLM_MODELS = {
 
 export const LLM_MODEL_OPTIONS = {
   anthropic: [
-    'claude-opus-4-6',
-    'claude-sonnet-4-6',
-    'claude-haiku-4-5',
+    // Claude 4.x — latest generation
+    'claude-sonnet-4-5-20250929',
     'claude-haiku-4-5-20251001',
+    'claude-opus-4-1-20250805',
+    // Aliases (always point to latest snapshot)
+    'claude-sonnet-4-5',
+    'claude-haiku-4-5',
+    'claude-opus-4-1',
   ],
   openai: [
-    'gpt-5.4',
-    'gpt-5.4-mini',
-    'gpt-5.4-nano',
-    'gpt-5.1',
-    'gpt-5.1-mini',
+    // GPT-4.1 family
     'gpt-4.1',
     'gpt-4.1-mini',
+    'gpt-4.1-nano',
+    // GPT-4o family
+    'gpt-4o',
+    'gpt-4o-mini',
+    // Reasoning models
+    'o3',
+    'o3-mini',
+    'o4-mini',
   ],
   google: [
-    'gemini-3.1-pro-preview',
-    'gemini-3-flash-preview',
-    'gemini-3.1-flash-lite-preview',
+    // Gemini 2.5 — current flagship
     'gemini-2.5-pro',
     'gemini-2.5-flash',
     'gemini-2.5-flash-lite',
-    'gemini-flash-latest',
+    // Gemini 2.0
     'gemini-2.0-flash',
     'gemini-2.0-flash-lite',
   ],
   ollama: [
+    // Llama 4
+    'llama4-scout',
+    'llama4-maverick',
+    // Llama 3.3 / 3.2 / 3.1
+    'llama3.3:70b',
     'llama3.2',
-    'mistral',
+    'llama3.1:8b',
+    // Coding
     'codellama',
-    'neural-chat',
+    // Reasoning
+    'qwen2.5:32b',
+    'qwq',
+    'deepseek-r1:7b',
+    'deepseek-r1:32b',
+    // Small / fast
+    'phi4',
     'phi3',
-    'gemma',
     'gemma3',
     'gemma3:1b',
-    'nemotron',
-    'nemotron-mini',
-    'huihui_ai/kimi-k2',
-    'kimi-k2:1t-cloud',
-    'kimi-k2.5:cloud',
-    'minimax-m1:cloud',
-    'minimax-m2:cloud',
-    'minimax-m2.5:cloud',
+    'mistral',
   ],
-  minimax: ['MiniMax-M2', 'MiniMax-M2.5'],
-  perplexity: ['sonar', 'sonar-pro', 'sonar-reasoning-pro', 'sonar-deep-research'],
+  minimax: [
+    // M2.7 — latest reasoning series
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+    // M2.5
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    // M2 / M1 / Text-01
+    'MiniMax-M2',
+    'MiniMax-M1',
+    'MiniMax-Text-01',
+  ],
+  perplexity: [
+    // Sonar search
+    'sonar',
+    'sonar-pro',
+    // Sonar reasoning
+    'sonar-reasoning',
+    'sonar-reasoning-pro',
+    // Deep research
+    'sonar-deep-research',
+  ],
 } as const
 
 export const LLM_PROVIDER_CAPABILITIES: Record<
@@ -99,57 +129,57 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
 > = {
   anthropic: {
     label: 'Anthropic',
-    bestFor: 'Long-form reasoning, coding, and reliable tool orchestration.',
+    bestFor: 'Agentic coding, long-horizon tasks, and reliable multi-step tool orchestration.',
     toolUse: 'strong',
     latency: 'balanced',
     contextProfile: 'large',
-    strengths: ['strong instruction following', 'good code quality', 'stable multi-step tool use'],
+    strengths: ['best-in-class agentic coding (Sonnet 4.5)', 'strong instruction following', 'stable multi-step tool use'],
     cautions: ['higher latency than smaller models', 'requires external API key'],
   },
   openai: {
     label: 'OpenAI',
-    bestFor: 'General-purpose assistant runs with strong tool calling and broad model coverage.',
+    bestFor: 'General-purpose tasks, structured output, and advanced reasoning with o3/o4-mini.',
     toolUse: 'strong',
     latency: 'balanced',
     contextProfile: 'large',
-    strengths: ['broad model family', 'strong reasoning', 'good structured output support'],
-    cautions: ['quality varies by selected model tier', 'requires external API key'],
+    strengths: ['GPT-4.1 excels at instruction following', 'o3/o4-mini for deep reasoning', 'broad model family'],
+    cautions: ['reasoning models (o3, o4-mini) are slower', 'requires external API key'],
   },
   google: {
     label: 'Google Gemini',
-    bestFor: 'Large-context tasks, search-heavy synthesis, and multimodal-friendly workflows.',
+    bestFor: 'Large-context tasks, multimodal workflows, and cost-effective fast runs.',
     toolUse: 'good',
     latency: 'balanced',
     contextProfile: 'large',
-    strengths: ['large context windows', 'good retrieval-style prompting', 'strong value on flash models'],
-    cautions: ['tool behavior can vary more across model variants', 'requires external API key'],
+    strengths: ['Gemini 2.5 Pro leads coding benchmarks', 'large context windows', 'Flash models are fast and cheap'],
+    cautions: ['tool behavior can vary across model variants', 'requires external API key'],
   },
   ollama: {
     label: 'Ollama',
-    bestFor: 'Private local runs, offline fallback, and cost-controlled development environments.',
+    bestFor: 'Private local runs, offline fallback, and cost-free development.',
     toolUse: 'basic',
     latency: 'variable',
     contextProfile: 'local',
-    strengths: ['local execution', 'no per-token API cost', 'works as fallback without cloud keys'],
-    cautions: ['quality depends on installed local model', 'tool-heavy runs may be less reliable'],
+    strengths: ['local execution — no API cost', 'Llama 4 Scout/Maverick available', 'works offline'],
+    cautions: ['quality depends on installed model', 'tool-heavy runs may be less reliable'],
   },
   minimax: {
     label: 'MiniMax',
-    bestFor: 'Alternative cloud routing where you want another capable general model option.',
+    bestFor: 'Reasoning tasks with the M2.7 series — fast, capable, and cost-efficient.',
     toolUse: 'good',
     latency: 'fast',
-    contextProfile: 'standard',
-    strengths: ['competitive latency', 'simple model lineup', 'useful secondary provider'],
-    cautions: ['fewer tested paths in this codebase', 'requires external API key'],
+    contextProfile: 'large',
+    strengths: ['MiniMax-M2.7 is a strong reasoning model', 'highspeed variant for fast throughput', '1M token context on M1/Text-01'],
+    cautions: ['newer API — fewer tested paths', 'requires external API key'],
   },
   perplexity: {
     label: 'Perplexity',
-    bestFor: 'Search-grounded answers, current-events synthesis, and quick research-oriented runs.',
+    bestFor: 'Real-time web-grounded answers, research synthesis, and current-events queries.',
     toolUse: 'basic',
     latency: 'balanced',
     contextProfile: 'large',
-    strengths: ['strong web-grounded answers', 'simple Sonar lineup', 'good for research-heavy prompts'],
-    cautions: ['tool-calling paths are less proven here', 'requires external API key'],
+    strengths: ['built-in web search grounding', 'Sonar Deep Research for exhaustive reports', 'sonar-reasoning-pro for CoT'],
+    cautions: ['tool-calling is less proven', 'requires external API key'],
   },
 } as const
 
