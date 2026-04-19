@@ -10,17 +10,23 @@ import {
   BookOpen,
   Brain,
   ChevronDown,
+  Download,
   FileText,
+  FlaskConical,
+  GitBranch,
+  Key,
   Layers3,
   Link2,
   LogOut,
   Menu,
   MessageSquare,
   Moon,
+  Play,
   RefreshCw,
   Search,
   ScrollText,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Sun,
@@ -28,6 +34,7 @@ import {
   Users,
   Wrench,
   X,
+  Zap,
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
 import type { Notification, UserSettings } from '@openagents/shared'
@@ -49,14 +56,24 @@ interface NavGroup {
 
 const BASE_NAV_GROUPS: NavGroup[] = [
   {
-    title: 'Control',
+    title: 'Home',
     items: [
       { label: 'Get Started', href: '/settings/get-started', icon: Sparkles },
       { label: 'Chat', href: '/chat', icon: MessageSquare },
+      { label: 'Overview', href: '/control/overview', icon: Activity },
       { label: 'Sessions', href: '/sessions', icon: Terminal },
-      { label: 'Repair', href: '/control/repair', icon: Wrench },
-      { label: 'Usage', href: '/control/usage', icon: Activity },
+      { label: 'Memory', href: '/memory', icon: Brain },
+    ],
+  },
+  {
+    title: 'Operate',
+    items: [
+      { label: 'Approvals', href: '/approvals', icon: ShieldAlert },
+      { label: 'Operator', href: '/control/operator', icon: ShieldCheck },
+      { label: 'Mission Control', href: '/control/mission-control', icon: Zap },
       { label: 'Cron Jobs', href: '/control/cron-jobs', icon: Bell },
+      { label: 'Workflows', href: '/control/workflows', icon: GitBranch },
+      { label: 'Handoffs', href: '/control/handoffs', icon: Users },
     ],
   },
   {
@@ -64,8 +81,32 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Agents', href: '/agent/agents', icon: Activity },
       { label: 'Skills', href: '/agent/skills', icon: Brain },
-      { label: 'Nodes', href: '/agent/nodes', icon: Layers3 },
       { label: 'Presets', href: '/agent/presets', icon: Layers3 },
+      { label: 'Versions', href: '/agent/versions', icon: ScrollText },
+      { label: 'Nanobot', href: '/agent/nanobot', icon: Sparkles },
+      { label: 'Marketplace', href: '/agent/marketplace', icon: BookOpen },
+    ],
+  },
+  {
+    title: 'Insights',
+    items: [
+      { label: 'Usage', href: '/control/usage', icon: Activity },
+      { label: 'Lineage', href: '/control/lineage', icon: GitBranch },
+      { label: 'Provenance', href: '/control/provenance', icon: FileText },
+      { label: 'Repair', href: '/control/repair', icon: Wrench },
+      { label: 'Dry Run', href: '/control/dry-run', icon: Play },
+      { label: 'A/B Testing', href: '/control/ab-testing', icon: FlaskConical },
+    ],
+  },
+  {
+    title: 'Tools',
+    items: [
+      { label: 'API Keys', href: '/control/apikeys', icon: Key },
+      { label: 'Export', href: '/control/export', icon: Download },
+      { label: 'Channels', href: '/control/channels', icon: Link2 },
+      { label: 'Automation', href: '/control/watchers', icon: ShieldCheck },
+      { label: 'Artifacts', href: '/artifacts', icon: FileText },
+      { label: 'Workspaces', href: '/workspaces', icon: Users },
     ],
   },
   {
@@ -73,19 +114,8 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Config', href: '/settings/config', icon: Settings2 },
       { label: 'Doctor', href: '/settings/doctor', icon: Wrench },
-      { label: 'Communications', href: '/control/channels', icon: Bell },
-      { label: 'Automation', href: '/control/watchers', icon: ShieldCheck },
-      { label: 'Infrastructure', href: '/control/instances', icon: Activity },
-      { label: 'Debug', href: '/settings/debug', icon: Terminal },
       { label: 'Logs', href: '/settings/logs', icon: ScrollText },
-    ],
-  },
-  {
-    title: 'Studio',
-    items: [
-      { label: 'Artifacts', href: '/artifacts', icon: FileText },
-      { label: 'Workspaces', href: '/workspaces', icon: Users },
-      { label: 'Marketplace', href: '/agent/marketplace', icon: BookOpen },
+      { label: 'Debug', href: '/settings/debug', icon: Terminal },
       { label: 'Docs', href: '/docs', icon: BookOpen },
     ],
   },
@@ -100,16 +130,20 @@ const CHAT_CONTROL_NAV_GROUPS: NavGroup[] = [
     title: 'Control',
     items: [
       { label: 'Overview', href: '/control/overview', icon: Activity },
-      { label: 'Channels', href: '/control/channels', icon: Link2 },
-      { label: 'Instances', href: '/control/instances', icon: Layers3 },
       { label: 'Sessions', href: '/sessions', icon: FileText },
+      { label: 'Approvals', href: '/approvals', icon: ShieldAlert },
+      { label: 'Channels', href: '/control/channels', icon: Link2 },
       { label: 'Usage', href: '/control/usage', icon: Activity },
       { label: 'Cron Jobs', href: '/control/cron-jobs', icon: Bell },
     ],
   },
   {
-    title: 'Agent',
-    items: [{ label: 'Docs', href: '/docs', icon: BookOpen }],
+    title: 'Quick Links',
+    items: [
+      { label: 'Memory', href: '/memory', icon: Brain },
+      { label: 'API Keys', href: '/control/apikeys', icon: Key },
+      { label: 'Docs', href: '/docs', icon: BookOpen },
+    ],
   },
 ]
 
@@ -184,7 +218,7 @@ export function AppShell({ children }: AppShellProps) {
       {
         title: 'Creator',
         items: [{ label: 'Admin', href: '/control/admin', icon: ShieldCheck }],
-        },
+      },
     ]
   }, [isChatControlRoute, isOwnerUser])
 

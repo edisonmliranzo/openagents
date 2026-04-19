@@ -93,7 +93,7 @@ export default function AgentsPage() {
 
         <div className="mt-4 space-y-2">
           <Link
-            href="/agent/openagent"
+            href="/agent/nanobot"
             className="block rounded-lg border border-indigo-200 bg-indigo-50 p-3 transition hover:bg-indigo-100"
           >
             <p className="text-sm font-semibold text-indigo-900">OpenAgent Runtime Control</p>
