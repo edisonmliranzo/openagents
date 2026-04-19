@@ -49,7 +49,7 @@ export interface StripeEventData {
 
 export interface StripePaymentObject {
   id: string;
-  object: StripeObjectType;
+  object: StripeObjectType | string;
   amount: number;
   currency: string;
   status: string;
