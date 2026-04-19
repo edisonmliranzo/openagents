@@ -24,6 +24,187 @@
 - [x] **Advanced AI Controller** - `apps/api/src/advanced-ai/advanced-ai.controller.ts`
 - [x] **Architecture Documentation** - `docs/advanced-ai-architecture.md`
 
+## 🚀 Phase 9: Core AI Power-Ups (IN PROGRESS ⚠️)
+
+### 🗣️ Voice Output (TTS)
+- [ ] **TTS Types** - Create `packages/shared/src/types/tts.ts`
+- [ ] **TTS Service** - Create `apps/api/src/tts/tts.service.ts`
+- [ ] **TTS Controller** - Create `apps/api/src/tts/tts.controller.ts`
+- [ ] **TTS Module** - Create `apps/api/src/tts/tts.module.ts`
+- [ ] **Whisper Integration** - Create `apps/api/src/whisper/whisper.service.ts`
+- [ ] **Voice Chat UI** - Update `apps/web/` chat interface for voice I/O
+
+### 🖼️ Multi-Modal Image Input
+- [ ] **Vision Types** - Use existing `packages/shared/src/types/multimodal.ts`
+- [ ] **Vision Service** - Create `apps/api/src/vision/vision.service.ts`
+- [ ] **Image Upload Handler** - Create `apps/api/src/vision/image-upload.service.ts`
+- [ ] **Vision UI** - Update chat with drag-drop image support
+- [ ] **Image Analysis Pipeline** - GPT-4o/Gemini vision integration
+
+### 🤖 Agent-to-Agent Delegation
+- [ ] **Delegation Types** - Create `packages/shared/src/types/delegation.ts`
+- [ ] **Delegation Service** - Create `apps/api/src/delegation/delegation.service.ts`
+- [ ] **Sub-Agent Spawner** - Create `apps/api/src/delegation/subagent.service.ts`
+- [ ] **Result Merger** - Create `apps/api/src/delegation/result-merger.service.ts`
+- [ ] **Delegation Controller** - Create `apps/api/src/delegation/delegation.controller.ts`
+
+### ⚡ Streaming Tool Results
+- [ ] **Streaming Types** - Create `packages/shared/src/types/streaming.ts`
+- [ ] **Streaming Service** - Create `apps/api/src/streaming/streaming.service.ts`
+- [ ] **WebSocket Support** - Implement SSE/WebSocket in API
+- [ ] **Streaming UI** - Token-by-token display in chat interface
+
+### 🎯 Long-Term Goal Tracking
+- [ ] **Goal Types** - Create `packages/shared/src/types/goals.ts`
+- [ ] **Goal Service** - Create `apps/api/src/goals/goal.service.ts`
+- [ ] **Goal Memory Integration** - Link with episodic memory
+- [ ] **Auto-Resume Logic** - Task continuation on login
+- [ ] **Goal Dashboard UI** - Persistent sidebar for active goals
+
+## 🎨 Phase 10: User Experience (IN PROGRESS ⚠️)
+
+### 👍 Chat Message Reactions & Ratings
+- [ ] **Reaction Types** - Create `packages/shared/src/types/reactions.ts`
+- [ ] **Reaction Service** - Create `apps/api/src/reactions/reaction.service.ts`
+- [ ] **Reaction Controller** - Create `apps/api/src/reactions/reaction.controller.ts`
+- [ ] **Rating Aggregation** - A/B test scoring integration
+- [ ] **Reaction UI** - Thumbs up/down buttons on agent replies
+
+### 🔍 Conversation Search
+- [ ] **Search Types** - Create `packages/shared/src/types/conversation-search.ts`
+- [ ] **Search Service** - Create `apps/api/src/conversation-search/search.service.ts`
+- [ ] **Full-Text Index** - Elasticsearch/Postgres full-text search
+- [ ] **Search UI** - Search bar with highlighted snippets
+
+### 📌 Pinned Messages
+- [ ] **Pin Types** - Create `packages/shared/src/types/pins.ts`
+- [ ] **Pin Service** - Create `apps/api/src/pins/pin.service.ts`
+- [ ] **Sidebar Panel** - Persistent pinned messages sidebar
+- [ ] **Pin UI** - Pin/unpin button on agent messages
+
+### 🚀 Conversation Templates / Starters
+- [ ] **Template Types** - Create `packages/shared/src/types/templates.ts`
+- [ ] **Template Service** - Create `apps/api/src/templates/template.service.ts`
+- [ ] **Pre-Built Kits** - SEO audit, code review, market research templates
+- [ ] **Template UI** - One-click launcher for prompt kits
+
+### 🎨 Dark/Light Per-Page Theme Override
+- [ ] **Theme Override Types** - Extend `packages/shared/src/types/settings.ts`
+- [ ] **Theme Service** - Update `apps/api/src/theme/theme.service.ts`
+- [ ] **Per-Workspace Colors** - Custom color themes per workspace
+- [ ] **Theme UI** - Theme selector in workspace settings
+
+## 🔌 Phase 11: Integrations (IN PROGRESS ⚠️)
+
+### 📁 Google Drive Connector
+- [ ] **Drive Types** - Create `packages/shared/src/types/google-drive.ts`
+- [ ] **Drive Service** - Create `apps/api/src/google-drive/google-drive.service.ts`
+- [ ] **Auth Integration** - OAuth2 with Google Drive API
+- [ ] **Read/Write Operations** - Docs, Sheets, Slides integration
+- [ ] **Drive UI** - File browser in chat interface
+
+### 📓 Notion Connector
+- [ ] **Notion Types** - Create `packages/shared/src/types/notion.ts`
+- [ ] **Notion Service** - Create `apps/api/src/notion/notion.service.ts`
+- [ ] **Auth Integration** - OAuth2 with Notion API
+- [ ] **Read/Write Operations** - Pages, databases CRUD
+- [ ] **Notion UI** - Page selector in chat interface
+
+### 💳 Stripe Webhook Listener
+- [ ] **Stripe Types** - Create `packages/shared/src/types/stripe.ts`
+- [ ] **Stripe Service** - Create `apps/api/src/stripe/stripe.service.ts`
+- [ ] **Webhook Handler** - Payment event listener
+- [ ] **Workflow Trigger** - Agent notified on payment events
+- [ ] **Stripe UI** - Payment dashboard in admin panel
+
+### 🌐 RSS / Web Monitor
+- [ ] **Monitor Types** - Create `packages/shared/src/types/monitor.ts`
+- [ ] **Monitor Service** - Create `apps/api/src/monitor/monitor.service.ts`
+- [ ] **URL Watcher** - Watch any URL for changes
+- [ ] **RSS Integration** - Parse RSS/Atom feeds
+- [ ] **Alert System** - Agent summarizes changes, sends alerts
+
+### 📧 Email Inbound (Catch-All)
+- [ ] **Email Types** - Create `packages/shared/src/types/email.ts`
+- [ ] **Email Service** - Create `apps/api/src/email/email.service.ts`
+- [ ] **Catch-All Handler** - @openagents.us incoming emails
+- [ ] **Agent Trigger** - Email triggers agent run
+- [ ] **Email UI** - Email inbox in chat interface
+
+## 💻 Phase 12: Developer & Power User (IN PROGRESS ⚠️)
+
+### 🧪 API Playground
+- [ ] **Playground Types** - Create `packages/shared/src/types/playground.ts`
+- [ ] **Playground Service** - Create `apps/api/src/playground/playground.service.ts`
+- [ ] **Interactive REST Client** - Built into web UI
+- [ ] **Auth Token Support** - Live auth token for testing
+- [ ] **Playground UI** - API testing interface
+
+### 🪝 Webhook Builder
+- [ ] **Webhook Builder Types** - Use existing `packages/shared/src/types/webhook.ts`
+- [ ] **Inbound Webhooks** - Create webhooks to trigger agent runs
+- [ ] **Custom Payloads** - Define payload structure
+- [ ] **Visual Logs** - Logs per webhook hit with request/response
+- [ ] **Webhook Builder UI** - Webhook creation interface
+
+### 🔧 Custom Tool Builder UI
+- [ ] **Tool Builder Types** - Create `packages/shared/src/types/tool-builder.ts`
+- [ ] **Tool Builder Service** - Create `apps/api/src/tool-builder/tool-builder.service.ts`
+- [ ] **Visual Form** - Define tool name, schema, HTTP endpoint
+- [ ] **Code Generation** - Auto-generate tool code
+- [ ] **Tool Builder UI** - Visual tool creation interface
+
+### ⏰ Agent Run Scheduler
+- [ ] **Scheduler Types** - Create `packages/shared/src/types/scheduler.ts`
+- [ ] **Scheduler Service** - Create `apps/api/src/scheduler/scheduler.service.ts`
+- [ ] **Cron Support** - "Run every Monday at 9am"
+- [ ] **Output Delivery** - Email or save to memory
+- [ ] **Scheduler UI** - Schedule management interface
+
+### 🐍 Code Execution Sandbox
+- [ ] **Sandbox Types** - Use existing `packages/shared/src/types/sandbox.ts`
+- [ ] **Sandbox Service** - Use existing `packages/sandbox/`
+- [ ] **Inline Execution** - Python/JS snippets in chat
+- [ ] **Output Display** - Rich output rendering
+- [ ] **Sandbox UI** - Inline code execution interface
+
+## 📊 Phase 13: Analytics & Ops (IN PROGRESS ⚠️)
+
+### 💰 Cost Per Conversation
+- [ ] **Cost Types** - Create `packages/shared/src/types/cost.ts`
+- [ ] **Cost Service** - Create `apps/api/src/cost/cost.service.ts`
+- [ ] **Token Tracking** - Estimated token cost per session
+- [ ] **Spend Graphs** - Daily/monthly spend visualization
+- [ ] **Cost UI** - Cost breakdown in conversation view
+
+### 🏆 Agent Performance Leaderboard
+- [ ] **Leaderboard Types** - Create `packages/shared/src/types/leaderboard.ts`
+- [ ] **Leaderboard Service** - Create `apps/api/src/leaderboard/leaderboard.service.ts`
+- [ ] **Ranking Metrics** - Avg latency, success rate, user rating
+- [ ] **A/B Test Scoring** - Compare preset performance
+- [ ] **Leaderboard UI** - Performance ranking dashboard
+
+### 🚨 Anomaly Alerts
+- [ ] **Anomaly Types** - Use existing `packages/shared/src/types/anomaly.ts`
+- [ ] **Anomaly Service** - Use existing `apps/api/src/anomaly/`
+- [ ] **Spike Detection** - Token spikes, error rate jumps
+- [ ] **Push Notifications** - Real-time anomaly alerts
+- [ ] **Email Alerts** - Anomaly summary emails
+
+### 🎬 Session Replay
+- [ ] **Replay Types** - Create `packages/shared/src/types/replay.ts`
+- [ ] **Replay Service** - Create `apps/api/src/replay/replay.service.ts`
+- [ ] **Step-Through** - Tool-by-tool conversation replay
+- [ ] **Tool Output View** - See what each tool returned
+- [ ] **Replay UI** - Session replay interface
+
+### 👥 Multi-User Support
+- [ ] **Multi-User Types** - Create `packages/shared/src/types/multi-user.ts`
+- [ ] **Team Service** - Create `apps/api/src/team/team.service.ts`
+- [ ] **Role-Based Access** - Viewer, editor, admin roles
+- [ ] **Personal Memory** - Each user has own memory
+- [ ] **Team UI** - Team management interface
+
 ## 🎨 Phase 2: MiniMax Hermes-Style Features (COMPLETED ✅)
 
 ### ✅ CLI Tool (Multi-Platform Access)

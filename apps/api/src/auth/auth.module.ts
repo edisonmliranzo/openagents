@@ -8,6 +8,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'
 import { AuthRateLimitService } from './auth-rate-limit.service'
 import { OAuthService } from './oauth.service'
 import { OAuthController } from './oauth.controller'
+import { EmailService } from '../email/email.service'
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { OAuthController } from './oauth.controller'
     }),
   ],
   controllers: [AuthController, OAuthController],
-  providers: [AuthService, JwtStrategy, AuthRateLimitService, OAuthService],
+  providers: [AuthService, JwtStrategy, AuthRateLimitService, OAuthService, EmailService],
   exports: [AuthService, JwtModule, OAuthService],
 })
 export class AuthModule {}

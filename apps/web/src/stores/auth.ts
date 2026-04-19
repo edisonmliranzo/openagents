@@ -53,6 +53,7 @@ interface AuthState {
   register: (email: string, password: string, name?: string) => Promise<void>
   logout: () => Promise<void>
   clear: () => void
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -118,6 +119,10 @@ export const useAuthStore = create<AuthState>()(
           document.cookie = `openagents-authed=; ${authCookieSuffix(0)}`
         }
         set({ user: null, accessToken: null, refreshToken: null, tokenExpiresIn: null, hydrated: true })
+      },
+
+      async changePassword(currentPassword, newPassword) {
+        await sdk.auth.changePassword(currentPassword, newPassword)
       },
 
       clear() {

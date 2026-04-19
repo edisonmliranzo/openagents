@@ -1,11 +1,12 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common'
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import * as bcrypt from 'bcrypt'
-import { randomUUID, createHash } from 'crypto'
+import { randomUUID, createHash, randomBytes } from 'crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import type { AuthTokens } from '@openagents/shared'
 import { AuthRateLimitService } from './auth-rate-limit.service'
+import { EmailService } from '../email/email.service'
 
 @Injectable()
 export class AuthService {
@@ -14,6 +15,7 @@ export class AuthService {
     private jwt: JwtService,
     private config: ConfigService,
     private authRateLimit: AuthRateLimitService,
+    private email: EmailService,
   ) {}
 
   async register(
@@ -99,6 +101,62 @@ export class AuthService {
 
   async logout(userId: string) {
     await this.prisma.refreshToken.deleteMany({ where: { userId } })
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    if (!user) throw new UnauthorizedException('User not found')
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash)
+    if (!valid) throw new UnauthorizedException('Current password is incorrect')
+
+    this.validatePasswordStrength(newPassword)
+
+    const passwordHash = await bcrypt.hash(newPassword, this.passwordHashRounds())
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } })
+    // Invalidate all sessions on password change
+    await this.prisma.refreshToken.deleteMany({ where: { userId } })
+    return { message: 'Password changed successfully' }
+  }
+
+  async forgotPassword(email: string, baseUrl: string) {
+    const normalizedEmail = this.normalizeEmail(email)
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
+    // Always return success to prevent email enumeration
+    if (!user) return { message: 'If that email exists, a reset link has been sent.' }
+
+    // Delete any existing reset tokens for this user
+    await this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } })
+
+    const token = randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+
+    await this.prisma.passwordResetToken.create({
+      data: { userId: user.id, token, expiresAt },
+    })
+
+    const resetUrl = `${baseUrl}/reset-password?token=${token}`
+    await this.email.sendPasswordReset(user.email, resetUrl)
+
+    return { message: 'If that email exists, a reset link has been sent.' }
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const record = await this.prisma.passwordResetToken.findUnique({ where: { token } })
+    if (!record || record.expiresAt < new Date()) {
+      if (record) await this.prisma.passwordResetToken.delete({ where: { id: record.id } })
+      throw new BadRequestException('Invalid or expired reset token')
+    }
+
+    this.validatePasswordStrength(newPassword)
+
+    const passwordHash = await bcrypt.hash(newPassword, this.passwordHashRounds())
+    await this.prisma.user.update({ where: { id: record.userId }, data: { passwordHash } })
+    await this.prisma.passwordResetToken.delete({ where: { id: record.id } })
+    // Invalidate all sessions
+    await this.prisma.refreshToken.deleteMany({ where: { userId: record.userId } })
+
+    return { message: 'Password reset successfully. Please log in.' }
   }
 
   private async generateTokens(userId: string, email: string): Promise<AuthTokens> {
