@@ -1,6 +1,5 @@
 'use client'
 
-import clsx from 'clsx'
 import { useCallback, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { sdk } from '@/stores/auth'
@@ -171,26 +170,9 @@ export function MessageBubble({
   const isTool = message.role === 'tool'
   const isSystem = message.role === 'system'
 
-  // ── Tool / System bubble (keep subtle card) ───────────────────────────────
+  // ── Tool / System bubble (hidden from user chat) ─────────────────────────
   if (isTool || isSystem) {
-    return (
-      <div className="space-y-1">
-        <div
-          className={clsx(
-            'rounded-xl border px-3 py-2 text-[13px]',
-            isTool
-              ? 'border-amber-200 bg-amber-50/60 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200'
-              : 'border-slate-200 bg-slate-50/60 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-300',
-          )}
-        >
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest opacity-60">
-            {roleLabel(message.role)}
-          </p>
-          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
-        </div>
-        <span className="pl-1 text-[11px] text-[#98a2b3]">{formatClock(message.createdAt)}</span>
-      </div>
-    )
+    return null
   }
 
   // ── Agent bubble ─────────────────────────────────────────────────────────────
