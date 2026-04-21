@@ -50,7 +50,7 @@ export class SkillSaveTool {
     const triggerPhrase = input.trigger_phrase ? String(input.trigger_phrase).trim() : null
 
     if (!name || !description || steps.length === 0) {
-      return { success: false, error: 'name, description, and steps are required' }
+      return { success: false, output: null, error: 'name, description, and steps are required' }
     }
 
     // Upsert by userId + name
