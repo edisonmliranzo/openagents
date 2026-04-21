@@ -108,6 +108,16 @@ export function MessageBubble({
   const [lineageError, setLineageError] = useState('')
   const canShowLineage = message.role === 'agent' && message.status !== 'streaming'
 
+  const tokenInfo = useMemo(() => {
+    if (!message.metadata) return null
+    try {
+      const meta = typeof message.metadata === 'string' ? JSON.parse(message.metadata) : message.metadata
+      return meta?.tokens ?? null
+    } catch {
+      return null
+    }
+  }, [message.metadata])
+
   const handleCopyBlock = useCallback(async (index: number, content: string) => {
     try {
       await copyToClipboard(content)
@@ -296,6 +306,13 @@ export function MessageBubble({
               sessionId={conversationId}
               messageIndex={messageIndex}
             />
+          )}
+          {tokenInfo && (
+            <span className="ml-auto text-[10px] text-[#c0c7d4] dark:text-[#4a5270]" title={`in: ${tokenInfo.inputTokens} / out: ${tokenInfo.outputTokens}${tokenInfo.durationMs ? ` / ${(tokenInfo.durationMs / 1000).toFixed(1)}s` : ''}`}>
+              {tokenInfo.totalTokens >= 1000
+                ? `${(tokenInfo.totalTokens / 1000).toFixed(1)}k`
+                : tokenInfo.totalTokens}{' '}tokens
+            </span>
           )}
         </div>
 

@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common'
 import { ToolsService } from './tools.service'
 import { ToolsController } from './tools.controller'
 import { ParallelAgentTool } from './connectors/parallel-agent.tool'
+import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
+import { SkillSaveTool } from './connectors/skill-save.tool'
 import { GmailTool } from './connectors/gmail.tool'
 import { CalendarTool } from './connectors/calendar.tool'
 import { WebFetchTool } from './connectors/web-fetch.tool'
@@ -44,9 +46,11 @@ import { PromptGuardService } from './prompt-guard.service'
 import { OutboundGuardService } from './outbound-guard.service'
 import { PolicyModule } from '../policy/policy.module'
 import { ToolsInternalController } from './tools.internal.controller'
+import { LLMService } from '../agent/llm.service'
+import { UsersModule } from '../users/users.module'
 
 @Module({
-  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule],
+  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule, UsersModule],
   providers: [
     ToolsService,
     GmailTool,
@@ -84,6 +88,9 @@ import { ToolsInternalController } from './tools.internal.controller'
     WhatsAppSendTool,
     TelegramSendTool,
     ParallelAgentTool,
+    MixtureOfAgentsTool,
+    SkillSaveTool,
+    LLMService,
     McpService,
     PromptGuardService,
     OutboundGuardService,

@@ -30,6 +30,15 @@ export function createConversationsApi(client: OpenAgentsClient) {
     repair: (id: string) =>
       client.post<ConversationRepairReport>(`/api/v1/conversations/${id}/repair`),
 
+    compress: (id: string) =>
+      client.post<{ ok: boolean; summary: string }>(`/api/v1/conversations/${id}/compress`),
+
+    search: (q: string) =>
+      client.get<Array<{ conversationId: string; conversationTitle: string | null; messageId: string; role: string; snippet: string; createdAt: string }>>(`/api/v1/conversations/search?q=${encodeURIComponent(q)}`),
+
+    exportJsonl: (id: string) =>
+      client.get<string[]>(`/api/v1/conversations/${id}/export/jsonl`),
+
     delete: (id: string) => client.delete<void>(`/api/v1/conversations/${id}`),
   }
 }

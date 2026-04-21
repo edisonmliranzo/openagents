@@ -16,6 +16,7 @@ export interface SessionRow {
   thinkingLevel?: string | null
   verboseLevel?: string | null
   reasoningLevel?: string | null
+  personality?: string | null
   inputTokens?: number | null
   outputTokens?: number | null
   totalTokens?: number | null
@@ -37,6 +38,7 @@ export interface SessionPatchInput {
   thinkingLevel?: string | null
   verboseLevel?: string | null
   reasoningLevel?: string | null
+  personality?: string | null
 }
 
 export interface SessionPatchResult {

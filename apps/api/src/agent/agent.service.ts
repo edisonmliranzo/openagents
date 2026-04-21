@@ -10,6 +10,7 @@ import { DataLineageService } from '../lineage/lineage.service'
 import { PromptGuardService } from '../tools/prompt-guard.service'
 import { MissionControlService } from '../mission-control/mission-control.service'
 import { RuntimeEventsService } from '../events/runtime-events.service'
+import { ContextCompressorService } from './context-compressor.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
   LLM_MODELS,
@@ -131,6 +132,7 @@ export class AgentService {
     private promptGuard: PromptGuardService,
     private mission: MissionControlService,
     private runtimeEvents: RuntimeEventsService,
+    private compressor: ContextCompressorService,
   ) {}
 
   async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
@@ -154,9 +156,10 @@ export class AgentService {
 
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
-      select: { title: true },
+      select: { title: true, personality: true },
     })
     const conversationNeedsTitle = !conversation?.title
+    const conversationPersonality = conversation?.personality ?? null
     const fallbackConversationTitle = conversationNeedsTitle
       ? this.deriveConversationTitle(userMessage)
       : null
@@ -218,9 +221,24 @@ export class AgentService {
       const basePrompt = settings.customSystemPrompt ?? DEFAULT_SYSTEM_PROMPT
       const manusModeEnabled = this.isManusModeEnabled()
       const openAgentsInstallAppendix = getOpenAgentsInstallPromptAppendix(userMessage)
-      const systemPrompt = memoryContext
-        ? `${basePrompt}\n\nUser context from memory:\n${memoryContext}`
-        : basePrompt
+
+      // Personality prefix
+      const personalityPrefix = conversationPersonality
+        ? this.buildPersonalityPrefix(conversationPersonality)
+        : ''
+
+      // Context compression summary
+      const compressionSummary = fastAdvisoryMode
+        ? null
+        : await this.compressor.getOrCreateSummary(conversationId, userId).catch(() => null)
+
+      const baseWithPersonality = personalityPrefix ? `${personalityPrefix}\n\n${basePrompt}` : basePrompt
+      let systemPrompt = memoryContext
+        ? `${baseWithPersonality}\n\nUser context from memory:\n${memoryContext}`
+        : baseWithPersonality
+      if (compressionSummary) {
+        systemPrompt = `${systemPrompt}\n\n${compressionSummary}`
+      }
       const promptAppendices = [
         OPENAGENTS_IDENTITY_APPENDIX,
         MEMORY_PROMPT_APPENDIX,
@@ -844,6 +862,14 @@ export class AgentService {
         },
       })
 
+      emit('tokens', {
+        inputTokens: runMetrics.inputTokens,
+        outputTokens: runMetrics.outputTokens,
+        totalTokens: runMetrics.inputTokens + runMetrics.outputTokens,
+        provider: activeProvider,
+        model: activeModel ?? null,
+        durationMs: Date.now() - runStartedAtMs,
+      })
       emit('status', { status: 'done' })
     } catch (err: any) {
       this.logger.error('Agent run failed', err)
@@ -1353,6 +1379,20 @@ export class AgentService {
     }
 
     return sections.join('\n\n')
+  }
+
+  private buildPersonalityPrefix(personality: string): string {
+    const presets: Record<string, string> = {
+      concise: 'Respond concisely. Prefer bullet points over paragraphs. Keep replies brief and to the point.',
+      detailed: 'Provide comprehensive, detailed responses. Include relevant context, examples, and explanations.',
+      creative: 'Be imaginative and creative. Use vivid language, explore novel angles, and think outside conventional boundaries.',
+      technical: 'Use precise technical language. Include code examples, specifications, and implementation details where relevant.',
+      professional: 'Maintain a formal, professional tone. Be direct, structured, and avoid casual language.',
+      friendly: 'Be warm, approachable, and conversational. Use casual language and be encouraging.',
+      socratic: 'Guide the user toward answers through questions rather than providing direct answers. Help them think through problems.',
+    }
+    const normalized = personality.toLowerCase().trim()
+    return presets[normalized] ?? personality
   }
 
   private clipContextText(value: string, limit: number) {

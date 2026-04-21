@@ -762,6 +762,38 @@ export function ChatWindow({
       return true
     }
 
+    if (parsed.id === 'compress') {
+      if (!activeConversationId) {
+        appendOperatorMessage('No active session to compress.', 'error')
+        return true
+      }
+      setRuntimeBusy('compress')
+      try {
+        const result = await sdk.conversations.compress(activeConversationId)
+        appendOperatorMessage(`Context compressed.\n\n${result.summary ?? ''}`)
+      } catch (err) {
+        appendOperatorMessage(formatCommandError(err, 'Compression failed.'), 'error')
+      } finally {
+        setRuntimeBusy(null)
+      }
+      return true
+    }
+
+    if (parsed.id === 'personality') {
+      const presets = ['concise', 'detailed', 'creative', 'technical', 'professional', 'friendly', 'socratic']
+      const value = parsed.arg.trim().toLowerCase()
+      if (!value) {
+        appendOperatorMessage(`Usage: /personality <preset>\nPresets: ${presets.join(', ')}`, 'error')
+        return true
+      }
+      await patchActiveSession(
+        { personality: value === 'clear' || value === 'default' ? null : value },
+        `Personality set to "${value === 'clear' || value === 'default' ? 'default' : value}".`,
+        'personality',
+      )
+      return true
+    }
+
     return false
   }
 
