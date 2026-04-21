@@ -26,13 +26,32 @@
 
 ## 🚀 Phase 9: Core AI Power-Ups (IN PROGRESS ⚠️)
 
-### 🗣️ Voice Output (TTS)
-- [ ] **TTS Types** - Create `packages/shared/src/types/tts.ts`
+### Recommended Delivery Order (April 2026)
+- [ ] **1. Streaming Tool Results** - Fastest trust win for every user and unlocks better replay/debug UX later
+- [ ] **2. Multi-Modal Image Input** - High user-visible value with a contained API/UI surface
+- [ ] **3. Agent-to-Agent Delegation** - Extends existing multi-agent foundation instead of starting from zero
+- [ ] **4. Long-Term Goal Tracking** - Builds on memory primitives and improves retention/product stickiness
+- [ ] **5. Production Voice Stack** - Upgrade MVP voice into provider-backed Whisper + TTS hands-free mode
+- [ ] **6. Conversation Search** - Strong UX payoff once sessions and memory volume grow
+- [ ] **7. Conversation Templates / Starters** - Low-risk growth lever after core chat surfaces stabilize
+- [ ] **8. Pinned Messages** - Small workflow improvement after search/sidebar foundations exist
+- [ ] **9. Chat Message Reactions & Ratings** - More valuable once evaluation and A/B loops are in daily use
+- [ ] **10. Per-Workspace Theme Override** - Nice UX polish, but lower leverage than core task-completion features
+- [ ] **11. Google Drive + Notion Connectors** - Ship together after auth, policies, and audit handling are hardened
+- [ ] **12. RSS / Web Monitor + Email Inbound + Stripe Webhooks** - Best grouped under event-trigger infrastructure
+- [ ] **13. API Playground + Webhook Builder + Custom Tool Builder** - Power-user set after platform APIs stabilize
+- [ ] **14. Agent Run Scheduler + Inline Sandbox UI** - Depend on stronger workflow/run surfaces and execution controls
+- [ ] **15. Cost, Replay, Leaderboards, Anomaly Alerts** - Land after telemetry collection is complete enough to trust
+- [ ] **16. Multi-User Support** - Broadest surface area; should follow auth, policy, audit, and workspace hardening
+
+### 🗣️ Production Voice Stack
+- [x] **MVP Voice API + UI** - `POST /api/v1/nanobot/voice/transcribe`, `POST /api/v1/nanobot/voice/speak`, browser STT/TTS support
+- [x] **TTS Types** - `packages/shared/src/types/tts.ts`
 - [ ] **TTS Service** - Create `apps/api/src/tts/tts.service.ts`
 - [ ] **TTS Controller** - Create `apps/api/src/tts/tts.controller.ts`
 - [ ] **TTS Module** - Create `apps/api/src/tts/tts.module.ts`
 - [ ] **Whisper Integration** - Create `apps/api/src/whisper/whisper.service.ts`
-- [ ] **Voice Chat UI** - Update `apps/web/` chat interface for voice I/O
+- [ ] **Provider-Backed Voice Chat UI** - Upgrade chat for full hands-free Whisper + streaming TTS I/O
 
 ### 🖼️ Multi-Modal Image Input
 - [ ] **Vision Types** - Use existing `packages/shared/src/types/multimodal.ts`
@@ -199,10 +218,14 @@
 - [ ] **Replay UI** - Session replay interface
 
 ### 👥 Multi-User Support
+- [ ] **Implementation Plan** - See `docs/multi-user-support-implementation.md`
 - [ ] **Multi-User Types** - Create `packages/shared/src/types/multi-user.ts`
 - [ ] **Team Service** - Create `apps/api/src/team/team.service.ts`
+- [ ] **Workspace Invites** - Invite teammates by email into shared workspaces
+- [ ] **Membership Lifecycle** - Pending, accepted, revoked, and expired team invites
 - [ ] **Role-Based Access** - Viewer, editor, admin roles
 - [ ] **Personal Memory** - Each user has own memory
+- [ ] **Shared Workspace Context** - Shared conversations, pins, and goals with access controls
 - [ ] **Team UI** - Team management interface
 
 ## 🎨 Phase 2: MiniMax Hermes-Style Features (COMPLETED ✅)

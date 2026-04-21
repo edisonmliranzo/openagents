@@ -35,6 +35,8 @@ import { BrowserScreenshotTool } from './connectors/browser-screenshot.tool'
 import { WhatsAppSendTool } from './connectors/whatsapp-send.tool'
 import { TelegramSendTool } from './connectors/telegram-send.tool'
 import { ParallelAgentTool } from './connectors/parallel-agent.tool'
+import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
+import { SkillSaveTool } from './connectors/skill-save.tool'
 import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
 import { ConnectorsService } from '../connectors/connectors.service'
 import { McpService } from './mcp.service'
@@ -96,6 +98,8 @@ export class ToolsService {
     private whatsappSend: WhatsAppSendTool,
     private telegramSend: TelegramSendTool,
     private parallelAgent: ParallelAgentTool,
+    private mixtureOfAgents: MixtureOfAgentsTool,
+    private skillSave: SkillSaveTool,
     private mcp: McpService,
     ) {
     this.registry = new Map([
@@ -195,6 +199,10 @@ export class ToolsService {
       ['telegram_send', { def: this.withBuiltinSource(this.telegramSend.def), execute: this.telegramSend.send.bind(this.telegramSend) }],
       // Parallel agent
       ['parallel_agent_run', { def: this.withBuiltinSource(this.parallelAgent.def), execute: this.parallelAgent.run.bind(this.parallelAgent) }],
+      // Mixture of agents
+      ['mixture_of_agents', { def: this.withBuiltinSource(this.mixtureOfAgents.def), execute: this.mixtureOfAgents.run.bind(this.mixtureOfAgents) }],
+      // Skill save
+      ['skill_save', { def: this.withBuiltinSource(this.skillSave.def), execute: this.skillSave.run.bind(this.skillSave) }],
     ])
   }
 

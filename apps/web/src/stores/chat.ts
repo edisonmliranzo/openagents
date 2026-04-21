@@ -440,6 +440,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }))
           }
 
+          if (data.event === 'tokens') {
+            const tokens = data.data as { inputTokens?: number; outputTokens?: number; totalTokens?: number; model?: string; durationMs?: number } | undefined
+            if (tokens) {
+              set((s) => ({
+                messages: s.messages.map((m) =>
+                  m.id === agentTempId
+                    ? { ...m, metadata: JSON.stringify({ tokens }) }
+                    : m,
+                ),
+              }))
+            }
+          }
+
           if (data.event === 'tool_result') {
             const toolName = typeof data.data?.tool === 'string' ? data.data.tool : 'tool'
             const result = data.data?.result as { success?: unknown; output?: unknown; error?: unknown } | undefined

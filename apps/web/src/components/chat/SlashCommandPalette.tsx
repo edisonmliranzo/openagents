@@ -44,6 +44,8 @@ const CMD = {
   LABEL: 'label',
   APPROVALS: 'approvals',
   HELP: 'help',
+  COMPRESS: 'compress',
+  PERSONALITY: 'personality',
 } as const
 
 const AGENT_COMMANDS: SlashCommand[] = [
@@ -65,6 +67,8 @@ export const OPERATOR_COMMANDS: SlashCommand[] = [
   { id: CMD.REASONING,  label: '/reasoning',  description: 'Set reasoning visibility for the current session',     icon: <Workflow size={14} />,   template: '/reasoning ' },
   { id: CMD.LABEL,      label: '/label',      description: 'Rename the current session label',                     icon: <Tag size={14} />,        template: '/label ' },
   { id: CMD.APPROVALS,  label: '/approvals',  description: 'Summarize pending approvals',                          icon: <ShieldCheck size={14} />, template: '/approvals' },
+  { id: CMD.COMPRESS,   label: '/compress',   description: 'Compress old messages into a summary to free context', icon: <FileText size={14} />,   template: '/compress' },
+  { id: CMD.PERSONALITY, label: '/personality', description: 'Set agent personality: concise|detailed|creative|technical|professional|friendly|socratic', icon: <Brain size={14} />, template: '/personality ' },
   { id: CMD.HELP,       label: '/help',       description: 'Show OpenAgents command help',                         icon: <BadgeInfo size={14} />,  template: '/help' },
 ]
 
@@ -75,7 +79,7 @@ const OPERATOR_COMMAND_ALIASES: Record<string, string> = {
   reason: CMD.REASONING,
 }
 
-const OPERATOR_COMMAND_IDS = new Set(OPERATOR_COMMANDS.map((command) => command.id))
+const OPERATOR_COMMAND_IDS = new Set([...OPERATOR_COMMANDS.map((command) => command.id), CMD.COMPRESS, CMD.PERSONALITY])
 
 export interface ParsedSlashCommand {
   id: string
@@ -108,6 +112,8 @@ export function buildOperatorCommandHelpText() {
     '/reasoning <inherit|off|on|stream>: set per-session reasoning visibility',
     '/label <name|clear>: update the current session label',
     '/approvals: summarize pending approvals for this session',
+    '/compress: compress old messages into a summary to free context',
+    '/personality <preset>: set agent tone — concise|detailed|creative|technical|professional|friendly|socratic',
     '/help: show this command list',
   ].join('\n')
 }

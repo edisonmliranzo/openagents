@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, UseGuards, Req, Res,
+  Controller, Get, Post, Delete, Param, Body, UseGuards, Req, Res, Query,
 } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsString, IsOptional } from 'class-validator'
@@ -7,6 +7,7 @@ import { Response } from 'express'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { ConversationsService } from './conversations.service'
 import { AgentService } from '../agent/agent.service'
+import { ContextCompressorService } from '../agent/context-compressor.service'
 import { NanobotLoopService } from '../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../nanobot/config/nanobot-config.service'
 
@@ -30,6 +31,7 @@ export class ConversationsController {
   constructor(
     private conversations: ConversationsService,
     private agent: AgentService,
+    private compressor: ContextCompressorService,
     private nanobotLoop: NanobotLoopService,
     private nanobotConfig: NanobotConfigService,
   ) {}
@@ -108,5 +110,24 @@ export class ConversationsController {
   @Post(':id/repair')
   repair(@Param('id') id: string, @Req() req: any) {
     return this.conversations.repairState(id, req.user.id)
+  }
+
+  @Post(':id/compress')
+  async compress(@Param('id') id: string, @Req() req: any) {
+    const summary = await this.compressor.forceCompress(id, req.user.id)
+    return { ok: true, summary }
+  }
+
+  @Get('search')
+  search(@Query('q') q: string, @Req() req: any) {
+    return this.conversations.search(req.user.id, q ?? '')
+  }
+
+  @Get(':id/export/jsonl')
+  async exportJsonl(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
+    const lines = await this.conversations.exportJsonl(id, req.user.id)
+    res.setHeader('Content-Type', 'application/x-ndjson')
+    res.setHeader('Content-Disposition', `attachment; filename="conversation-${id}.jsonl"`)
+    res.send(lines.join('\n'))
   }
 }
