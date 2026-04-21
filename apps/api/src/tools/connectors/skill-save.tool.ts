@@ -74,7 +74,7 @@ export class SkillSaveTool {
 
     return {
       success: true,
-      data: {
+      output: {
         id: skill.id,
         name: skill.name,
         message: existing ? `Skill "${name}" updated.` : `Skill "${name}" saved to your library.`,
