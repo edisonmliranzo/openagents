@@ -35,7 +35,7 @@ export class MixtureOfAgentsTool {
 
   async run(input: Record<string, unknown>, userId: string): Promise<ToolResult> {
     const question = String(input.question ?? '').trim()
-    if (!question) return { success: false, error: 'question is required' }
+    if (!question) return { success: false, output: null, error: 'question is required' }
 
     const defaultModels: Array<{ provider: LLMProvider; model: string }> = [
       { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
@@ -81,7 +81,7 @@ export class MixtureOfAgentsTool {
     }
 
     if (responses.length === 0) {
-      return { success: false, error: 'All model calls failed' }
+      return { success: false, output: null, error: 'All model calls failed' }
     }
 
     if (responses.length === 1) {
@@ -102,7 +102,7 @@ export class MixtureOfAgentsTool {
 
     return {
       success: true,
-      data: synthesis.content.trim(),
+      output: synthesis.content.trim(),
     }
   }
 }
