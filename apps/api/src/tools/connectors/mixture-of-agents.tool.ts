@@ -85,7 +85,7 @@ export class MixtureOfAgentsTool {
     }
 
     if (responses.length === 1) {
-      return { success: true, data: responses[0].replace(/^Model \d+: /, '') }
+      return { success: true, output: responses[0].replace(/^Model \d+: /, '') }
     }
 
     // Synthesize with aggregator call
