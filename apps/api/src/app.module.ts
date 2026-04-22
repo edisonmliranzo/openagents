@@ -52,6 +52,23 @@ import { WsModule } from './events/ws.module'
 import { ApiKeysModule } from './apikeys/apikeys.module'
 import { ExportModule } from './export/export.module'
 import { AbTestingModule } from './ab-testing/ab-testing.module'
+import { StreamingModule } from './streaming/streaming.module'
+import { VisionModule } from './vision/vision.module'
+import { DelegationModule } from './delegation/delegation.module'
+import { GoalsModule } from './goals/goals.module'
+import { ConversationSearchModule } from './conversation-search/search.module'
+import { TemplatesModule } from './templates/templates.module'
+import { PinsModule } from './pins/pins.module'
+import { ReactionsModule } from './reactions/reactions.module'
+import { CostModule } from './cost/cost.module'
+import { SchedulerModule } from './scheduler/scheduler.module'
+import { ToolBuilderModule } from './tool-builder/tool-builder.module'
+import { GenerativeUIModule } from './generative-ui/generative-ui.module'
+import { BrowserAutomationModule } from './browser-automation/browser-automation.module'
+import { ProactiveAgentsModule } from './proactive-agents/proactive-agents.module'
+import { WebRTCVoiceModule } from './webrtc-voice/webrtc-voice.module'
+import { WarRoomsModule } from './war-rooms/war-rooms.module'
+import { LocalDaemonModule } from './local-daemon/local-daemon.module'
 
 @Module({
   imports: [
@@ -110,6 +127,23 @@ import { AbTestingModule } from './ab-testing/ab-testing.module'
     ApiKeysModule,
     ExportModule,
     AbTestingModule,
+    StreamingModule,
+    VisionModule,
+    DelegationModule,
+    GoalsModule,
+    ConversationSearchModule,
+    TemplatesModule,
+    PinsModule,
+    ReactionsModule,
+    CostModule,
+    SchedulerModule,
+    ToolBuilderModule,
+    GenerativeUIModule,
+    BrowserAutomationModule,
+    ProactiveAgentsModule,
+    WebRTCVoiceModule,
+    WarRoomsModule,
+    LocalDaemonModule,
   ],
 })
 export class AppModule {}

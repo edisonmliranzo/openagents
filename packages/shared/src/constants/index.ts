@@ -185,7 +185,7 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
 
 export const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
-export const SHORT_TERM_MEMORY_LIMIT = 20 // last N messages for context
+export const SHORT_TERM_MEMORY_LIMIT = 40 // last N messages for context
 
 export const QUEUE_NAMES = {
   approvals: 'approvals',

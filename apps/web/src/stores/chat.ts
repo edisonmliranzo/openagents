@@ -138,21 +138,23 @@ function formatStreamingStatus(status: string | null, data?: Record<string, unkn
 
   switch (status) {
     case 'thinking':
-      return 'Working...'
+      return 'Thinking through your request...'
     case 'planning':
-      return 'Working...'
-    case 'executing':
-      return 'Working...'
+      return 'Planning execution strategy...'
+    case 'executing': {
+      const round = Number.isFinite(Number(data?.round)) ? Number(data?.round) : null
+      return round ? `Executing tools (round ${round})...` : 'Executing tools...'
+    }
     case 'running_tool':
-      return `Using ${toolName}...`
+      return `Running ${toolName}...`
     case 'retrying_tool': {
       const attempt = Number.isFinite(Number(data?.attempt)) ? Number(data?.attempt) : null
-      return attempt ? `Retrying ${toolName}...` : `Retrying ${toolName}...`
+      return attempt ? `Retrying ${toolName} (attempt ${attempt})...` : `Retrying ${toolName}...`
     }
     case 'verifying':
-      return 'Finalizing...'
+      return 'Verifying results and finalizing...'
     case 'waiting_approval':
-      return toolName !== 'tool' ? `Approval needed: ${toolName}` : 'Approval needed'
+      return toolName !== 'tool' ? `⚠️ Approval needed: ${toolName}` : '⚠️ Approval needed'
     default:
       return ''
   }
@@ -446,7 +448,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               set((s) => ({
                 messages: s.messages.map((m) =>
                   m.id === agentTempId
-                    ? { ...m, metadata: JSON.stringify({ tokens }) }
+                    ? { ...m, metadata: { ...m.metadata, tokens } }
                     : m,
                 ),
               }))
