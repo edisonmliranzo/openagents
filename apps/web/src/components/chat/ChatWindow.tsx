@@ -28,6 +28,7 @@ import {
 } from './SlashCommandPalette'
 import { PinnedContext, buildPinnedContextBlock, type PinnedItem } from './PinnedContext'
 import { ResponsePresets } from './ResponsePresets'
+import { WebRtcVoiceControls } from './WebRtcVoiceControls'
 import clsx from 'clsx'
 import {
   ArrowUp,
@@ -896,7 +897,13 @@ export function ChatWindow({
     activeSession?.modelProvider?.trim(),
   )
   const assistantStatusText = isStreaming
-    ? 'OpenAgents is working...'
+    ? (runStatus === 'running_tool'
+        ? 'OpenAgents is executing tools...'
+        : runStatus === 'planning'
+          ? 'OpenAgents is planning...'
+          : runStatus === 'verifying'
+            ? 'OpenAgents is finalizing...'
+            : 'OpenAgents is thinking...')
     : runtimeBusy
         ? 'Updating runtime...'
         : 'OpenAgents ready'
@@ -1410,9 +1417,7 @@ export function ChatWindow({
                   <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isStreaming} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#667085] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#1e2433]" aria-label="Attach file">
                     <Paperclip size={16} />
                   </button>
-                  <button type="button" disabled className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] opacity-40" aria-label="Voice input">
-                    <Mic size={16} />
-                  </button>
+                  <WebRtcVoiceControls />
                 </div>
                 <div className="flex items-center gap-2">
                   {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}

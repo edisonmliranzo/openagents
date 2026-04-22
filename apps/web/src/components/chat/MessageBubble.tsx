@@ -6,6 +6,9 @@ import { sdk } from '@/stores/auth'
 import type { DataLineageRecord, Message } from '@openagents/shared'
 import { Brain, ChevronDown, ChevronRight, Copy } from 'lucide-react'
 import { BranchButton } from '@/components/branch-button'
+import { GenerativeUIWidget } from './GenerativeUIWidget'
+import { BrowserPreview } from './BrowserPreview'
+import { WarRoomPanel } from './WarRoomPanel'
 
 // Strip <thinking>…</thinking> blocks out of visible content and return them separately.
 function extractThinkingBlocks(raw: string): { thinking: string[]; visible: string } {
@@ -198,7 +201,14 @@ export function MessageBubble({
             (() => {
               let codeIdx = -1
               return (
-                <ReactMarkdown
+                <>
+                  {visible.includes('[WAR_ROOM:') && (
+                    <WarRoomPanel agents={['Architect', 'DevOps', 'Frontend']} topic={visible.split('[WAR_ROOM:')[1].split(']')[0]} />
+                  )}
+                  {visible.includes('[BROWSER:') && (
+                    <BrowserPreview sessionId={message.id} url={visible.split('[BROWSER:')[1].split(']')[0]} status="active" />
+                  )}
+                  <ReactMarkdown
                   components={{
                     p: ({ children }) => (
                       <p className="mb-2 text-[14px] leading-6 text-[#101828] dark:text-white">
@@ -258,17 +268,24 @@ export function MessageBubble({
                               {copiedCodeIndex === currentIdx ? 'Copied' : 'Copy'}
                             </button>
                           </div>
-                          <pre className="overflow-x-auto bg-[#f9fafb] px-3 py-2 text-xs text-[#344054] dark:bg-[#141824] dark:text-[#c9d1e0]">
-                            {content}
-                          </pre>
+                          {lang === 'react-live' ? (
+                            <GenerativeUIWidget componentId={`${message.id}-${currentIdx}`} code={content} language="react" />
+                          ) : lang === 'html-live' ? (
+                            <GenerativeUIWidget componentId={`${message.id}-${currentIdx}`} code={content} language="html" />
+                          ) : (
+                            <pre className="overflow-x-auto bg-[#f9fafb] px-3 py-2 text-xs text-[#344054] dark:bg-[#141824] dark:text-[#c9d1e0]">
+                              {content}
+                            </pre>
+                          )}
                         </div>
                       )
                     },
                     pre: ({ children }) => <>{children}</>,
                   }}
                 >
-                  {visible}
+                  {visible.replace(/\[WAR_ROOM:.*?\]/g, '').replace(/\[BROWSER:.*?\]/g, '')}
                 </ReactMarkdown>
+              </>
               )
             })()
           ) : (

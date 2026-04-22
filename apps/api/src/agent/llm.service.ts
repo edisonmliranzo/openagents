@@ -373,7 +373,7 @@ export class LLMService {
 
     const response = await client.messages.create({
       model: modelOverride ?? LLM_MODELS.anthropic.default,
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: systemPrompt,
       messages: anthropicMessages,
       tools: tools.map((t) => ({
