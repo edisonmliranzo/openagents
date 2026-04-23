@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { sdk } from './auth'
-import type { Conversation, Message, Approval, HumanHandoffTicket } from '@openagents/shared'
+import type { Conversation, Message, Approval, HumanHandoffTicket, MessageArtifact, MessageMeta, MessageProgressState } from '@openagents/shared'
 
 type GatewayStatus = 'connecting' | 'connected' | 'disconnected'
 
@@ -14,6 +14,128 @@ export interface ChatToolStreamEvent {
   attempts?: number
   recoveredByRetry?: boolean
   createdAt: string
+}
+
+function clampPercent(value: unknown) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return Math.max(0, Math.min(100, Math.round(numeric)))
+}
+
+function deriveProgressPercent(status: string | null, data?: Record<string, unknown>) {
+  const explicit = clampPercent(data?.percent)
+  if (explicit !== null) return explicit
+  const currentStep = Number(data?.currentStep)
+  const totalSteps = Number(data?.totalSteps)
+  if (Number.isFinite(currentStep) && Number.isFinite(totalSteps) && totalSteps > 0) {
+    return clampPercent((currentStep / totalSteps) * 100)
+  }
+  switch (status) {
+    case 'thinking':
+      return 15
+    case 'planning':
+      return 28
+    case 'executing':
+      return 55
+    case 'running_tool':
+      return 68
+    case 'retrying_tool':
+      return 72
+    case 'verifying':
+      return 90
+    case 'waiting_approval':
+      return 95
+    case 'done':
+      return 100
+    default:
+      return null
+  }
+}
+
+function formatProgressLabel(status: string | null, data?: Record<string, unknown>) {
+  const toolName =
+    typeof data?.tool === 'string' && data.tool.trim()
+      ? data.tool.trim()
+      : null
+
+  switch (status) {
+    case 'thinking':
+      return 'Understanding the request'
+    case 'planning':
+      return 'Building a plan'
+    case 'executing':
+      return toolName ? `Executing with ${toolName}` : 'Executing steps'
+    case 'running_tool':
+      return toolName ? `Running ${toolName}` : 'Running tools'
+    case 'retrying_tool':
+      return toolName ? `Retrying ${toolName}` : 'Retrying step'
+    case 'verifying':
+      return 'Checking the result'
+    case 'waiting_approval':
+      return toolName ? `Waiting for approval: ${toolName}` : 'Waiting for approval'
+    case 'done':
+      return 'Completed'
+    default:
+      return null
+  }
+}
+
+function toProgressState(status: string | null, data?: Record<string, unknown>): MessageProgressState | undefined {
+  if (!status) return undefined
+  const percent = deriveProgressPercent(status, data)
+  const stage = typeof data?.stage === 'string' && data.stage.trim() ? data.stage.trim() : status
+  const label =
+    typeof data?.label === 'string' && data.label.trim()
+      ? data.label.trim()
+      : formatProgressLabel(status, data)
+  const currentStep = Number.isFinite(Number(data?.currentStep)) ? Number(data?.currentStep) : undefined
+  const totalSteps = Number.isFinite(Number(data?.totalSteps)) ? Number(data?.totalSteps) : undefined
+  const etaSeconds = Number.isFinite(Number(data?.etaSeconds)) ? Number(data?.etaSeconds) : undefined
+  return {
+    stage,
+    ...(label ? { label } : {}),
+    ...(currentStep !== undefined ? { currentStep } : {}),
+    ...(totalSteps !== undefined ? { totalSteps } : {}),
+    ...(percent !== null ? { percent } : {}),
+    ...(etaSeconds !== undefined ? { etaSeconds } : {}),
+  }
+}
+
+function normalizeArtifacts(value: unknown): MessageArtifact[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null
+      const row = entry as Record<string, unknown>
+      const name = typeof row.name === 'string' ? row.name.trim() : ''
+      const type = typeof row.type === 'string' ? row.type.trim() : ''
+      if (!name || !['image', 'video', 'audio', 'file', 'link'].includes(type)) return null
+      return {
+        name,
+        type: type as MessageArtifact['type'],
+        ...(typeof row.url === 'string' && row.url.trim() ? { url: row.url.trim() } : {}),
+        ...(typeof row.mimeType === 'string' && row.mimeType.trim() ? { mimeType: row.mimeType.trim() } : {}),
+        ...(Number.isFinite(Number(row.sizeBytes)) ? { sizeBytes: Number(row.sizeBytes) } : {}),
+        ...(typeof row.previewUrl === 'string' && row.previewUrl.trim() ? { previewUrl: row.previewUrl.trim() } : {}),
+        ...(typeof row.summary === 'string' && row.summary.trim() ? { summary: row.summary.trim() } : {}),
+      } satisfies MessageArtifact
+    })
+    .filter((item): item is MessageArtifact => Boolean(item))
+}
+
+function normalizeMessageMeta(metadata: Message['metadata'] | undefined): MessageMeta | undefined {
+  if (!metadata) return undefined
+  const parsed = typeof metadata === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(metadata) as MessageMeta
+        } catch {
+          return undefined
+        }
+      })()
+    : metadata
+  if (!parsed || typeof parsed !== 'object') return undefined
+  return parsed
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -158,6 +280,14 @@ function formatStreamingStatus(status: string | null, data?: Record<string, unkn
     default:
       return ''
   }
+}
+
+function mergeMessageMeta(base: Message['metadata'] | undefined, patch: Partial<MessageMeta>): string {
+  const next: MessageMeta = {
+    ...(normalizeMessageMeta(base) ?? {}),
+    ...patch,
+  }
+  return JSON.stringify(next)
 }
 
 function deriveConversationTitle(value: string) {
@@ -397,6 +527,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
           if (data.event === 'status') {
             const nextStatus = typeof data.data?.status === 'string' ? data.data.status : null
+            const eventData = data.data && typeof data.data === 'object'
+              ? (data.data as Record<string, unknown>)
+              : undefined
             const learnedSkillId = typeof data.data?.learnedSkill === 'string'
               ? data.data.learnedSkill.trim()
               : ''
@@ -404,17 +537,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ? data.data.learnedIntent.trim()
               : ''
             if (nextStatus) {
-              const statusText = formatStreamingStatus(
-                nextStatus,
-                data.data && typeof data.data === 'object'
-                  ? (data.data as Record<string, unknown>)
-                  : undefined,
-              )
+              const statusText = formatStreamingStatus(nextStatus, eventData)
+              const progress = toProgressState(nextStatus, eventData)
+              const artifacts = normalizeArtifacts(eventData?.artifacts)
               set((s) => ({
                 runStatus: nextStatus,
                 messages: s.messages.map((m) =>
                   m.id === agentTempId && !sawAgentMessage && m.status === 'streaming'
-                    ? { ...m, content: statusText || m.content }
+                    ? {
+                        ...m,
+                        content: statusText || m.content,
+                        metadata: mergeMessageMeta(m.metadata, {
+                          ...(progress ? { progress } : {}),
+                          ...(artifacts.length > 0 ? { artifacts } : {}),
+                          ...(statusText ? { statusLabel: statusText } : {}),
+                        }),
+                      }
                     : m,
                 ),
               }))
@@ -432,12 +570,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
           if (data.event === 'message' && data.data?.role === 'agent') {
             sawAgentMessage = true
+            const artifacts = normalizeArtifacts(data.data?.metadata && typeof data.data.metadata === 'object'
+              ? (data.data.metadata as Record<string, unknown>).artifacts
+              : undefined)
             set((s) => ({
               isStreaming: false,
               runStatus: 'done',
               lastError: null,
               messages: s.messages.map((m) =>
-                m.id === agentTempId ? { ...m, content: data.data.content, status: 'done' } : m,
+                m.id === agentTempId
+                  ? {
+                      ...m,
+                      content: data.data.content,
+                      status: 'done',
+                      metadata: mergeMessageMeta(m.metadata, {
+                        progress: { stage: 'done', label: 'Completed', percent: 100 },
+                        ...(artifacts.length > 0 ? { artifacts } : {}),
+                      }),
+                    }
+                  : m,
               ),
             }))
           }
@@ -448,7 +599,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               set((s) => ({
                 messages: s.messages.map((m) =>
                   m.id === agentTempId
-                    ? { ...m, metadata: { ...m.metadata, tokens } }
+                    ? { ...m, metadata: mergeMessageMeta(m.metadata, { tokens }) }
                     : m,
                 ),
               }))
