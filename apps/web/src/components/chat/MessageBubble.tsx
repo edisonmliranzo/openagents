@@ -138,12 +138,21 @@ function ArtifactGallery({ artifacts }: { artifacts: MessageArtifact[] }) {
             >
               {artifact.type === 'image' && preview && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={preview} alt={artifact.name} className="h-40 w-full object-cover" />
+                <div className="bg-black/5 dark:bg-black/20">
+                  <img src={preview} alt={artifact.name} className="max-h-[22rem] w-full object-contain" />
+                </div>
               )}
               {artifact.type === 'video' && preview && (
-                <video controls className="h-40 w-full bg-black object-contain">
+                <video controls preload="metadata" className="max-h-[22rem] w-full bg-black object-contain">
                   <source src={preview} type={artifact.mimeType || 'video/mp4'} />
                 </video>
+              )}
+              {artifact.type === 'audio' && preview && (
+                <div className="border-b border-[#e4e7ec] bg-[#fcfcfd] px-3 py-3 dark:border-[#2d3347] dark:bg-[#141824]">
+                  <audio controls preload="metadata" className="w-full">
+                    <source src={preview} type={artifact.mimeType || 'audio/mpeg'} />
+                  </audio>
+                </div>
               )}
               <div className="p-3">
                 <div className="flex items-start gap-2">
