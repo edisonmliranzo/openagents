@@ -33,8 +33,47 @@ OpenAgents is a **self-hosted AI assistant platform** for complex, long-horizon 
 
 ## Installation
 
-> No coding experience needed. Docker handles everything.  
-> First launch takes **5–10 minutes** to build.
+> Recommended path: use the guided setup for local development, and Docker Compose for production/self-hosting.  
+> First launch can take **5–10 minutes** depending on image builds and model setup.
+
+### Quick install checklist
+
+Before starting, make sure you have:
+
+- **Node.js 20+**
+- **pnpm 9** (or Corepack enabled)
+- **Docker Desktop / Docker Engine**
+- **Git**
+
+For a fully functional install, OpenAgents also needs:
+
+- **PostgreSQL** and **Redis** running locally or via Docker
+- At least one model provider configured after first login:
+  - **Ollama** for local/self-hosted usage, or
+  - **OpenAI / Anthropic / Gemini / other supported API key**
+
+### Recommended local setup
+
+From the repo root, run:
+
+```bash
+pnpm setup
+pnpm dev
+```
+
+What `pnpm setup` does:
+
+- installs dependencies
+- creates missing `.env` files from examples
+- starts local Postgres + Redis with Docker when available
+- runs Prisma generate + migrations
+
+After startup:
+
+- Web: `http://localhost:3000/login`
+- API health: `http://localhost:3001/api/v1/health`
+
+Then log in and go to **Settings → Config** to add your provider key or connect Ollama.
 
 ---
 
@@ -58,23 +97,35 @@ Press `Win + X` → click **Terminal** or **PowerShell**, then paste:
 
 ```powershell
 git clone https://github.com/edisonmliranzo/openagents.git
-cd openagents/infra/docker
-copy .env.prod.example .env.prod
+cd openagents
+pnpm setup
 ```
 
 **Step 4 — Start OpenAgents**
 
 ```powershell
-docker compose -f docker-compose.prod.yml up --build -d
+pnpm dev
 ```
 
 **Step 5 — Open your browser**
 
 ```
-http://localhost:4300
+http://localhost:3000/login
 ```
 
-Go to **Settings → AI Providers** to add your API key.
+**Step 6 — Make it fully functional**
+
+- Go to **Settings → Config**
+- Add an API key **or** run Ollama locally and set its URL
+- Confirm API health at `http://localhost:3001/api/v1/health`
+
+If you want the production Docker stack instead of local dev, use:
+
+```powershell
+cd infra/docker
+copy .env.prod.example .env.prod
+docker compose -f docker-compose.prod.yml up --build -d
+```
 
 ---
 
@@ -92,23 +143,31 @@ Press `Cmd + Space`, type **Terminal**, press Enter, then paste:
 
 ```bash
 git clone https://github.com/edisonmliranzo/openagents.git
-cd openagents/infra/docker
-cp .env.prod.example .env.prod
+cd openagents
+pnpm setup
 ```
 
 **Step 3 — Start OpenAgents**
 
 ```bash
-docker compose -f docker-compose.prod.yml up --build -d
+pnpm dev
 ```
 
 **Step 4 — Open your browser**
 
 ```
-http://localhost:4300
+http://localhost:3000/login
 ```
 
-Go to **Settings → AI Providers** to add your API key.
+Then go to **Settings → Config** to add an API key or connect Ollama.
+
+For the production Docker stack instead:
+
+```bash
+cd infra/docker
+cp .env.prod.example .env.prod
+docker compose -f docker-compose.prod.yml up --build -d
+```
 
 ---
 
@@ -122,30 +181,40 @@ curl -fsSL https://get.docker.com | sh && sudo systemctl enable --now docker
 
 Verify: `docker --version`
 
-**Step 2 — Clone the repository**
+**Step 2 — Install Node.js 20 + pnpm**
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+corepack enable
+corepack prepare pnpm@9.0.0 --activate
+```
+
+**Step 3 — Clone the repository**
 
 ```bash
 git clone https://github.com/edisonmliranzo/openagents.git
-cd openagents/infra/docker
+cd openagents
 ```
 
-**Step 3 — Launch OpenAgents**
+**Step 4 — Run guided setup**
 
 ```bash
-docker compose -f docker-compose.prod.yml up --build -d
+pnpm setup
+pnpm dev
 ```
 
-Go to **Settings → AI Providers** to add your API key.
+Go to **Settings → Config** to add your API key or connect Ollama.
 
 **Open your browser:**
 
 ```
-http://YOUR_SERVER_IP:4300
+http://YOUR_SERVER_IP:3000/login
 ```
 
 ---
 
-### 🟢 Linux / VPS
+### 🟢 Linux / VPS / Production Docker
 
 **Step 1 — Install Docker**
 
@@ -161,18 +230,64 @@ cd openagents/infra/docker
 cp .env.prod.example .env.prod
 ```
 
-**Step 3 — Launch**
+**Step 3 — Edit `.env.prod` before launch**
+
+At minimum, change these values:
+
+- `JWT_SECRET`
+- `JWT_REFRESH_SECRET`
+- `ENCRYPTION_KEY`
+- `POSTGRES_PASSWORD`
+- one provider setting such as `OPENAI_API_KEY` or local `OLLAMA_BASE_URL`
+- `FRONTEND_URL` / `NEXT_PUBLIC_API_URL` if not using localhost
+
+**Step 4 — Launch**
 
 ```bash
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-Go to **Settings → AI Providers** to add your API key.
+**Step 5 — Verify the installation**
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+curl http://localhost:3001/api/v1/health
+curl -I http://localhost:3000/login
+```
+
+If Ollama is used from the host machine, make sure it is actually running and reachable from Docker via `host.docker.internal`.
 
 **Open your browser:**
 
 ```
-http://YOUR_SERVER_IP:4300
+http://YOUR_SERVER_IP:3000/login
+```
+
+### Post-install: fully functional checklist
+
+Your installation is not fully usable until these are true:
+
+- [ ] Web loads at `/login`
+- [ ] API health endpoint returns success
+- [ ] Database migrations completed
+- [ ] Redis is reachable
+- [ ] You can log in / register
+- [ ] At least one LLM provider is configured
+- [ ] Optional media features have keys set if needed:
+  - `OPENAI_API_KEY` for DALL-E / TTS
+  - `STABILITY_API_KEY` for Stability image generation
+  - `ELEVENLABS_API_KEY` for ElevenLabs audio
+
+### Troubleshooting
+
+- If `pnpm setup` fails, confirm **Node.js 20+** and **pnpm 9**.
+- If chat opens but the agent never answers, configure a provider in **Settings → Config**.
+- If Ollama is selected, verify the Ollama server is running and the base URL is correct.
+- If Docker production healthchecks fail, inspect:
+
+```bash
+cd infra/docker
+docker compose -f docker-compose.prod.yml logs --tail=200 api web worker
 ```
 
 ---
