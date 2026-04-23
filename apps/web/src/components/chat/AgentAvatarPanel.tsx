@@ -2,7 +2,7 @@
 
 import clsx from 'clsx'
 import type { CSSProperties } from 'react'
-import type { Message } from '@openagents/shared'
+import type { Message, MessageMeta } from '@openagents/shared'
 import { Activity, Sparkles } from 'lucide-react'
 
 interface AgentAvatarPanelProps {
@@ -24,6 +24,18 @@ function formatStatusLabel(status: string | null | undefined) {
   const normalized = status.replace(/[_-]+/g, ' ').trim()
   if (!normalized) return null
   return normalized
+}
+
+function parseMetadata(metadata: Message['metadata'] | undefined): MessageMeta | null {
+  if (!metadata) return null
+  if (typeof metadata === 'string') {
+    try {
+      return JSON.parse(metadata) as MessageMeta
+    } catch {
+      return null
+    }
+  }
+  return metadata
 }
 
 const ORB_RIBBONS = [
@@ -55,6 +67,9 @@ export function AgentAvatarPanel({
   const latestAgentMessage =
     [...messages].reverse().find((message) => message.role === 'agent' && message.content.trim())
       ?.content ?? ''
+  const latestAgentMeta = parseMetadata(
+    [...messages].reverse().find((message) => message.role === 'agent' && message.content.trim())?.metadata,
+  )
   const statusLabel = !gatewayConnected
     ? 'offline'
     : isStreaming
@@ -201,6 +216,23 @@ export function AgentAvatarPanel({
           <p className="mt-2 text-sm text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
             {modeCopy}
           </p>
+          {latestAgentMeta?.progress?.label && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] dark:text-[var(--muted)]">
+                <span>Progress</span>
+                <span>{latestAgentMeta.progress.percent ?? 0}%</span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface)]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-rose-400 to-orange-400 transition-all duration-500"
+                  style={{ width: `${latestAgentMeta.progress.percent ?? 0}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
+                {latestAgentMeta.progress.label}
+              </p>
+            </div>
+          )}
           {latestAgentMessage && (
             <p className="mt-2 text-xs text-[var(--muted)] dark:text-[var(--muted)]">
               Latest response: {compactText(latestAgentMessage, 140)}

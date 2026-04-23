@@ -3,8 +3,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { sdk } from '@/stores/auth'
-import type { DataLineageRecord, Message } from '@openagents/shared'
-import { Brain, ChevronDown, ChevronRight, Copy } from 'lucide-react'
+import type { DataLineageRecord, Message, MessageArtifact, MessageMeta } from '@openagents/shared'
+import { Brain, ChevronDown, ChevronRight, Copy, FileText, Film, ImageIcon, Link2, LoaderCircle, Music4 } from 'lucide-react'
 import { BranchButton } from '@/components/branch-button'
 import { GenerativeUIWidget } from './GenerativeUIWidget'
 import { BrowserPreview } from './BrowserPreview'
@@ -44,6 +44,138 @@ function ThinkingBlock({ content }: { content: string }) {
 
 function formatClock(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function parseMetadata(metadata: Message['metadata'] | undefined): MessageMeta | null {
+  if (!metadata) return null
+  if (typeof metadata === 'string') {
+    try {
+      return JSON.parse(metadata) as MessageMeta
+    } catch {
+      return null
+    }
+  }
+  return metadata
+}
+
+function artifactIcon(type: MessageArtifact['type']) {
+  switch (type) {
+    case 'image':
+      return <ImageIcon size={13} />
+    case 'video':
+      return <Film size={13} />
+    case 'audio':
+      return <Music4 size={13} />
+    case 'link':
+      return <Link2 size={13} />
+    default:
+      return <FileText size={13} />
+  }
+}
+
+function formatBytes(sizeBytes?: number) {
+  if (!Number.isFinite(sizeBytes)) return null
+  const value = Number(sizeBytes)
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`
+  return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+function ProgressCard({ metadata, isStreaming }: { metadata: MessageMeta | null; isStreaming: boolean }) {
+  const progress = metadata?.progress
+  if (!progress && !isStreaming) return null
+  const percent = typeof progress?.percent === 'number' ? Math.max(0, Math.min(100, progress.percent)) : undefined
+  const label = progress?.label || (isStreaming ? 'OpenAgents is working…' : null)
+  const stage = progress?.stage?.replace(/[_-]+/g, ' ') ?? null
+
+  return (
+    <div className="mb-3 rounded-2xl border border-[#e4e7ec] bg-[#f9fafb] px-3 py-3 dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[11px] font-semibold text-[#475467] dark:text-[#c9d1e0]">
+          <LoaderCircle size={13} className={isStreaming ? 'animate-spin' : ''} />
+          <span>{label ?? 'Working'}</span>
+        </div>
+        {percent !== undefined && (
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#98a2b3]">
+            {percent}%
+          </span>
+        )}
+      </div>
+      {percent !== undefined && (
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#eaecf0] dark:bg-[#232837]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[#ef4444] to-[#f97316] transition-all duration-500"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      )}
+      {(stage || progress?.currentStep || progress?.totalSteps) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[#98a2b3] dark:text-[#8892a4]">
+          {stage && <span className="rounded-full bg-white px-2 py-0.5 dark:bg-[#141824]">{stage}</span>}
+          {progress?.currentStep !== undefined && progress?.totalSteps !== undefined && (
+            <span>step {progress.currentStep} of {progress.totalSteps}</span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ArtifactGallery({ artifacts }: { artifacts: MessageArtifact[] }) {
+  if (artifacts.length === 0) return null
+  return (
+    <div className="mb-3 space-y-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#98a2b3]">Outputs</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {artifacts.map((artifact, index) => {
+          const preview = artifact.previewUrl || artifact.url || null
+          const sizeLabel = formatBytes(artifact.sizeBytes)
+          return (
+            <article
+              key={`${artifact.name}-${artifact.type}-${index}`}
+              className="overflow-hidden rounded-2xl border border-[#e4e7ec] bg-[#f9fafb] dark:border-[#2d3347] dark:bg-[#1a1f2e]"
+            >
+              {artifact.type === 'image' && preview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview} alt={artifact.name} className="h-40 w-full object-cover" />
+              )}
+              {artifact.type === 'video' && preview && (
+                <video controls className="h-40 w-full bg-black object-contain">
+                  <source src={preview} type={artifact.mimeType || 'video/mp4'} />
+                </video>
+              )}
+              <div className="p-3">
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5 text-[#667085] dark:text-[#98a2b3]">{artifactIcon(artifact.type)}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[#101828] dark:text-white">{artifact.name}</p>
+                    <p className="mt-1 text-[11px] text-[#667085] dark:text-[#98a2b3]">
+                      {artifact.type}{sizeLabel ? ` • ${sizeLabel}` : ''}
+                    </p>
+                    {artifact.summary && (
+                      <p className="mt-1 text-[11px] text-[#667085] dark:text-[#98a2b3]">{artifact.summary}</p>
+                    )}
+                  </div>
+                </div>
+                {artifact.url && (
+                  <a
+                    href={artifact.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex items-center gap-1 rounded-full border border-[#e4e7ec] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#344054] transition hover:bg-[#f2f4f7] dark:border-[#2d3347] dark:bg-[#141824] dark:text-[#c9d1e0]"
+                  >
+                    <Link2 size={11} />
+                    Open file
+                  </a>
+                )}
+              </div>
+            </article>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function roleLabel(role: Message['role']) {
@@ -103,6 +235,8 @@ export function MessageBubble({
     [message.content],
   )
   const codeBlocks = useMemo(() => extractCodeBlocks(visible).map((b) => b.content), [visible])
+  const parsedMetadata = useMemo(() => parseMetadata(message.metadata), [message.metadata])
+  const artifacts = parsedMetadata?.artifacts ?? []
   const [copiedCodeIndex, setCopiedCodeIndex] = useState<number | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
   const [lineage, setLineage] = useState<DataLineageRecord | null>(null)
@@ -195,6 +329,10 @@ export function MessageBubble({
         {thinking.map((block, idx) => (
           <ThinkingBlock key={`thinking-${idx}`} content={block} />
         ))}
+
+        <ProgressCard metadata={parsedMetadata} isStreaming={message.status === 'streaming'} />
+
+        <ArtifactGallery artifacts={artifacts} />
 
         <div className="rounded-[22px] border border-[#e4e7ec] bg-white px-4 py-4 text-[14px] leading-relaxed text-[#101828] shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-[#2d3347] dark:bg-[#141824] dark:text-white">
           {visible ? (

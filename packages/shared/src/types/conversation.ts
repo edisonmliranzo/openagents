@@ -1,6 +1,34 @@
 export type MessageRole = 'user' | 'agent' | 'tool' | 'system'
 export type MessageStatus = 'pending' | 'streaming' | 'done' | 'error'
 
+export interface MessageArtifact {
+  name: string
+  type: 'image' | 'video' | 'audio' | 'file' | 'link'
+  url?: string
+  mimeType?: string
+  sizeBytes?: number
+  previewUrl?: string
+  summary?: string
+}
+
+export interface MessageProgressState {
+  stage?: string
+  label?: string
+  currentStep?: number
+  totalSteps?: number
+  percent?: number
+  etaSeconds?: number
+}
+
+export interface MessageMeta {
+  tokens?: Record<string, unknown>
+  thinking?: string[]
+  progress?: MessageProgressState
+  artifacts?: MessageArtifact[]
+  statusLabel?: string
+  [key: string]: unknown
+}
+
 export interface Message {
   id: string
   conversationId: string
@@ -9,7 +37,7 @@ export interface Message {
   status: MessageStatus
   toolCall?: ToolCall
   toolResult?: ToolResult
-  metadata?: Record<string, unknown>
+  metadata?: MessageMeta | string
   createdAt: string
 }
 
