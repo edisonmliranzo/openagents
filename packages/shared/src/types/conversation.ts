@@ -20,10 +20,27 @@ export interface MessageProgressState {
   etaSeconds?: number
 }
 
+export interface MessageWorkflowStep {
+  id: string
+  label: string
+  status: 'pending' | 'active' | 'completed' | 'failed'
+  detail?: string
+  kind?: 'prompt' | 'image' | 'video' | 'audio' | 'artifact' | 'review' | 'publish'
+}
+
+export interface MessageWorkflowState {
+  kind: 'image' | 'video' | 'audio' | 'artifact' | 'generic'
+  title?: string
+  status: 'pending' | 'active' | 'completed' | 'failed'
+  currentStepId?: string
+  steps: MessageWorkflowStep[]
+}
+
 export interface MessageMeta {
   tokens?: Record<string, unknown>
   thinking?: string[]
   progress?: MessageProgressState
+  workflow?: MessageWorkflowState
   artifacts?: MessageArtifact[]
   statusLabel?: string
   [key: string]: unknown

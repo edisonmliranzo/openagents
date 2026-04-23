@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { sdk } from './auth'
-import type { Conversation, Message, Approval, HumanHandoffTicket, MessageArtifact, MessageMeta, MessageProgressState } from '@openagents/shared'
+import type { Conversation, Message, Approval, HumanHandoffTicket, MessageArtifact, MessageMeta, MessageProgressState, MessageWorkflowState, MessageWorkflowStep } from '@openagents/shared'
 
 type GatewayStatus = 'connecting' | 'connected' | 'disconnected'
 
@@ -121,6 +121,79 @@ function normalizeArtifacts(value: unknown): MessageArtifact[] {
       } satisfies MessageArtifact
     })
     .filter((item): item is MessageArtifact => Boolean(item))
+}
+
+function detectWorkflowKindFromArtifacts(artifacts: MessageArtifact[]): MessageWorkflowState['kind'] {
+  if (artifacts.some((artifact) => artifact.type === 'video')) return 'video'
+  if (artifacts.some((artifact) => artifact.type === 'image')) return 'image'
+  if (artifacts.some((artifact) => artifact.type === 'audio')) return 'audio'
+  if (artifacts.some((artifact) => artifact.type === 'file')) return 'artifact'
+  return 'generic'
+}
+
+function buildDefaultWorkflowSteps(kind: MessageWorkflowState['kind'], status: string | null, data?: Record<string, unknown>): MessageWorkflowStep[] {
+  const labels =
+    kind === 'video'
+      ? ['Prompt accepted', 'Storyboard', 'Render video', 'Review output']
+      : kind === 'image'
+        ? ['Prompt accepted', 'Compose image', 'Render image', 'Review output']
+        : kind === 'audio'
+          ? ['Prompt accepted', 'Generate audio', 'Finalize output']
+          : ['Prompt accepted', 'Generate output', 'Review output']
+
+  const activeIndex =
+    status === 'thinking' ? 0
+      : status === 'planning' ? 1
+      : status === 'executing' || status === 'running_tool' || status === 'retrying_tool' ? Math.min(2, labels.length - 1)
+      : status === 'verifying' ? labels.length - 1
+      : status === 'done' ? labels.length
+      : 0
+
+  return labels.map((label, index) => ({
+    id: `${kind}-step-${index + 1}`,
+    label,
+    status:
+      status === 'error'
+        ? index === Math.max(0, activeIndex - 1)
+          ? 'failed'
+          : index < Math.max(0, activeIndex - 1)
+            ? 'completed'
+            : 'pending'
+        : activeIndex >= labels.length
+          ? 'completed'
+          : index < activeIndex
+            ? 'completed'
+            : index === activeIndex
+              ? 'active'
+              : 'pending',
+    kind,
+    ...(typeof data?.tool === 'string' && index === activeIndex ? { detail: `tool: ${data.tool}` } : {}),
+  }))
+}
+
+function toWorkflowState(status: string | null, data?: Record<string, unknown>, artifacts: MessageArtifact[] = []): MessageWorkflowState | undefined {
+  const workflowKindRaw = typeof data?.workflowKind === 'string' ? data.workflowKind.trim().toLowerCase() : ''
+  const title = typeof data?.workflowTitle === 'string' && data.workflowTitle.trim() ? data.workflowTitle.trim() : undefined
+  const kind = (['image', 'video', 'audio', 'artifact', 'generic'].includes(workflowKindRaw)
+    ? workflowKindRaw
+    : detectWorkflowKindFromArtifacts(artifacts)) as MessageWorkflowState['kind']
+
+  if (kind === 'generic' && artifacts.length === 0 && !title && !status) return undefined
+
+  const steps = buildDefaultWorkflowSteps(kind, status, data)
+  const currentStep = steps.find((step) => step.status === 'active')
+  const normalizedStatus: MessageWorkflowState['status'] =
+    status === 'done' ? 'completed'
+      : status === 'error' ? 'failed'
+      : 'active'
+
+  return {
+    kind,
+    ...(title ? { title } : {}),
+    status: normalizedStatus,
+    ...(currentStep ? { currentStepId: currentStep.id } : {}),
+    steps,
+  }
 }
 
 function normalizeMessageMeta(metadata: Message['metadata'] | undefined): MessageMeta | undefined {
@@ -540,6 +613,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               const statusText = formatStreamingStatus(nextStatus, eventData)
               const progress = toProgressState(nextStatus, eventData)
               const artifacts = normalizeArtifacts(eventData?.artifacts)
+              const workflow = toWorkflowState(nextStatus, eventData, artifacts)
               set((s) => ({
                 runStatus: nextStatus,
                 messages: s.messages.map((m) =>
@@ -549,6 +623,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                         content: statusText || m.content,
                         metadata: mergeMessageMeta(m.metadata, {
                           ...(progress ? { progress } : {}),
+                          ...(workflow ? { workflow } : {}),
                           ...(artifacts.length > 0 ? { artifacts } : {}),
                           ...(statusText ? { statusLabel: statusText } : {}),
                         }),
@@ -573,6 +648,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const artifacts = normalizeArtifacts(data.data?.metadata && typeof data.data.metadata === 'object'
               ? (data.data.metadata as Record<string, unknown>).artifacts
               : undefined)
+            const workflow = toWorkflowState('done', data.data?.metadata && typeof data.data.metadata === 'object'
+              ? (data.data.metadata as Record<string, unknown>)
+              : undefined, artifacts)
             set((s) => ({
               isStreaming: false,
               runStatus: 'done',
@@ -585,6 +663,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       status: 'done',
                       metadata: mergeMessageMeta(m.metadata, {
                         progress: { stage: 'done', label: 'Completed', percent: 100 },
+                        ...(workflow ? { workflow } : {}),
                         ...(artifacts.length > 0 ? { artifacts } : {}),
                       }),
                     }

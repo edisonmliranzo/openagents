@@ -3,8 +3,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { sdk } from '@/stores/auth'
-import type { DataLineageRecord, Message, MessageArtifact, MessageMeta } from '@openagents/shared'
-import { Brain, ChevronDown, ChevronRight, Copy, FileText, Film, ImageIcon, Link2, LoaderCircle, Music4 } from 'lucide-react'
+import type { DataLineageRecord, Message, MessageArtifact, MessageMeta, MessageWorkflowStep } from '@openagents/shared'
+import { Brain, CheckCircle2, ChevronDown, ChevronRight, Circle, Copy, FileText, Film, ImageIcon, Link2, LoaderCircle, Music4, PlaySquare, XCircle } from 'lucide-react'
 import { BranchButton } from '@/components/branch-button'
 import { GenerativeUIWidget } from './GenerativeUIWidget'
 import { BrowserPreview } from './BrowserPreview'
@@ -187,6 +187,52 @@ function ArtifactGallery({ artifacts }: { artifacts: MessageArtifact[] }) {
   )
 }
 
+function workflowStepIcon(step: MessageWorkflowStep) {
+  if (step.status === 'completed') return <CheckCircle2 size={14} className="text-emerald-500" />
+  if (step.status === 'failed') return <XCircle size={14} className="text-rose-500" />
+  if (step.status === 'active') return <LoaderCircle size={14} className="animate-spin text-orange-500" />
+  if (step.kind === 'video') return <PlaySquare size={14} className="text-slate-400" />
+  return <Circle size={14} className="text-slate-300" />
+}
+
+function WorkflowCard({ metadata }: { metadata: MessageMeta | null }) {
+  const workflow = metadata?.workflow
+  if (!workflow || workflow.steps.length === 0) return null
+
+  return (
+    <div className="mb-3 rounded-2xl border border-[#e4e7ec] bg-[#f9fafb] px-3 py-3 dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#98a2b3]">Workflow</p>
+          <p className="mt-1 text-sm font-semibold text-[#101828] dark:text-white">
+            {workflow.title || `${workflow.kind} generation workflow`}
+          </p>
+        </div>
+        <span className="rounded-full border border-[#e4e7ec] bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#667085] dark:border-[#2d3347] dark:bg-[#141824] dark:text-[#c9d1e0]">
+          {workflow.status}
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {workflow.steps.map((step) => (
+          <div
+            key={step.id}
+            className="flex items-start gap-2 rounded-xl border border-[#e4e7ec] bg-white px-3 py-2 dark:border-[#2d3347] dark:bg-[#141824]"
+          >
+            <span className="mt-0.5">{workflowStepIcon(step)}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-[#101828] dark:text-white">{step.label}</p>
+              {step.detail && (
+                <p className="mt-0.5 text-[11px] text-[#667085] dark:text-[#98a2b3]">{step.detail}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function roleLabel(role: Message['role']) {
   if (role === 'tool') return 'Tool'
   if (role === 'system') return 'System'
@@ -340,6 +386,8 @@ export function MessageBubble({
         ))}
 
         <ProgressCard metadata={parsedMetadata} isStreaming={message.status === 'streaming'} />
+
+        <WorkflowCard metadata={parsedMetadata} />
 
         <ArtifactGallery artifacts={artifacts} />
 
