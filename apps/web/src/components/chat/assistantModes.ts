@@ -100,16 +100,8 @@ export function getAssistantModeDefinition(mode: AssistantMode) {
 export function buildAssistantModePrompt(mode: AssistantMode, content: string) {
   const trimmed = content.trim()
   if (!trimmed) return ''
-  if (mode === 'assist') return trimmed
-
-  const definition = getAssistantModeDefinition(mode)
-  const rules = definition.executionRules.map((rule) => `- ${rule}`).join('\n')
-
-  return [
-    `Assistant operating mode: ${definition.label}`,
-    'Follow these instructions while answering the user request:',
-    rules,
-    'User request:',
-    trimmed,
-  ].join('\n\n')
+  // For non-assist modes, mode instructions are already injected by the backend
+  // via the modeAppendix in agent.service.ts. Do not include visible mode labels
+  // in the user content that will be displayed in the chat history.
+  return trimmed
 }
