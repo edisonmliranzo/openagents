@@ -411,7 +411,7 @@ interface ChatState {
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
   createConversation: () => Promise<string>
-  sendMessage: (content: string, options?: { displayContent?: string }) => Promise<void>
+  sendMessage: (content: string, options?: { displayContent?: string; mode?: string }) => Promise<void>
   approveAction: (approvalId: string) => Promise<void>
   denyAction: (approvalId: string) => Promise<void>
   refreshActiveHandoff: () => Promise<void>

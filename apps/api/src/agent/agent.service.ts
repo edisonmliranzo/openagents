@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+0import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from './llm.service'
 import { ToolsService } from '../tools/tools.service'
@@ -26,6 +26,7 @@ export interface AgentRunParams {
   userMessage: string
   emit: (event: string, data: unknown) => void
   systemPromptAppendix?: string
+  mode?: string
 }
 
 const DEFAULT_SYSTEM_PROMPT = `${OPENAGENTS_SUPPORT_IDENTITY_PROMPT}

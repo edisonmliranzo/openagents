@@ -17,10 +17,11 @@ export function createConversationsApi(client: OpenAgentsClient) {
       conversationId: string,
       content: string,
       onChunk: (chunk: string) => void,
+      options?: { mode?: string },
     ) =>
       client.stream(
         `/api/v1/conversations/${conversationId}/chat`,
-        { content },
+        { content, ...(options?.mode ? { mode: options.mode } : {}) },
         onChunk,
       ),
 
