@@ -830,7 +830,7 @@ export function ChatWindow({
     const fileNames = files.length > 0 ? ` [${files.map((f) => f.name).join(', ')}]` : ''
     const displayWithFiles = displayContent ? `${displayContent}${fileNames}` : fileNames.trim()
 
-    await sendMessage(content, { displayContent: displayWithFiles || displayContent })
+    await sendMessage(content, { displayContent: displayWithFiles || displayContent, mode: assistantMode })
   }
 
   async function handleSend() {

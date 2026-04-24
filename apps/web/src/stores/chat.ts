@@ -355,12 +355,12 @@ function formatStreamingStatus(status: string | null, data?: Record<string, unkn
   }
 }
 
-function mergeMessageMeta(base: Message['metadata'] | undefined, patch: Partial<MessageMeta>): string {
+function mergeMessageMeta(base: Message['metadata'] | undefined, patch: Partial<MessageMeta>): MessageMeta {
   const next: MessageMeta = {
     ...(normalizeMessageMeta(base) ?? {}),
     ...patch,
   }
-  return JSON.stringify(next)
+  return next
 }
 
 function deriveConversationTitle(value: string) {
@@ -575,8 +575,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     let sawApprovalRequest = false
 
     try {
-      await sdk.conversations.sendMessage(activeConversationId, content, (chunk) => {
-        try {
+      await sdk.conversations.sendMessage(
+        activeConversationId,
+        content,
+        (chunk) => {
+          try {
           const data = JSON.parse(chunk)
           if (data.event === 'error') {
             const rawMessage =
@@ -736,7 +739,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }))
           }
         } catch {}
-      })
+      },
+      options?.mode ? { mode: options.mode } : undefined)
 
       // Reload messages to get server-side IDs
       const messages = ensureArrayResponse<Message>(
