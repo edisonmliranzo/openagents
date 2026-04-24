@@ -21,6 +21,7 @@ class CreateConversationDto {
 
 class ChatDto {
   @IsString() content: string
+  @IsString() @IsOptional() mode?: string
 }
 
 @ApiTags('conversations')
@@ -93,6 +94,7 @@ export class ConversationsController {
         userId: req.user.id,
         userMessage: dto.content,
         emit,
+        ...(dto.mode ? { systemPromptAppendix: `User-selected mode: ${dto.mode}\nApply this mode's execution rules.` } : {}),
       })
     } catch (err: any) {
       emit('error', { message: err.message })

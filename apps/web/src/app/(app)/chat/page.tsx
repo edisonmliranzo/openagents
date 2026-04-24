@@ -19,7 +19,7 @@ export default function ChatPage() {
   const searchParams = useSearchParams()
   const targetConversationId = searchParams.get('conversation')
   const autoCreatedRef = useRef(false)
-  const [assistantMode, setAssistantMode] = useState<AssistantMode>('assist')
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>('autopilot')
   const {
     conversations,
     conversationsLoaded,
