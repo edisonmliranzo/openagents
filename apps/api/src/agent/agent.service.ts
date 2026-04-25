@@ -237,6 +237,7 @@ export class AgentService {
       status: 'thinking',
       ...(fastAdvisoryMode ? { mode: 'fast_advisory' } : {}),
     })
+    emit('thinking', { step: 'analyzing', message: 'Analyzing your request...' })
 
     try {
       // 3. Load user settings (provider, custom prompt)
@@ -322,6 +323,7 @@ export class AgentService {
       if (manusModeEnabled) {
         emit('status', { status: 'planning' })
       }
+      emit('thinking', { step: 'planning', message: 'Building execution plan...' })
 
       // 7. Call LLM with user's preferred provider + per-user key if configured
       const userLlmKey = await this.users.getRawLlmKey(userId, provider)
