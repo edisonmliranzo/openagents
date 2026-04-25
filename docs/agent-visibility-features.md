@@ -18,6 +18,12 @@ This document tracks the implementation of features that make the agent feel ali
 - Artifact tracking and display
 - Status labels and ETA calculation
 
+### 3. Thinking Chain Events (Done)
+- Backend emits `thinking` events during agent execution
+- Events: `Analyzing your request...`, `Building execution plan...`
+- Frontend can render these as visible "thought trail"
+- `emit('thinking', { step, message })` pattern ready for frontend to consume
+
 ---
 
 ## 🚧 In Progress
