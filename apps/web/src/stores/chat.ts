@@ -422,6 +422,7 @@ interface ChatState {
   escalateToHuman: (reason?: string) => Promise<void>
   clearError: () => void
   appendStreamChunk: (chunk: string) => void
+  saveApiKey: (provider: string, apiKey: string) => Promise<void>
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -903,5 +904,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearError() {
     set({ lastError: null })
+  },
+
+  async saveApiKey(provider: string, apiKey: string) {
+    try {
+      await sdk.users.upsertLlmKey(provider, { apiKey })
+      set({ lastError: null })
+    } catch (err: any) {
+      set({ lastError: err?.message ?? 'Failed to save API key' })
+    }
   },
 }))
