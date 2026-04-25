@@ -149,6 +149,9 @@ function buildDefaultWorkflowSteps(kind: MessageWorkflowState['kind'], status: s
       : status === 'done' ? labels.length
       : 0
 
+  // 'generic' is valid for MessageWorkflowState but not for MessageWorkflowStep — map it to undefined
+  const stepKind: MessageWorkflowStep['kind'] = (kind === 'generic' ? undefined : kind) as MessageWorkflowStep['kind']
+
   return labels.map((label, index) => ({
     id: `${kind}-step-${index + 1}`,
     label,
@@ -166,7 +169,7 @@ function buildDefaultWorkflowSteps(kind: MessageWorkflowState['kind'], status: s
             : index === activeIndex
               ? 'active'
               : 'pending',
-    kind,
+    kind: stepKind,
     ...(typeof data?.tool === 'string' && index === activeIndex ? { detail: `tool: ${data.tool}` } : {}),
   }))
 }
