@@ -70,12 +70,16 @@ export class ConversationsController {
     @Res() res: Response,
   ) {
     res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')  // Tells nginx to never buffer this response
+    res.setHeader('Transfer-Encoding', 'chunked')
     res.flushHeaders()
 
     const emit = (event: string, data: unknown) => {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      // Explicitly flush after every event so nginx / Node deliver tokens immediately
+      if (typeof (res as any).flush === 'function') (res as any).flush()
     }
 
     try {
