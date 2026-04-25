@@ -410,6 +410,7 @@ interface ChatState {
   gatewayStatus: GatewayStatus
   gatewayMessage: string
   lastError: string | null
+  thinkingSteps: Array<{ step: string; message: string; timestamp: number }>
 
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
@@ -438,6 +439,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   gatewayStatus: 'connecting',
   gatewayMessage: 'connecting...',
   lastError: null,
+  thinkingSteps: [],
 
   async loadConversations() {
     set({ conversationsLoading: true })
@@ -602,6 +604,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ),
             }))
             return
+          }
+
+          if (data.event === 'thinking') {
+            const step = typeof data.data?.step === 'string' ? data.data.step : ''
+            const message = typeof data.data?.message === 'string' ? data.data.message : ''
+            if (step && message) {
+              set((s) => ({
+                thinkingSteps: [
+                  ...s.thinkingSteps,
+                  { step, message, timestamp: Date.now() },
+                ],
+              }))
+            }
+            // Also update the agent message content to show thinking progress
+            set((s) => ({
+              messages: s.messages.map((m) =>
+                m.id === agentTempId && m.status === 'streaming'
+                  ? { ...m, content: `🧠 ${message}` }
+                  : m,
+              ),
+            }))
           }
 
           if (data.event === 'status') {

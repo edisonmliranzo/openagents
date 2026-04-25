@@ -23,6 +23,7 @@ export function createConversationsApi(client: OpenAgentsClient) {
       if (options?.mode) {
         body.mode = options.mode
       }
+      // client.stream takes (path, body, onChunk) - no options/signal support
       return client.stream(
         `/api/v1/conversations/${conversationId}/chat`,
         body,
