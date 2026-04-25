@@ -10,13 +10,24 @@ import { GenerativeUIWidget } from './GenerativeUIWidget'
 import { BrowserPreview } from './BrowserPreview'
 import { WarRoomPanel } from './WarRoomPanel'
 
-// Strip <thinking>…</thinking> blocks out of visible content and return them separately.
+// Strip <think>/<thinking> blocks out of visible content and return them separately.
+// Models use both variants — handle both.
 function extractThinkingBlocks(raw: string): { thinking: string[]; visible: string } {
   const thinking: string[] = []
-  const visible = raw.replace(/<thinking>([\s\S]*?)<\/thinking>/gi, (_, block: string) => {
-    thinking.push(block.trim())
-    return ''
-  }).trim()
+  // Match <think>...</think> AND <thinking>...</thinking> (case-insensitive, multiline)
+  const visible = raw
+    .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, (match: string) => {
+      const inner = match.replace(/^<think(?:ing)?>/i, '').replace(/<\/think(?:ing)?>$/i, '')
+      thinking.push(inner.trim())
+      return ''
+    })
+    // Also strip any unclosed <think> block that might be mid-stream
+    .replace(/<think(?:ing)?>[\s\S]*/gi, (match: string) => {
+      const inner = match.replace(/^<think(?:ing)?>/i, '')
+      if (inner.trim()) thinking.push(inner.trim())
+      return ''
+    })
+    .trim()
   return { thinking, visible }
 }
 
