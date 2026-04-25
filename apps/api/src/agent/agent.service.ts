@@ -833,7 +833,12 @@ export class AgentService {
         }
       }
 
-      // 9. Save agent response
+      // 9. Save agent response — strip raw <think>/<thinking> tags before persisting
+      finalResponseContent = finalResponseContent
+        .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '')
+        .replace(/<think(?:ing)?>[\s\S]*/gi, '')  // unclosed tags mid-content
+        .trim()
+
       if (finalResponseContent) {
         const agentMsg = await this.prisma.message.create({
           data: { conversationId, role: 'agent', content: finalResponseContent, status: 'done' },
