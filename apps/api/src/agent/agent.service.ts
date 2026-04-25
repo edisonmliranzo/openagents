@@ -625,28 +625,97 @@ export class AgentService {
             where: { id: run.id },
             data: { status: 'running_tool' },
           })
-          emit('status', { status: 'running_tool', tool: toolCall.name })
-          void this.mission.publish({
-            userId,
-            type: 'tool_call',
-            status: 'started',
-            source: 'agent.run',
-            runId: run.id,
-            conversationId,
-            payload: {
-              toolName: toolCall.name,
-              round: toolRound,
-            },
-          })
+      emit('status', { status: 'running_tool', tool: toolCall.name })
+      void this.mission.publish({
+        userId,
+        type: 'tool_call',
+        status: 'started',
+        source: 'agent.run',
+        runId: run.id,
+        conversationId,
+        payload: {
+          toolName: toolCall.name,
+          round: toolRound,
+        },
+      })
 
-          const toolExecution = await this.executeToolWithRetry({
-            toolName: toolCall.name,
-            toolInput: toolCall.input,
-            userId,
-            maxRetries: toolRetryAttempts,
-            emit,
-          })
-          const result = toolExecution.result
+      let artifacts: Array<{ name: string; type: 'image' | 'video' | 'audio' | 'file'; url: string; mimeType?: string; summary?: string }> = []
+
+      const toolExecution = await this.executeToolWithRetry({
+        toolName: toolCall.name,
+        toolInput: toolCall.input,
+        userId,
+        maxRetries: toolRetryAttempts,
+        emit,
+      })
+
+      const result = toolExecution.result
+
+          // Extract artifacts from tool output (images, audio, video, files)
+          const toolOutput = result.output as Record<string, unknown> | null
+          if (toolOutput) {
+            const toolName = toolCall.name.toLowerCase()
+            
+            // Image generation tools
+            if ((toolName === 'image_generate' || toolName === 'atlascloud_image_generate') && toolOutput.images) {
+              const images = toolOutput.images as Array<{ url?: string; b64_json?: string; model?: string }>
+              for (const img of images) {
+                if (img.url) {
+                  artifacts.push({
+                    name: `generated-image-${Date.now()}.png`,
+                    type: 'image' as const,
+                    url: img.url,
+                    mimeType: 'image/png',
+                    summary: img.model ? `Generated with ${img.model}` : undefined,
+                  })
+                } else if (img.b64_json) {
+                  artifacts.push({
+                    name: `generated-image-${Date.now()}.png`,
+                    type: 'image' as const,
+                    url: `data:image/png;base64,${img.b64_json}`,
+                    mimeType: 'image/png',
+                    summary: img.model ? `Generated with ${img.model}` : undefined,
+                  })
+                }
+              }
+            }
+
+            // Audio generation
+            if (toolName === 'audio_generate' && toolOutput.audioUrl) {
+              artifacts.push({
+                name: `generated-audio-${Date.now()}.mp3`,
+                type: 'audio' as const,
+                url: toolOutput.audioUrl as string,
+                mimeType: 'audio/mpeg',
+                summary: toolOutput.provider ? `Generated with ${toolOutput.provider}` : undefined,
+              })
+            }
+
+            // Video generation
+            if ((toolName === 'video_generate' || toolName === 'create_video') && toolOutput.videoUrl) {
+              artifacts.push({
+                name: `generated-video-${Date.now()}.mp4`,
+                type: 'video' as const,
+                url: toolOutput.videoUrl as string,
+                mimeType: 'video/mp4',
+                summary: toolOutput.model ? `Generated with ${toolOutput.model}` : undefined,
+              })
+            }
+
+            // Generic file output
+            if (toolOutput.fileUrl || toolOutput.downloadUrl) {
+              const fileUrl = (toolOutput.fileUrl || toolOutput.downloadUrl) as string
+              const fileName = (toolOutput.fileName || `generated-file-${Date.now()}`) as string
+              const mimeType = (toolOutput.mimeType || 'application/octet-stream') as string
+              artifacts.push({
+                name: fileName,
+                type: 'file' as const,
+                url: fileUrl,
+                mimeType,
+                summary: toolOutput.description as string | undefined,
+              })
+            }
+          }
           runMetrics.toolRetries += Math.max(0, toolExecution.attempts - 1)
           if (toolExecution.recoveredByRetry) {
             runMetrics.toolRecoveries += 1
