@@ -171,8 +171,8 @@ export class OpenAgentsClient {
   private streamRequest(
     method: 'GET' | 'POST',
     path: string,
+    body: unknown,
     onChunk: (chunk: string) => void,
-    body?: unknown,
     extraHeaders?: Record<string, string>,
     signal?: AbortSignal,
   ): Promise<void> {
@@ -299,7 +299,7 @@ export class OpenAgentsClient {
 
   /** Stream SSE from the agent endpoint */
   stream(path: string, body: unknown, onChunk: (chunk: string) => void, signal?: AbortSignal): Promise<void> {
-    return this.streamRequest('POST', path, onChunk, body, undefined, signal)
+    return this.streamRequest('POST', path, body, onChunk, undefined, signal)
   }
 
   streamGet(
@@ -308,7 +308,7 @@ export class OpenAgentsClient {
     headers?: Record<string, string>,
     signal?: AbortSignal,
   ) {
-    return this.streamRequest('GET', path, onChunk, undefined, headers, signal)
+    return this.streamRequest('GET', path, undefined, onChunk, headers, signal)
   }
 }
 
