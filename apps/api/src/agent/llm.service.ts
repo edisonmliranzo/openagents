@@ -5,7 +5,7 @@ import OpenAI from 'openai'
 import type { LLMProvider } from '@openagents/shared'
 import { LLM_MODELS } from '@openagents/shared'
 
-const SUPPORTED_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity']
+const SUPPORTED_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia']
 
 const PROVIDER_LABELS: Record<LLMProvider, string> = {
   anthropic: 'Anthropic',
@@ -14,6 +14,7 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
   ollama: 'Ollama',
   minimax: 'MiniMax',
   perplexity: 'Perplexity',
+  nvidia: 'NVIDIA NIM',
 }
 
 const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
@@ -22,12 +23,14 @@ const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
   google: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   minimax: ['MINIMAX_API_KEY'],
   perplexity: ['PERPLEXITY_API_KEY'],
+  nvidia: ['NVIDIA_API_KEY'],
 }
 
 const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LLMProvider, string>> = {
   google: 'https://generativelanguage.googleapis.com/v1beta/openai',
   minimax: 'https://api.minimaxi.chat/v1',
   perplexity: 'https://api.perplexity.ai',
+  nvidia: 'https://integrate.api.nvidia.com/v1',
 }
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
 const DEFAULT_OLLAMA_ALLOWED_HOSTS = [
@@ -86,6 +89,7 @@ export class LLMService {
       google: this.readFirstEnv(PROVIDER_ENV_VARS.google),
       minimax: this.readFirstEnv(PROVIDER_ENV_VARS.minimax),
       perplexity: this.readFirstEnv(PROVIDER_ENV_VARS.perplexity),
+      nvidia: this.readFirstEnv(PROVIDER_ENV_VARS.nvidia),
     }
 
     const configured = (config.get<string>('DEFAULT_LLM_PROVIDER') ?? 'anthropic').trim().toLowerCase()

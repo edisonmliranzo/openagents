@@ -34,6 +34,11 @@ export const LLM_MODELS = {
     fast: 'sonar',
     powerful: 'sonar-reasoning-pro',
   },
+  nvidia: {
+    default: 'meta/llama-4-scout-17b-16e-instruct',
+    fast: 'meta/llama-3.3-70b-instruct',
+    powerful: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+  },
 } as const
 
 export const LLM_MODEL_OPTIONS = {
@@ -113,6 +118,25 @@ export const LLM_MODEL_OPTIONS = {
     // Deep research
     'sonar-deep-research',
   ],
+  nvidia: [
+    // Llama 4 via NIM
+    'meta/llama-4-scout-17b-16e-instruct',
+    'meta/llama-4-maverick-17b-128e-instruct',
+    // Llama 3.x via NIM
+    'meta/llama-3.3-70b-instruct',
+    'meta/llama-3.1-405b-instruct',
+    'meta/llama-3.1-8b-instruct',
+    // Nemotron
+    'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    'nvidia/llama-3.3-nemotron-super-49b-v1',
+    // Mistral via NIM
+    'mistralai/mistral-large-2-instruct',
+    'mistralai/mixtral-8x22b-instruct-v0.1',
+    // Qwen via NIM
+    'qwen/qwen2.5-72b-instruct',
+    // DeepSeek via NIM
+    'deepseek-ai/deepseek-r1',
+  ],
 } as const
 
 export const LLM_PROVIDER_CAPABILITIES: Record<
@@ -180,6 +204,15 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
     contextProfile: 'large',
     strengths: ['built-in web search grounding', 'Sonar Deep Research for exhaustive reports', 'sonar-reasoning-pro for CoT'],
     cautions: ['tool-calling is less proven', 'requires external API key'],
+  },
+  nvidia: {
+    label: 'NVIDIA NIM',
+    bestFor: 'GPU-accelerated inference on top open models — Llama 4, Nemotron, DeepSeek, Qwen via NVIDIA cloud.',
+    toolUse: 'good',
+    latency: 'fast',
+    contextProfile: 'large',
+    strengths: ['access to Llama 4 Scout/Maverick', 'Nemotron ultra models', 'DeepSeek R1 & Qwen via NIM', 'fast GPU-backed inference'],
+    cautions: ['requires NVIDIA_API_KEY from build.nvidia.com', 'model availability may vary'],
   },
 } as const
 

@@ -17,6 +17,7 @@ const TRACKED_KEYS: Array<{ name: string; envVar: string }> = [
   { name: 'Perplexity', envVar: 'PERPLEXITY_API_KEY' },
   { name: 'AtlasCloud', envVar: 'ATLASCLOUD_API_KEY' },
   { name: 'MiniMax', envVar: 'MINIMAX_API_KEY' },
+  { name: 'NVIDIA NIM', envVar: 'NVIDIA_API_KEY' },
   { name: 'XAI / Grok', envVar: 'XAI_API_KEY' },
   { name: 'DeepSeek', envVar: 'DEEPSEEK_API_KEY' },
   { name: 'Mistral', envVar: 'MISTRAL_API_KEY' },
