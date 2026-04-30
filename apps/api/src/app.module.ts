@@ -149,6 +149,8 @@ import { VisionModule } from './vision/vision.module'
     WarRoomsModule,
     LocalDaemonModule,
     TtsModule,
+    SandboxModule,
+
 
   ],
 })
