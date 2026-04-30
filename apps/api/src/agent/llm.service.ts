@@ -130,11 +130,25 @@ export class LLMService {
       return this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient, model, userBaseUrl)
     }
 
-    // openai-compatible providers (openai, google gemini, minimax, perplexity)
+    // openai-compatible providers (openai, google gemini, minimax, perplexity, nvidia)
     return this.completeWithKeyRotation(
-      (key) => {
+      async (key) => {
         const client = this.createOpenAICompatibleClient(p, key, userBaseUrl)
-        return this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default)
+        const response = await this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default)
+
+        // Some NVIDIA NIM models return empty content with no tool calls when tools are passed
+        // (e.g. nemotron, mixtral, qwen-coder). Retry without tools to get a usable response.
+        if (
+          p === 'nvidia' &&
+          tools.length > 0 &&
+          !response.content?.trim() &&
+          !response.toolCalls?.length
+        ) {
+          this.logger.warn(`NVIDIA model "${model ?? LLM_MODELS.nvidia.default}" returned empty content with tools — retrying without tools`)
+          return this.completeOpenAI(messages, [], systemPrompt, client, model, LLM_MODELS[p].default)
+        }
+
+        return response
       },
       p,
       userApiKey,

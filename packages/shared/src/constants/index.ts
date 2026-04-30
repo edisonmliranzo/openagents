@@ -35,9 +35,9 @@ export const LLM_MODELS = {
     powerful: 'sonar-reasoning-pro',
   },
   nvidia: {
-    default: 'meta/llama-4-scout-17b-16e-instruct',
-    fast: 'meta/llama-3.3-70b-instruct',
-    powerful: 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    default: 'meta/llama-3.3-70b-instruct',
+    fast: 'meta/llama-3.1-8b-instruct',
+    powerful: 'meta/llama-3.1-405b-instruct',
   },
 } as const
 
@@ -120,22 +120,19 @@ export const LLM_MODEL_OPTIONS = {
   ],
   nvidia: [
     // Llama 4 via NIM
-    'meta/llama-4-scout-17b-16e-instruct',
     'meta/llama-4-maverick-17b-128e-instruct',
     // Llama 3.x via NIM
     'meta/llama-3.3-70b-instruct',
     'meta/llama-3.1-405b-instruct',
     'meta/llama-3.1-8b-instruct',
+    'meta/llama-3.2-3b-instruct',
+    'meta/llama-3.2-1b-instruct',
     // Nemotron
-    'nvidia/llama-3.1-nemotron-ultra-253b-v1',
     'nvidia/llama-3.3-nemotron-super-49b-v1',
     // Mistral via NIM
-    'mistralai/mistral-large-2-instruct',
     'mistralai/mixtral-8x22b-instruct-v0.1',
     // Qwen via NIM
-    'qwen/qwen2.5-72b-instruct',
-    // DeepSeek via NIM
-    'deepseek-ai/deepseek-r1',
+    'qwen/qwen2.5-coder-32b-instruct',
   ],
 } as const
 
