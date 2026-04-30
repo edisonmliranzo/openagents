@@ -69,6 +69,10 @@ import { ProactiveAgentsModule } from './proactive-agents/proactive-agents.modul
 import { WebRTCVoiceModule } from './webrtc-voice/webrtc-voice.module'
 import { WarRoomsModule } from './war-rooms/war-rooms.module'
 import { LocalDaemonModule } from './local-daemon/local-daemon.module'
+import { TtsModule } from './tts/tts.module'
+
+import { VisionModule } from './vision/vision.module'
+
 
 @Module({
   imports: [
@@ -144,6 +148,8 @@ import { LocalDaemonModule } from './local-daemon/local-daemon.module'
     WebRTCVoiceModule,
     WarRoomsModule,
     LocalDaemonModule,
+    TtsModule,
+
   ],
 })
 export class AppModule {}

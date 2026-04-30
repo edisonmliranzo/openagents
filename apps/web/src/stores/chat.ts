@@ -411,6 +411,8 @@ interface ChatState {
   gatewayMessage: string
   lastError: string | null
   thinkingSteps: Array<{ step: string; message: string; timestamp: number }>
+  voiceEnabled: boolean
+
 
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
@@ -441,6 +443,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   gatewayMessage: 'connecting...',
   lastError: null,
   thinkingSteps: [],
+  voiceEnabled: false,
+
+  setVoiceEnabled: (enabled: boolean) => void,
 
   async loadConversations() {
     set({ conversationsLoading: true })
@@ -906,6 +911,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ lastError: null })
   },
 
+  setVoiceEnabled(enabled) {
+    set({ voiceEnabled: enabled })
+  },
+
   async saveApiKey(provider: string, apiKey: string) {
     try {
       await sdk.users.upsertLlmKey(provider, { apiKey })
@@ -915,3 +924,4 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 }))
+

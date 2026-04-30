@@ -162,7 +162,17 @@ function ArtifactGallery({ artifacts }: { artifacts: MessageArtifact[] }) {
                 <div className="border-b border-[#e4e7ec] bg-[#fcfcfd] px-3 py-3 dark:border-[#2d3347] dark:bg-[#141824]">
                   <audio controls preload="metadata" className="w-full">
                     <source src={preview} type={artifact.mimeType || 'audio/mpeg'} />
+                    Your browser does not support the audio element.
                   </audio>
+                  <button 
+                    onClick={() => {
+                      const audio = new Audio(preview)
+                      audio.play().catch(console.error)
+                    }}
+                    className="mt-2 inline-flex items-center gap-1 rounded-full border border-[#e4e7ec] bg-white px-3 py-1 text-[11px] font-semibold text-[#475467] transition hover:bg-[#f2f4f7]"
+                  >
+                    🔈 Play TTS
+                  </button>
                 </div>
               )}
               <div className="p-3">

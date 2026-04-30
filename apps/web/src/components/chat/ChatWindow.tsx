@@ -43,6 +43,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Volume2,
 } from 'lucide-react'
 
 interface ChatWindowProps {
@@ -404,6 +405,8 @@ export function ChatWindow({
     () => getAssistantModeDefinition(assistantMode),
     [assistantMode],
   )
+  const { voiceEnabled, setVoiceEnabled } = useChatStore()
+
 
   const visibleMessages = useMemo(
     () =>
@@ -1209,6 +1212,21 @@ export function ChatWindow({
                   <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="*/*" />
                   <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isStreaming} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#667085] disabled:opacity-40" aria-label="Attach file">
                     <Paperclip size={15} />
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setVoiceEnabled(!voiceEnabled)} 
+                    disabled={isStreaming}
+                    className={clsx(
+                      'inline-flex h-8 w-8 items-center justify-center rounded-full transition border border-[#e4e7ec]',
+                      voiceEnabled 
+                        ? 'bg-[#10b981] text-white hover:bg-[#059669]' 
+                        : 'text-[#98a2b3] hover:bg-[#f2f4f7] hover:text-[#059669]'
+                    )}
+                    aria-label="Toggle voice output"
+                    title="Enable voice responses (TTS)"
+                  >
+                    <Volume2 size={15} />
                   </button>
                   {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
                   <button
