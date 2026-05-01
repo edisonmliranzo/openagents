@@ -39,6 +39,11 @@ export const LLM_MODELS = {
     fast: 'meta/llama-3.1-8b-instruct',
     powerful: 'meta/llama-3.1-405b-instruct',
   },
+  atlascloud: {
+    default: 'deepseek-v3',
+    fast: 'meta/llama-4-scout-17b-16e-instruct',
+    powerful: 'deepseek-r1',
+  },
 } as const
 
 export const LLM_MODEL_OPTIONS = {
@@ -134,6 +139,13 @@ export const LLM_MODEL_OPTIONS = {
     // Qwen via NIM
     'qwen/qwen2.5-coder-32b-instruct',
   ],
+  atlascloud: [
+    'owl',
+    'deepseek-r1',
+    'deepseek-v3',
+    'qwen/qwen2.5-72b-instruct',
+    'meta/llama-4-scout-17b-16e-instruct',
+  ],
 } as const
 
 export const LLM_PROVIDER_CAPABILITIES: Record<
@@ -210,6 +222,15 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
     contextProfile: 'large',
     strengths: ['access to Llama 4 Scout/Maverick', 'Nemotron ultra models', 'DeepSeek R1 & Qwen via NIM', 'fast GPU-backed inference'],
     cautions: ['requires NVIDIA_API_KEY from build.nvidia.com', 'model availability may vary'],
+  },
+  atlascloud: {
+    label: 'AtlasCloud',
+    bestFor: 'Unified access to 300+ models — DeepSeek R1/V3, Llama 4, Qwen — via a single OpenAI-compatible API.',
+    toolUse: 'good',
+    latency: 'fast',
+    contextProfile: 'large',
+    strengths: ['300+ models via one API', 'DeepSeek R1 & V3', 'Llama 4 Scout', 'OpenAI-SDK compatible'],
+    cautions: ['requires ATLASCLOUD_API_KEY from atlascloud.ai', 'tool-call quality varies by model'],
   },
 } as const
 

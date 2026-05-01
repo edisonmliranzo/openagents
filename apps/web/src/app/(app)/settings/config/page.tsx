@@ -21,10 +21,10 @@ import { LLM_MODEL_OPTIONS, LLM_PROVIDER_CAPABILITIES } from '@openagents/shared
 
 // Types
 
-type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax' | 'perplexity' | 'nvidia'
+type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax' | 'perplexity' | 'nvidia' | 'atlascloud'
 
-const PROVIDERS: Provider[] = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'ollama']
-const CLOUD_PROVIDERS = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia'] as const
+const PROVIDERS: Provider[] = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud', 'ollama']
+const CLOUD_PROVIDERS = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud'] as const
 const DEFAULT_OLLAMA_BASE_URL = process.env.NEXT_PUBLIC_OLLAMA_BASE_URL?.trim() || 'http://localhost:11434'
 
 interface ProviderCardState {
@@ -48,6 +48,7 @@ const DEFAULTS: Record<Provider, ProviderCardState> = {
   perplexity:{ apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   minimax:   { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   nvidia:    { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  atlascloud:{ apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   ollama:    { apiKey: '', baseUrl: DEFAULT_OLLAMA_BASE_URL, showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
 }
 const OLLAMA_FALLBACK_MODELS: string[] = [...(LLM_MODEL_OPTIONS.ollama as unknown as string[])]
@@ -58,6 +59,7 @@ const PROVIDER_PLAN_OPTIONS: Record<Exclude<Provider, 'ollama'>, string[]> = {
   perplexity: ['Starter', 'Pro', 'Enterprise'],
   minimax: ['Starter', 'Pro', 'Enterprise'],
   nvidia: ['Free', 'Pro', 'Enterprise'],
+  atlascloud: ['Free', 'Pro', 'Enterprise'],
 }
 
 const PROVIDER_META: Record<Provider, {
@@ -114,6 +116,14 @@ const PROVIDER_META: Record<Provider, {
     gradient: 'from-green-500 to-green-700',
     ring: 'ring-green-400',
     inputLabel: 'API Key',
+    isKeyless: false,
+  },
+  atlascloud: {
+    label: 'AtlasCloud',
+    icon: <Sparkles className="h-5 w-5" />,
+    gradient: 'from-blue-500 to-purple-600',
+    ring: 'ring-blue-400',
+    inputLabel: 'AtlasCloud API Key',
     isKeyless: false,
   },
   ollama: {
@@ -393,6 +403,7 @@ export default function ConfigPage() {
         perplexity: { ...DEFAULTS.perplexity },
         minimax: { ...DEFAULTS.minimax },
         nvidia: { ...DEFAULTS.nvidia },
+        atlascloud: { ...DEFAULTS.atlascloud },
         ollama: { ...DEFAULTS.ollama },
       }
 
@@ -542,7 +553,7 @@ export default function ConfigPage() {
           key.provider !== 'ollama' && key.isActive && isProvider(key.provider),
       )?.provider
       if (!savedCloudProvider) {
-        setError('No active cloud provider configured. Save a key for Anthropic, OpenAI, Google, Perplexity, MiniMax, or NVIDIA first.')
+        setError('No active cloud provider configured. Save a key for Anthropic, OpenAI, Google, Perplexity, MiniMax, NVIDIA, or AtlasCloud first.')
         return
       }
       const cloudModelOptions = providerModels(savedCloudProvider)
