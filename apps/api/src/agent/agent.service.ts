@@ -1235,7 +1235,8 @@ export class AgentService {
       normalized === 'ollama' ||
       normalized === 'minimax' ||
       normalized === 'perplexity' ||
-      normalized === 'nvidia'
+      normalized === 'nvidia' ||
+      normalized === 'atlascloud'
     ) {
       return normalized
     }
@@ -1442,7 +1443,9 @@ export class AgentService {
                 ? 'MiniMax'
                 : provider === 'nvidia'
                   ? 'NVIDIA NIM'
-                  : provider
+                  : provider === 'atlascloud'
+                    ? 'AtlasCloud'
+                    : provider
     const modelLabel = model?.trim()
     return modelLabel ? `${providerLabel} ${modelLabel}` : providerLabel
   }
