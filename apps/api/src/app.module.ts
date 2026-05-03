@@ -74,6 +74,7 @@ import { ImageWorkflowModule } from './image-workflow/image-workflow.module'
 import { AppBuilderWorkflowModule } from './app-builder-workflow/app-builder-workflow.module'
 import { SocialMediaWorkflowModule } from './social-media-workflow/social-media-workflow.module'
 import { UGCAdWorkflowModule } from './ugc-ad-workflow/ugc-ad-workflow.module'
+import { MasterAgentModule } from './master-agent/master-agent.module'
 
 import { VisionModule } from './vision/vision.module'
 
@@ -141,6 +142,7 @@ import { VisionModule } from './vision/vision.module'
     AppBuilderWorkflowModule,
     SocialMediaWorkflowModule,
     UGCAdWorkflowModule,
+    MasterAgentModule,
     VisionModule,
     DelegationModule,
     GoalsModule,
