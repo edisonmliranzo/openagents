@@ -264,6 +264,9 @@ function formatAgentError(raw: string) {
   if (lower === 'network error' || lower.includes('network error')) {
     return 'Model provider network error. Verify your internet/proxy, then retry or switch provider in Settings > Config.'
   }
+  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('rate_limit') || lower.includes('too many requests')) {
+    return 'Rate limit reached. Your API key is on a free/low tier. Add billing at console.anthropic.com to upgrade, or switch to a different provider in Settings > Config.'
+  }
   if (lower.includes('invalid x-api-key') || lower.includes('authentication_error')) {
     return 'LLM authentication failed. Add a valid provider key in Settings > Config and retry.'
   }
@@ -425,6 +428,7 @@ interface ChatState {
   clearError: () => void
   appendStreamChunk: (chunk: string) => void
   saveApiKey: (provider: string, apiKey: string) => Promise<void>
+  setVoiceEnabled: (enabled: boolean) => void
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -444,8 +448,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   lastError: null,
   thinkingSteps: [],
   voiceEnabled: false,
-
-  setVoiceEnabled: (enabled: boolean) => void,
 
   async loadConversations() {
     set({ conversationsLoading: true })
