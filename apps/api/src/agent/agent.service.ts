@@ -17,8 +17,9 @@ import {
   OPENAGENTS_SUPPORT_IDENTITY_PROMPT,
   SHORT_TERM_MEMORY_LIMIT,
   getOpenAgentsInstallPromptAppendix,
+  getAgentRolePromptAppendix,
 } from '@openagents/shared'
-import type { LLMProvider, LineageToolInfluence, ToolResult } from '@openagents/shared'
+import type { AgentRole, LLMProvider, LineageToolInfluence, ToolResult } from '@openagents/shared'
 
 export interface AgentRunParams {
   conversationId: string
@@ -27,6 +28,11 @@ export interface AgentRunParams {
   emit: (event: string, data: unknown) => void
   systemPromptAppendix?: string
   mode?: string
+  role?: AgentRole
+}
+
+export interface OrchestrateRunParams extends AgentRunParams {
+  parallelAgentService: ParallelAgentService
 }
 
 const DEFAULT_SYSTEM_PROMPT = `${OPENAGENTS_SUPPORT_IDENTITY_PROMPT}
@@ -189,7 +195,7 @@ export class AgentService {
     private compressor: ContextCompressorService,
   ) {}
 
-  async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
+  async run({ conversationId, userId, userMessage, emit, systemPromptAppendix, role }: AgentRunParams) {
     // 1. Save user message
     const userMsg = await this.prisma.message.create({
       data: { conversationId, role: 'user', content: userMessage, status: 'done' },
@@ -294,11 +300,16 @@ export class AgentService {
       if (compressionSummary) {
         systemPrompt = `${systemPrompt}\n\n${compressionSummary}`
       }
+      const rolePromptAppendix = role
+        ? getAgentRolePromptAppendix(role)
+        : ''
+
       const promptAppendices = [
         OPENAGENTS_IDENTITY_APPENDIX,
         MEMORY_PROMPT_APPENDIX,
         manusModeEnabled ? MANUS_MODE_PROMPT_APPENDIX : '',
         systemPromptAppendix?.trim() ?? '',
+        rolePromptAppendix,
         openAgentsInstallAppendix,
       ].filter(Boolean)
       const effectiveSystemPrompt = promptAppendices.length

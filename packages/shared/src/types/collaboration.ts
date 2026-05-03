@@ -159,7 +159,7 @@ export interface CollaborationProtocol {
   qualityThresholds: QualityThresholds
 }
 
-export interface AgentRole {
+export interface CollaborationAgentRole {
   id: string
   name: string
   description?: string
@@ -231,7 +231,7 @@ export interface AgentTeam {
   name: string
   description?: string
   userId: string
-  roles: AgentRole[]
+  roles: CollaborationAgentRole[]
   members: AgentTeamMember[]
   sharedBlackboard: SharedBlackboard
   collaborationProtocol: CollaborationProtocol
@@ -405,7 +405,7 @@ export interface TeamMetrics {
 export interface CreateAgentTeamInput {
   name: string
   description?: string
-  roles: Array<Partial<AgentRole> & { name: string; capabilities: string[]; responsibilities: string[]; permissions: string[] }>
+  roles: Array<Partial<CollaborationAgentRole> & { name: string; capabilities: string[]; responsibilities: string[]; permissions: string[] }>
   protocol?: Partial<Omit<CollaborationProtocol, 'id' | 'teamId'>>
 }
 

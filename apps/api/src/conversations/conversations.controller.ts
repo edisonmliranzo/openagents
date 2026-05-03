@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Delete, Param, Body, UseGuards, Req, Res, Query,
 } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
-import { IsString, IsOptional } from 'class-validator'
+import { IsString, IsOptional, IsIn } from 'class-validator'
 import { Response } from 'express'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { ConversationsService } from './conversations.service'
@@ -10,6 +10,7 @@ import { AgentService } from '../agent/agent.service'
 import { ContextCompressorService } from '../agent/context-compressor.service'
 import { NanobotLoopService } from '../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../nanobot/config/nanobot-config.service'
+import type { AgentRole } from '@openagents/shared'
 
 const SKILL_COMMAND_PATTERN = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
 const ADAPTIVE_SKILL_INTENT_PATTERN =
@@ -19,9 +20,12 @@ class CreateConversationDto {
   @IsString() @IsOptional() title?: string
 }
 
+const AGENT_ROLES = ['general', 'research', 'coding', 'debugger', 'repo_architect', 'test_runner'] as const
+
 class ChatDto {
   @IsString() content: string
   @IsString() @IsOptional() mode?: string
+  @IsString() @IsOptional() @IsIn(AGENT_ROLES as readonly string[]) role?: AgentRole
 }
 
 @ApiTags('conversations')
@@ -98,7 +102,9 @@ export class ConversationsController {
         userId: req.user.id,
         userMessage: dto.content,
         emit,
+        ...(dto.mode ? { mode: dto.mode } : {}),
         ...(dto.mode ? { systemPromptAppendix: `User-selected mode: ${dto.mode}\nApply this mode's execution rules.` } : {}),
+        ...(dto.role ? { role: dto.role } : {}),
       })
     } catch (err: any) {
       emit('error', { message: err.message })

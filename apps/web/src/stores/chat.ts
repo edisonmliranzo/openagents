@@ -417,7 +417,7 @@ interface ChatState {
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
   createConversation: () => Promise<string>
-  sendMessage: (content: string, options?: { displayContent?: string; mode?: string }) => Promise<void>
+   sendMessage: (content: string, options?: { displayContent?: string; mode?: string; role?: string }) => Promise<void>
   approveAction: (approvalId: string) => Promise<void>
   denyAction: (approvalId: string) => Promise<void>
   refreshActiveHandoff: () => Promise<void>
@@ -772,7 +772,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         } catch {}
       },
-      options?.mode ? { mode: options.mode } : undefined)
+       { mode: options?.mode, role: options?.role })
 
       // Reload messages to get server-side IDs
       const messages = ensureArrayResponse<Message>(

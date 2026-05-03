@@ -1,6 +1,6 @@
 'use client'
 
-export type AssistantMode = 'assist' | 'plan' | 'execute' | 'autopilot'
+export type AssistantMode = 'assist' | 'plan' | 'execute' | 'autopilot' | 'orchestrate'
 
 export interface AssistantModeDefinition {
   id: AssistantMode
@@ -85,6 +85,24 @@ export const ASSISTANT_MODE_DEFINITIONS: AssistantModeDefinition[] = [
       'Work proactively and complete the request end-to-end when possible.',
       'Chain steps together instead of stopping after a single answer.',
       'Only pause for approvals, permissions, or genuinely missing context.',
+    ],
+  },
+  {
+    id: 'orchestrate',
+    label: 'Orchestrate',
+    caption: 'Multi-agent',
+    description: 'Split complex work into parallel branches, run multiple agents simultaneously, and merge results into one final outcome.',
+    placeholder: 'Ask the assistant to orchestrate parallel agents for a complex task...',
+    starterPrompts: [
+      'Run two agents in parallel: one researches options while the other drafts implementation, then merge into one recommendation.',
+      'Break this task into two concurrent branches and return a single consolidated final answer.',
+      'Use multi-agent orchestration to compare two approaches in parallel and synthesize tradeoffs.',
+      'Coordinate parallel execution like a computer-use assistant and report one merged result.',
+    ],
+    executionRules: [
+      'Decompose complex tasks into independent branches that can run concurrently.',
+      'Run multiple agent branches in parallel when it improves speed or quality.',
+      'Merge branch outputs into one coherent, actionable final response.',
     ],
   },
 ]

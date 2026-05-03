@@ -17,11 +17,14 @@ export function createConversationsApi(client: OpenAgentsClient) {
       conversationId: string,
       content: string,
       onChunk: (chunk: string) => void,
-      options?: { mode?: string },
+      options?: { mode?: string; role?: string },
     ) => {
       const body: Record<string, unknown> = { content }
       if (options?.mode) {
         body.mode = options.mode
+      }
+      if (options?.role) {
+        body.role = options.role
       }
       // client.stream takes (path, body, onChunk) - no options/signal support
       return client.stream(
