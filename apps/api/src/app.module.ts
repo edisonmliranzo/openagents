@@ -70,6 +70,10 @@ import { WarRoomsModule } from './war-rooms/war-rooms.module'
 import { LocalDaemonModule } from './local-daemon/local-daemon.module'
 import { TtsModule } from './tts/tts.module'
 import { VideoWorkflowModule } from './video-workflow/video-workflow.module'
+import { ImageWorkflowModule } from './image-workflow/image-workflow.module'
+import { AppBuilderWorkflowModule } from './app-builder-workflow/app-builder-workflow.module'
+import { SocialMediaWorkflowModule } from './social-media-workflow/social-media-workflow.module'
+import { UGCAdWorkflowModule } from './ugc-ad-workflow/ugc-ad-workflow.module'
 
 import { VisionModule } from './vision/vision.module'
 
@@ -133,6 +137,10 @@ import { VisionModule } from './vision/vision.module'
     AbTestingModule,
     StreamingModule,
     VideoWorkflowModule,
+    ImageWorkflowModule,
+    AppBuilderWorkflowModule,
+    SocialMediaWorkflowModule,
+    UGCAdWorkflowModule,
     VisionModule,
     DelegationModule,
     GoalsModule,
