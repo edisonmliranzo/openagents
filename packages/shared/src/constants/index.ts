@@ -62,13 +62,19 @@ export const LLM_MODEL_OPTIONS = {
     'gpt-4.1',
     'gpt-4.1-mini',
     'gpt-4.1-nano',
+    // GPT-4.5 preview
+    'gpt-4.5-preview',
     // GPT-4o family
     'gpt-4o',
     'gpt-4o-mini',
-    // Reasoning models
+    // Reasoning models — o3 / o4
     'o3',
     'o3-mini',
     'o4-mini',
+    // Reasoning models — o1
+    'o1',
+    'o1-mini',
+    'o1-pro',
   ],
   google: [
     // Gemini 2.5 — current flagship
