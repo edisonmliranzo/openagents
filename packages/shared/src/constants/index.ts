@@ -12,7 +12,7 @@ export const LLM_MODELS = {
   openai: {
     default: 'gpt-4.1',
     fast: 'gpt-4.1-mini',
-    powerful: 'o3',
+    powerful: 'o3-pro',
   },
   google: {
     default: 'gemini-2.5-pro',
@@ -48,17 +48,24 @@ export const LLM_MODEL_OPTIONS = {
     'claude-opus-4-1',
   ],
   openai: [
-    // GPT-4.1 family
+    // GPT-4.1 family (April 2025)
     'gpt-4.1',
     'gpt-4.1-mini',
     'gpt-4.1-nano',
+    // GPT-4.5 (Feb 2025)
+    'gpt-4.5-preview',
     // GPT-4o family
     'gpt-4o',
     'gpt-4o-mini',
-    // Reasoning models
+    // Reasoning — o4
+    'o4-mini',
+    // Reasoning — o3
+    'o3-pro',
     'o3',
     'o3-mini',
-    'o4-mini',
+    // Reasoning — o1
+    'o1',
+    'o1-mini',
   ],
   google: [
     // Gemini 2.5 — current flagship
@@ -142,7 +149,7 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
     toolUse: 'strong',
     latency: 'balanced',
     contextProfile: 'large',
-    strengths: ['GPT-4.1 excels at instruction following', 'o3/o4-mini for deep reasoning', 'broad model family'],
+    strengths: ['GPT-4.1 excels at instruction following', 'o3-pro/o4-mini for deep reasoning', 'broad model family from o1 to o3-pro'],
     cautions: ['reasoning models (o3, o4-mini) are slower', 'requires external API key'],
   },
   google: {
