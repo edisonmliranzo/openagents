@@ -58,6 +58,10 @@ export const LLM_MODEL_OPTIONS = {
     'claude-opus-4-1',
   ],
   openai: [
+    // GPT-5.4 family
+    'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
     // GPT-4.1 family
     'gpt-4.1',
     'gpt-4.1-mini',
