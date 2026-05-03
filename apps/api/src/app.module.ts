@@ -53,7 +53,6 @@ import { ApiKeysModule } from './apikeys/apikeys.module'
 import { ExportModule } from './export/export.module'
 import { AbTestingModule } from './ab-testing/ab-testing.module'
 import { StreamingModule } from './streaming/streaming.module'
-import { VisionModule } from './vision/vision.module'
 import { DelegationModule } from './delegation/delegation.module'
 import { GoalsModule } from './goals/goals.module'
 import { ConversationSearchModule } from './conversation-search/search.module'
@@ -151,9 +150,6 @@ import { VisionModule } from './vision/vision.module'
     WarRoomsModule,
     LocalDaemonModule,
     TtsModule,
-    SandboxModule,
-
-
   ],
 })
 export class AppModule {}
