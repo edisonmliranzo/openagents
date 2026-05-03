@@ -70,6 +70,7 @@ import { WebRTCVoiceModule } from './webrtc-voice/webrtc-voice.module'
 import { WarRoomsModule } from './war-rooms/war-rooms.module'
 import { LocalDaemonModule } from './local-daemon/local-daemon.module'
 import { TtsModule } from './tts/tts.module'
+import { VideoWorkflowModule } from './video-workflow/video-workflow.module'
 
 import { VisionModule } from './vision/vision.module'
 
@@ -132,6 +133,7 @@ import { VisionModule } from './vision/vision.module'
     ExportModule,
     AbTestingModule,
     StreamingModule,
+    VideoWorkflowModule,
     VisionModule,
     DelegationModule,
     GoalsModule,
