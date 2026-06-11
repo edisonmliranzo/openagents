@@ -1,0 +1,2 @@
+FROM hf.co/unsloth/gemma-4-12b-it-GGUF:latest
+PARAMETER num_ctx 8192
