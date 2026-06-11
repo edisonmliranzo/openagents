@@ -207,10 +207,51 @@ export class ToolsService {
   }
 
   async getAvailableForUser(userId: string): Promise<ToolDefinition[]> {
-    // For MVP: return all tools; later filter by connected tools
-    const builtinTools = Array.from(this.registry.values()).map((t) => t.def)
+    const healthSnapshot = await this.connectors.listHealth(userId).catch(() => null)
+    const activeConnectors = new Set<string>()
+    if (healthSnapshot) {
+      for (const entry of healthSnapshot.connectors) {
+        if (entry.status === 'connected' || entry.status === 'degraded') {
+          activeConnectors.add(entry.connectorId)
+        }
+      }
+    }
+
+    const filteredBuiltinTools: ToolDefinition[] = []
+    for (const [name, entry] of this.registry.entries()) {
+      const toolDef = entry.def
+
+      // Exclude env-var based tools if their keys are missing
+      if (name.startsWith('notion_') && !process.env.NOTION_TOKEN) {
+        continue
+      }
+      if (name.startsWith('jira_') && !process.env.JIRA_API_TOKEN) {
+        continue
+      }
+      if (name.startsWith('linear_') && !process.env.LINEAR_API_KEY) {
+        continue
+      }
+      if (name.startsWith('bybit_') && !process.env.BYBIT_API_KEY) {
+        continue
+      }
+      if (name.startsWith('hubspot_') && !process.env.HUBSPOT_ACCESS_TOKEN) {
+        continue
+      }
+      if (name.startsWith('airtable_') && !process.env.AIRTABLE_API_KEY) {
+        continue
+      }
+
+      // Exclude connector-based tools if they are not connected/degraded
+      const connId = this.inferConnectorId(name)
+      if (connId && !activeConnectors.has(connId)) {
+        continue
+      }
+
+      filteredBuiltinTools.push(toolDef)
+    }
+
     const mcpTools = await this.mcp.listToolDefinitions()
-    return [...builtinTools, ...mcpTools]
+    return [...filteredBuiltinTools, ...mcpTools]
   }
 
   async execute(toolName: string, input: Record<string, unknown>, userId: string): Promise<ToolResult> {
@@ -320,6 +361,10 @@ export class ToolsService {
     const value = toolName.trim().toLowerCase()
     if (value.startsWith('gmail_')) return 'google_gmail'
     if (value.startsWith('calendar_')) return 'google_calendar'
+    if (value.startsWith('slack_')) return 'slack'
+    if (value.startsWith('whatsapp_')) return 'whatsapp'
+    if (value.startsWith('telegram_')) return 'telegram'
+    if (value.startsWith('discord_') || value === 'discord') return 'discord'
     if (value.startsWith('web_')) return null
     if (value.startsWith('notes_')) return null
     return null
