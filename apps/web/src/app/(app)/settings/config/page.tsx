@@ -924,7 +924,7 @@ export default function ConfigPage() {
                     <input
                       value={activeModel}
                       onChange={(e) => setActiveModel(e.target.value)}
-                      placeholder="Type model id (e.g. llama3.2)"
+                      placeholder="Type model id (e.g. hf.co/unsloth/gemma-4-12b-it-GGUF)"
                       className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100 sm:min-w-[240px]"
                     />
                   )

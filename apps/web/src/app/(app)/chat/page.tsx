@@ -103,76 +103,16 @@ export default function ChatPage() {
     [assistantMode],
   )
 
-  const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false)
   const gatewayConnected = gatewayStatus === 'connected'
   const hasPendingApprovals = pendingApprovals.length > 0
   const handleRuntimeLabelChange = useCallback((_label: string) => {}, [])
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden">
-      {/* Mobile sessions drawer */}
-      {mobileSessionsOpen && (
-        <>
-          <button
-            type="button"
-            aria-label="Close sessions"
-            onClick={() => setMobileSessionsOpen(false)}
-            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm lg:hidden"
-          />
-          <div className="fixed inset-y-0 left-0 z-50 flex w-[min(85vw,280px)] flex-col overflow-hidden border-r border-[#e4e7ec] bg-white shadow-[4px_0_24px_rgba(15,23,42,0.12)] lg:hidden dark:border-[#2d3347] dark:bg-[#141824]">
-            <ConversationList onSelect={() => setMobileSessionsOpen(false)} />
-          </div>
-        </>
-      )}
-
-      {/* Desktop persistent chat history sidebar */}
-      <aside className="hidden lg:flex w-[240px] shrink-0 flex-col overflow-hidden border-r border-[#e6e8ef] bg-white dark:border-[#2d3347] dark:bg-[#141824]">
-        <ConversationList />
-      </aside>
-
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-transparent">
       {/* Main chat area */}
-      <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
-        {(lastError || !gatewayConnected || hasPendingApprovals) && (
-          <div className="flex flex-wrap items-center gap-2">
-            {!gatewayConnected && (
-              <div className="rounded-full border border-[#f3c8c5] bg-[#fff3f2] px-3 py-1.5 text-xs font-semibold text-[#d92d20]">
-                {gatewayMessage ?? 'Assistant offline'}
-              </div>
-            )}
-            {lastError && (
-              <button
-                type="button"
-                onClick={clearError}
-                className="rounded-full border border-[#f3c8c5] bg-[#fff8f7] px-3 py-1.5 text-xs font-semibold text-[#d92d20]"
-              >
-                {lastError} | Dismiss
-              </button>
-            )}
-            {hasPendingApprovals && (
-              <div className="rounded-full border border-[#f2d18b] bg-[#fff8e8] px-3 py-1.5 text-xs font-semibold text-[#b54708]">
-                {pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} waiting
-              </div>
-            )}
-            <div className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-xs font-semibold text-[#475467]">
-              {assistantModeDefinition.label}
-            </div>
-            {activeConversation && (
-              <div className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-xs font-semibold text-[#475467]">
-                {activeConversation.title ?? 'main'}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => void loadConversations()}
-              className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-xs font-semibold text-[#475467]"
-            >
-              Refresh sessions
-            </button>
-          </div>
-        )}
-
+      <div className="flex min-w-0 flex-1 flex-col gap-2 p-0 bg-transparent">
         {hasPendingApprovals && (
-          <div className="space-y-2">
+          <div className="space-y-2 px-3 pt-2">
             {pendingApprovals.map((approval) => (
               <ApprovalBanner key={approval.id} approval={approval} />
             ))}
@@ -185,11 +125,12 @@ export default function ChatPage() {
             onAssistantModeChange={setAssistantMode}
             gatewayConnected={gatewayConnected}
             onNewSession={async () => {
-              setMobileSessionsOpen(false)
               await createConversation()
             }}
             onRuntimeLabelChange={handleRuntimeLabelChange}
-            onOpenMobileSessions={() => setMobileSessionsOpen(true)}
+            onOpenMobileSessions={() => {
+              window.dispatchEvent(new CustomEvent('openagents:open-sidebar'))
+            }}
           />
         </div>
       </div>

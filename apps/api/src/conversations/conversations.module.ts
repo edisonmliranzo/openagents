@@ -6,9 +6,10 @@ import { AuthModule } from '../auth/auth.module'
 import { NanobotModule } from '../nanobot/nanobot.module'
 import { ApprovalsModule } from '../approvals/approvals.module'
 import { EventsModule } from '../events/events.module'
+import { StreamingModule } from '../streaming/streaming.module'
 
 @Module({
-  imports: [AgentModule, AuthModule, NanobotModule, ApprovalsModule, EventsModule],
+  imports: [AgentModule, AuthModule, NanobotModule, ApprovalsModule, EventsModule, StreamingModule],
   controllers: [ConversationsController],
   providers: [ConversationsService],
   exports: [ConversationsService],

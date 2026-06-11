@@ -49,6 +49,7 @@ function run(command, commandArgs, options = {}) {
     result = spawnSync(candidate, commandArgs, {
       cwd: rootDir,
       stdio: "inherit",
+      shell: process.platform === "win32",
     });
     if (result.error && result.error.code === "ENOENT") {
       continue;
@@ -85,6 +86,7 @@ function canRun(command, commandArgs) {
     const result = spawnSync(candidate, commandArgs, {
       cwd: rootDir,
       stdio: "ignore",
+      shell: process.platform === "win32",
     });
     if (result.error && result.error.code === "ENOENT") {
       continue;

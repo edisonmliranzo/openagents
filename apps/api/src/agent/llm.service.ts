@@ -47,7 +47,7 @@ const DEFAULT_OLLAMA_ALLOWED_HOSTS = [
 
 export interface LLMMessage {
   role: 'user' | 'assistant'
-  content: string
+  content: string | any[]
 }
 
 export interface LLMTool {
@@ -391,13 +391,19 @@ export class LLMService {
     client: Anthropic,
     modelOverride?: string,
   ): Promise<LLMResponse> {
-    const anthropicMessages = this.normalizeAnthropicMessages(messages)
+    const parsedMessages = messages.map((m) => ({
+      role: m.role,
+      content: m.role === 'user' && typeof m.content === 'string'
+        ? this.parseMultimodalContent(m.content, 'anthropic')
+        : m.content,
+    }))
+    const anthropicMessages = this.normalizeAnthropicMessages(parsedMessages)
 
     const response = await client.messages.create({
       model: modelOverride ?? LLM_MODELS.anthropic.default,
       max_tokens: 8192,
       system: systemPrompt,
-      messages: anthropicMessages,
+      messages: anthropicMessages as any,
       tools: tools.map((t) => ({
         name: t.name,
         description: t.description,
@@ -421,7 +427,12 @@ export class LLMService {
 
   // Some Anthropic models reject assistant-prefill payloads; enforce a user-final turn.
   private normalizeAnthropicMessages(messages: LLMMessage[]): LLMMessage[] {
-    const normalized = messages.filter((message) => message.content.trim().length > 0)
+    const normalized = messages.filter((message) => {
+      if (typeof message.content === 'string') {
+        return message.content.trim().length > 0
+      }
+      return Array.isArray(message.content) && message.content.length > 0
+    })
 
     if (normalized.length === 0) {
       return [{ role: 'user', content: 'Continue.' }]
@@ -445,9 +456,15 @@ export class LLMService {
     modelOverride?: string,
     defaultModel?: string,
   ): Promise<LLMResponse> {
+    const parsedMessages = messages.map((m) => ({
+      role: m.role,
+      content: m.role === 'user' && typeof m.content === 'string'
+        ? this.parseMultimodalContent(m.content, 'openai')
+        : m.content,
+    }))
     const response = await client.chat.completions.create({
       model: modelOverride ?? defaultModel ?? LLM_MODELS.openai.default,
-      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+      messages: [{ role: 'system', content: systemPrompt }, ...parsedMessages] as any,
       ...(tools.length > 0 ? {
         tools: tools.map((t) => ({
           type: 'function' as const,
@@ -675,5 +692,45 @@ export class LLMService {
 
     const hosts = fromEnv.length > 0 ? fromEnv : DEFAULT_OLLAMA_ALLOWED_HOSTS
     return new Set(hosts)
+  }
+
+  private parseMultimodalContent(content: string, provider: LLMProvider): any {
+    const base64Regex = /data:(image\/[a-zA-Z+.-]+);base64,([a-zA-Z0-9+/=]+)/g
+    const matches = [...content.matchAll(base64Regex)]
+
+    if (matches.length === 0) {
+      return content
+    }
+
+    let cleanText = content.replace(base64Regex, '').replace(/\[Attached image:[^\]]*\]/g, '').trim()
+    if (!cleanText) cleanText = 'Analyze this image.'
+
+    if (provider === 'anthropic') {
+      const parts: any[] = [{ type: 'text', text: cleanText }]
+      for (const match of matches) {
+        const mimeType = match[1]
+        const base64Data = match[2]
+        parts.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mimeType,
+            data: base64Data,
+          },
+        })
+      }
+      return parts
+    } else {
+      const parts: any[] = [{ type: 'text', text: cleanText }]
+      for (const match of matches) {
+        parts.push({
+          type: 'image_url',
+          image_url: {
+            url: match[0],
+          },
+        })
+      }
+      return parts
+    }
   }
 }

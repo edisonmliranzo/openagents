@@ -33,14 +33,19 @@ import clsx from 'clsx'
 import {
   ArrowUp,
   BrainCircuit,
+  ChevronDown,
   ChevronUp,
+  Code,
   Command,
   Gauge,
   LayoutList,
+  Menu,
   Mic,
   MessageSquarePlus,
   Paperclip,
+  Plus,
   RefreshCw,
+  Search,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
@@ -99,8 +104,8 @@ function controlButtonClass() {
 
 function getDefaultRuntime(settings?: Pick<UserSettings, 'preferredProvider' | 'preferredModel'> | null) {
   return {
-    provider: settings?.preferredProvider?.trim() || 'default',
-    model: settings?.preferredModel?.trim() || 'default model',
+    provider: settings?.preferredProvider?.trim() || 'ollama',
+    model: settings?.preferredModel?.trim() || 'hf.co/unsloth/gemma-4-12b-it-GGUF',
   }
 }
 
@@ -395,6 +400,8 @@ export function ChatWindow({
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const modelPickerRef = useRef<HTMLDivElement>(null)
+  const [mcpDropdownOpen, setMcpDropdownOpen] = useState(false)
+  const mcpPickerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -415,7 +422,7 @@ export function ChatWindow({
 
   const activeProvider = useMemo(() => {
     const normalized = normalizeProviderId(runtimeSettings?.preferredProvider)
-    return isRuntimeProvider(normalized) ? normalized : 'anthropic'
+    return isRuntimeProvider(normalized) ? normalized : 'ollama'
   }, [runtimeSettings?.preferredProvider])
   const effectiveRuntime = useMemo(
     () => getEffectiveRuntime(runtimeSettings, activeSession),
@@ -562,6 +569,17 @@ export function ChatWindow({
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [modelPickerOpen])
+
+  useEffect(() => {
+    if (!mcpDropdownOpen) return
+    const handler = (e: MouseEvent) => {
+      if (mcpPickerRef.current && !mcpPickerRef.current.contains(e.target as Node)) {
+        setMcpDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [mcpDropdownOpen])
 
   function focusComposer() {
     requestAnimationFrame(() => textareaRef.current?.focus())
@@ -913,255 +931,102 @@ export function ChatWindow({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[#e6e8ef] bg-[#f7f8fb] shadow-[0_12px_34px_rgba(15,23,42,0.05)]">
-      <div className="border-b border-[#e8ebf2] bg-[#fbfbfd] px-4 py-3 sm:px-6">
-        <div className="flex items-center justify-between gap-2">
-          {/* Session + runtime info — scrollable on mobile */}
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="shrink-0 rounded-[14px] border border-[#e4e7ec] bg-white px-3 py-2 text-sm font-medium text-[#101828] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-              <span className="line-clamp-1 max-w-[140px]">{sessionLabel}</span>
-            </div>
-            <div className="hidden shrink-0 rounded-[14px] border border-[#e4e7ec] bg-white px-3 py-2 text-sm text-[#667085] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:block">
-              <span className="line-clamp-1 max-w-[200px]">{runtimeSummary}</span>
-            </div>
-            <div className="hidden shrink-0 rounded-[14px] border border-[#e4e7ec] bg-white px-3 py-2 text-sm text-[#667085] shadow-[0_1px_2px_rgba(16,24,40,0.04)] md:block">
-              <span>{runtimeBadgeLabel}</span>
-            </div>
-          </div>
-
-          {/* Action buttons — non-wrapping */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            {onOpenMobileSessions && (
-              <button
-                type="button"
-                onClick={onOpenMobileSessions}
-                className={`${controlButtonClass()} xl:hidden`}
-                title="Sessions"
-              >
-                <LayoutList size={14} />
-              </button>
+      <div className="flex items-center justify-between border-b border-[#e8ebf2] bg-[#fbfbfd] px-4 py-3 dark:border-[#2d3347] dark:bg-[#141824] sm:px-6">
+        {/* Left: clean model select dropdown */}
+        <div ref={modelPickerRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setModelPickerOpen((o) => !o)}
+            disabled={Boolean(runtimeBusy) || runtimeLoading}
+            className={clsx(
+              'inline-flex items-center gap-1.5 text-[13px] font-medium text-[#475467] hover:text-[#101828] transition dark:text-[#a1a1aa] dark:hover:text-white',
+              (Boolean(runtimeBusy) || runtimeLoading) && 'opacity-50 cursor-not-allowed',
             )}
-            <button
-              type="button"
-              onClick={() => void syncRuntimeState()}
-              disabled={runtimeLoading}
-              className={`${controlButtonClass()} hidden sm:inline-flex`}
-              title="Refresh runtime"
-            >
-              <RefreshCw size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setControlsExpanded((current) => !current)}
-              className={`${controlButtonClass()} hidden sm:inline-flex`}
-              title={controlsExpanded ? 'Hide details' : 'Show details'}
-            >
-              {controlsExpanded ? <ChevronUp size={12} /> : <BrainCircuit size={12} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => void executeOperatorCommand('/approvals')}
-              className="hidden h-10 w-10 items-center justify-center rounded-2xl border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] transition hover:bg-[#fff1ef] sm:inline-flex"
-              title="Approvals"
-            >
-              <ShieldCheck size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={() => void onNewSession()}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[#f2b7b2] bg-[#fff8f7] text-[#ef4444] transition hover:bg-[#fff1ef]"
-              title="New session"
-            >
-              <MessageSquarePlus size={12} />
-            </button>
-          </div>
-        </div>
+            title="Switch model"
+          >
+            <span>{runtimeSettings?.preferredModel ? (runtimeSettings.preferredModel.split('/').pop() || runtimeSettings.preferredModel) : 'Select model'}</span>
+            <ChevronDown size={14} className={clsx('transition-transform', modelPickerOpen ? 'rotate-180' : '')} />
+          </button>
 
-        <div className="mt-3 flex items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden text-[11px]">
-          <span className={`rounded-full border px-3 py-1 font-semibold ${statusChipClass(runStatus, isStreaming)}`}>
-            {runStatus ?? (isStreaming ? 'running' : 'ready')}
-          </span>
-          <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
-            {assistantModeDefinition.label}
-          </span>
-          {!beginnerMode && activeConversationId && (
-            <span className="rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#98a2b3]">
-              {shortId(activeConversationId)}
-            </span>
-          )}
-          {pendingApprovals.length > 0 && (
-            <span className="rounded-full border border-[#f2d18b] bg-[#fff8e8] px-3 py-1 font-semibold text-[#b54708]">
-              {pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} waiting
-            </span>
-          )}
-          {learnedSkill && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1 font-semibold text-[#475467]">
-              <BrainCircuit size={12} />
-              <code className="font-mono text-[10px]">{learnedSkill.skillId}</code>
-              {learnedIntentLabel && <span className="text-[#98a2b3]">{learnedIntentLabel}</span>}
-            </span>
+          {modelPickerOpen && (
+            <div className="absolute left-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-[18px] border border-[#e4e7ec] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+              <div className="border-b border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">Model</p>
+              </div>
+
+              {/* Provider tabs */}
+              <div className="flex gap-1 overflow-x-auto px-3 pt-3 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {RUNTIME_PROVIDERS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => void updateRuntimeSettings(p, LLM_MODELS[p].default, 'provider')}
+                    className={clsx(
+                      'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition',
+                      activeProvider === p
+                        ? 'bg-[#f4fbf7] text-[#10b981] border border-[#a7f3d0] dark:bg-[#064e3b] dark:text-[#34d399] dark:border-[#065f46]'
+                        : 'text-[#667085] hover:bg-[#f8fafc] border border-transparent dark:text-[#a1a1aa] dark:hover:bg-[#232837]',
+                    )}
+                  >
+                    {LLM_PROVIDER_CAPABILITIES[p].label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Model list */}
+              <div className="max-h-52 overflow-y-auto px-2 pb-3 pt-1">
+                {providerModelOptions.map((model) => {
+                  const active = (runtimeSettings?.preferredModel?.trim() || LLM_MODELS[activeProvider].default) === model
+                  return (
+                    <button
+                      key={model}
+                      type="button"
+                      onClick={() => { void updateRuntimeSettings(activeProvider, model, 'model'); setModelPickerOpen(false) }}
+                      className={clsx(
+                        'flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-[12px] transition',
+                        active
+                          ? 'bg-[#f4fbf7] font-semibold text-[#10b981] dark:bg-[#064e3b] dark:text-[#34d399]'
+                          : 'text-[#344054] hover:bg-[#f8fafc] dark:text-[#c9d1e0] dark:hover:bg-[#232837]',
+                      )}
+                    >
+                      <span className="truncate">{model}</span>
+                      {active && (
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#10b981]" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           )}
         </div>
 
-        {!beginnerMode && controlsExpanded && (
-          <div className="mt-4 rounded-[20px] border border-[#e4e7ec] bg-white p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#98a2b3]">
-                  Session details
-                </p>
-                <p className="mt-1 text-xs text-[#667085]">
-                  Runtime defaults plus per-session thinking, verbose, and reasoning controls.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => void executeOperatorCommand('/status')}
-                  disabled={runtimeLoading || isStreaming}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#475467] transition hover:bg-[#f8fafc] disabled:opacity-50"
-                >
-                  <Gauge size={12} />
-                  Status
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void syncRuntimeState()}
-                  disabled={runtimeLoading}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#475467] transition hover:bg-[#f8fafc] disabled:opacity-50"
-                >
-                  <RefreshCw size={12} />
-                  Refresh
-                </button>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <label className="space-y-1">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                  Default provider
-                </span>
-                <select
-                  value={activeProvider}
-                  disabled={runtimeLoading || Boolean(runtimeBusy)}
-                  onChange={(e) => {
-                    const provider = e.target.value
-                    if (!isRuntimeProvider(provider)) return
-                    void updateRuntimeSettings(provider, LLM_MODELS[provider].default, 'provider')
-                  }}
-                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] dark:text-[var(--tone-inverse)]"
-                >
-                  {RUNTIME_PROVIDERS.map((provider) => (
-                    <option key={provider} value={provider}>
-                      {LLM_PROVIDER_CAPABILITIES[provider].label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                  Default model
-                </span>
-                <select
-                  value={runtimeSettings?.preferredModel?.trim() || LLM_MODELS[activeProvider].default}
-                  disabled={runtimeLoading || Boolean(runtimeBusy)}
-                  onChange={(e) => void updateRuntimeSettings(activeProvider, e.target.value, 'model')}
-                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] dark:text-[var(--tone-inverse)]"
-                >
-                  {providerModelOptions.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                  Thinking
-                </span>
-                <select
-                  value={thinkingValue}
-                  disabled={!activeConversationId || runtimeLoading || Boolean(runtimeBusy)}
-                  onChange={(e) =>
-                    void patchActiveSession(
-                      { thinkingLevel: resolveThinkingPatchValue(e.target.value, binaryThinking) },
-                      `Thinking level set to ${e.target.value || 'inherit'}.`,
-                      'think',
-                    )
-                  }
-                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] disabled:opacity-60 dark:text-[var(--tone-inverse)]"
-                >
-                  {thinkingOptions.map((value) => (
-                    <option key={value || 'inherit'} value={value}>
-                      {value || 'inherit'}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                  Verbose
-                </span>
-                <select
-                  value={verboseValue}
-                  disabled={!activeConversationId || runtimeLoading || Boolean(runtimeBusy)}
-                  onChange={(e) =>
-                    void patchActiveSession(
-                      { verboseLevel: e.target.value || null },
-                      `Verbose level set to ${e.target.value || 'inherit'}.`,
-                      'verbose',
-                    )
-                  }
-                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] disabled:opacity-60 dark:text-[var(--tone-inverse)]"
-                >
-                  {verboseOptions.map((option) => (
-                    <option key={option.value || 'inherit'} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--tone-soft)]">
-                  Reasoning
-                </span>
-                <select
-                  value={reasoningValue}
-                  disabled={!activeConversationId || runtimeLoading || Boolean(runtimeBusy)}
-                  onChange={(e) =>
-                    void patchActiveSession(
-                      { reasoningLevel: e.target.value || null },
-                      `Reasoning visibility set to ${e.target.value || 'inherit'}.`,
-                      'reasoning',
-                    )
-                  }
-                  className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--tone-strong)] outline-none transition focus:border-[var(--border-strong)] disabled:opacity-60 dark:text-[var(--tone-inverse)]"
-                >
-                  {reasoningOptions.map((value) => (
-                    <option key={value || 'inherit'} value={value}>
-                      {value || 'inherit'}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </div>
+        {/* Right: mobile menu toggle */}
+        {onOpenMobileSessions && (
+          <button
+            type="button"
+            onClick={onOpenMobileSessions}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e4e7ec] bg-white text-[#667085] transition hover:bg-[#f8fafc] xl:hidden dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+            title="Menu"
+          >
+            <Menu size={16} />
+          </button>
         )}
       </div>
 
       {visibleMessages.length === 0 ? (
-        /* ── Landing / empty state — centered MiniMax-style layout ── */
+        /* ── Landing / empty state ── */
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-[#f7f8fb] px-4 py-10 dark:bg-[#0f1117]">
-          <h1 className="mb-2 text-center text-[26px] font-bold leading-snug text-[#101828] dark:text-white sm:text-[30px]">
-            OpenAgents,{' '}
-            <span className="text-[#ef4444]">making work autonomous.</span>
-          </h1>
-          <p className="mb-8 text-center text-[13px] text-[#98a2b3]">
-            Give it a goal — it will plan, use tools, and report back.
-          </p>
+          <div className="flex flex-col items-center justify-center gap-2 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="oa-brand-badge flex h-10 w-10 items-center justify-center rounded-xl text-xs font-bold text-white shrink-0">
+                OA
+              </div>
+              <h1 className="text-3xl font-semibold text-[#101828] dark:text-white tracking-tight">
+                How can I help?
+              </h1>
+            </div>
+          </div>
 
           {/* Input card */}
           <div className="relative w-full max-w-2xl">
@@ -1173,7 +1038,7 @@ export function ChatWindow({
               />
             )}
 
-            <div className="rounded-[28px] border border-[#e4e7ec] bg-white shadow-[0_8px_32px_rgba(15,23,42,0.08)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+            <div className="rounded-[28px] border border-[#e4e7ec] bg-white shadow-[0_8px_32px_rgba(15,23,42,0.06)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
               {/* File chips */}
               {attachedFiles.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 px-5 pt-4">
@@ -1199,117 +1064,89 @@ export function ChatWindow({
                 onKeyDown={handleKey}
                 disabled={isStreaming}
                 rows={3}
-                placeholder={gatewayConnected ? assistantModeDefinition.placeholder : 'Runtime offline. /help still works locally.'}
+                placeholder="Ask anything"
                 className="max-h-48 min-h-[96px] w-full resize-none bg-transparent px-5 pt-5 text-[15px] text-[#101828] outline-none placeholder:text-[#b0b8cc] disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
               />
 
               <div className="flex items-center justify-between border-t border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
-                {/* Left: attach + mode chip */}
+                {/* Left: attach + badge pills */}
                 <div className="flex items-center gap-1.5">
                   <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="*/*" />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isStreaming} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#667085] disabled:opacity-40" aria-label="Attach file">
-                    <Paperclip size={15} />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isStreaming}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#e4e7ec] bg-white text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+                    title="Attach files"
+                  >
+                    <Plus size={14} />
                   </button>
-                  {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
                   <button
                     type="button"
                     onClick={() => {
-                      const modes: AssistantMode[] = ['assist', 'plan', 'execute', 'autopilot']
-                      const idx = modes.indexOf(assistantMode)
-                      onAssistantModeChange(modes[(idx + 1) % modes.length])
+                      setInput((prev) => prev.startsWith('/search ') ? prev : `/search ${prev}`)
+                      focusComposer()
                     }}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-[#f8fafc] px-2.5 text-[11px] font-semibold text-[#475467] transition hover:border-[#f3c8c5] hover:bg-[#fff8f7] hover:text-[#ef4444]"
-                    title="Cycle assistant mode"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
                   >
-                    <Sparkles size={10} />
-                    {assistantModeDefinition.label}
+                    <Search size={11} className="text-[#10b981]" />
+                    <span>Search</span>
                   </button>
-                </div>
-
-                {/* Right: model picker + send */}
-                <div className="flex items-center gap-2">
-                  {/* Model selector */}
-                  <div ref={modelPickerRef} className="relative hidden sm:block">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAssistantModeChange('execute')
+                      setInput((prev) => prev + (prev ? '\n' : '') + '```\n\n```')
+                      focusComposer()
+                    }}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+                  >
+                    <Code size={11} className="text-[#10b981]" />
+                    <span>Code</span>
+                  </button>
+                  
+                  <div ref={mcpPickerRef} className="relative">
                     <button
                       type="button"
-                      onClick={() => setModelPickerOpen((o) => !o)}
-                      disabled={Boolean(runtimeBusy) || runtimeLoading}
-                      className={clsx(
-                        'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition',
-                        modelPickerOpen
-                          ? 'border-[#f3c8c5] bg-[#fff8f7] text-[#ef4444]'
-                          : 'border-[#e4e7ec] bg-[#f8fafc] text-[#667085] hover:border-[#f3c8c5] hover:bg-[#fff8f7] hover:text-[#ef4444]',
-                        (Boolean(runtimeBusy) || runtimeLoading) && 'opacity-50 cursor-not-allowed',
-                      )}
-                      title="Switch model"
+                      onClick={() => setMcpDropdownOpen((o) => !o)}
+                      className="inline-flex h-8 items-center gap-1 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
                     >
-                      {runtimeBusy ? (
-                        <RefreshCw size={10} className="animate-spin" />
-                      ) : (
-                        <BrainCircuit size={10} />
-                      )}
-                      <span className="max-w-[140px] truncate">{runtimeSummary}</span>
-                      <ChevronUp size={9} className={clsx('transition-transform', modelPickerOpen ? 'rotate-180' : '')} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#10b981] animate-pulse" />
+                      <span>MCP</span>
+                      <ChevronDown size={10} className={clsx('transition-transform', mcpDropdownOpen ? 'rotate-180' : '')} />
                     </button>
 
-                    {modelPickerOpen && (
-                      <div className="absolute bottom-full right-0 z-50 mb-2 w-72 overflow-hidden rounded-[18px] border border-[#e4e7ec] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
-                        <div className="border-b border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
-                          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">Model</p>
-                        </div>
-
-                        {/* Provider tabs */}
-                        <div className="flex gap-1 overflow-x-auto px-3 pt-3 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                          {RUNTIME_PROVIDERS.map((p) => (
-                            <button
-                              key={p}
-                              type="button"
-                              onClick={() => void updateRuntimeSettings(p, LLM_MODELS[p].default, 'provider')}
-                              className={clsx(
-                                'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition',
-                                activeProvider === p
-                                  ? 'bg-[#fff8f7] text-[#ef4444] border border-[#f3c8c5]'
-                                  : 'text-[#667085] hover:bg-[#f8fafc] border border-transparent',
-                              )}
-                            >
-                              {LLM_PROVIDER_CAPABILITIES[p].label}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Model list */}
-                        <div className="max-h-52 overflow-y-auto px-2 pb-3 pt-1">
-                          {providerModelOptions.map((model) => {
-                            const active = (runtimeSettings?.preferredModel?.trim() || LLM_MODELS[activeProvider].default) === model
-                            return (
-                              <button
-                                key={model}
-                                type="button"
-                                onClick={() => { void updateRuntimeSettings(activeProvider, model, 'model'); setModelPickerOpen(false) }}
-                                className={clsx(
-                                  'flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-[12px] transition',
-                                  active
-                                    ? 'bg-[#fff8f7] font-semibold text-[#ef4444]'
-                                    : 'text-[#344054] hover:bg-[#f8fafc] dark:text-[#c9d1e0] dark:hover:bg-[#232837]',
-                                )}
-                              >
-                                <span className="truncate">{model}</span>
-                                {active && (
-                                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ef4444]" />
-                                )}
-                              </button>
-                            )
-                          })}
+                    {mcpDropdownOpen && (
+                      <div className="absolute left-0 bottom-full z-50 mb-2 w-56 overflow-hidden rounded-[14px] border border-[#e4e7ec] bg-white p-3 shadow-lg dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+                        <p className="text-[11px] font-semibold text-[#10b981] mb-2">Model Context Protocol</p>
+                        <p className="text-[11px] text-[#667085] mb-2 dark:text-[#a1a1aa]">Active local servers:</p>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
+                            <span>filesystem</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
+                            <span>web-search</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
+                            <span>developer-tools</span>
+                          </div>
                         </div>
                       </div>
                     )}
                   </div>
+                </div>
 
+                {/* Right: mic + green send button */}
+                <div className="flex items-center gap-2">
+                  <WebRtcVoiceControls />
                   <button
                     type="button"
                     onClick={() => void handleSend()}
                     disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
-                    className="oa-accent-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
                     aria-label="Send message"
                   >
                     <ArrowUp size={15} />
@@ -1317,42 +1154,6 @@ export function ChatWindow({
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Mode chips */}
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {ASSISTANT_MODE_DEFINITIONS.map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                onClick={() => onAssistantModeChange(mode.id)}
-                className={clsx(
-                  'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12px] font-medium transition shadow-[0_1px_2px_rgba(16,24,40,0.04)]',
-                  assistantMode === mode.id
-                    ? 'border-[#f3c8c5] bg-[#fff8f7] text-[#ef4444]'
-                    : 'border-[#e4e7ec] bg-white text-[#344054] hover:border-[#f3c8c5] hover:bg-[#fff8f7] hover:text-[#ef4444] dark:bg-[#1a1f2e] dark:text-[#c9d1e0] dark:border-[#2d3347]',
-                )}
-              >
-                {mode.label}
-                <span className="hidden text-[#98a2b3] sm:inline">— {mode.caption}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Quick starter prompts */}
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {assistantModeDefinition.starterPrompts.slice(0, 3).map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                disabled={!gatewayConnected || isStreaming}
-                onClick={() => void handleQuickPrompt(prompt)}
-                className="max-w-[260px] truncate rounded-full border border-[#e4e7ec] bg-white px-3 py-1.5 text-[11px] text-[#667085] transition hover:border-[#f3c8c5] hover:text-[#ef4444] disabled:opacity-50 dark:bg-[#1a1f2e] dark:text-[#8892a4] dark:border-[#2d3347]"
-                title={prompt}
-              >
-                {prompt}
-              </button>
-            ))}
           </div>
         </div>
       ) : (
@@ -1408,20 +1209,90 @@ export function ChatWindow({
                 onKeyDown={handleKey}
                 disabled={isStreaming}
                 rows={1}
-                placeholder={gatewayConnected ? 'Message OpenAgents (Enter to send)' : 'Runtime offline. /help still works locally.'}
-                className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-base text-[#101828] outline-none placeholder:text-[#667085] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:text-white"
+                placeholder="Ask anything"
+                className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-base text-[#101828] outline-none placeholder:text-[#a1a1aa] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:text-white"
               />
               <div className="flex items-center justify-between border-t border-[#f2f4f7] px-3 py-2.5 dark:border-[#2d3347]">
-                <div className="flex items-center gap-1">
+                {/* Left: attach + badge pills */}
+                <div className="flex items-center gap-1.5">
                   <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="*/*" />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isStreaming} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#98a2b3] transition hover:bg-[#f2f4f7] hover:text-[#667085] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#1e2433]" aria-label="Attach file">
-                    <Paperclip size={16} />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isStreaming}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#e4e7ec] bg-white text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+                    title="Attach files"
+                  >
+                    <Plus size={14} />
                   </button>
-                  <WebRtcVoiceControls />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInput((prev) => prev.startsWith('/search ') ? prev : `/search ${prev}`)
+                      focusComposer()
+                    }}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+                  >
+                    <Search size={11} className="text-[#10b981]" />
+                    <span>Search</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAssistantModeChange('execute')
+                      setInput((prev) => prev + (prev ? '\n' : '') + '```\n\n```')
+                      focusComposer()
+                    }}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+                  >
+                    <Code size={11} className="text-[#10b981]" />
+                    <span>Code</span>
+                  </button>
+                  
+                  <div ref={mcpPickerRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setMcpDropdownOpen((o) => !o)}
+                      className="inline-flex h-8 items-center gap-1 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#10b981] animate-pulse" />
+                      <span>MCP</span>
+                      <ChevronDown size={10} className={clsx('transition-transform', mcpDropdownOpen ? 'rotate-180' : '')} />
+                    </button>
+
+                    {mcpDropdownOpen && (
+                      <div className="absolute left-0 bottom-full z-50 mb-2 w-56 overflow-hidden rounded-[14px] border border-[#e4e7ec] bg-white p-3 shadow-lg dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+                        <p className="text-[11px] font-semibold text-[#10b981] mb-2">Model Context Protocol</p>
+                        <p className="text-[11px] text-[#667085] mb-2 dark:text-[#a1a1aa]">Active local servers:</p>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
+                            <span>filesystem</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
+                            <span>web-search</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
+                            <span>developer-tools</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Right: mic + green send button */}
                 <div className="flex items-center gap-2">
-                  {!beginnerMode && <ResponsePresets onApply={handlePresetApply} />}
-                  <button type="button" onClick={() => void handleSend()} disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)} className="oa-accent-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Send message">
+                  <WebRtcVoiceControls />
+                  <button
+                    type="button"
+                    onClick={() => void handleSend()}
+                    disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label="Send message"
+                  >
                     <ArrowUp size={15} />
                   </button>
                 </div>

@@ -30,6 +30,76 @@ export class GoalService {
   private readonly logger = new Logger(GoalService.name)
   private goals = new Map<string, Goal>()
 
+  constructor(private readonly prisma: PrismaService) {}
+
+  private async syncGoalToMemory(userId: string, goal: Goal) {
+    try {
+      const factKey = `goal_${goal.id}`
+      await this.prisma.memoryFact.upsert({
+        where: {
+          userId_entity_key: {
+            userId,
+            entity: 'user_goals',
+            key: factKey,
+          },
+        },
+        create: {
+          userId,
+          entity: 'user_goals',
+          key: factKey,
+          value: JSON.stringify({
+            title: goal.title,
+            description: goal.description,
+            status: goal.status,
+            progress: goal.progress,
+            priority: goal.priority,
+            milestones: goal.milestones.map((m) => ({ title: m.title, completed: m.completed })),
+            dueDate: goal.dueDate,
+          }),
+          confidence: 0.9,
+        },
+        update: {
+          value: JSON.stringify({
+            title: goal.title,
+            description: goal.description,
+            status: goal.status,
+            progress: goal.progress,
+            priority: goal.priority,
+            milestones: goal.milestones.map((m) => ({ title: m.title, completed: m.completed })),
+            dueDate: goal.dueDate,
+          }),
+          confidence: 0.9,
+        },
+      })
+
+      await this.prisma.memoryEvent.create({
+        data: {
+          userId,
+          kind: 'note',
+          summary: `Goal "${goal.title}" updated (status: ${goal.status}, progress: ${goal.progress}%)`,
+          payload: JSON.stringify({ goalId: goal.id, title: goal.title, status: goal.status, progress: goal.progress }),
+          confidence: 0.9,
+        },
+      })
+    } catch (err: any) {
+      this.logger.warn(`Failed to sync goal to memory: ${err.message}`)
+    }
+  }
+
+  private async deleteGoalFromMemory(userId: string, goalId: string) {
+    try {
+      await this.prisma.memoryFact.deleteMany({
+        where: {
+          userId,
+          entity: 'user_goals',
+          key: `goal_${goalId}`,
+        },
+      })
+    } catch (err: any) {
+      this.logger.warn(`Failed to delete goal from memory: ${err.message}`)
+    }
+  }
+
   async create(input: {
     userId: string
     title: string
@@ -60,6 +130,7 @@ export class GoalService {
     }
     this.goals.set(goal.id, goal)
     this.logger.log(`Created goal "${goal.title}" for user ${input.userId}`)
+    await this.syncGoalToMemory(input.userId, goal)
     return goal
   }
 
@@ -72,6 +143,7 @@ export class GoalService {
       goal.completedAt = new Date().toISOString()
       goal.progress = 100
     }
+    await this.syncGoalToMemory(goal.userId, goal)
     return goal
   }
 
@@ -85,7 +157,6 @@ export class GoalService {
       milestone.completedAt = new Date().toISOString()
     }
 
-    // Recalculate progress
     const total = goal.milestones.length
     const completed = goal.milestones.filter((m) => m.completed).length
     goal.progress = total > 0 ? Math.round((completed / total) * 100) : 0
@@ -96,6 +167,7 @@ export class GoalService {
       goal.completedAt = new Date().toISOString()
     }
 
+    await this.syncGoalToMemory(goal.userId, goal)
     return goal
   }
 
@@ -103,6 +175,7 @@ export class GoalService {
     const goal = this.goals.get(goalId)
     if (goal && !goal.conversationIds.includes(conversationId)) {
       goal.conversationIds.push(conversationId)
+      await this.syncGoalToMemory(goal.userId, goal)
     }
   }
 
@@ -119,6 +192,9 @@ export class GoalService {
   }
 
   async delete(goalId: string): Promise<boolean> {
+    const goal = this.goals.get(goalId)
+    if (!goal) return false
+    await this.deleteGoalFromMemory(goal.userId, goalId)
     return this.goals.delete(goalId)
   }
 

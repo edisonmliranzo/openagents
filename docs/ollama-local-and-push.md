@@ -59,7 +59,7 @@ ollama -v
 ## 2) Pull and test a local model
 
 ```bash
-ollama pull llama3.2
+ollama run hf.co/unsloth/gemma-4-12b-it-GGUF
 ollama ls
 curl http://localhost:11434/api/tags
 ```
@@ -77,7 +77,7 @@ The OpenAI-compatible endpoint is:
 2. Open `Settings -> Config`.
 3. In `Active LLM`, set:
    - Provider: `Ollama`
-   - Model: your pulled model (for example `llama3.2`)
+   - Model: your pulled model (for example `hf.co/unsloth/gemma-4-12b-it-GGUF`)
 4. In the Ollama card:
    - Server URL: `http://localhost:11434`
    - Click `Test`
