@@ -420,10 +420,9 @@ export function ChatWindow({
     [messages, operatorMessages],
   )
 
-  const activeProvider = useMemo(() => {
-    const normalized = normalizeProviderId(runtimeSettings?.preferredProvider)
-    return isRuntimeProvider(normalized) ? normalized : 'ollama'
-  }, [runtimeSettings?.preferredProvider])
+  const activeProvider = useMemo<RuntimeProvider>(() => {
+    return 'ollama'
+  }, [])
   const effectiveRuntime = useMemo(
     () => getEffectiveRuntime(runtimeSettings, activeSession),
     [runtimeSettings, activeSession],
@@ -954,24 +953,6 @@ export function ChatWindow({
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">Model</p>
               </div>
 
-              {/* Provider tabs */}
-              <div className="flex gap-1 overflow-x-auto px-3 pt-3 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {RUNTIME_PROVIDERS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => void updateRuntimeSettings(p, LLM_MODELS[p].default, 'provider')}
-                    className={clsx(
-                      'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition',
-                      activeProvider === p
-                        ? 'bg-[#f4fbf7] text-[#10b981] border border-[#a7f3d0] dark:bg-[#064e3b] dark:text-[#34d399] dark:border-[#065f46]'
-                        : 'text-[#667085] hover:bg-[#f8fafc] border border-transparent dark:text-[#a1a1aa] dark:hover:bg-[#232837]',
-                    )}
-                  >
-                    {LLM_PROVIDER_CAPABILITIES[p].label}
-                  </button>
-                ))}
-              </div>
 
               {/* Model list */}
               <div className="max-h-52 overflow-y-auto px-2 pb-3 pt-1">
