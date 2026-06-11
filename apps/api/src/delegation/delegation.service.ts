@@ -1,4 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { PrismaService } from '../prisma/prisma.service'
+import { SubagentService } from './subagent.service'
+
 export interface SubAgentConfig {
   id: string
   name: string
@@ -34,6 +37,11 @@ export class DelegationService {
   private readonly logger = new Logger(DelegationService.name)
   private activeTasks = new Map<string, DelegationTask>()
 
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subagent: SubagentService,
+  ) {}
+
   async createTask(input: {
     parentRunId: string
     userId: string
@@ -67,16 +75,66 @@ export class DelegationService {
     // Execute each sub-agent's work
     const results: DelegationResult[] = []
     for (const agent of task.subAgents) {
+      const partialResult = await this.subagent.executeSubAgent(
+        task.userId,
+        task.objective,
+        agent,
+      )
+
       const result: DelegationResult = {
         subAgentId: agent.id,
         subAgentName: agent.name,
-        status: 'completed',
-        output: `Sub-agent "${agent.name}" completed objective: ${task.objective}`,
-        confidence: 0.8,
-        tokensUsed: 0,
-        durationMs: 0,
-        completedAt: new Date().toISOString(),
+        status: partialResult.status ?? 'failed',
+        output: partialResult.output ?? '',
+        confidence: partialResult.confidence ?? 0.8,
+        tokensUsed: partialResult.tokensUsed ?? 0,
+        durationMs: partialResult.durationMs ?? 0,
+        completedAt: partialResult.completedAt ?? new Date().toISOString(),
       }
+
+      // Persist runs into SubagentRun and DelegationEdge tables in database
+      try {
+        const subagentRun = await this.prisma.subagentRun.create({
+          data: {
+            userId: task.userId,
+            parentRunId: task.parentRunId,
+            role: agent.preset ?? 'developer',
+            label: agent.name,
+            objective: task.objective,
+            input: JSON.stringify({ subagentId: agent.id }),
+            output: result.output,
+            status: result.status === 'completed' ? 'done' : 'error',
+            startedAt: new Date(Date.now() - result.durationMs),
+            finishedAt: new Date(),
+            error: result.status === 'failed' ? result.output : null,
+          },
+        })
+
+        // Verify if parent run exists before creating the edge to satisfy foreign key constraints
+        const parentExists = task.parentRunId
+          ? await this.prisma.subagentRun.findUnique({ where: { id: task.parentRunId } }).catch(() => null)
+          : null
+
+        if (parentExists) {
+          await this.prisma.delegationEdge.create({
+            data: {
+              userId: task.userId,
+              fromRunId: task.parentRunId,
+              toRunId: subagentRun.id,
+              intent: `delegate_${agent.name.toLowerCase().replace(/\s+/g, '_')}`,
+              status: result.status === 'completed' ? 'completed' : 'failed',
+              metadata: JSON.stringify({
+                confidence: result.confidence,
+                tokensUsed: result.tokensUsed,
+                durationMs: result.durationMs,
+              }),
+            },
+          })
+        }
+      } catch (dbErr: any) {
+        this.logger.warn(`Failed to persist sub-agent run details to DB: ${dbErr.message}`)
+      }
+
       results.push(result)
       task.results.push(result)
     }

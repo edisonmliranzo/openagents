@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common'
 import { DelegationService } from './delegation.service'
 import { DelegationController } from './delegation.controller'
+import { SubagentService } from './subagent.service'
+import { AgentModule } from '../agent/agent.module'
+import { PrismaModule } from '../prisma/prisma.module'
 
 @Module({
-  providers: [DelegationService],
+  imports: [AgentModule, PrismaModule],
+  providers: [DelegationService, SubagentService],
   controllers: [DelegationController],
-  exports: [DelegationService],
+  exports: [DelegationService, SubagentService],
 })
 export class DelegationModule {}

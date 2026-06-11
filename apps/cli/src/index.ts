@@ -3,7 +3,7 @@
 import { cac } from 'cac';
 import chalk from 'chalk';
 import ora from 'ora';
-import { readlineSync } from 'readline-sync';
+import readlineSync from 'readline-sync';
 
 const cli = cac('openagents');
 
@@ -72,7 +72,7 @@ cli.command('chat', 'Start an interactive chat session')
             throw new Error(`API error: ${response.status}`);
           }
           
-          const data = await response.json();
+          const data = (await response.json()) as any;
           responseSpinner.stop();
           
           console.log(chalk.green('\nAgent: '), data.reply || data.message || data.content, '\n');
@@ -115,7 +115,7 @@ cli.command('send <message>', 'Send a single message and exit')
         throw new Error(`API error: ${response.status}`);
       }
       
-      const data = await response.json();
+      const data = (await response.json()) as any;
       spinner.stop();
       
       console.log(chalk.green('\nAgent: '), data.reply || data.message || data.content, '\n');
@@ -141,7 +141,7 @@ cli.command('memory', 'View and manage agent memory')
           },
         });
         
-        const data = await response.json();
+        const data = (await response.json()) as any;
         spinner.stop();
         
         console.log(chalk.cyan('\n📚 Agent Memory:\n'));
@@ -157,7 +157,7 @@ cli.command('memory', 'View and manage agent memory')
           },
         });
         
-        const data = await response.json();
+        const data = (await response.json()) as any;
         spinner.stop();
         
         console.log(chalk.cyan(`\n🔍 Search results for "${options.search}":\n`));
@@ -199,8 +199,8 @@ cli.command('status', 'Check platform status and health')
         }),
       ]);
       
-      const health = await healthRes.json();
-      const metrics = await metricsRes.json().catch(() => ({}));
+      const health = (await healthRes.json()) as any;
+      const metrics = (await metricsRes.json().catch(() => ({}))) as any;
       
       spinner.stop();
       
@@ -251,7 +251,7 @@ cli.command('learn', 'View learning statistics and insights')
         },
       });
       
-      const data = await response.json();
+      const data = (await response.json()) as any;
       spinner.stop();
       
       console.log(chalk.cyan(`

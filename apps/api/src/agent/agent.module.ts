@@ -11,9 +11,19 @@ import { UsersModule } from '../users/users.module'
 import { AuditModule } from '../audit/audit.module'
 import { NotificationsModule } from '../notifications/notifications.module'
 import { EventsModule } from '../events/events.module'
+import { GoalsModule } from '../goals/goals.module'
 
 @Module({
-  imports: [ToolsModule, MemoryModule, ApprovalsModule, UsersModule, AuditModule, NotificationsModule, EventsModule],
+  imports: [
+    ToolsModule,
+    MemoryModule,
+    ApprovalsModule,
+    UsersModule,
+    AuditModule,
+    NotificationsModule,
+    EventsModule,
+    GoalsModule,
+  ],
   controllers: [AgentController],
   providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService],
   exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService],

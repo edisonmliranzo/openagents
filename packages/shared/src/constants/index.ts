@@ -20,8 +20,8 @@ export const LLM_MODELS = {
     powerful: 'gemini-2.5-pro',
   },
   ollama: {
-    default: 'llama3.2',
-    fast: 'llama3.1:8b',
+    default: 'hf.co/unsloth/gemma-4-12b-it-GGUF',
+    fast: 'llama3.2',
     powerful: 'llama3.3:70b',
   },
   minimax: {
@@ -90,26 +90,10 @@ export const LLM_MODEL_OPTIONS = {
     'gemini-2.0-flash-lite',
   ],
   ollama: [
-    // Llama 4
-    'llama4-scout',
-    'llama4-maverick',
-    // Llama 3.3 / 3.2 / 3.1
-    'llama3.3:70b',
-    'llama3.2',
-    'llama3.1:8b',
-    // Coding
-    'codellama',
-    // Reasoning
-    'qwen2.5:32b',
-    'qwq',
-    'deepseek-r1:7b',
-    'deepseek-r1:32b',
-    // Small / fast
-    'phi4',
-    'phi3',
-    'gemma3',
-    'gemma3:1b',
-    'mistral',
+    // Gemma 4 (E4B / E2B)
+    'hf.co/unsloth/gemma-4-12b-it-GGUF',
+    'hf.co/unsloth/gemma-4-E4B-it-GGUF',
+    'hf.co/unsloth/gemma-4-E2B-it-GGUF',
   ],
   minimax: [
     // M2.7 — latest reasoning series
@@ -203,7 +187,7 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
     toolUse: 'basic',
     latency: 'variable',
     contextProfile: 'local',
-    strengths: ['local execution — no API cost', 'Llama 4 Scout/Maverick available', 'works offline'],
+    strengths: ['local execution — no API cost', 'Gemma 4 (E4B) default model', 'Llama 4 Scout/Maverick available', 'works offline'],
     cautions: ['quality depends on installed model', 'tool-heavy runs may be less reliable'],
   },
   minimax: {

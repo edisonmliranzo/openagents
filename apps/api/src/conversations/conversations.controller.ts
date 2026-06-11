@@ -10,6 +10,8 @@ import { AgentService } from '../agent/agent.service'
 import { ContextCompressorService } from '../agent/context-compressor.service'
 import { NanobotLoopService } from '../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../nanobot/config/nanobot-config.service'
+import { WsGateway } from '../events/ws.gateway'
+import { StreamingService } from '../streaming/streaming.service'
 
 const SKILL_COMMAND_PATTERN = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
 const ADAPTIVE_SKILL_INTENT_PATTERN =
@@ -35,6 +37,8 @@ export class ConversationsController {
     private compressor: ContextCompressorService,
     private nanobotLoop: NanobotLoopService,
     private nanobotConfig: NanobotConfigService,
+    private wsGateway: WsGateway,
+    private streamingService: StreamingService,
   ) {}
 
   @Get()
@@ -76,10 +80,39 @@ export class ConversationsController {
     res.setHeader('Transfer-Encoding', 'chunked')
     res.flushHeaders()
 
+    const streamSession = this.streamingService.createSession(conversationId)
+
     const emit = (event: string, data: unknown) => {
+      // 1. Log chunk and tool progress in StreamingService
+      if (event === 'message' || event === 'tokens' || event === 'thinking') {
+        const textContent = typeof data === 'string'
+          ? data
+          : (data as any)?.content ?? (data as any)?.message ?? JSON.stringify(data)
+        this.streamingService.pushChunk(streamSession.id, {
+          type: event === 'tokens' ? 'token' : 'text',
+          content: textContent,
+        })
+      } else if (event === 'tool_result' || event === 'status' || event === 'approval_required') {
+        const toolName = (data as any)?.tool ?? (data as any)?.toolName ?? 'unknown'
+        const status = event === 'status'
+          ? ((data as any)?.status ?? 'running')
+          : event === 'approval_required'
+            ? 'failed'
+            : 'completed'
+        const msg = typeof data === 'string' ? data : JSON.stringify(data)
+        this.streamingService.pushToolProgress(streamSession.id, {
+          toolName,
+          status,
+          message: msg,
+        })
+      }
+
+      // 2. Stream over SSE
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-      // Explicitly flush after every event so nginx / Node deliver tokens immediately
       if (typeof (res as any).flush === 'function') (res as any).flush()
+
+      // 3. Broadcast to WebSocket conversation room
+      this.wsGateway.emitToConversation(conversationId, event, data)
     }
 
     try {
@@ -87,8 +120,6 @@ export class ConversationsController {
       const isSkillCommand = SKILL_COMMAND_PATTERN.test(message)
       const isAdaptiveSkillIntent =
         this.nanobotConfig.adaptiveIntentRoutingEnabled && ADAPTIVE_SKILL_INTENT_PATTERN.test(message)
-      // Keep normal chat on the faster agent path. Reserve the heavier nanobot loop
-      // for explicit skill/research-style requests that benefit from multi-step autonomy.
       const useNanobotLoop = isSkillCommand || isAdaptiveSkillIntent
       const run = useNanobotLoop
         ? this.nanobotLoop.run.bind(this.nanobotLoop)
@@ -103,6 +134,7 @@ export class ConversationsController {
     } catch (err: any) {
       emit('error', { message: err.message })
     } finally {
+      this.streamingService.completeSession(streamSession.id)
       res.write('data: [DONE]\n\n')
       res.end()
     }

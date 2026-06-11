@@ -11,6 +11,7 @@ import { PromptGuardService } from '../tools/prompt-guard.service'
 import { MissionControlService } from '../mission-control/mission-control.service'
 import { RuntimeEventsService } from '../events/runtime-events.service'
 import { ContextCompressorService } from './context-compressor.service'
+import { GoalService } from '../goals/goal.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
   LLM_MODELS,
@@ -187,6 +188,7 @@ export class AgentService {
     private mission: MissionControlService,
     private runtimeEvents: RuntimeEventsService,
     private compressor: ContextCompressorService,
+    private goals: GoalService,
   ) {}
 
   async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
@@ -293,6 +295,10 @@ export class AgentService {
         : baseWithPersonality
       if (compressionSummary) {
         systemPrompt = `${systemPrompt}\n\n${compressionSummary}`
+      }
+      const goalSummary = await this.goals.getActiveGoalSummary(userId)
+      if (goalSummary) {
+        systemPrompt = `${systemPrompt}\n\nActive Goals:\n${goalSummary}`
       }
       const promptAppendices = [
         OPENAGENTS_IDENTITY_APPENDIX,
