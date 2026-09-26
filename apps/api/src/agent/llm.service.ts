@@ -153,7 +153,7 @@ export class LLMService {
     if (p === 'anthropic') {
       return this.completeWithKeyRotation(
         (key) => {
-          const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', key) })
+          const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', key), timeout: 120_000, maxRetries: 1 })
           return this.completeAnthropic(messages, tools, systemPrompt, client, model)
         },
         p,
@@ -378,7 +378,7 @@ export class LLMService {
 
     try {
       if (requestedProvider === 'anthropic') {
-        const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', apiKey) })
+        const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', apiKey), timeout: 120_000, maxRetries: 1 })
         const res = await client.messages.create({
           model: model ?? LLM_MODELS.anthropic.default,
           max_tokens: 5,
@@ -660,6 +660,9 @@ export class LLMService {
     return new OpenAI({
       baseURL: this.resolveOllamaBaseUrl(baseUrl),
       apiKey: 'ollama',
+      // Fail fast instead of hanging the chat on "thinking" forever.
+      timeout: 120_000,
+      maxRetries: 1,
     })
   }
 
@@ -679,6 +682,9 @@ export class LLMService {
     return new OpenAI({
       ...(baseURL ? { baseURL } : {}),
       apiKey,
+      // Fail fast instead of hanging the chat on "thinking" forever.
+      timeout: 120_000,
+      maxRetries: 1,
     })
   }
 

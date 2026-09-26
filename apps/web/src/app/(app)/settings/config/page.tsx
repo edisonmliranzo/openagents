@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import type { LlmApiKey, UserDomain, UserDomainProvider, UserDomainStatus } from '@openagents/shared'
 import { LLM_MODEL_OPTIONS, LLM_PROVIDER_CAPABILITIES } from '@openagents/shared'
+import { ModelPicker } from '@/components/settings/ModelPicker'
 
 // Types
 
@@ -1077,20 +1078,12 @@ export default function ConfigPage() {
                     />
                   )
                 ) : (
-                  <>
-                    <input
-                      value={activeModel}
-                      onChange={(e) => setActiveModel(e.target.value)}
-                      placeholder="Pick from catalog or type any model id"
-                      list="oa-model-catalog"
-                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100 sm:min-w-[180px]"
-                    />
-                    <datalist id="oa-model-catalog">
-                      {modelOptions.map((m) => (
-                        <option key={m} value={m} />
-                      ))}
-                    </datalist>
-                  </>
+                  <ModelPicker
+                    models={modelOptions}
+                    value={activeModel}
+                    onChange={(m) => setActiveModel(m)}
+                    placeholder="Select a model"
+                  />
                 )}
 
                 {activeProvider === 'ollama' && (
