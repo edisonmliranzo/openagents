@@ -235,6 +235,24 @@ export class AgentService {
     let activeModelForRun: string | null = null
     const fastAdvisoryMode = this.shouldUseFastAdvisoryMode(userMessage)
 
+    // Instant path for greetings/small-talk: a single no-tools LLM call.
+    // Skips memory pulls, tool catalogs, planning loops, and delegation so a
+    // "hello" answers in ~1s instead of going through the full agent stack.
+    if (this.isSmallTalk(userMessage)) {
+      const handled = await this.tryRunSmallTalk({
+        conversationId,
+        userId,
+        userMessage,
+        emit,
+        runId: run.id,
+        runStartedAtMs,
+      }).catch((err) => {
+        this.logger.warn(`Small-talk fast path failed, falling back to full run: ${this.safeError(err)}`)
+        return false
+      })
+      if (handled) return
+    }
+
     emit('status', {
       status: 'thinking',
       ...(fastAdvisoryMode ? { mode: 'fast_advisory' } : {}),
@@ -1469,6 +1487,124 @@ export class AgentService {
     if (normalized.length <= maxLength) return normalized
     const head = normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()
     return `${head}...`
+  }
+
+  // Pure small-talk (greetings, thanks, goodbyes): safe to answer instantly
+  // with one no-tools call. Anything with a question, task verb, or link —
+  // plus any "yes/ok" that might answer a pending approval or question —
+  // goes through the full agent instead.
+  private isSmallTalk(userMessage: string): boolean {
+    const normalized = userMessage.trim().toLowerCase().replace(/[!.?…\s]+$/g, '')
+    if (!normalized || normalized.length > 40) return false
+    if (
+      /[?？]|https?:|\b(what|who|when|where|why|how|which|whose|whom|is|are|do|does|did|will|would|should|can you|could you|please|search|find|run|execute|send|create|build|make|generate|write|code|explain|tell me|show|open|delete|help me|i need|i want|remind|schedule|book|buy|order)\b/.test(normalized)
+    ) {
+      return false
+    }
+    return /^(hi+|hey+|hello+|hola|yo|sup|howdy|good\s?(morning|afternoon|evening|day|night)|morning|evening|afternoon|thanks?|thank\s?you|thx|bye+|goodbye|good\s?night|see\s?you|👋|🙏|haha+|lol|nice|cool|great|awesome|perfect)\b/.test(normalized)
+  }
+
+  // One-shot greeting reply: no memory pulls, no tools, no planning loop.
+  // Returns true when fully handled (message saved + done emitted).
+  private async tryRunSmallTalk(input: {
+    conversationId: string
+    userId: string
+    userMessage: string
+    emit: (event: string, data: unknown) => void
+    runId: string
+    runStartedAtMs: number
+  }): Promise<boolean> {
+    const { conversationId, userId, userMessage, emit, runId, runStartedAtMs } = input
+
+    // Never fast-path when the user might be answering something real.
+    const [pendingApprovals, lastAgentMessage] = await Promise.all([
+      this.prisma.approval.findMany({
+        where: { userId, status: 'pending' },
+        select: { id: true },
+        take: 1,
+      }),
+      this.prisma.message.findFirst({
+        where: { conversationId, role: 'agent' },
+        orderBy: { createdAt: 'desc' },
+        select: { content: true },
+      }),
+    ])
+    if (pendingApprovals.length > 0) return false
+    if (lastAgentMessage?.content.trim().endsWith('?')) return false
+
+    const settings = await this.users.getSettings(userId)
+    const routing = this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel)
+    const userLlmKey = await this.users.getRawLlmKey(userId, routing.provider).catch(() => null)
+    const userApiKey = userLlmKey?.isActive
+      ? (userLlmKey.apiKey ?? userLlmKey.loginPassword ?? undefined)
+      : undefined
+    const userBaseUrl = userLlmKey?.isActive ? (userLlmKey.baseUrl ?? undefined) : undefined
+
+    const history = await this.prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: { role: true, content: true },
+    })
+
+    const response = await this.llm.complete(
+      [
+        ...history
+          .slice()
+          .reverse()
+          .filter((m) => m.role === 'user' || m.role === 'agent')
+          .slice(-4)
+          .map((m) => ({
+            role: (m.role === 'agent' ? 'assistant' : 'user') as 'user' | 'assistant',
+            content: m.content.slice(0, 500),
+          })),
+        { role: 'user', content: userMessage.slice(0, 500) },
+      ],
+      [],
+      'You are OpenAgents, a friendly AI assistant. The user just said hello or made small talk. Reply briefly and warmly (1-2 short sentences), as yourself. Do not offer tool-powered help unless asked — just be personable.',
+      routing.provider,
+      userApiKey,
+      userBaseUrl,
+      routing.model,
+    )
+
+    const content = (response.content ?? '').trim()
+    if (!content) return false
+
+    const agentMsg = await this.prisma.message.create({
+      data: { conversationId, role: 'agent', content, status: 'done' },
+    })
+    emit('message', agentMsg)
+    await this.prisma.agentRun.update({
+      where: { id: runId },
+      data: { status: 'done', finishedAt: new Date() },
+    })
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageAt: new Date() },
+    })
+
+    const durationMs = Date.now() - runStartedAtMs
+    emit('tokens', {
+      inputTokens: Math.ceil((userMessage.length + content.length) / 4),
+      outputTokens: Math.ceil(content.length / 4),
+      totalTokens: Math.ceil((userMessage.length + content.length * 2) / 4),
+      provider: routing.provider,
+      model: routing.model ?? null,
+      durationMs,
+      fastPath: 'small-talk',
+    })
+    emit('status', { status: 'done' })
+    void this.mission.publish({
+      userId,
+      type: 'run',
+      status: 'success',
+      source: 'agent.run.small-talk',
+      runId,
+      conversationId,
+      payload: { provider: routing.provider, model: routing.model ?? null, toolRounds: 0, toolCalls: 0 },
+    }).catch(() => undefined)
+    return true
   }
 
   private shouldUseFastAdvisoryMode(userMessage: string) {

@@ -3,8 +3,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { sdk } from '@/stores/auth'
-import type { DataLineageRecord, Message, MessageArtifact, MessageMeta, MessageWorkflowStep } from '@openagents/shared'
-import { Brain, CheckCircle2, ChevronDown, ChevronRight, Circle, Copy, FileText, Film, ImageIcon, Link2, LoaderCircle, Music4, PlaySquare, XCircle } from 'lucide-react'
+import type { DataLineageRecord, Message, MessageArtifact, MessageMeta } from '@openagents/shared'
+import { Brain, ChevronDown, ChevronRight, Copy, FileText, Film, ImageIcon, Link2, Music4 } from 'lucide-react'
 import { BranchButton } from '@/components/branch-button'
 import { GenerativeUIWidget } from './GenerativeUIWidget'
 import { BrowserPreview } from './BrowserPreview'
@@ -94,43 +94,10 @@ function formatBytes(sizeBytes?: number) {
 }
 
 function ProgressCard({ metadata, isStreaming }: { metadata: MessageMeta | null; isStreaming: boolean }) {
-  const progress = metadata?.progress
-  if (!progress && !isStreaming) return null
-  const percent = typeof progress?.percent === 'number' ? Math.max(0, Math.min(100, progress.percent)) : undefined
-  const label = progress?.label || (isStreaming ? 'OpenAgents is working…' : null)
-  const stage = progress?.stage?.replace(/[_-]+/g, ' ') ?? null
-
-  return (
-    <div className="mb-3 rounded-2xl border border-[#e4e7ec] bg-[#f9fafb] px-3 py-3 dark:border-[#2d3347] dark:bg-[#1a1f2e]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-[11px] font-semibold text-[#475467] dark:text-[#c9d1e0]">
-          <LoaderCircle size={13} className={isStreaming ? 'animate-spin' : ''} />
-          <span>{label ?? 'Working'}</span>
-        </div>
-        {percent !== undefined && (
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#98a2b3]">
-            {percent}%
-          </span>
-        )}
-      </div>
-      {percent !== undefined && (
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#eaecf0] dark:bg-[#232837]">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-[#ef4444] to-[#f97316] transition-all duration-500"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      )}
-      {(stage || progress?.currentStep || progress?.totalSteps) && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[#98a2b3] dark:text-[#8892a4]">
-          {stage && <span className="rounded-full bg-white px-2 py-0.5 dark:bg-[#141824]">{stage}</span>}
-          {progress?.currentStep !== undefined && progress?.totalSteps !== undefined && (
-            <span>step {progress.currentStep} of {progress.totalSteps}</span>
-          )}
-        </div>
-      )}
-    </div>
-  )
+  // Hidden by design: run progress internals are not shown to users.
+  void metadata
+  void isStreaming
+  return null
 }
 
 function ArtifactGallery({ artifacts }: { artifacts: MessageArtifact[] }) {
@@ -198,50 +165,10 @@ function ArtifactGallery({ artifacts }: { artifacts: MessageArtifact[] }) {
   )
 }
 
-function workflowStepIcon(step: MessageWorkflowStep) {
-  if (step.status === 'completed') return <CheckCircle2 size={14} className="text-emerald-500" />
-  if (step.status === 'failed') return <XCircle size={14} className="text-rose-500" />
-  if (step.status === 'active') return <LoaderCircle size={14} className="animate-spin text-orange-500" />
-  if (step.kind === 'video') return <PlaySquare size={14} className="text-slate-400" />
-  return <Circle size={14} className="text-slate-300" />
-}
-
 function WorkflowCard({ metadata }: { metadata: MessageMeta | null }) {
-  const workflow = metadata?.workflow
-  if (!workflow || workflow.steps.length === 0) return null
-
-  return (
-    <div className="mb-3 rounded-2xl border border-[#e4e7ec] bg-[#f9fafb] px-3 py-3 dark:border-[#2d3347] dark:bg-[#1a1f2e]">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#98a2b3]">Workflow</p>
-          <p className="mt-1 text-sm font-semibold text-[#101828] dark:text-white">
-            {workflow.title || `${workflow.kind} generation workflow`}
-          </p>
-        </div>
-        <span className="rounded-full border border-[#e4e7ec] bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#667085] dark:border-[#2d3347] dark:bg-[#141824] dark:text-[#c9d1e0]">
-          {workflow.status}
-        </span>
-      </div>
-
-      <div className="mt-3 space-y-2">
-        {workflow.steps.map((step) => (
-          <div
-            key={step.id}
-            className="flex items-start gap-2 rounded-xl border border-[#e4e7ec] bg-white px-3 py-2 dark:border-[#2d3347] dark:bg-[#141824]"
-          >
-            <span className="mt-0.5">{workflowStepIcon(step)}</span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-[#101828] dark:text-white">{step.label}</p>
-              {step.detail && (
-                <p className="mt-0.5 text-[11px] text-[#667085] dark:text-[#98a2b3]">{step.detail}</p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+  // Hidden by design: workflow step internals are not shown to users.
+  void metadata
+  return null
 }
 
 function roleLabel(role: Message['role']) {
