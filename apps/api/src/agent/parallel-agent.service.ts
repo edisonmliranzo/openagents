@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { AgentService } from './agent.service'
+import { LLMService } from './llm.service'
+import { UsersService } from '../users/users.service'
+import type { LLMProvider } from '@openagents/shared'
 
 export interface ParallelBranch {
   id: string
@@ -35,7 +39,12 @@ export interface ParallelRunOutput {
 export class ParallelAgentService {
   private readonly logger = new Logger(ParallelAgentService.name)
 
-  constructor(private readonly agentService: AgentService) {}
+  constructor(
+    private readonly agentService: AgentService,
+    private readonly llm: LLMService,
+    private readonly users: UsersService,
+    private readonly config: ConfigService,
+  ) {}
 
   async runParallel(input: ParallelRunInput): Promise<ParallelRunOutput> {
     const start = Date.now()
@@ -67,7 +76,7 @@ export class ParallelAgentService {
     const failCount = resolved.length - successCount
 
     // Merge results into a cohesive summary
-    const merged = this.mergeResults(resolved)
+    const merged = await this.mergeResults(resolved, userId)
 
     return {
       results: resolved,
@@ -127,11 +136,42 @@ export class ParallelAgentService {
     }
   }
 
-  private mergeResults(results: ParallelResult[]): string {
+  private async mergeResults(results: ParallelResult[], userId: string): Promise<string> {
     const successful = results.filter((r) => r.success)
     if (successful.length === 0) return 'All parallel branches failed.'
 
     const lines = successful.map((r, i) => `**Branch ${i + 1}** (${r.task.slice(0, 60)}):\n${r.result}`)
-    return lines.join('\n\n---\n\n')
+    const concat = lines.join('\n\n---\n\n')
+
+    const raw = (this.config.get<string>('MERGE_CRITIC') ?? 'false').trim().toLowerCase()
+    const mergeCritic = ['1', 'true', 'yes', 'on'].includes(raw)
+    if (!mergeCritic || successful.length < 2) return concat
+
+    try {
+      const settings = await this.users.getSettings(userId)
+      const provider = (settings.preferredProvider ?? 'ollama') as LLMProvider
+      const key = await this.users.getRawLlmKey(userId, provider).catch(() => null)
+      const apiKey = key?.isActive ? (key.apiKey ?? key.loginPassword ?? undefined) : undefined
+      const baseUrl = key?.isActive ? (key.baseUrl ?? undefined) : undefined
+      const synthesis = await this.llm.complete(
+        [
+          {
+            role: 'user',
+            content: `Multiple specialist agents worked on parts of one goal. Synthesize their outputs into ONE coherent final answer. Resolve conflicts, drop duplication, keep every concrete fact.\n\n${concat.slice(0, 12000)}`,
+          },
+        ],
+        [],
+        'You are a synthesis critic for an agent swarm. Produce the single best merged answer.',
+        provider,
+        apiKey,
+        baseUrl,
+        settings.preferredModel ?? undefined,
+      )
+      const text = (synthesis.content ?? '').trim()
+      return text || concat
+    } catch (error: any) {
+      this.logger.debug(`Merge critic skipped: ${error?.message ?? error}`)
+      return concat
+    }
   }
 }

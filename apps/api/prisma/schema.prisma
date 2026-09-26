@@ -78,6 +78,8 @@ model User {
   skillSuggestions  SkillSuggestion[]
   answerCache       AnswerCache[]
   routingOutcomes   RoutingOutcome[]
+  goldenTasks       GoldenTask[]
+  evalRuns          EvalRun[]
 }
 
 model PasswordResetToken {
@@ -1384,4 +1386,38 @@ model RoutingOutcome {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, taskClass, createdAt])
+}
+
+// ─── Golden Tasks + Eval Runs (measurement loop) ──────────────────────────
+
+model GoldenTask {
+  id        String   @id @default(cuid())
+  userId    String
+  prompt    String
+  notes     String   @default("") // what a perfect answer looks like
+  createdAt DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evalRuns EvalRun[]
+
+  @@index([userId, createdAt])
+}
+
+model EvalRun {
+  id            String   @id @default(cuid())
+  userId        String
+  goldenTaskId  String
+  score         Int      // 0-10 judge score
+  output        String   @default("")
+  error         String?
+  provider      String
+  model         String?
+  durationMs    Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goldenTask GoldenTask @relation(fields: [goldenTaskId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([goldenTaskId, createdAt])
 }

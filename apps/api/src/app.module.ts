@@ -70,6 +70,7 @@ import { WebRTCVoiceModule } from './webrtc-voice/webrtc-voice.module'
 import { WarRoomsModule } from './war-rooms/war-rooms.module'
 import { LocalDaemonModule } from './local-daemon/local-daemon.module'
 import { ReflectionModule } from './reflection/reflection.module'
+import { EvalModule } from './eval/eval.module'
 
 @Module({
   imports: [
@@ -146,6 +147,7 @@ import { ReflectionModule } from './reflection/reflection.module'
     WarRoomsModule,
     LocalDaemonModule,
     ReflectionModule,
+    EvalModule,
   ],
 })
 export class AppModule {}
