@@ -56,8 +56,6 @@ model User {
   metricLogs       MetricLog[]
   budgetLimits     BudgetLimit[]
   conversationSummaries ConversationSummary[]
-  conversationHighlights ConversationHighlight[]
-  actionItems      ActionItem[]
   agentPresets     AgentPreset[]
   artifacts        Artifact[]
   artifactTemplates ArtifactTemplate[]
@@ -75,6 +73,7 @@ model User {
   learnedPatterns   LearnedPattern[]
   learningStats     LearningStats?
   userSkills        UserSkill[]
+  goals             Goal[]
 }
 
 model PasswordResetToken {
@@ -910,49 +909,9 @@ model ConversationSummary {
   updatedAt       DateTime @updatedAt
 
   user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  highlights ConversationHighlight[]
 
   @@index([userId, conversationId])
   @@index([conversationId, createdAt])
-}
-
-model ConversationHighlight {
-  id              String   @id @default(cuid())
-  summaryId       String
-  messageId       String
-  userId          String
-  type            String   // key_point | decision | question | insight | action
-  content         String
-  importance      String   @default("medium") // low | medium | high
-  startIndex     Int?
-  endIndex       Int?
-  createdAt       DateTime @default(now())
-
-  summary ConversationSummary @relation(fields: [summaryId], references: [id], onDelete: Cascade)
-  user   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  actionItem ActionItem?
-
-  @@index([userId, createdAt])
-  @@index([summaryId, type])
-}
-
-model ActionItem {
-  id              String   @id @default(cuid())
-  userId          String
-  highlightId     String?  @unique
-  description     String
-  assignee        String?
-  dueDate         DateTime?
-  status          String   @default("pending") // pending | completed | deferred
-  sourceMessageId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  highlight ConversationHighlight? @relation(fields: [highlightId], references: [id], onDelete: SetNull)
-
-  @@index([userId, status])
-  @@index([userId, dueDate])
 }
 
 model AgentPreset {
@@ -1303,4 +1262,27 @@ model UserSkill {
 
   @@index([userId, createdAt])
   @@index([userId, timesUsed])
+}
+
+// ─── Long-Term Goals (Muse-style goal tracking, persisted) ────────────────
+
+model Goal {
+  id              String   @id
+  userId          String
+  title           String
+  description     String   @default("")
+  status          String   @default("active") // active | paused | completed | abandoned
+  priority        String   @default("medium") // low | medium | high | critical
+  milestones      String   @default("[]") // JSON array of { id, title, completed, completedAt? }
+  progress        Int      @default(0) // 0-100
+  conversationIds String   @default("[]") // JSON array of conversation ids
+  tags            String   @default("[]") // JSON array
+  dueDate         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completedAt     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, updatedAt])
 }
