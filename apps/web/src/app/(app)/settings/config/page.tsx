@@ -417,11 +417,14 @@ export default function ConfigPage() {
   const [liveModels, setLiveModels] = useState<string[]>([])
   const [liveModelsStatus, setLiveModelsStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
   const [liveModelsSource, setLiveModelsSource] = useState<'live' | 'curated'>('curated')
+  const [liveModelsProvider, setLiveModelsProvider] = useState<Provider | null>(null)
 
   const modelOptions: string[] = (() => {
     if (activeProvider !== 'ollama') {
-      // Live provider catalog first, then curated entries not already present
-      const merged = [...liveModels]
+      // Live provider catalog first (only when it belongs to this provider),
+      // then curated entries not already present
+      const live = liveModelsProvider === activeProvider && liveModelsStatus === 'loaded' ? liveModels : []
+      const merged = [...live]
       for (const m of providerModels(activeProvider)) {
         if (!merged.includes(m)) merged.push(m)
       }
@@ -461,11 +464,18 @@ export default function ConfigPage() {
       const result = await sdk.agent.listProviderModels(provider, baseUrl || undefined)
       setLiveModels(result.models ?? [])
       setLiveModelsSource(result.source ?? 'curated')
+      setLiveModelsProvider(provider)
       setLiveModelsStatus('loaded')
-    } catch {
+      if (result.source === 'live') {
+        setStatus(`${PROVIDER_META[provider].label}: loaded ${result.models?.length ?? 0} live models. Pick the one you want.`)
+      } else if (result.error) {
+        setError(result.error)
+      }
+    } catch (err: any) {
       setLiveModels([])
       setLiveModelsSource('curated')
       setLiveModelsStatus('error')
+      setError(err?.message ?? 'Failed to load live models.')
     }
   }, [])
 
@@ -567,6 +577,7 @@ export default function ConfigPage() {
     if (activeProvider === 'ollama') return
     setLiveModels([])
     setLiveModelsSource('curated')
+    setLiveModelsProvider(null)
     setLiveModelsStatus('idle')
     void loadLiveModels(activeProvider, cards[activeProvider]?.baseUrl || undefined)
   }, [activeProvider, loadLiveModels])
@@ -730,6 +741,7 @@ export default function ConfigPage() {
       })
       if (result.ok) {
         updateCard(provider, { testStatus: 'ok', testModel: result.model ?? '' })
+        if (result.warning) setStatus(result.warning)
       } else {
         updateCard(provider, { testStatus: 'error', testError: result.error ?? 'Failed' })
       }
@@ -808,6 +820,10 @@ export default function ConfigPage() {
       // refresh stored keys
       const keys = await sdk.users.getLlmKeys()
       setExistingKeys(keys)
+      // Immediately show what this key can use: load its live model catalog.
+      if (provider !== 'ollama') {
+        await loadLiveModels(provider, card.baseUrl.trim() || undefined)
+      }
     } catch (err: any) {
       setError(err?.message ?? 'Failed to save credentials')
     } finally {

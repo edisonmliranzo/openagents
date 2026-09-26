@@ -10,6 +10,7 @@ export interface TestLlmConnectionDto {
 export interface TestLlmConnectionResult {
   ok: boolean
   model?: string
+  warning?: string
   error?: string
 }
 
@@ -20,6 +21,7 @@ export interface OllamaModelsResult {
 export interface ProviderModelsResult {
   models: string[]
   source: 'live' | 'curated'
+  error?: string
 }
 
 export function createAgentApi(client: OpenAgentsClient) {

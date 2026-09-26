@@ -35,9 +35,9 @@ export const LLM_MODELS = {
     powerful: 'sonar-reasoning-pro',
   },
   nvidia: {
-    default: 'meta/llama-3.3-70b-instruct',
-    fast: 'meta/llama-3.1-8b-instruct',
-    powerful: 'meta/llama-3.1-405b-instruct',
+    default: 'nvidia/nemotron-3-super-120b-a12b',
+    fast: 'stepfun-ai/step-3.7-flash',
+    powerful: 'nvidia/nemotron-3-ultra-550b-a55b',
   },
   atlascloud: {
     default: 'deepseek-v3',
@@ -158,23 +158,12 @@ export const LLM_MODEL_OPTIONS = {
     'sonar-deep-research',
   ],
   nvidia: [
-    // Llama 4 via NIM
+    // Verified live on NIM (retired Llama 3.x / Nemotron v1 / Mixtral ids removed — they 410)
+    'nvidia/nemotron-3-super-120b-a12b',
+    'nvidia/nemotron-3-ultra-550b-a55b',
+    'stepfun-ai/step-3.7-flash',
+    'minimaxai/minimax-m3',
     'meta/llama-4-maverick-17b-128e-instruct',
-    // Llama 3.x via NIM
-    'meta/llama-3.3-70b-instruct',
-    'meta/llama-3.1-405b-instruct',
-    'meta/llama-3.1-8b-instruct',
-    'meta/llama-3.2-3b-instruct',
-    'meta/llama-3.2-1b-instruct',
-    // Nemotron
-    'nvidia/llama-3.3-nemotron-super-49b-v1',
-    'nvidia/llama-3.1-nemotron-ultra-253b-v1',
-    'nvidia/nemotron-3-nano-30b-a3b',
-    'nvidia/nemotron-mini-4b-instruct',
-    'nvidia/nvidia-nemotron-nano-9b-v2',
-    // Mistral via NIM
-    'mistralai/mixtral-8x22b-instruct-v0.1',
-    // Qwen via NIM
     'qwen/qwen2.5-coder-32b-instruct',
   ],
   atlascloud: [
