@@ -4,6 +4,8 @@ import { AgentController } from './agent.controller'
 import { LLMService } from './llm.service'
 import { ParallelAgentService } from './parallel-agent.service'
 import { ContextCompressorService } from './context-compressor.service'
+import { ModelRouterService } from './model-router.service'
+import { SentinelService } from './sentinel.service'
 import { ToolsModule } from '../tools/tools.module'
 import { MemoryModule } from '../memory/memory.module'
 import { ApprovalsModule } from '../approvals/approvals.module'
@@ -25,7 +27,7 @@ import { GoalsModule } from '../goals/goals.module'
     GoalsModule,
   ],
   controllers: [AgentController],
-  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService],
-  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService],
+  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService],
+  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService],
 })
 export class AgentModule {}

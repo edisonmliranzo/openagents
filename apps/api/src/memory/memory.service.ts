@@ -3,6 +3,8 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service'
+import { EmbeddingService } from './embedding.service'
+import { cosineSimilarity, parseEmbedding } from '../agent/embeddings'
 import type {
   BrowserCaptureInput,
   BrowserCaptureResult,
@@ -109,6 +111,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private prisma: PrismaService,
+    private embeddings: EmbeddingService,
   ) {}
 
   onModuleInit() {
@@ -299,7 +302,26 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
       },
     })
 
+    this.embedInto('event', row.id, `${kind}: ${summary}`)
     return this.toMemoryEvent(row)
+  }
+
+  /** Best-effort, non-blocking embedding for semantic recall. */
+  private embedInto(kind: 'event' | 'fact', id: string, text: string) {
+    void (async () => {
+      try {
+        const result = await this.embeddings.embed(text)
+        if (!result) return
+        const payload = this.embeddings.serialize(result.vector)
+        if (kind === 'event') {
+          await this.prisma.memoryEvent.update({ where: { id }, data: { embedding: payload } })
+        } else {
+          await this.prisma.memoryFact.update({ where: { id }, data: { embedding: payload } })
+        }
+      } catch {
+        // Embeddings are best-effort; keyword search still works without them.
+      }
+    })()
   }
 
   async upsertFact(userId: string, input: UpsertMemoryFactInput): Promise<MemoryFact> {
@@ -375,6 +397,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
       },
     })
 
+    this.embedInto('fact', row.id, `${entity} ${key}: ${value}`)
     return this.toMemoryFact(row)
   }
 
@@ -392,6 +415,86 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     })
 
     return rows.map((row) => this.toMemoryFact(row))
+  }
+
+  /**
+   * Vector recall: cosine-scores the query embedding against the user's
+   * stored fact/event embeddings. Returns the closest memories regardless of
+   * exact wording. Falls back to empty when embeddings are unavailable.
+   */
+  async semanticRecall(
+    userId: string,
+    query: string,
+    limit = 10,
+  ): Promise<Array<{ id: string; type: 'fact' | 'event'; text: string; score: number }>> {
+    const safeLimit = Math.max(1, Math.min(limit, 30))
+    const embedded = await this.embeddings.embed(query)
+    if (!embedded) return []
+
+    const [facts, events] = await Promise.all([
+      this.prisma.memoryFact.findMany({
+        where: { userId, embedding: { not: null } },
+        select: { id: true, entity: true, key: true, value: true, embedding: true },
+        take: 800,
+      }),
+      this.prisma.memoryEvent.findMany({
+        where: { userId, embedding: { not: null } },
+        select: { id: true, kind: true, summary: true, embedding: true },
+        orderBy: { createdAt: 'desc' },
+        take: 800,
+      }),
+    ])
+
+    const scored: Array<{ id: string; type: 'fact' | 'event'; text: string; score: number }> = []
+    for (const fact of facts) {
+      const vector = parseEmbedding(fact.embedding)
+      if (!vector) continue
+      scored.push({
+        id: fact.id,
+        type: 'fact',
+        text: `${fact.key}: ${fact.value}`,
+        score: cosineSimilarity(embedded.vector, vector),
+      })
+    }
+    for (const event of events) {
+      const vector = parseEmbedding(event.embedding)
+      if (!vector) continue
+      scored.push({
+        id: event.id,
+        type: 'event',
+        text: event.summary,
+        score: cosineSimilarity(embedded.vector, vector),
+      })
+    }
+
+    return scored
+      .filter((item) => item.score > 0.15)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, safeLimit)
+  }
+
+  /** One-time/periodic job: embed memory rows that predate vector recall. */
+  async backfillEmbeddings(userId?: string, cap = 300): Promise<{ embedded: number }> {
+    const where = { embedding: null as null | undefined, ...(userId ? { userId } : {}) }
+    const [facts, events] = await Promise.all([
+      this.prisma.memoryFact.findMany({ where, select: { id: true, entity: true, key: true, value: true }, take: cap }),
+      this.prisma.memoryEvent.findMany({ where, select: { id: true, kind: true, summary: true }, take: cap }),
+    ])
+
+    let embedded = 0
+    for (const fact of facts) {
+      const result = await this.embeddings.embed(`${fact.entity} ${fact.key}: ${fact.value}`)
+      if (!result) continue
+      await this.prisma.memoryFact.update({ where: { id: fact.id }, data: { embedding: this.embeddings.serialize(result.vector) } })
+      embedded += 1
+    }
+    for (const event of events) {
+      const result = await this.embeddings.embed(`${event.kind}: ${event.summary}`)
+      if (!result) continue
+      await this.prisma.memoryEvent.update({ where: { id: event.id }, data: { embedding: this.embeddings.serialize(result.vector) } })
+      embedded += 1
+    }
+    return { embedded }
   }
 
   async queryTiered(userId: string, input: QueryMemoryInput): Promise<QueryMemoryResult> {

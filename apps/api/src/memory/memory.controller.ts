@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import {
   IsArray,
@@ -305,5 +305,17 @@ export class MemoryController {
   @Post('decay')
   runDecay() {
     return this.memory.runDecayCycle()
+  }
+
+  @Post('semantic')
+  semantic(@Req() req: any, @Body() body: { query?: string; limit?: number }) {
+    const query = String(body?.query ?? '').trim()
+    if (!query) throw new BadRequestException('query is required.')
+    return this.memory.semanticRecall(req.user.id, query, Number(body?.limit) || 10)
+  }
+
+  @Post('embed-backfill')
+  backfill(@Req() req: any, @Body() body: { cap?: number }) {
+    return this.memory.backfillEmbeddings(req.user.id, Number(body?.cap) || 300)
   }
 }

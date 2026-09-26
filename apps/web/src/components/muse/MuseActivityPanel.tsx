@@ -12,11 +12,12 @@ import {
   Lightbulb,
   Loader2,
   Plus,
+  Sparkles,
   Target,
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
-import type { MuseGoal } from '@openagents/sdk'
+import type { MuseGoal, SkillSuggestionRow } from '@openagents/sdk'
 
 type RightTab = 'activity' | 'goals' | 'ideas' | 'memory'
 
@@ -136,6 +137,10 @@ export function MuseActivityPanel() {
   const [facts, setFacts] = useState<Array<{ id: string; entity: string; key: string; value: string }>>([])
   const [factsLoading, setFactsLoading] = useState(false)
   const [creatingGoal, setCreatingGoal] = useState(false)
+  const [suggestions, setSuggestions] = useState<SkillSuggestionRow[]>([])
+  const [busySuggestionId, setBusySuggestionId] = useState<string | null>(null)
+  const [reflecting, setReflecting] = useState(false)
+  const [reflectMsg, setReflectMsg] = useState('')
 
   const connected = gatewayStatus === 'connected'
   const displayName = (user?.name ?? '').trim() || (user?.email ? user.email.split('@')[0] : 'You')
@@ -221,6 +226,68 @@ export function MuseActivityPanel() {
     window.addEventListener('openagents:show-ideas', handler)
     return () => window.removeEventListener('openagents:show-ideas', handler)
   }, [])
+
+  // Skill suggestions ride along with the Ideas tab.
+  useEffect(() => {
+    if (tab !== 'ideas') return
+    let cancelled = false
+    sdk.learning
+      .listSuggestions('pending')
+      .then((rows) => {
+        if (!cancelled) setSuggestions(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tab])
+
+  async function handleApproveSuggestion(id: string) {
+    setBusySuggestionId(id)
+    try {
+      await sdk.learning.approveSuggestion(id)
+      setSuggestions((prev) => prev.filter((s) => s.id !== id))
+    } catch {
+      // keep the card visible; user can retry
+    } finally {
+      setBusySuggestionId(null)
+    }
+  }
+
+  async function handleDismissSuggestion(id: string) {
+    setBusySuggestionId(id)
+    try {
+      await sdk.learning.dismissSuggestion(id)
+      setSuggestions((prev) => prev.filter((s) => s.id !== id))
+    } catch {
+      // ignore
+    } finally {
+      setBusySuggestionId(null)
+    }
+  }
+
+  async function handleReflectNow() {
+    if (reflecting) return
+    setReflecting(true)
+    setReflectMsg('')
+    try {
+      const result = await sdk.reflection.run()
+      setReflectMsg(
+        result.skipped
+          ? `Skipped: ${result.reason ?? 'not enough recent conversation'}.`
+          : `Reflected: ${result.facts} facts, ${result.events} events saved.`,
+      )
+      // refresh facts list so new memories show immediately
+      const rows = await sdk.memory.listFacts(undefined, 20).catch(() => [])
+      setFacts(Array.isArray(rows) ? rows : [])
+    } catch (err: any) {
+      setReflectMsg(err?.message ?? 'Reflection failed.')
+    } finally {
+      setReflecting(false)
+    }
+  }
 
   function handleIdeaClick(idea: MuseIdea) {
     if (idea.conversationId) {
@@ -382,12 +449,56 @@ export function MuseActivityPanel() {
                 ))}
               </div>
             )}
+            {suggestions.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-[13px] font-semibold text-slate-900">Skill suggestions</p>
+                <div className="space-y-2">
+                  {suggestions.map((s) => (
+                    <div key={s.id} className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-2">
+                      <p className="text-[13px] font-medium text-slate-800">{s.name}</p>
+                      <p className="mt-0.5 text-[12px] leading-snug text-slate-500">{s.description}</p>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleApproveSuggestion(s.id)}
+                          disabled={busySuggestionId === s.id}
+                          className="rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          {busySuggestionId === s.id ? 'Saving…' : 'Save as skill'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDismissSuggestion(s.id)}
+                          disabled={busySuggestionId === s.id}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {tab === 'memory' && (
           <div>
-            <p className="mb-2 text-[13px] font-semibold text-slate-900">Memory</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-slate-900">Memory</p>
+              <button
+                type="button"
+                onClick={() => void handleReflectNow()}
+                disabled={reflecting}
+                title="Run memory reflection over the last 24h of conversations"
+                className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+              >
+                {reflecting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                {reflecting ? 'Reflecting…' : 'Reflect now'}
+              </button>
+            </div>
+            {reflectMsg && <p className="mb-2 text-[11px] text-slate-500">{reflectMsg}</p>}
             {factsLoading ? (
               <p className="flex items-center gap-2 py-6 text-[13px] text-slate-400">
                 <Loader2 size={14} className="animate-spin" /> Loading memory…

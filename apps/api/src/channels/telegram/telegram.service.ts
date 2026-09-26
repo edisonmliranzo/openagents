@@ -328,6 +328,17 @@ export class TelegramService {
     return true
   }
 
+  /** Public outbound delivery: send a proactive message to the user's first linked chat. */
+  async deliver(userId: string, text: string): Promise<boolean> {
+    const chat = await this.prisma.telegramChat.findFirst({
+      where: { userId },
+      orderBy: { lastSeenAt: 'desc' },
+      select: { chatId: true },
+    })
+    if (!chat) return false
+    return this.sendMessage(chat.chatId, text.slice(0, 3900))
+  }
+
   private async sendMessage(chatId: string, text: string) {
     const token = this.getBotToken()
     if (!token) {
