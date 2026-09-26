@@ -152,6 +152,8 @@ model Conversation {
   verboseLevel   String?
   reasoningLevel String?
   personality    String?
+  model          String?
+  modelProvider  String?
   lastMessageAt  DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

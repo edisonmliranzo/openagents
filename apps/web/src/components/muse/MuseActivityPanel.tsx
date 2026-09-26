@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   Circle,
+  Lightbulb,
   Loader2,
   Plus,
   Target,
@@ -17,7 +18,80 @@ import { sdk, useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import type { MuseGoal } from '@openagents/sdk'
 
-type RightTab = 'activity' | 'goals' | 'memory'
+type RightTab = 'activity' | 'goals' | 'ideas' | 'memory'
+
+export interface MuseIdea {
+  id: string
+  title: string
+  detail: string
+  icon: 'goal' | 'chat' | 'approval' | 'memory' | 'start'
+  conversationId?: string
+}
+
+function buildIdeas(input: {
+  goals: MuseGoal[]
+  conversations: Array<{ id: string; title: string | null; lastMessageAt: string | null; createdAt: string }>
+  pendingApprovals: number
+  factCount: number
+}): MuseIdea[] {
+  const { goals, conversations, pendingApprovals, factCount } = input
+  const ideas: MuseIdea[] = []
+  const now = Date.now()
+  const DAY = 86400000
+
+  if (pendingApprovals > 0) {
+    ideas.push({
+      id: 'idea-approvals',
+      title: `${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`,
+      detail: 'Review pending actions so your agent can continue.',
+      icon: 'approval',
+    })
+  }
+
+  for (const goal of goals.filter((g) => g.status === 'active').slice(0, 3)) {
+    const next = goal.milestones.find((m) => !m.completed)
+    ideas.push({
+      id: `idea-goal-${goal.id}`,
+      title: `Advance "${goal.title}"`,
+      detail: next ? `Next milestone: ${next.title} (${goal.progress}% done)` : `Progress is ${goal.progress}% — ask your agent for the next step.`,
+      icon: 'goal',
+    })
+  }
+
+  const stale = conversations.find((c) => {
+    const ts = new Date(c.lastMessageAt ?? c.createdAt).getTime()
+    return Number.isFinite(ts) && now - ts > 3 * DAY
+  })
+  if (stale) {
+    ideas.push({
+      id: `idea-stale-${stale.id}`,
+      title: `Resume "${stale.title ?? 'Untitled chat'}"`,
+      detail: 'Idle for a few days — pick it back up.',
+      icon: 'chat',
+      conversationId: stale.id,
+    })
+  }
+
+  if (goals.filter((g) => g.status === 'active').length === 0) {
+    ideas.push({
+      id: 'idea-new-goal',
+      title: 'Set a long-term goal',
+      detail: 'Give your agent a goal and it will track milestones for you.',
+      icon: 'start',
+    })
+  }
+
+  if (factCount === 0) {
+    ideas.push({
+      id: 'idea-memory',
+      title: 'Teach your agent about you',
+      detail: 'Mention preferences or people and OpenAgents saves them to memory.',
+      icon: 'memory',
+    })
+  }
+
+  return ideas.slice(0, 6)
+}
 
 interface ActivityItem {
   id: string
@@ -54,6 +128,7 @@ export function MuseActivityPanel() {
   const user = useAuthStore((s) => s.user)
   const gatewayStatus = useChatStore((s) => s.gatewayStatus)
   const conversations = useChatStore((s) => s.conversations)
+  const pendingApprovals = useChatStore((s) => s.pendingApprovals)
   const selectConversation = useChatStore((s) => s.selectConversation)
   const [tab, setTab] = useState<RightTab>('activity')
   const [goals, setGoals] = useState<MuseGoal[]>([])
@@ -90,7 +165,7 @@ export function MuseActivityPanel() {
   }, [conversations])
 
   useEffect(() => {
-    if (tab !== 'goals') return
+    if (tab !== 'goals' && tab !== 'ideas') return
     let cancelled = false
     setGoalsLoading(true)
     sdk.goals
@@ -110,7 +185,7 @@ export function MuseActivityPanel() {
   }, [tab])
 
   useEffect(() => {
-    if (tab !== 'memory') return
+    if (tab !== 'memory' && tab !== 'ideas') return
     let cancelled = false
     setFactsLoading(true)
     sdk.memory
@@ -128,6 +203,34 @@ export function MuseActivityPanel() {
       cancelled = true
     }
   }, [tab])
+
+  const ideas = useMemo(
+    () =>
+      buildIdeas({
+        goals,
+        conversations,
+        pendingApprovals: pendingApprovals.length,
+        factCount: facts.length,
+      }),
+    [goals, conversations, pendingApprovals.length, facts.length],
+  )
+
+  // The left rail's Ideas button opens this tab.
+  useEffect(() => {
+    const handler = () => setTab('ideas')
+    window.addEventListener('openagents:show-ideas', handler)
+    return () => window.removeEventListener('openagents:show-ideas', handler)
+  }, [])
+
+  function handleIdeaClick(idea: MuseIdea) {
+    if (idea.conversationId) {
+      void selectConversation(idea.conversationId)
+      return
+    }
+    if (idea.icon === 'goal' || idea.id === 'idea-new-goal') setTab('goals')
+    if (idea.id === 'idea-approvals') window.location.assign('/approvals')
+    if (idea.icon === 'memory') setTab('memory')
+  }
 
   async function handleCreateGoal() {
     if (creatingGoal) return
@@ -164,6 +267,9 @@ export function MuseActivityPanel() {
         </TabButton>
         <TabButton active={tab === 'goals'} onClick={() => setTab('goals')} label="Goals">
           <ShieldCheck size={14} />
+        </TabButton>
+        <TabButton active={tab === 'ideas'} onClick={() => setTab('ideas')} label="Ideas">
+          <Lightbulb size={14} />
         </TabButton>
         <TabButton active={tab === 'memory'} onClick={() => setTab('memory')} label="Memory">
           <History size={14} />
@@ -239,6 +345,40 @@ export function MuseActivityPanel() {
                       {g.status} · {g.progress}%{g.dueDate ? ` · due ${g.dueDate}` : ''}
                     </p>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'ideas' && (
+          <div>
+            <p className="mb-2 text-[13px] font-semibold text-slate-900">Ideas for you</p>
+            {goalsLoading && ideas.length === 0 ? (
+              <p className="flex items-center gap-2 py-6 text-[13px] text-slate-400">
+                <Loader2 size={14} className="animate-spin" /> Thinking…
+              </p>
+            ) : ideas.length === 0 ? (
+              <p className="py-6 text-center text-[13px] text-slate-400">
+                You&apos;re all caught up. Set a goal or start a chat and ideas will appear here.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {ideas.map((idea) => (
+                  <button
+                    key={idea.id}
+                    type="button"
+                    onClick={() => handleIdeaClick(idea)}
+                    className="flex w-full items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-2 text-left transition hover:border-amber-200 hover:bg-amber-50"
+                  >
+                    <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-amber-500 shadow-sm">
+                      <Lightbulb size={13} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium text-slate-800">{idea.title}</span>
+                      <span className="mt-0.5 block text-[12px] leading-snug text-slate-500">{idea.detail}</span>
+                    </span>
+                  </button>
                 ))}
               </div>
             )}

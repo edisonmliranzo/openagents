@@ -39,6 +39,8 @@ export interface SessionPatchInput {
   verboseLevel?: string | null
   reasoningLevel?: string | null
   personality?: string | null
+  model?: string | null
+  modelProvider?: string | null
 }
 
 export interface SessionPatchResult {
