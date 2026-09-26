@@ -17,6 +17,11 @@ export default function WorkspacesPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<'viewer' | 'editor' | 'admin'>('editor')
+  const [inviteDays, setInviteDays] = useState(7)
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [isUpdatingWorkspace, setIsUpdatingWorkspace] = useState(false)
   const [memoryTitle, setMemoryTitle] = useState('')
   const [memoryContent, setMemoryContent] = useState('')
   const [shareConversationId, setShareConversationId] = useState('')
@@ -80,6 +85,35 @@ export default function WorkspacesPage() {
     void loadWorkspace(selectedWorkspaceId)
   }, [loadWorkspace, selectedWorkspaceId])
 
+  useEffect(() => {
+    setEditName(selectedWorkspace?.name ?? '')
+    setEditDescription(selectedWorkspace?.description ?? '')
+  }, [selectedWorkspace])
+
+  async function handleUpdateWorkspace() {
+    if (!selectedWorkspaceId || !editName.trim()) {
+      addToast('warning', 'Workspace name is required.')
+      return
+    }
+    setIsUpdatingWorkspace(true)
+    setError('')
+    try {
+      const updated = await sdk.workspaces.update(selectedWorkspaceId, {
+        name: editName.trim(),
+        description: editDescription.trim() || null,
+      })
+      setSelectedWorkspace(updated)
+      setWorkspaces((current) => current.map((w) => (w.id === updated.id ? updated : w)))
+      addToast('success', 'Workspace updated')
+    } catch (err: any) {
+      const message = err?.message ?? 'Failed to update workspace'
+      setError(message)
+      addToast('error', message)
+    } finally {
+      setIsUpdatingWorkspace(false)
+    }
+  }
+
   async function handleCreateWorkspace() {
     if (!name.trim()) {
       addToast('warning', 'Workspace name is required.')
@@ -114,7 +148,11 @@ export default function WorkspacesPage() {
     setIsInviting(true)
     setError('')
     try {
-      await sdk.workspaces.invite(selectedWorkspaceId, { email: inviteEmail.trim(), role: 'editor' })
+      await sdk.workspaces.invite(selectedWorkspaceId, {
+        email: inviteEmail.trim(),
+        role: inviteRole,
+        expiresInDays: inviteDays,
+      })
       setInviteEmail('')
       await loadWorkspace(selectedWorkspaceId)
       addToast('success', 'Invitation created')
@@ -330,6 +368,32 @@ export default function WorkspacesPage() {
             </p>
           ) : (
             <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Workspace details</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <input
+                    value={editName}
+                    onChange={(event) => setEditName(event.target.value)}
+                    placeholder="Workspace name"
+                    className="h-10 min-w-[160px] flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100"
+                  />
+                  <input
+                    value={editDescription}
+                    onChange={(event) => setEditDescription(event.target.value)}
+                    placeholder="Description (optional)"
+                    className="h-10 min-w-[200px] flex-[2] rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleUpdateWorkspace()}
+                    disabled={isUpdatingWorkspace}
+                    className="rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    {isUpdatingWorkspace ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Members</p>
@@ -342,13 +406,33 @@ export default function WorkspacesPage() {
                     ))}
                   </div>
 
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <input
                       value={inviteEmail}
                       onChange={(event) => setInviteEmail(event.target.value)}
                       placeholder="teammate@example.com"
-                      className="h-10 flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100"
+                      className="h-10 min-w-[180px] flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100"
                     />
+                    <select
+                      value={inviteRole}
+                      onChange={(event) => setInviteRole(event.target.value as 'viewer' | 'editor' | 'admin')}
+                      title="Invite role"
+                      className="h-10 rounded-lg border border-slate-200 px-2 text-sm text-slate-700 outline-none focus:border-sky-200"
+                    >
+                      <option value="viewer">viewer</option>
+                      <option value="editor">editor</option>
+                      <option value="admin">admin</option>
+                    </select>
+                    <select
+                      value={inviteDays}
+                      onChange={(event) => setInviteDays(Number(event.target.value))}
+                      title="Invitation expires in"
+                      className="h-10 rounded-lg border border-slate-200 px-2 text-sm text-slate-700 outline-none focus:border-sky-200"
+                    >
+                      <option value={1}>1 day</option>
+                      <option value={7}>7 days</option>
+                      <option value={30}>30 days</option>
+                    </select>
                     <button
                       type="button"
                       onClick={() => void handleInvite()}

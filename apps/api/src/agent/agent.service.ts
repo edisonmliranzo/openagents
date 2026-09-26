@@ -212,7 +212,7 @@ export class AgentService {
 
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
-      select: { title: true, personality: true },
+      select: { title: true, personality: true, model: true, modelProvider: true },
     })
     const conversationNeedsTitle = !conversation?.title
     const conversationPersonality = conversation?.personality ?? null
@@ -246,6 +246,8 @@ export class AgentService {
         emit,
         runId: run.id,
         runStartedAtMs,
+        providerOverride: this.normalizeProvider(conversation?.modelProvider),
+        modelOverride: conversation?.model?.trim() || undefined,
       }).catch((err) => {
         this.logger.warn(`Small-talk fast path failed, falling back to full run: ${this.safeError(err)}`)
         return false
@@ -263,7 +265,13 @@ export class AgentService {
       // 3. Load user settings (provider, custom prompt)
       const prepStartedAt = Date.now()
       const settings = await this.users.getSettings(userId)
-      const routing = this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel)
+      // Per-chat override: a model/provider pinned on the conversation wins
+      // over the user's global default.
+      const sessionProvider = this.normalizeProvider(conversation?.modelProvider)
+      const sessionModel = conversation?.model?.trim() || undefined
+      const routing = sessionProvider
+        ? { provider: sessionProvider, model: sessionModel, applied: false, preset: 'none' as const }
+        : this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel)
       const provider = routing.provider
       const preferredModel = fastAdvisoryMode
         ? this.resolveFastAdvisoryModel(provider, routing.model)
@@ -1513,6 +1521,8 @@ export class AgentService {
     emit: (event: string, data: unknown) => void
     runId: string
     runStartedAtMs: number
+    providerOverride?: LLMProvider | null
+    modelOverride?: string
   }): Promise<boolean> {
     const { conversationId, userId, userMessage, emit, runId, runStartedAtMs } = input
 
@@ -1533,7 +1543,9 @@ export class AgentService {
     if (lastAgentMessage?.content.trim().endsWith('?')) return false
 
     const settings = await this.users.getSettings(userId)
-    const routing = this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel)
+    const routing = input.providerOverride
+      ? { provider: input.providerOverride, model: input.modelOverride }
+      : this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel)
     const userLlmKey = await this.users.getRawLlmKey(userId, routing.provider).catch(() => null)
     const userApiKey = userLlmKey?.isActive
       ? (userLlmKey.apiKey ?? userLlmKey.loginPassword ?? undefined)

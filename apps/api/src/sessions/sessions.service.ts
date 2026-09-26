@@ -76,6 +76,8 @@ export class SessionsService {
     if ('verboseLevel' in patch) data.verboseLevel = this.normalizeNullable(patch.verboseLevel)
     if ('reasoningLevel' in patch) data.reasoningLevel = this.normalizeNullable(patch.reasoningLevel)
     if ('personality' in patch) data.personality = this.normalizeNullable(patch.personality)
+    if ('model' in patch) data.model = this.normalizeNullable(patch.model)
+    if ('modelProvider' in patch) data.modelProvider = this.normalizeNullable(patch.modelProvider)
 
     const updated = Object.keys(data).length
       ? await this.prisma.conversation.update({ where: { id: conversationId }, data })
@@ -149,6 +151,8 @@ export class SessionsService {
       verboseLevel: string | null
       reasoningLevel: string | null
       personality?: string | null
+      model?: string | null
+      modelProvider?: string | null
       lastMessageAt: Date | null
       createdAt: Date
     },
@@ -171,8 +175,8 @@ export class SessionsService {
       inputTokens: tokenCounts.inputTokens,
       outputTokens: tokenCounts.outputTokens,
       totalTokens: tokenCounts.totalTokens,
-      model: settings?.preferredModel ?? null,
-      modelProvider: settings?.preferredProvider ?? null,
+      model: conversation.model ?? settings?.preferredModel ?? null,
+      modelProvider: conversation.modelProvider ?? settings?.preferredProvider ?? null,
       contextTokens: null,
     }
   }

@@ -142,11 +142,11 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
   )
 }
 
-const RAIL_ITEMS = [
+const RAIL_ITEMS: Array<{ icon: typeof MessageCircle; label: string; href?: string; action?: 'ideas' }> = [
   { icon: MessageCircle, label: 'Chat', href: '/chat' },
   { icon: Search, label: 'Search', href: '/control/repair' },
   { icon: Files, label: 'Artifacts', href: '/artifacts' },
-  { icon: Lightbulb, label: 'Ideas', href: '/memory' },
+  { icon: Lightbulb, label: 'Ideas', action: 'ideas' },
   { icon: CheckSquare, label: 'Approvals', href: '/approvals' },
   { icon: LayoutGrid, label: 'Control', href: '/control/overview' },
 ]
@@ -162,7 +162,13 @@ export function MuseIconRail({ onNavigate }: { onNavigate?: (href: string) => vo
             type="button"
             title={item.label}
             aria-label={item.label}
-            onClick={() => onNavigate?.(item.href)}
+            onClick={() => {
+              if (item.action === 'ideas') {
+                window.dispatchEvent(new CustomEvent('openagents:show-ideas'))
+                return
+              }
+              if (item.href) onNavigate?.(item.href)
+            }}
             className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
           >
             <Icon size={17} />

@@ -474,6 +474,7 @@ export function ChatWindow({
   const [controlsExpanded, setControlsExpanded] = useState(false)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
+  const [modelScope, setModelScope] = useState<'global' | 'chat'>('global')
   const [favoriteModels, setFavoriteModels] = useState<Record<string, string[]>>({})
   const modelPickerRef = useRef<HTMLDivElement>(null)
   const [mcpDropdownOpen, setMcpDropdownOpen] = useState(false)
@@ -752,6 +753,18 @@ export function ChatWindow({
     } finally {
       setRuntimeBusy(null)
     }
+  }
+
+  async function selectModel(model: string) {
+    if (modelScope === 'chat') {
+      await patchActiveSession(
+        { model, modelProvider: activeProvider },
+        `This chat will use ${model} (${activeProvider}). Your default runtime is unchanged.`,
+        'model',
+      )
+      return
+    }
+    await updateRuntimeSettings(activeProvider, model, 'model')
   }
 
   async function patchActiveSession(patch: SessionPatchInput, successMessage: string, source: string) {
@@ -1086,10 +1099,42 @@ export function ChatWindow({
 
           {modelPickerOpen && (
             <div className="absolute left-0 top-full z-50 mt-2 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-[18px] border border-[#e4e7ec] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
-              <div className="border-b border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
+              <div className="flex items-center justify-between gap-2 border-b border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">Model</p>
+                <div className="flex items-center gap-1 rounded-full bg-[#f2f4f7] p-0.5 dark:bg-[#232837]">
+                  <button
+                    type="button"
+                    onClick={() => setModelScope('global')}
+                    className={clsx(
+                      'rounded-full px-2 py-0.5 text-[10px] font-semibold transition',
+                      modelScope === 'global'
+                        ? 'bg-white text-[#101828] shadow-sm dark:bg-[#141824] dark:text-white'
+                        : 'text-[#98a2b3] hover:text-[#475467]',
+                    )}
+                  >
+                    All chats
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModelScope('chat')}
+                    className={clsx(
+                      'rounded-full px-2 py-0.5 text-[10px] font-semibold transition',
+                      modelScope === 'chat'
+                        ? 'bg-white text-[#101828] shadow-sm dark:bg-[#141824] dark:text-white'
+                        : 'text-[#98a2b3] hover:text-[#475467]',
+                    )}
+                  >
+                    This chat
+                  </button>
+                </div>
               </div>
-
+              {modelScope === 'chat' && (
+                <p className="border-b border-[#f2f4f7] bg-[#fffbeb] px-4 py-1.5 text-[10px] text-[#92400e] dark:border-[#2d3347] dark:bg-[#1c1917] dark:text-[#fbbf24]">
+                  {activeSession?.model
+                    ? <>This chat uses <span className="font-semibold">{activeSession.model}</span>. <button type="button" onClick={() => { void patchActiveSession({ model: null, modelProvider: null }, 'This chat now follows your default model.', 'model') }} className="underline underline-offset-2">Reset</button></>
+                    : 'Picks below apply to this chat only.'}
+                </p>
+              )}
 
               {/* Model list — favorites first, active model marked in use */}
               <div className="max-h-52 overflow-y-auto px-2 pb-3 pt-1">
@@ -1103,7 +1148,7 @@ export function ChatWindow({
                         inUse={inUseModel === model}
                         favorite
                         onToggleFavorite={() => toggleFavoriteModel(model)}
-                        onSelect={() => { void updateRuntimeSettings(activeProvider, model, 'model'); setModelPickerOpen(false) }}
+                        onSelect={() => { void selectModel(model); setModelPickerOpen(false) }}
                       />
                     ))}
                     <div className="mx-3 my-1 border-t border-[#f2f4f7] dark:border-[#2d3347]" />
@@ -1119,7 +1164,7 @@ export function ChatWindow({
                     inUse={inUseModel === model}
                     favorite={false}
                     onToggleFavorite={() => toggleFavoriteModel(model)}
-                    onSelect={() => { void updateRuntimeSettings(activeProvider, model, 'model'); setModelPickerOpen(false) }}
+                    onSelect={() => { void selectModel(model); setModelPickerOpen(false) }}
                   />
                 ))}
                 {providerModelOptions.length === 0 && (
