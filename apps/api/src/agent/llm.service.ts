@@ -93,6 +93,7 @@ export interface LLMResponse {
 export interface TestConnectionResult {
   ok: boolean
   model?: string
+  warning?: string
   error?: string
 }
 
@@ -170,21 +171,39 @@ export class LLMService {
     return this.completeWithKeyRotation(
       async (key) => {
         const client = this.createOpenAICompatibleClient(p, key, userBaseUrl)
-        const response = await this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default)
+        const requestedModel = model ?? LLM_MODELS[p].default
+        try {
+          const response = await this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default)
 
-        // Some NVIDIA NIM models return empty content with no tool calls when tools are passed
-        // (e.g. nemotron, mixtral, qwen-coder). Retry without tools to get a usable response.
-        if (
-          p === 'nvidia' &&
-          tools.length > 0 &&
-          !response.content?.trim() &&
-          !response.toolCalls?.length
-        ) {
-          this.logger.warn(`NVIDIA model "${model ?? LLM_MODELS.nvidia.default}" returned empty content with tools — retrying without tools`)
-          return this.completeOpenAI(messages, [], systemPrompt, client, model, LLM_MODELS[p].default)
+          // Some NVIDIA NIM models return empty content with no tool calls when tools are passed
+          // (e.g. nemotron, mixtral, qwen-coder). Retry without tools to get a usable response.
+          if (
+            p === 'nvidia' &&
+            tools.length > 0 &&
+            !response.content?.trim() &&
+            !response.toolCalls?.length
+          ) {
+            this.logger.warn(`NVIDIA model "${requestedModel}" returned empty content with tools — retrying without tools`)
+            return this.completeOpenAI(messages, [], systemPrompt, client, model, LLM_MODELS[p].default)
+          }
+
+          return response
+        } catch (err: any) {
+          if (!this.isGoneError(err)) throw err
+          // 410 Gone = retired model (or, on NVIDIA, a key without the Public
+          // API Endpoints entitlement). Self-heal by switching to the first
+          // model in the provider's live catalog instead of failing the run.
+          const live = await this.fetchLiveModels(p, key, userBaseUrl).catch(() => [] as string[])
+          const replacement = live.map((id) => id.trim()).filter(Boolean)
+            .find((id) => id !== requestedModel)
+          if (!replacement) throw this.friendlyProviderError(p, err, requestedModel)
+          this.logger.warn(`${PROVIDER_LABELS[p]} model "${requestedModel}" is gone (410) — retrying with live model "${replacement}"`)
+          try {
+            return await this.completeOpenAI(messages, tools, systemPrompt, client, replacement, replacement)
+          } catch (retryErr: any) {
+            throw this.friendlyProviderError(p, retryErr, replacement)
+          }
         }
-
-        return response
       },
       p,
       userApiKey,
@@ -233,6 +252,29 @@ export class LLMService {
     return status === 429
   }
 
+  private isGoneError(err: unknown): boolean {
+    const status = (err as any)?.status ?? (err as any)?.statusCode ?? 0
+    if (status === 410) return true
+    return /status code.*410|410 gone/i.test((err as any)?.message ?? '')
+  }
+
+  // Translates raw provider errors into actionable messages. NVIDIA returns
+  // 410 both for retired models and for keys missing the "Public API
+  // Endpoints" entitlement; the live catalog is the way to tell them apart.
+  private friendlyProviderError(provider: string, err: unknown, model?: string): Error {
+    const raw = err instanceof Error && err.message ? err.message : 'Request failed'
+    if (this.isGoneError(err)) {
+      const where = model ? `Model "${model}"` : 'The requested model'
+      const hint = provider === 'nvidia'
+        ? `${where} is retired (410 Gone) or your key lacks Public API Endpoints. Refresh models to see what your nvapi- key can use, pick a live one, or enable the entitlement at build.nvidia.com.`
+        : `${where} is no longer served by ${PROVIDER_LABELS[provider as LLMProvider] ?? provider} (410 Gone). Refresh models and pick a live one.`
+      const error = new Error(hint)
+      ;(error as any).status = 410
+      return error
+    }
+    return err instanceof Error ? err : new Error(raw)
+  }
+
   async listOllamaModels(baseUrl?: string): Promise<string[]> {
     return this.listLocalOllamaModels(baseUrl, true)
   }
@@ -240,48 +282,73 @@ export class LLMService {
   /**
    * Live model discovery per provider. Returns the provider's own model
    * catalog (Ollama /api/tags, Anthropic Models API, or OpenAI-compatible
-   * /v1/models) merged after the curated list. Falls back to the curated
-   * list when the live lookup fails (missing key, offline server, …).
+   * /v1/models) merged after the curated list. Never throws for lookup
+   * failures — those come back as `{ source: 'curated', error }` so the UI
+   * can tell the user exactly why the live list is missing.
    */
   async listProviderModels(
     provider: LLMProvider,
     apiKey?: string,
     baseUrl?: string,
-  ): Promise<{ models: string[]; source: 'live' | 'curated' }> {
+  ): Promise<{ models: string[]; source: 'live' | 'curated'; error?: string }> {
     const requested = String(provider ?? '').trim().toLowerCase()
     if (!this.isSupportedProvider(requested)) {
       throw new Error(`Unsupported provider "${provider}".`)
     }
     const curated = [...(LLM_MODEL_OPTIONS[requested] as unknown as string[])]
-    const merge = (live: string[]) => {
-      const seen = new Set(curated)
-      const extras = live.map((id) => id.trim()).filter((id) => id && !seen.has(id))
-      return { models: [...curated, ...extras].slice(0, 200), source: (extras.length > 0 || live.length > 0 ? 'live' : 'curated') as 'live' | 'curated' }
-    }
 
     try {
-      if (requested === 'ollama') {
-        const live = await this.listLocalOllamaModels(baseUrl, true)
-        return live.length > 0 ? merge(live) : { models: curated, source: 'curated' }
-      }
-
-      if (requested === 'anthropic') {
-        const key = this.resolveApiKey('anthropic', apiKey)
-        const response = await fetch('https://api.anthropic.com/v1/models?limit=100', {
-          headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-        })
-        if (!response.ok) throw new Error(`Anthropic models lookup failed (HTTP ${response.status}).`)
-        const json = await response.json() as { data?: Array<{ id?: string }> }
-        const live = (json.data ?? []).map((m) => m.id ?? '').filter(Boolean)
-        return live.length > 0 ? merge(live) : { models: curated, source: 'curated' }
-      }
-
-      const client = this.createOpenAICompatibleClient(requested, apiKey, baseUrl)
-      const live = await this.listModelIds(client)
-      return live.length > 0 ? merge(live) : { models: curated, source: 'curated' }
-    } catch {
-      return { models: curated, source: 'curated' }
+      const live = await this.fetchLiveModels(requested, apiKey, baseUrl)
+      if (live.length === 0) return { models: curated, source: 'curated' }
+      const seen = new Set(curated)
+      const extras = live.map((id) => id.trim()).filter((id) => id && !seen.has(id))
+      return { models: [...curated, ...extras].slice(0, 200), source: 'live' }
+    } catch (err: any) {
+      return { models: curated, source: 'curated', error: this.friendlyCatalogError(requested, err) }
     }
+  }
+
+  private friendlyCatalogError(provider: string, err: any): string {
+    const status = err?.status ?? err?.statusCode ?? 0
+    if (status === 401 || status === 403) {
+      return 'Provider rejected the key (401/403). Save a valid key first, then refresh.'
+    }
+    if (this.isGoneError(err)) {
+      return this.friendlyProviderError(provider, err).message
+    }
+    const msg = err instanceof Error && err.message ? err.message : 'Lookup failed'
+    if (/not configured/i.test(msg)) {
+      return 'No key saved for this provider yet. Save a key first, then refresh.'
+    }
+    return `Live catalog unavailable (${msg}). Showing curated list.`
+  }
+
+  // Raw live catalog. Throws on any failure — callers decide how to degrade.
+  private async fetchLiveModels(
+    provider: Exclude<LLMProvider, 'anthropic' | 'ollama'> | 'anthropic' | 'ollama',
+    apiKey?: string,
+    baseUrl?: string,
+  ): Promise<string[]> {
+    if (provider === 'ollama') {
+      return this.listLocalOllamaModels(baseUrl, true)
+    }
+
+    if (provider === 'anthropic') {
+      const key = this.resolveApiKey('anthropic', apiKey)
+      const response = await fetch('https://api.anthropic.com/v1/models?limit=100', {
+        headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      })
+      if (!response.ok) {
+        const error = new Error(`Anthropic models lookup failed (HTTP ${response.status}).`)
+        ;(error as any).status = response.status
+        throw error
+      }
+      const json = await response.json() as { data?: Array<{ id?: string }> }
+      return (json.data ?? []).map((m) => m.id ?? '').filter(Boolean)
+    }
+
+    const client = this.createOpenAICompatibleClient(provider, apiKey, baseUrl)
+    return this.listModelIds(client)
   }
 
   async runOllamaPrompt(baseUrl: string | undefined, model: string, prompt: string, maxTokens = 200) {
@@ -348,13 +415,36 @@ export class LLMService {
       }
 
       // openai-compatible providers (openai plus every OpenAI-compatible cloud/local endpoint)
+      const requestedModel = model ?? LLM_MODELS[requestedProvider].default
       const client = this.createOpenAICompatibleClient(requestedProvider, apiKey, baseUrl)
-      const res = await client.chat.completions.create({
-        model: model ?? LLM_MODELS[requestedProvider].default,
-        max_tokens: 5,
-        messages: [{ role: 'user', content: 'hi' }],
-      })
-      return { ok: true, model: res.model }
+      try {
+        const res = await client.chat.completions.create({
+          model: requestedModel,
+          max_tokens: 5,
+          messages: [{ role: 'user', content: 'hi' }],
+        })
+        return { ok: true, model: res.model }
+      } catch (err: any) {
+        if (!this.isGoneError(err) || requestedModel === LLM_MODELS[requestedProvider].default) {
+          throw this.friendlyProviderError(requestedProvider, err, requestedModel)
+        }
+        // Requested model is gone — retry once with the provider default so a
+        // stale pin doesn't fail the whole connectivity check.
+        try {
+          const res = await client.chat.completions.create({
+            model: LLM_MODELS[requestedProvider].default,
+            max_tokens: 5,
+            messages: [{ role: 'user', content: 'hi' }],
+          })
+          return {
+            ok: true,
+            model: res.model,
+            warning: `Model "${requestedModel}" is retired (410 Gone) — test passed with default "${LLM_MODELS[requestedProvider].default}". Refresh models and pick a live one.`,
+          }
+        } catch (retryErr: any) {
+          throw this.friendlyProviderError(requestedProvider, retryErr, LLM_MODELS[requestedProvider].default)
+        }
+      }
     } catch (err: any) {
       return { ok: false, error: err?.message ?? 'Connection failed' }
     }
