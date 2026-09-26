@@ -1,8 +1,9 @@
-import { Controller, Post, Body, UseGuards, Req, Get, Query, Param, BadRequestException } from '@nestjs/common'
+import { Controller, Delete, Post, Body, UseGuards, Req, Get, Query, Param, BadRequestException } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsString, IsOptional } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { LLMService } from './llm.service'
+import { AnswerCacheService } from './answer-cache.service'
 import { UsersService } from '../users/users.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { LLMProvider } from '@openagents/shared'
@@ -23,7 +24,47 @@ export class AgentController {
     private llm: LLMService,
     private users: UsersService,
     private prisma: PrismaService,
+    private answerCache: AnswerCacheService,
   ) {}
+
+  @Get('intelligence')
+  async intelligence(@Req() req: any) {
+    const [cache, rows] = await Promise.all([
+      this.answerCache.stats(req.user.id),
+      this.prisma.routingOutcome.findMany({
+        where: { userId: req.user.id },
+        select: { taskClass: true, model: true, durationMs: true, success: true },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+      }),
+    ])
+
+    const buckets = new Map<string, { samples: number; successes: number; totalMs: number }>()
+    for (const row of rows) {
+      const key = `${row.taskClass}::${row.model}`
+      const entry = buckets.get(key) ?? { samples: 0, successes: 0, totalMs: 0 }
+      entry.samples += 1
+      if (row.success) entry.successes += 1
+      entry.totalMs += row.durationMs
+      buckets.set(key, entry)
+    }
+
+    return {
+      cache,
+      routing: [...buckets.entries()].slice(0, 50).map(([key, entry]) => ({
+        taskClass: key.split('::')[0],
+        model: key.split('::').slice(1).join('::'),
+        samples: entry.samples,
+        avgDurationMs: Math.round(entry.totalMs / entry.samples),
+        successRate: Number((entry.successes / entry.samples).toFixed(2)),
+      })),
+    }
+  }
+
+  @Delete('cache')
+  clearCache(@Req() req: any) {
+    return this.answerCache.clear(req.user.id)
+  }
 
   @Post('branch')
   @UseGuards(JwtAuthGuard)
