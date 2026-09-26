@@ -71,6 +71,7 @@ import { WarRoomsModule } from './war-rooms/war-rooms.module'
 import { LocalDaemonModule } from './local-daemon/local-daemon.module'
 import { ReflectionModule } from './reflection/reflection.module'
 import { EvalModule } from './eval/eval.module'
+import { BriefingModule } from './briefing/briefing.module'
 
 @Module({
   imports: [
@@ -148,6 +149,7 @@ import { EvalModule } from './eval/eval.module'
     LocalDaemonModule,
     ReflectionModule,
     EvalModule,
+    BriefingModule,
   ],
 })
 export class AppModule {}

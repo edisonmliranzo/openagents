@@ -968,7 +968,20 @@ export function ChatWindow({
   async function dispatchMessage(rawText: string) {
     const displayContent = rawText.trim()
     if (!displayContent && attachedFiles.length === 0) return
-    if (isStreaming) return
+
+    // Mid-run steering: while the agent is working, fold the new instruction
+    // into the active run instead of queueing a separate turn.
+    if (isStreaming) {
+      if (!displayContent || !activeConversationId) return
+      setInput('')
+      try {
+        await sdk.conversations.steer(activeConversationId, displayContent)
+        appendOperatorMessage(`Steering sent: "${displayContent.slice(0, 80)}"`)
+      } catch (err) {
+        appendOperatorMessage(formatCommandError(err, 'Failed to steer the current run.'), 'error')
+      }
+      return
+    }
 
     const parsed = displayContent ? parseSlashCommand(displayContent) : null
     if (parsed && isOperatorCommandId(parsed.id)) {
@@ -1319,7 +1332,7 @@ export function ChatWindow({
                   <button
                     type="button"
                     onClick={() => void handleSend()}
-                    disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
+                    disabled={(!input.trim() && attachedFiles.length === 0) || (isStreaming && !input.trim()) || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
                     className="oa-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:cursor-not-allowed"
                     aria-label="Send message"
                   >
@@ -1381,9 +1394,8 @@ export function ChatWindow({
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKey}
-                disabled={isStreaming}
                 rows={1}
-                placeholder="Ask anything"
+                placeholder={isStreaming ? 'Steer the current run…' : 'Ask anything'}
                 className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-base text-[#101828] outline-none placeholder:text-[#a1a1aa] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:text-white"
               />
               <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-[#f2f4f7] px-3 py-2.5 dark:border-[#2d3347]">
@@ -1463,7 +1475,7 @@ export function ChatWindow({
                   <button
                     type="button"
                     onClick={() => void handleSend()}
-                    disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
+                    disabled={(!input.trim() && attachedFiles.length === 0) || (isStreaming && !input.trim()) || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
                     className="oa-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:cursor-not-allowed"
                     aria-label="Send message"
                   >

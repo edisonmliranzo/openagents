@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { ToolResult } from '@openagents/shared'
 import { MemoryService } from '../../memory/memory.service'
+import { PrismaService } from '../../prisma/prisma.service'
 import type { ToolDefinition } from '../tools.service'
 
 /**
@@ -15,7 +16,7 @@ import type { ToolDefinition } from '../tools.service'
  */
 @Injectable()
 export class MemoryPersonalTool {
-  constructor(private memory: MemoryService) {}
+  constructor(private memory: MemoryService, private prisma: PrismaService) {}
 
   // ── Save contact ───────────────────────────────────────────────────────────
 
@@ -224,6 +225,58 @@ export class MemoryPersonalTool {
       return { success: true, output: { updated: `${input.key} = ${input.value}` } }
     } catch (err: any) {
       return { success: false, output: null, error: err?.message ?? 'Failed to update profile.' }
+    }
+  }
+
+  // ── Forget ─────────────────────────────────────────────────────────────────
+
+  get forgetDef(): ToolDefinition {
+    return {
+      name: 'memory_forget',
+      displayName: 'Forget',
+      description:
+        'Delete memories about a topic, person, or preference when the user asks you to forget. Matches case-insensitively against stored facts. Returns what was removed.',
+      requiresApproval: false,
+      hidden: true,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'What to forget (e.g. "my old job", "Maria", "crypto trading")' },
+        },
+        required: ['query'],
+      },
+    }
+  }
+
+  async forget(input: { query: string }, userId: string): Promise<ToolResult> {
+    const query = String(input.query ?? '').trim().toLowerCase()
+    if (!query) {
+      return { success: false, output: null, error: 'query is required.' }
+    }
+
+    try {
+      const candidates = await this.prisma.memoryFact.findMany({
+        where: { userId },
+        select: { id: true, entity: true, key: true, value: true },
+        take: 1000,
+      })
+      const matching = candidates.filter((row) =>
+        `${row.entity} ${row.key} ${row.value}`.toLowerCase().includes(query),
+      )
+      if (matching.length === 0) {
+        return { success: true, output: { removed: 0, note: `No stored memories matched "${query}".` } }
+      }
+      await this.prisma.memoryFact.deleteMany({ where: { id: { in: matching.map((row) => row.id) } } })
+      await this.memory.syncFiles(userId).catch(() => undefined)
+      return {
+        success: true,
+        output: {
+          removed: matching.length,
+          items: matching.slice(0, 10).map((row) => `${row.entity} · ${row.key}`),
+        },
+      }
+    } catch (err: any) {
+      return { success: false, output: null, error: err?.message ?? 'Failed to forget.' }
     }
   }
 }

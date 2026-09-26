@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, UseGuards, Req, Res, Query,
+  Controller, Get, Post, Delete, Param, Body, UseGuards, Req, Res, Query, HttpCode,
 } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsString, IsOptional } from 'class-validator'
@@ -12,6 +12,7 @@ import { NanobotLoopService } from '../nanobot/agent/nanobot-loop.service'
 import { NanobotConfigService } from '../nanobot/config/nanobot-config.service'
 import { WsGateway } from '../events/ws.gateway'
 import { StreamingService } from '../streaming/streaming.service'
+import { SteeringService } from '../agent/steering.service'
 
 const SKILL_COMMAND_PATTERN = /^\s*(\/skill\s+|learn\s+skill\s*:|teach\s+skill\s*:|learn\s+skills?\s+(?:of|about|for)\s+)/i
 const ADAPTIVE_SKILL_INTENT_PATTERN =
@@ -39,6 +40,7 @@ export class ConversationsController {
     private nanobotConfig: NanobotConfigService,
     private wsGateway: WsGateway,
     private streamingService: StreamingService,
+    private steering: SteeringService,
   ) {}
 
   @Get()
@@ -143,6 +145,15 @@ export class ConversationsController {
   @Delete(':id')
   delete(@Param('id') id: string, @Req() req: any) {
     return this.conversations.delete(id, req.user.id)
+  }
+
+  @Post(':id/steer')
+  @HttpCode(202)
+  async steer(@Param('id') id: string, @Body() dto: ChatDto, @Req() req: any) {
+    // Ownership check first, then queue the mid-run instruction.
+    await this.conversations.get(id, req.user.id)
+    const depth = this.steering.push(id, dto.content ?? '')
+    return { ok: true, queued: depth }
   }
 
   @Post(':id/repair')
