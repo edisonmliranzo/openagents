@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common'
 import { ToolsService } from './tools.service'
 import { ToolsController } from './tools.controller'
 import { ParallelAgentTool } from './connectors/parallel-agent.tool'
+import { SideQuestTool } from './connectors/side-quest.tool'
+import { ApiToolProposalTool } from './connectors/api-tool-proposal.tool'
 import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
 import { SkillSaveTool } from './connectors/skill-save.tool'
 import { GmailTool } from './connectors/gmail.tool'
@@ -88,6 +90,8 @@ import { UsersModule } from '../users/users.module'
     WhatsAppSendTool,
     TelegramSendTool,
     ParallelAgentTool,
+    SideQuestTool,
+    ApiToolProposalTool,
     MixtureOfAgentsTool,
     SkillSaveTool,
     LLMService,

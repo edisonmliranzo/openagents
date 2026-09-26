@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from './llm.service'
 import { ToolsService } from '../tools/tools.service'
@@ -16,6 +16,8 @@ import { SentinelService } from './sentinel.service'
 import { AnswerCacheService } from './answer-cache.service'
 import { CriticService } from './critic.service'
 import { PersonaService } from './persona.service'
+import { SteeringService } from './steering.service'
+import { SkillSuggesterService } from '../learning/skill-suggester.service'
 import { GoalService } from '../goals/goal.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
@@ -177,7 +179,7 @@ interface AgentRunMetrics {
 }
 
 @Injectable()
-export class AgentService {
+export class AgentService implements OnModuleInit {
   private readonly logger = new Logger(AgentService.name)
 
   constructor(
@@ -199,7 +201,25 @@ export class AgentService {
     private answerCache: AnswerCacheService,
     private critic: CriticService,
     private persona: PersonaService,
+    private steering: SteeringService,
+    private skillSuggester: SkillSuggesterService,
   ) {}
+
+  async onModuleInit() {
+    // Self-heal: mark runs left mid-flight by a previous process as interrupted.
+    try {
+      const staleBefore = new Date(Date.now() - 3 * 60 * 1000)
+      const result = await this.prisma.agentRun.updateMany({
+        where: { status: { in: ['thinking', 'running_tool'] }, startedAt: { lt: staleBefore } },
+        data: { status: 'error', finishedAt: new Date(), error: 'interrupted by server restart' },
+      })
+      if (result.count > 0) {
+        this.logger.warn(`Marked ${result.count} interrupted agent run(s) from a previous session.`)
+      }
+    } catch (error: any) {
+      this.logger.warn(`Interrupted-run sweep failed: ${error?.message ?? error}`)
+    }
+  }
 
   async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
     // 1. Save user message
@@ -472,6 +492,7 @@ export class AgentService {
       let activeUserApiKey = userApiKey
       let activeUserBaseUrl = userBaseUrl
       let activeModel = preferredModel
+      let budgetDowngraded = false
       activeProviderForRun = activeProvider
       activeModelForRun = activeModel ?? null
       const runMetrics: AgentRunMetrics = {
@@ -589,6 +610,23 @@ export class AgentService {
       let toolRound = 0
 
       while (toolRound < maxToolRounds) {
+        // Fold in any steering messages the user sent mid-run.
+        const steers = this.steering.drain(conversationId)
+        for (const steer of steers) {
+          llmWorkingMessages.push({ role: 'user', content: `[steering] ${steer}` })
+          emit('thinking', { step: 'executing', message: 'Incorporating your new instruction' })
+        }
+
+        // Budget guard: downgrade to the fast tier once a run outspends its ceiling.
+        if (!budgetDowngraded && this.exceedsTaskBudget(runMetrics)) {
+          budgetDowngraded = true
+          const fastModel = LLM_MODELS[activeProvider]?.fast
+          if (fastModel && activeModel !== fastModel) {
+            activeModel = fastModel
+            emit('thinking', { step: 'executing', message: `Task budget reached — switching to ${fastModel} for the rest of this run` })
+          }
+        }
+
         const response = await completeWithProviderFallback(llmWorkingMessages)
 
         if (response.content?.trim()) {
@@ -1177,6 +1215,18 @@ export class AgentService {
         })
         .catch(() => undefined)
 
+      // Playbooks: multi-step successful runs become reusable skill proposals.
+      if (runMetrics.toolCalls.length >= 4) {
+        void this.skillSuggester
+          .recordRun({
+            userId,
+            userMessage,
+            toolSequence: runMetrics.toolCalls.map((tool) => tool.name),
+            success: true,
+          })
+          .catch(() => undefined)
+      }
+
       // Feed the semantic answer cache for stable, tool-free answers.
       if (finalResponseContent) {
         void this.answerCache
@@ -1607,7 +1657,42 @@ export class AgentService {
     if (value === 'calendar_cancel_event') {
       return `cancel calendar event ${this.describeId(toolInput.eventId)}`
     }
+    // Diff-style previews so approvals show what will actually change.
+    if (value === 'shell_execute' || value === 'shell_session_run') {
+      return `run shell command ${this.describeQuotedText(toolInput.command ?? toolInput.cmd) || '(no command given)'}`
+    }
+    if (value === 'code_execute') {
+      const language = this.describeId(toolInput.language)
+      const firstLine = String(toolInput.code ?? '').trim().split(/\r?\n/)[0]?.slice(0, 60) ?? ''
+      return `execute ${language} code${firstLine ? ` starting: ${this.describeQuotedText(firstLine)}` : ''}`
+    }
+    if (value === 'web_fetch') {
+      return `fetch ${this.describeId(toolInput.url)}`
+    }
+    if (value === 'computer_navigate') {
+      return `navigate the browser to ${this.describeId(toolInput.url)}`
+    }
+    if (value === 'computer_click_link') {
+      return `click a browser element ${this.describeQuotedText(toolInput.selector ?? toolInput.ref)}`
+    }
+    if (value === 'telegram_send' || value === 'whatsapp_send' || value === 'slack_send') {
+      return `send a ${value.split('_')[0]} message ${this.describeQuotedText(toolInput.text ?? toolInput.message)}`
+    }
+    if (value === 'bybit_place_demo_order') {
+      return `place a demo ${this.describeId(toolInput.symbol)} order`
+    }
+    if (value === 'notion_create_page' || value === 'jira_create_issue' || value === 'linear_create_issue' || value === 'github_create_issue' || value === 'github_create_pr') {
+      return `${value.replace(/_/g, ' ')} ${this.describeQuotedText(toolInput.title ?? toolInput.name ?? toolInput.summary)}`
+    }
     return `use tool ${toolName}`
+  }
+
+  private exceedsTaskBudget(runMetrics: AgentRunMetrics): boolean {
+    const ceiling = Number(process.env.TASK_COST_CEILING_USD ?? '')
+    if (!Number.isFinite(ceiling) || ceiling <= 0) return false
+    const totalTokens = runMetrics.inputTokens + runMetrics.outputTokens
+    // Blended ~$3/M tokens estimate — conservative for premium models.
+    return (totalTokens / 1_000_000) * 3 > ceiling
   }
 
   private describeId(value: unknown) {

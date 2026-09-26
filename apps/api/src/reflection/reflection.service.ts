@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../prisma/prisma.service'
 import { MemoryService } from '../memory/memory.service'
 import { LLMService } from '../agent/llm.service'
+import { NotificationsService } from '../notifications/notifications.service'
+import { TelegramService } from '../channels/telegram/telegram.service'
 import type { LLMProvider } from '@openagents/shared'
 
 export interface ReflectionResult {
@@ -21,9 +23,10 @@ const REFLECTION_PROMPT = `You are the long-term memory curator for a personal A
 From the conversation log below, extract ONLY durable, useful knowledge about the user:
 - facts: stable personal/professional facts, preferences, contacts, projects (entity = person/project/user, key = short slug, value = one sentence)
 - events: notable completed actions or decisions worth remembering (kind = conversation|workflow|note, summary = one sentence)
-Ignore greetings, small talk, and anything already trivial. Return STRICT JSON only:
-{"facts":[{"entity":"...","key":"...","value":"..."}],"events":[{"kind":"note","summary":"..."}]}
-If nothing is worth keeping, return {"facts":[],"events":[]}.`
+- loops: OPEN COMMITMENTS the user or assistant promised to do that are NOT yet done, each with an optional ISO dueDate if a time was mentioned (e.g. "I'll send the invoice Friday" -> loop with dueDate). Ignore greetings, small talk, and anything already trivial.
+Return STRICT JSON only:
+{"facts":[{"entity":"...","key":"...","value":"..."}],"events":[{"kind":"note","summary":"..."}],"loops":[{"text":"...","dueDate":"ISO or omit"}]}
+If nothing is worth keeping, return {"facts":[],"events":[],"loops":[]}.`
 
 @Injectable()
 export class ReflectionService implements OnModuleInit, OnModuleDestroy {
@@ -36,6 +39,8 @@ export class ReflectionService implements OnModuleInit, OnModuleDestroy {
     private readonly memory: MemoryService,
     private readonly llm: LLMService,
     private readonly config: ConfigService,
+    private readonly notifications: NotificationsService,
+    private readonly telegram: TelegramService,
   ) {}
 
   onModuleInit() {
@@ -142,11 +147,58 @@ export class ReflectionService implements OnModuleInit, OnModuleDestroy {
       events += 1
     }
 
-    this.logger.log(`Reflection for ${userId}: ${facts} facts, ${events} events.`)
+    let loops = 0
+    const loopList = Array.isArray(parsed.loops) ? (parsed.loops as Array<Record<string, unknown>>).slice(0, 6) : []
+    for (const loop of loopList) {
+      const text = typeof loop.text === 'string' ? loop.text.trim() : ''
+      if (!text) continue
+      const dueDate = typeof loop.dueDate === 'string' && Date.parse(loop.dueDate) ? new Date(loop.dueDate).toISOString() : null
+      await this.memory
+        .upsertFact(userId, {
+          entity: 'open_loop',
+          key: `loop-${Date.now()}-${loops}`,
+          value: JSON.stringify({ text: text.slice(0, 500), dueDate, status: 'open' }),
+          confidence: 0.85,
+          sourceRef: 'reflection',
+        })
+        .catch(() => undefined)
+      loops += 1
+    }
+
+    await this.checkDueLoops(userId)
+
+    this.logger.log(`Reflection for ${userId}: ${facts} facts, ${events} events, ${loops} loops.`)
     return { userId, skipped: false, facts, events }
   }
 
-  private extractJson(text: string): { facts?: unknown[]; events?: unknown[] } | null {
+  /** Notify + nudge about open loops that are due. */
+  private async checkDueLoops(userId: string): Promise<void> {
+    const rows = await this.prisma.memoryFact.findMany({
+      where: { userId, entity: 'open_loop' },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    })
+    const now = Date.now()
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(row.value) as { text?: string; dueDate?: string | null; status?: string }
+        if (parsed.status !== 'open') continue
+        if (!parsed.dueDate || Date.parse(parsed.dueDate) > now) continue
+        await this.prisma.memoryFact.update({
+          where: { id: row.id },
+          data: { value: JSON.stringify({ ...parsed, status: 'nudged' }) },
+        })
+        await this.notifications
+          .create(userId, 'Open loop due', `${parsed.text ?? 'A commitment is due.'} — want me to work on it?`, 'warning')
+          .catch(() => undefined)
+        await this.telegram.deliver(userId, `⏰ Open loop due: ${parsed.text ?? 'commitment'}\nWant me to handle it?`).catch(() => false)
+      } catch {
+        // malformed loop fact — leave for manual review
+      }
+    }
+  }
+
+  private extractJson(text: string): { facts?: unknown[]; events?: unknown[]; loops?: unknown[] } | null {
     const raw = (text ?? '').trim()
     const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
     const candidates = [fenced?.[1], raw].filter((v): v is string => typeof v === 'string' && v.length > 0)
@@ -157,7 +209,7 @@ export class ReflectionService implements OnModuleInit, OnModuleDestroy {
       try {
         const parsed: unknown = JSON.parse(candidate.slice(start, end + 1))
         if (parsed && typeof parsed === 'object') {
-          return parsed as { facts?: unknown[]; events?: unknown[] }
+          return parsed as { facts?: unknown[]; events?: unknown[]; loops?: unknown[] }
         }
       } catch {
         // try next candidate

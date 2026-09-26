@@ -11,7 +11,8 @@ export class CronTool {
     return {
       name: 'cron_add',
       displayName: 'Cron Add',
-      description: 'Create a recurring or one-shot scheduled task.',
+      description:
+        'Create a recurring or one-shot scheduled task. Use this for reminders and follow-ups: pass an ISO datetime with oneShot=true (e.g. schedule "2026-09-28T09:00:00" oneShot true task "Ask the user whether the deploy worked").',
       requiresApproval: false,
       inputSchema: {
         type: 'object',

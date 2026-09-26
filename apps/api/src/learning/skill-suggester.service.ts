@@ -53,6 +53,32 @@ export class SkillSuggesterService {
     return created
   }
 
+  /**
+   * Playbooks: a successful multi-tool run becomes a reusable skill proposal,
+   * with the tool sequence as the steps. Deduped by sequence signature.
+   */
+  async recordRun(input: { userId: string; userMessage: string; toolSequence: string[]; success: boolean }) {
+    if (!input.success || input.toolSequence.length < 4) return null
+    const signature = `playbook:${input.toolSequence.slice(0, 6).join('>')}`
+    const existing = await this.prisma.skillSuggestion.findFirst({
+      where: { userId: input.userId, sourcePattern: signature },
+    })
+    if (existing) return null
+
+    const title = input.userMessage.trim().split(/\r?\n/)[0].slice(0, 70) || 'Multi-step workflow'
+    return this.prisma.skillSuggestion.create({
+      data: {
+        userId: input.userId,
+        name: title.charAt(0).toUpperCase() + title.slice(1),
+        description: `Your agent completed this ${input.toolSequence.length}-step workflow successfully. Save it as a reusable skill so it can repeat the sequence reliably.`,
+        steps: JSON.stringify(input.toolSequence.map((tool, i) => `Step ${i + 1}: ${tool}`)),
+        tags: JSON.stringify(['playbook', 'auto-suggested']),
+        sourcePattern: signature,
+        status: 'pending',
+      },
+    })
+  }
+
   async listSuggestions(userId: string, status = 'pending') {
     const rows = await this.prisma.skillSuggestion.findMany({
       where: { userId, status },

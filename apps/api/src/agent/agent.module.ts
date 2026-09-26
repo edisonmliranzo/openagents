@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { LearningModule } from '../learning/learning.module'
 import { AgentService } from './agent.service'
 import { AgentController } from './agent.controller'
 import { LLMService } from './llm.service'
@@ -9,6 +10,7 @@ import { SentinelService } from './sentinel.service'
 import { AnswerCacheService } from './answer-cache.service'
 import { CriticService } from './critic.service'
 import { PersonaService } from './persona.service'
+import { SteeringService } from './steering.service'
 import { ToolsModule } from '../tools/tools.module'
 import { MemoryModule } from '../memory/memory.module'
 import { ApprovalsModule } from '../approvals/approvals.module'
@@ -28,9 +30,10 @@ import { GoalsModule } from '../goals/goals.module'
     NotificationsModule,
     EventsModule,
     GoalsModule,
+    LearningModule,
   ],
   controllers: [AgentController],
-  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService],
-  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService],
+  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService],
+  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService],
 })
 export class AgentModule {}

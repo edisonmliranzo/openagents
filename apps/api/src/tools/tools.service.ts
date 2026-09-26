@@ -35,6 +35,8 @@ import { BrowserScreenshotTool } from './connectors/browser-screenshot.tool'
 import { WhatsAppSendTool } from './connectors/whatsapp-send.tool'
 import { TelegramSendTool } from './connectors/telegram-send.tool'
 import { ParallelAgentTool } from './connectors/parallel-agent.tool'
+import { SideQuestTool } from './connectors/side-quest.tool'
+import { ApiToolProposalTool } from './connectors/api-tool-proposal.tool'
 import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
 import { SkillSaveTool } from './connectors/skill-save.tool'
 import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
@@ -98,6 +100,8 @@ export class ToolsService {
     private whatsappSend: WhatsAppSendTool,
     private telegramSend: TelegramSendTool,
     private parallelAgent: ParallelAgentTool,
+    private sideQuest: SideQuestTool,
+    private apiToolProposal: ApiToolProposalTool,
     private mixtureOfAgents: MixtureOfAgentsTool,
     private skillSave: SkillSaveTool,
     private mcp: McpService,
@@ -166,6 +170,7 @@ export class ToolsService {
       ['memory_search',          { def: this.withBuiltinSource(this.memoryPersonal.searchDef),            execute: this.memoryPersonal.search.bind(this.memoryPersonal) }],
       ['memory_get_profile',     { def: this.withBuiltinSource(this.memoryPersonal.getProfileDef),        execute: this.memoryPersonal.getProfile.bind(this.memoryPersonal) }],
       ['memory_update_profile',  { def: this.withBuiltinSource(this.memoryPersonal.updateProfileDef),     execute: this.memoryPersonal.updateProfile.bind(this.memoryPersonal) }],
+      ['memory_forget',          { def: this.withBuiltinSource(this.memoryPersonal.forgetDef),            execute: this.memoryPersonal.forget.bind(this.memoryPersonal) }],
       // Proactive / Always-on
       ['proactive_daily_briefing',  { def: this.withBuiltinSource(this.proactive.dailyBriefingDef),  execute: this.proactive.dailyBriefing.bind(this.proactive) }],
       ['proactive_web_monitor',     { def: this.withBuiltinSource(this.proactive.webMonitorDef),     execute: this.proactive.webMonitor.bind(this.proactive) }],
@@ -199,6 +204,9 @@ export class ToolsService {
       ['telegram_send', { def: this.withBuiltinSource(this.telegramSend.def), execute: this.telegramSend.send.bind(this.telegramSend) }],
       // Parallel agent
       ['parallel_agent_run', { def: this.withBuiltinSource(this.parallelAgent.def), execute: this.parallelAgent.run.bind(this.parallelAgent) }],
+      // Side quests + self-extension
+      ['side_quest', { def: this.withBuiltinSource(this.sideQuest.def), execute: this.sideQuest.run.bind(this.sideQuest) }],
+      ['propose_api_tool', { def: this.withBuiltinSource(this.apiToolProposal.def), execute: this.apiToolProposal.run.bind(this.apiToolProposal) }],
       // Mixture of agents
       ['mixture_of_agents', { def: this.withBuiltinSource(this.mixtureOfAgents.def), execute: this.mixtureOfAgents.run.bind(this.mixtureOfAgents) }],
       // Skill save
