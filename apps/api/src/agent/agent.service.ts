@@ -15,6 +15,7 @@ import { ModelRouterService } from './model-router.service'
 import { SentinelService } from './sentinel.service'
 import { AnswerCacheService } from './answer-cache.service'
 import { CriticService } from './critic.service'
+import { PersonaService } from './persona.service'
 import { GoalService } from '../goals/goal.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
@@ -197,6 +198,7 @@ export class AgentService {
     private sentinel: SentinelService,
     private answerCache: AnswerCacheService,
     private critic: CriticService,
+    private persona: PersonaService,
   ) {}
 
   async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
@@ -205,6 +207,7 @@ export class AgentService {
       data: { conversationId, role: 'user', content: userMessage, status: 'done' },
     })
     emit('message', { ...userMsg })
+    this.captureCorrection(userId, userMessage)
     void this.runtimeEvents.publish({
       name: 'conversation.message',
       userId,
@@ -377,14 +380,19 @@ export class AgentService {
       if (goalSummary) {
         systemPrompt = `${systemPrompt}\n\nActive Goals:\n${goalSummary}`
       }
+      const freshnessNote = this.needsFreshData(userMessage)
+        ? 'This request may depend on current information. Use web_search/web_fetch to verify facts that change over time before answering — do not rely on stale training data.'
+        : ''
       const promptAppendices = [
         OPENAGENTS_IDENTITY_APPENDIX,
         MEMORY_PROMPT_APPENDIX,
         manusModeEnabled ? MANUS_MODE_PROMPT_APPENDIX : '',
         systemPromptAppendix?.trim() ?? '',
         openAgentsInstallAppendix,
+        this.persona.enabled ? this.persona.appendixFor(taskClass) : '',
+        freshnessNote,
       ].filter(Boolean)
-      const effectiveSystemPrompt = promptAppendices.length
+      let effectiveSystemPrompt = promptAppendices.length
         ? `${systemPrompt}\n\n${promptAppendices.join('\n\n')}`
         : systemPrompt
 
@@ -415,6 +423,34 @@ export class AgentService {
       const fallbackApiKeys = provider !== 'ollama'
         ? await this.users.getFallbackLlmKeys(userId, provider).catch(() => [])
         : []
+
+      // Extended thinking: hard tasks get a plan-only pass first, then the
+      // agent executes against that plan — the harness version of "thinking: high".
+      if (
+        this.readBooleanEnv('THINKING_MODE', true) &&
+        !fastAdvisoryMode &&
+        (taskClass === 'reasoning' || taskClass === 'code') &&
+        userMessage.trim().length > 80
+      ) {
+        try {
+          const plan = await this.llm.complete(
+            [{ role: 'user', content: `Request: ${userMessage.slice(0, 2000)}\n\nWrite a concise execution plan: 3-6 numbered steps, each one concrete action. No prose, no caveats.` }],
+            [],
+            'You are a planning module. Output only the numbered plan.',
+            provider,
+            userApiKey,
+            userBaseUrl,
+            preferredModel,
+          )
+          const planText = (plan.content ?? '').trim()
+          if (planText) {
+            effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n## Execution plan (follow step by step, adapt when needed)\n${planText.slice(0, 2000)}`
+            emit('thinking', { step: 'planning', message: 'Approach planned — executing now' })
+          }
+        } catch {
+          // Planning is best-effort; the run proceeds without it.
+        }
+      }
 
       const maxToolRounds = this.readToolLoopSetting(
         'AGENT_MAX_TOOL_ROUNDS',
@@ -759,7 +795,28 @@ export class AgentService {
         emit,
       })
 
-      const result = toolExecution.result
+      let result = toolExecution.result
+
+      // Self-debugging: failed code gets one automated fix-and-retry cycle —
+      // the single biggest quality lever for coding agents.
+      if (
+        !result.success &&
+        toolCall.name === 'code_execute' &&
+        this.readBooleanEnv('CODE_SELF_DEBUG', true)
+      ) {
+        const repaired = await this.trySelfDebugCode({
+          toolInput: toolCall.input,
+          result,
+          userId,
+          provider: activeProvider,
+          apiKey: activeUserApiKey,
+          baseUrl: activeUserBaseUrl,
+          model: activeModel,
+          maxRetries: toolRetryAttempts,
+          emit,
+        })
+        if (repaired) result = repaired
+      }
 
           // Extract artifacts from tool output (images, audio, video, files)
           const toolOutput = result.output as Record<string, unknown> | null
@@ -1297,6 +1354,72 @@ export class AgentService {
     }
   }
 
+  /**
+   * Self-debugging: on a failed code_execute, ask the model for a fix and
+   * re-run once. Returns the repaired result, or null to keep the failure.
+   */
+  private async trySelfDebugCode(input: {
+    toolInput: Record<string, unknown>
+    result: ToolResult
+    userId: string
+    provider: LLMProvider
+    apiKey?: string
+    baseUrl?: string
+    model?: string
+    maxRetries: number
+    emit: (event: string, data: unknown) => void
+  }): Promise<ToolResult | null> {
+    const language = String(input.toolInput.language ?? '')
+    const code = String(input.toolInput.code ?? '')
+    if (!language || !code) return null
+
+    const output = (input.result.output ?? {}) as Record<string, unknown>
+    const stderr = String(output.stderr ?? input.result.error ?? '').slice(0, 2500)
+    const stdout = String(output.stdout ?? '').slice(-800)
+
+    try {
+      input.emit('thinking', { step: 'retrying_tool', message: 'Self-debugging the failed code' })
+      const fix = await this.llm.complete(
+        [
+          {
+            role: 'user',
+            content: `This ${language} code failed.\n\nCODE:\n${code.slice(0, 4000)}\n\nSTDERR:\n${stderr || '(none)'}\nSTDOUT (tail):\n${stdout}\n\nReturn ONLY the corrected complete code in one fenced code block. No explanation.`,
+          },
+        ],
+        [],
+        'You are a debugging expert. Fix the code so it fulfills its evident intent. Output only code.',
+        input.provider,
+        input.apiKey,
+        input.baseUrl,
+        input.model,
+      )
+      const fixed = this.extractCodeBlock(fix.content ?? '')
+      if (!fixed || fixed.trim() === code.trim()) return null
+
+      const retry = await this.executeToolWithRetry({
+        toolName: 'code_execute',
+        toolInput: { ...input.toolInput, code: fixed },
+        userId: input.userId,
+        maxRetries: 0,
+        emit: input.emit,
+      })
+      if (retry.result.success) {
+        return {
+          ...retry.result,
+          output: { ...(retry.result.output as Record<string, unknown> ?? {}), selfDebugged: true },
+        }
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  private extractCodeBlock(text: string): string {
+    const fenced = text.match(/```[a-zA-Z0-9_+-]*\n([\s\S]*?)```/)
+    return (fenced?.[1] ?? '').trim()
+  }
+
   private isRetryableToolError(rawError: unknown) {
     if (typeof rawError !== 'string') return false
     const message = rawError.toLowerCase()
@@ -1775,6 +1898,28 @@ export class AgentService {
       payload: { provider: routing.provider, model: routing.model ?? null, toolRounds: 0, toolCalls: 0 },
     }).catch(() => undefined)
     return true
+  }
+
+  // Detects "no, do it like this" corrections and commits them to memory as
+  // durable preferences — the fastest personal moat there is.
+  private captureCorrection(userId: string, userMessage: string): void {
+    const normalized = userMessage.trim()
+    if (!normalized || normalized.length > 300) return
+    if (!/^(no[,.\s]|actually|wait[,.\s]|i prefer|remember that|remember:|don'?t forget|from now on|always |never )/i.test(normalized)) return
+    const key = `correction-${Date.now()}`
+    void this.memory
+      .upsertFact(userId, {
+        entity: 'user',
+        key,
+        value: normalized,
+        confidence: 0.92,
+        sourceRef: 'correction',
+      })
+      .catch(() => undefined)
+  }
+
+  private needsFreshData(userMessage: string): boolean {
+    return /\b(latest|current(ly)?|today|tonight|now\b|right now|price|prices|news|weather|score|version|who (is|won|has)|as of|recent|upcoming|live|stock|ticker)\b/i.test(userMessage)
   }
 
   private shouldUseFastAdvisoryMode(userMessage: string) {

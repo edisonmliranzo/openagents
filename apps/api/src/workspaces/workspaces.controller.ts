@@ -150,6 +150,11 @@ export class WorkspacesController {
     return this.workspaces.create(req.user.id, dto)
   }
 
+  @Get(':id/briefing')
+  briefing(@Req() req: any, @Param('id') id: string) {
+    return this.workspaces.buildBriefing(req.user.id, id)
+  }
+
   @Get(':id')
   get(@Req() req: any, @Param('id') id: string) {
     return this.workspaces.getForUser(req.user.id, id)

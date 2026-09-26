@@ -78,6 +78,41 @@ export class WorkspacesService {
     return this.toWorkspace(row)
   }
 
+  /**
+   * Project mind: a compact briefing that loads a workspace's whole context
+   * (team, memory, shared work) into one block the agent can reason over.
+   */
+  async buildBriefing(userId: string, workspaceId: string): Promise<{ workspaceId: string; name: string; briefing: string }> {
+    const workspace = await this.getForUser(userId, workspaceId)
+    const sections = [
+      `# Project: ${workspace.name}`,
+      workspace.description ? workspace.description : '',
+      `Team (${workspace.members.length}): ${workspace.members
+        .map((m) => `${m.userId} (${m.role})`)
+        .slice(0, 10)
+        .join(', ')}`,
+      workspace.memory.length
+        ? `## Shared memory\n${workspace.memory
+            .slice(0, 10)
+            .map((entry) => `- **${entry.title}**: ${entry.content.slice(0, 300)}`)
+            .join('\n')}`
+        : '',
+      workspace.conversations.length
+        ? `## Shared conversations\n${workspace.conversations.map((c) => `- ${c.title}`).join('\n')}`
+        : '',
+      workspace.workflows.length ? `## Shared workflows\n${workspace.workflows.map((w) => `- ${w.name}`).join('\n')}` : '',
+      workspace.artifacts.length
+        ? `## Shared artifacts\n${workspace.artifacts.map((a) => `- ${a.title}`).join('\n')}`
+        : '',
+    ].filter(Boolean)
+
+    return {
+      workspaceId: workspace.id,
+      name: workspace.name,
+      briefing: sections.join('\n\n').slice(0, 12000),
+    }
+  }
+
   async create(userId: string, input: CreateWorkspaceInput): Promise<Workspace> {
     const name = this.requireName(input.name)
     const description = optionalText(input.description, 500)

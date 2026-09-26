@@ -8,6 +8,7 @@ import { ModelRouterService } from './model-router.service'
 import { SentinelService } from './sentinel.service'
 import { AnswerCacheService } from './answer-cache.service'
 import { CriticService } from './critic.service'
+import { PersonaService } from './persona.service'
 import { ToolsModule } from '../tools/tools.module'
 import { MemoryModule } from '../memory/memory.module'
 import { ApprovalsModule } from '../approvals/approvals.module'
@@ -29,7 +30,7 @@ import { GoalsModule } from '../goals/goals.module'
     GoalsModule,
   ],
   controllers: [AgentController],
-  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService],
-  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService],
+  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService],
+  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService],
 })
 export class AgentModule {}
