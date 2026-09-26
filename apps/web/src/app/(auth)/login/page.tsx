@@ -86,6 +86,15 @@ export default function LoginPage() {
           </span>
         </div>
 
+        <div>
+          <h1 className="oa-gradient-text text-2xl font-semibold tracking-tight">
+            {mode === 'login' ? 'Welcome back' : 'Create your account'}
+          </h1>
+          <p className="mt-1 text-[13px] text-[var(--muted)]">
+            Your personal AI agent — self-hosted, always yours.
+          </p>
+        </div>
+
         {/* Tab toggle */}
         <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
           <button
