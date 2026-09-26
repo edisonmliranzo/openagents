@@ -25,12 +25,74 @@ export interface GoalMilestone {
   completedAt?: string
 }
 
+function parseJsonArray(raw: string | null | undefined): string[] {
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.map(String) : []
+  } catch {
+    return []
+  }
+}
+
+function parseMilestones(raw: string | null | undefined): GoalMilestone[] {
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((m): m is Record<string, unknown> => typeof m === 'object' && m !== null)
+      .map((m) => ({
+        id: String(m.id ?? ''),
+        title: String(m.title ?? ''),
+        completed: Boolean(m.completed),
+        ...(typeof m.completedAt === 'string' ? { completedAt: m.completedAt } : {}),
+      }))
+      .filter((m) => m.id && m.title)
+  } catch {
+    return []
+  }
+}
+
 @Injectable()
 export class GoalService {
   private readonly logger = new Logger(GoalService.name)
-  private goals = new Map<string, Goal>()
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private toGoal(row: {
+    id: string
+    userId: string
+    title: string
+    description: string
+    status: string
+    priority: string
+    milestones: string
+    progress: number
+    conversationIds: string
+    tags: string
+    dueDate: string | null
+    createdAt: Date
+    updatedAt: Date
+    completedAt: string | null
+  }): Goal {
+    return {
+      id: row.id,
+      userId: row.userId,
+      title: row.title,
+      description: row.description,
+      status: row.status as Goal['status'],
+      priority: row.priority as Goal['priority'],
+      milestones: parseMilestones(row.milestones),
+      progress: row.progress,
+      conversationIds: parseJsonArray(row.conversationIds),
+      tags: parseJsonArray(row.tags),
+      ...(row.dueDate ? { dueDate: row.dueDate } : {}),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      ...(row.completedAt ? { completedAt: row.completedAt } : {}),
+    }
+  }
 
   private async syncGoalToMemory(userId: string, goal: Goal) {
     try {
@@ -109,96 +171,116 @@ export class GoalService {
     tags?: string[]
     dueDate?: string
   }): Promise<Goal> {
-    const goal: Goal = {
-      id: `goal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      userId: input.userId,
-      title: input.title,
-      description: input.description,
-      status: 'active',
-      priority: input.priority ?? 'medium',
-      milestones: (input.milestones ?? []).map((title, i) => ({
-        id: `ms-${i}-${Date.now()}`,
-        title,
-        completed: false,
-      })),
-      progress: 0,
-      conversationIds: [],
-      tags: input.tags ?? [],
-      dueDate: input.dueDate,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-    this.goals.set(goal.id, goal)
+    const now = Date.now()
+    const milestones: GoalMilestone[] = (input.milestones ?? []).map((title, i) => ({
+      id: `ms-${i}-${now}`,
+      title,
+      completed: false,
+    }))
+    const row = await this.prisma.goal.create({
+      data: {
+        id: `goal-${now}-${Math.random().toString(36).slice(2, 8)}`,
+        userId: input.userId,
+        title: input.title,
+        description: input.description ?? '',
+        status: 'active',
+        priority: input.priority ?? 'medium',
+        milestones: JSON.stringify(milestones),
+        progress: 0,
+        conversationIds: '[]',
+        tags: JSON.stringify(input.tags ?? []),
+        dueDate: input.dueDate ?? null,
+      },
+    })
+    const goal = this.toGoal(row)
     this.logger.log(`Created goal "${goal.title}" for user ${input.userId}`)
     await this.syncGoalToMemory(input.userId, goal)
     return goal
   }
 
   async update(userId: string, goalId: string, patch: Partial<Pick<Goal, 'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'tags'>>): Promise<Goal | null> {
-    const goal = this.goals.get(goalId)
-    if (!goal || goal.userId !== userId) return null
+    const existing = await this.prisma.goal.findFirst({ where: { id: goalId, userId } })
+    if (!existing) return null
 
-    Object.assign(goal, patch, { updatedAt: new Date().toISOString() })
+    const data: Record<string, unknown> = {}
+    if (patch.title !== undefined) data.title = patch.title
+    if (patch.description !== undefined) data.description = patch.description
+    if (patch.status !== undefined) data.status = patch.status
+    if (patch.priority !== undefined) data.priority = patch.priority
+    if (patch.dueDate !== undefined) data.dueDate = patch.dueDate || null
+    if (patch.tags !== undefined) data.tags = JSON.stringify(patch.tags)
     if (patch.status === 'completed') {
-      goal.completedAt = new Date().toISOString()
-      goal.progress = 100
+      data.completedAt = new Date().toISOString()
+      data.progress = 100
     }
-    await this.syncGoalToMemory(goal.userId, goal)
+
+    const row = await this.prisma.goal.update({ where: { id: existing.id }, data: data as never })
+    const goal = this.toGoal(row)
+    await this.syncGoalToMemory(userId, goal)
     return goal
   }
 
   async completeMilestone(userId: string, goalId: string, milestoneId: string): Promise<Goal | null> {
-    const goal = this.goals.get(goalId)
-    if (!goal || goal.userId !== userId) return null
+    const existing = await this.prisma.goal.findFirst({ where: { id: goalId, userId } })
+    if (!existing) return null
 
-    const milestone = goal.milestones.find((m) => m.id === milestoneId)
+    const milestones = parseMilestones(existing.milestones)
+    const milestone = milestones.find((m) => m.id === milestoneId)
     if (milestone) {
       milestone.completed = true
       milestone.completedAt = new Date().toISOString()
     }
 
-    const total = goal.milestones.length
-    const completed = goal.milestones.filter((m) => m.completed).length
-    goal.progress = total > 0 ? Math.round((completed / total) * 100) : 0
-    goal.updatedAt = new Date().toISOString()
+    const total = milestones.length
+    const completed = milestones.filter((m) => m.completed).length
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0
 
-    if (goal.progress === 100) {
-      goal.status = 'completed'
-      goal.completedAt = new Date().toISOString()
-    }
-
-    await this.syncGoalToMemory(goal.userId, goal)
+    const row = await this.prisma.goal.update({
+      where: { id: existing.id },
+      data: {
+        milestones: JSON.stringify(milestones),
+        progress,
+        ...(progress === 100
+          ? { status: 'completed', completedAt: new Date().toISOString() }
+          : {}),
+      },
+    })
+    const goal = this.toGoal(row)
+    await this.syncGoalToMemory(userId, goal)
     return goal
   }
 
   async linkConversation(userId: string, goalId: string, conversationId: string): Promise<void> {
-    const goal = this.goals.get(goalId)
-    if (!goal || goal.userId !== userId) return
-    if (goal && !goal.conversationIds.includes(conversationId)) {
-      goal.conversationIds.push(conversationId)
-      await this.syncGoalToMemory(goal.userId, goal)
-    }
+    const existing = await this.prisma.goal.findFirst({ where: { id: goalId, userId } })
+    if (!existing) return
+    const ids = parseJsonArray(existing.conversationIds)
+    if (ids.includes(conversationId)) return
+    const row = await this.prisma.goal.update({
+      where: { id: existing.id },
+      data: { conversationIds: JSON.stringify([...ids, conversationId]) },
+    })
+    await this.syncGoalToMemory(userId, this.toGoal(row))
   }
 
   async listForUser(userId: string, status?: Goal['status']): Promise<Goal[]> {
-    const goals = Array.from(this.goals.values())
-      .filter((g) => g.userId === userId)
-      .filter((g) => !status || g.status === status)
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    return goals
+    const rows = await this.prisma.goal.findMany({
+      where: { userId, ...(status ? { status } : {}) },
+      orderBy: { updatedAt: 'desc' },
+    })
+    return rows.map((row) => this.toGoal(row))
   }
 
   async get(userId: string, goalId: string): Promise<Goal | null> {
-    const goal = this.goals.get(goalId) ?? null
-    if (!goal || goal.userId !== userId) return null
-    return goal
+    const row = await this.prisma.goal.findFirst({ where: { id: goalId, userId } })
+    return row ? this.toGoal(row) : null
   }
 
   async delete(userId: string, goalId: string): Promise<boolean> {
-    const goal = this.goals.get(goalId)
-    if (!goal || goal.userId !== userId) return false
-    await this.deleteGoalFromMemory(goal.userId, goalId)
-    return this.goals.delete(goalId)
+    const existing = await this.prisma.goal.findFirst({ where: { id: goalId, userId } })
+    if (!existing) return false
+    await this.prisma.goal.delete({ where: { id: existing.id } })
+    await this.deleteGoalFromMemory(userId, goalId)
+    return true
   }
 
   async getActiveGoalSummary(userId: string): Promise<string> {

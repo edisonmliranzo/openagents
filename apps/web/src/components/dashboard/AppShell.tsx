@@ -22,7 +22,6 @@ import {
   MessageSquare,
   Moon,
   Play,
-  Plus,
   RefreshCw,
   Search,
   ScrollText,
@@ -36,12 +35,9 @@ import {
   Wrench,
   X,
   Zap,
-  Folder,
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
 import type { Notification, UserSettings } from '@openagents/shared'
-import { ConversationList } from '../chat/ConversationList'
-import { useChatStore } from '@/stores/chat'
 
 interface AppShellProps {
   children: React.ReactNode
