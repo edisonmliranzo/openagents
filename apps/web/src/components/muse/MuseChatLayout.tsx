@@ -12,14 +12,14 @@ export function MuseChatLayout({ children }: { children: React.ReactNode }) {
   const [rightOpen, setRightOpen] = useState(false)
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-white">
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-gradient-to-br from-[#f8fafc] via-white to-[#fff5f2]">
       {/* Far-left icon rail (desktop) */}
       <div className="hidden md:block">
         <MuseIconRail onNavigate={(href) => router.push(href)} />
       </div>
 
       {/* Chats column (desktop) */}
-      <aside className="hidden w-[240px] shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
+      <aside className="hidden w-[240px] shrink-0 flex-col border-r border-slate-200/70 bg-white/70 backdrop-blur-xl md:flex">
         <MuseSidePanel onNavigate={(href) => router.push(href)} />
       </aside>
 
@@ -70,7 +70,7 @@ export function MuseChatLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Right activity column (desktop) */}
-      <aside className="hidden w-[300px] shrink-0 flex-col border-l border-slate-200 bg-white lg:flex">
+      <aside className="hidden w-[300px] shrink-0 flex-col border-l border-slate-200/70 bg-white/70 backdrop-blur-xl lg:flex">
         <MuseActivityPanel />
       </aside>
     </div>

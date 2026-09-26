@@ -314,21 +314,23 @@ export function MuseActivityPanel() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-transparent">
       <div className="flex items-start justify-between px-4 pt-3">
         <div className="mx-auto flex flex-col items-center pt-2 text-center">
-          <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-xl font-semibold text-amber-800">
-            {initial}
+          <div className="oa-avatar-ring-gradient">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-orange-100 text-xl font-semibold text-amber-800">
+              {initial}
+            </div>
           </div>
-          <p className="mt-2 text-[15px] font-semibold text-slate-900">{displayName}</p>
-          <p className="mt-0.5 flex items-center gap-1 text-[12px] text-slate-500">
-            <span className={clsx('inline-block h-2 w-2 rounded-full', connected ? 'bg-emerald-500' : 'bg-slate-300')} />
+          <p className="mt-2.5 text-[15px] font-semibold text-slate-900">{displayName}</p>
+          <p className="mt-1 flex items-center gap-1.5 text-[12px] text-slate-500">
+            <span className={clsx('oa-status-dot', !connected && 'bg-slate-300')} style={connected ? undefined : { background: '#cbd5e1' }} />
             {connected ? 'Connected' : 'Offline'}
           </p>
         </div>
       </div>
 
-      <div className="mx-4 mt-3 flex items-center justify-between rounded-full bg-slate-100 px-2 py-1">
+      <div className="oa-segment mx-4 mt-4 flex items-center justify-between px-1.5 py-1">
         <TabButton active={tab === 'activity'} onClick={() => setTab('activity')} label="Activity">
           <ListOrdered size={14} />
         </TabButton>
@@ -361,7 +363,7 @@ export function MuseActivityPanel() {
                       key={item.id}
                       type="button"
                       onClick={() => item.conversationId && void selectConversation(item.conversationId)}
-                      className="flex w-full gap-2.5 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2 text-left transition hover:border-slate-200 hover:bg-slate-50"
+                      className="oa-hover-card flex w-full gap-2.5 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-left"
                     >
                       <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm">
                         {item.done ? <CheckCircle2 size={13} /> : <Circle size={13} />}
@@ -542,8 +544,8 @@ function TabButton({
       aria-label={label}
       onClick={onClick}
       className={clsx(
-        'inline-flex h-9 w-9 items-center justify-center rounded-full transition',
-        active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600',
+        'oa-segment-item inline-flex h-9 w-9 items-center justify-center transition',
+        active ? 'oa-segment-item--active' : 'text-slate-400 hover:text-slate-600',
       )}
     >
       {children}

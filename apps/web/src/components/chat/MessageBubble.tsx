@@ -296,12 +296,12 @@ export function MessageBubble({
   // ── User bubble ──────────────────────────────────────────────────────────────
   if (isUser) {
     return (
-      <div className="flex flex-col items-end gap-1.5">
-        <div className="oa-user-bubble max-w-[90%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm shadow-none sm:max-w-[75%] xl:max-w-[62%]">
+      <div className="oa-message-enter flex flex-col items-end gap-1.5">
+        <div className="oa-message-user max-w-[90%] px-4 py-2.5 text-sm shadow-none sm:max-w-[75%] xl:max-w-[62%]">
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         </div>
-        <span className="pr-1 text-[11px] text-[#98a2b3]">
-          {roleLabel(message.role)} | {formatClock(message.createdAt)}
+        <span className="oa-meta-row pr-1">
+          {roleLabel(message.role)} · {formatClock(message.createdAt)}
         </span>
       </div>
     )
@@ -317,7 +317,7 @@ export function MessageBubble({
 
   // ── Agent bubble ─────────────────────────────────────────────────────────────
   return (
-    <div className="group flex flex-col items-start gap-1.5">
+    <div className="oa-message-enter group flex flex-col items-start gap-1.5">
       <div className="w-full max-w-full xl:max-w-[92%]">
         {thinking.map((block, idx) => (
           <ThinkingBlock key={`thinking-${idx}`} content={block} />
@@ -329,7 +329,7 @@ export function MessageBubble({
 
         <ArtifactGallery artifacts={artifacts} />
 
-        <div className="rounded-[22px] border border-[#e4e7ec] bg-white px-4 py-4 text-[14px] leading-relaxed text-[#101828] shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-[#2d3347] dark:bg-[#141824] dark:text-white">
+        <div className="oa-message-agent px-5 py-4 text-[14px] leading-relaxed text-[#101828] dark:text-white">
           {visible ? (
             (() => {
               let codeIdx = -1
@@ -431,12 +431,12 @@ export function MessageBubble({
         </div>
 
         {/* action row */}
-        <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
+        <div className="oa-meta-row mt-2 flex flex-wrap items-center gap-2 px-1">
           {canShowLineage && (
             <button
               type="button"
               onClick={() => void handleToggleLineage()}
-              className="text-[11px] text-[#98a2b3] transition hover:text-[#667085]"
+              className="rounded-full px-2 py-0.5 transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
             >
               Why this answer
             </button>
@@ -445,7 +445,7 @@ export function MessageBubble({
             <button
               type="button"
               onClick={() => void handleCopyAll()}
-              className="inline-flex items-center gap-1 text-[11px] text-[#98a2b3] transition hover:text-[#667085]"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
             >
               <Copy size={11} />
               {copiedAll ? 'Copied' : codeBlocks.length > 1 ? 'Copy all code' : 'Copy code'}
@@ -490,8 +490,9 @@ export function MessageBubble({
         )}
       </div>
 
-      <span className="pl-0.5 text-[11px] text-[#98a2b3]">
-        {roleLabel(message.role)} | {formatClock(message.createdAt)}
+      <span className="oa-meta-row flex items-center gap-1.5 pl-0.5">
+        <span className="oa-brand-badge inline-flex h-3.5 w-3.5 items-center justify-center rounded-[5px] text-[7px] font-bold text-white">OA</span>
+        {roleLabel(message.role)} · {formatClock(message.createdAt)}
       </span>
     </div>
   )

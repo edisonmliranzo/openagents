@@ -1079,8 +1079,8 @@ export function ChatWindow({
   const runtimeBadgeLabel = isRuntimeCustomized ? 'Session override' : 'Default runtime'
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-[#e6e8ef] bg-[#f7f8fb] shadow-[0_12px_34px_rgba(15,23,42,0.05)]">
-      <div className="flex items-center justify-between border-b border-[#e8ebf2] bg-[#fbfbfd] px-4 py-3 dark:border-[#2d3347] dark:bg-[#141824] sm:px-6">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-slate-200/70 bg-white/60 shadow-[0_2px_4px_rgba(15,23,42,0.03),0_24px_64px_-24px_rgba(15,23,42,0.14)] backdrop-blur-2xl dark:border-[#2d3347] dark:bg-[#10141f]/60">
+      <div className="flex items-center justify-between border-b border-slate-200/70 bg-white/70 px-4 py-2.5 backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141824]/70 sm:px-6">
         {/* Left: clean model select dropdown */}
         <div ref={modelPickerRef} className="relative">
           <button
@@ -1088,7 +1088,7 @@ export function ChatWindow({
             onClick={() => setModelPickerOpen((o) => !o)}
             disabled={Boolean(runtimeBusy) || runtimeLoading}
             className={clsx(
-              'inline-flex items-center gap-1.5 text-[13px] font-medium text-[#475467] hover:text-[#101828] transition dark:text-[#a1a1aa] dark:hover:text-white',
+              'oa-model-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-[#475467] transition hover:text-[#101828] dark:text-[#a1a1aa] dark:hover:text-white',
               (Boolean(runtimeBusy) || runtimeLoading) && 'opacity-50 cursor-not-allowed',
             )}
             title="Switch model"
@@ -1190,13 +1190,13 @@ export function ChatWindow({
 
       {visibleMessages.length === 0 ? (
         /* ── Landing / empty state ── */
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-[#f7f8fb] px-4 py-10 dark:bg-[#0f1117]">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-transparent px-4 py-10">
           <div className="flex flex-col items-center justify-center gap-2 mb-6">
             <div className="flex items-center gap-3">
               <div className="oa-brand-badge flex h-10 w-10 items-center justify-center rounded-xl text-xs font-bold text-white shrink-0">
                 OA
               </div>
-              <h1 className="text-3xl font-semibold text-[#101828] dark:text-white tracking-tight">
+              <h1 className="oa-gradient-text text-3xl font-semibold tracking-tight sm:text-4xl">
                 How can I help?
               </h1>
             </div>
@@ -1212,7 +1212,7 @@ export function ChatWindow({
               />
             )}
 
-            <div className="rounded-[28px] border border-[#e4e7ec] bg-white shadow-[0_8px_32px_rgba(15,23,42,0.06)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+            <div className="oa-composer overflow-hidden">
               {/* File chips */}
               {attachedFiles.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 px-5 pt-4">
@@ -1320,7 +1320,7 @@ export function ChatWindow({
                     type="button"
                     onClick={() => void handleSend()}
                     disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="oa-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:cursor-not-allowed"
                     aria-label="Send message"
                   >
                     <ArrowUp size={15} />
@@ -1333,7 +1333,7 @@ export function ChatWindow({
       ) : (
         /* ── Active chat — messages + bottom input bar ── */
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[#f6f7fb] px-4 py-4 sm:px-7 dark:bg-[#0f1117]">
+          <div className="oa-scroll-panel min-h-0 flex-1 overflow-y-auto bg-transparent px-4 py-4 sm:px-7">
             <div className="mx-auto w-full max-w-[980px] space-y-6 pb-6 pt-2">
               {visibleMessages.map((message, idx) => (
                 <MessageBubble
@@ -1349,7 +1349,7 @@ export function ChatWindow({
 
           <PinnedContext items={pinnedItems} onRemove={handleRemovePin} onAdd={handleAddPin} />
 
-          <div className="border-t border-[#e4e7ec] bg-[#fbfbfd] px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-[#2d3347] dark:bg-[#141824] sm:px-6">
+          <div className="border-t border-slate-200/70 bg-white/70 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141824]/70 sm:px-6">
             {slashQuery !== null && (
               <SlashCommandPalette
                 query={slashQuery}
@@ -1375,7 +1375,7 @@ export function ChatWindow({
               </div>
             )}
 
-            <div className="rounded-[22px] border border-[#e4e7ec] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+            <div className="oa-composer overflow-hidden">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -1464,7 +1464,7 @@ export function ChatWindow({
                     type="button"
                     onClick={() => void handleSend()}
                     disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="oa-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:cursor-not-allowed"
                     aria-label="Send message"
                   >
                     <ArrowUp size={15} />

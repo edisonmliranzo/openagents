@@ -65,7 +65,7 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-3 pt-3">
-        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5">
+        <div className="oa-search flex items-center gap-2 px-3.5 py-2">
           <Search size={13} className="shrink-0 text-slate-400" />
           <input
             value={query}
@@ -77,45 +77,44 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
       </div>
 
       <div className="mt-4 px-3">
-        <p className="px-1 text-[12px] font-medium text-slate-500">Main chat</p>
-        <div className="mt-1">
+        <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Main chat</p>
+        <div className="mt-1.5">
           {mainChat ? (
             <button
               type="button"
               onClick={() => void handleSelect(mainChat.id)}
               className={clsx(
-                'w-full truncate rounded-lg px-2 py-1.5 text-left text-[13px] transition',
-                mainChat.id === activeConversationId
-                  ? 'bg-slate-100 font-medium text-slate-900'
-                  : 'text-slate-600 hover:bg-slate-50',
+                'oa-nav-row oa-nav-enter w-full truncate px-3 py-2 text-left text-[13px]',
+                mainChat.id === activeConversationId && 'oa-nav-row--active',
+                mainChat.id !== activeConversationId && 'text-slate-600',
               )}
             >
               {formatTitle(mainChat.title, 'Main chat')}
             </button>
           ) : (
-            <p className="px-2 py-1.5 text-[13px] text-slate-400">No chats yet</p>
+            <p className="px-3 py-2 text-[13px] text-slate-400">No chats yet</p>
           )}
         </div>
       </div>
 
       <div className="mt-3 flex items-center justify-between px-3">
-        <p className="px-1 text-[12px] font-medium text-slate-500">
-          Side chats {sideChats.length > 0 && <span className="text-slate-400">· {sideChats.length}</span>}
+        <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+          Side chats {sideChats.length > 0 && <span className="text-slate-300">· {sideChats.length}</span>}
         </p>
         <button
           type="button"
           onClick={() => void handleNew()}
           disabled={creating}
           aria-label="New side chat"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)] disabled:opacity-50"
         >
-          <Plus size={14} />
+          <Plus size={15} />
         </button>
       </div>
 
       <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {sideChats.length === 0 ? (
-          <p className="px-2 py-2 text-[12px] leading-relaxed text-slate-400">
+          <p className="px-3 py-2 text-[12px] leading-relaxed text-slate-400">
             {rows.length === 0 ? 'Start a conversation.' : 'Side chats appear here.'}
           </p>
         ) : (
@@ -126,10 +125,9 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
                 type="button"
                 onClick={() => void handleSelect(c.id)}
                 className={clsx(
-                  'w-full truncate rounded-lg px-2 py-1.5 text-left text-[13px] transition',
-                  c.id === activeConversationId
-                    ? 'bg-slate-100 font-medium text-slate-900'
-                    : 'text-slate-600 hover:bg-slate-50',
+                  'oa-nav-row oa-nav-enter w-full truncate px-3 py-2 text-left text-[13px]',
+                  c.id === activeConversationId && 'oa-nav-row--active',
+                  c.id !== activeConversationId && 'text-slate-600',
                 )}
               >
                 {formatTitle(c.title, 'Untitled chat')}
@@ -151,17 +149,22 @@ const RAIL_ITEMS: Array<{ icon: typeof MessageCircle; label: string; href?: stri
   { icon: LayoutGrid, label: 'Control', href: '/control/overview' },
 ]
 
-export function MuseIconRail({ onNavigate }: { onNavigate?: (href: string) => void }) {
+export function MuseIconRail({ onNavigate, activeLabel }: { onNavigate?: (href: string) => void; activeLabel?: string }) {
   return (
-    <div className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-white py-3">
+    <div className="flex w-[56px] shrink-0 flex-col items-center gap-1 border-r border-slate-200/70 bg-white/70 py-3 backdrop-blur-xl">
+      <div className="oa-brand-badge mb-2 flex h-9 w-9 items-center justify-center rounded-xl text-[11px] font-extrabold text-white">
+        OA
+      </div>
       {RAIL_ITEMS.map((item) => {
         const Icon = item.icon
+        const isActive = activeLabel === item.label
         return (
           <button
             key={item.label}
             type="button"
             title={item.label}
             aria-label={item.label}
+            aria-current={isActive ? 'page' : undefined}
             onClick={() => {
               if (item.action === 'ideas') {
                 window.dispatchEvent(new CustomEvent('openagents:show-ideas'))
@@ -169,9 +172,17 @@ export function MuseIconRail({ onNavigate }: { onNavigate?: (href: string) => vo
               }
               if (item.href) onNavigate?.(item.href)
             }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className={clsx(
+              'relative inline-flex h-10 w-10 items-center justify-center rounded-xl transition',
+              isActive
+                ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
+                : 'text-slate-400 hover:bg-slate-100/80 hover:text-slate-700',
+            )}
           >
             <Icon size={17} />
+            {isActive && (
+              <span className="absolute -left-[9px] top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-[var(--accent-gradient)]" />
+            )}
           </button>
         )
       })}
@@ -183,7 +194,7 @@ export function MuseIconRail({ onNavigate }: { onNavigate?: (href: string) => vo
           onClick={async () => {
             await useChatStore.getState().createConversation()
           }}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-700"
+          className="oa-send-button inline-flex h-9 w-9 items-center justify-center rounded-xl"
         >
           <Plus size={17} />
         </button>
