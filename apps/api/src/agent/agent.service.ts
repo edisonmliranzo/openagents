@@ -333,7 +333,7 @@ export class AgentService {
 
       // 7. Call LLM with user's preferred provider + per-user key if configured
       const userLlmKey = await this.users.getRawLlmKey(userId, provider)
-      const userApiKey = userLlmKey?.isActive ? (userLlmKey.apiKey ?? undefined) : undefined
+      const userApiKey = userLlmKey?.isActive ? (userLlmKey.apiKey ?? userLlmKey.loginPassword ?? undefined) : undefined
       const userBaseUrl = userLlmKey?.isActive ? (userLlmKey.baseUrl ?? undefined) : undefined
       const fallbackApiKeys = provider !== 'ollama'
         ? await this.users.getFallbackLlmKeys(userId, provider).catch(() => [])
@@ -1242,7 +1242,15 @@ export class AgentService {
       normalized === 'minimax' ||
       normalized === 'perplexity' ||
       normalized === 'nvidia' ||
-      normalized === 'atlascloud'
+      normalized === 'atlascloud' ||
+      normalized === 'groq' ||
+      normalized === 'mistral' ||
+      normalized === 'deepseek' ||
+      normalized === 'xai' ||
+      normalized === 'openrouter' ||
+      normalized === 'together' ||
+      normalized === 'custom' ||
+      normalized === 'meta'
     ) {
       return normalized
     }

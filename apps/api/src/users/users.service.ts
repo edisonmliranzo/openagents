@@ -3,7 +3,12 @@ import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../prisma/prisma.service'
 import type { LLMProvider } from '@openagents/shared'
 
-const SUPPORTED_LLM_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud']
+const SUPPORTED_LLM_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
+
+// Providers that speak the OpenAI chat-completions API and therefore accept
+// an optional custom base URL (stored as-is; the LLM service decides at call
+// time whether a non-default host is allowed).
+const OPENAI_COMPATIBLE_LLM_PROVIDERS: LLMProvider[] = ['openai', 'google', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
 const DEFAULT_OLLAMA_ALLOWED_HOSTS = [
   'localhost',
@@ -129,8 +134,29 @@ export class UsersService {
       updateData.loginEmail = null
       updateData.loginPassword = null
       updateData.subscriptionPlan = null
+    } else if (normalizedProvider === 'custom') {
+      // Custom endpoints may be keyless (local servers) — only a base URL is required.
+      if (data.baseUrl !== undefined) {
+        updateData.baseUrl = this.normalizeGenericBaseUrl(data.baseUrl)
+      } else if (!existing?.baseUrl) {
+        throw new BadRequestException('A Base URL is required for the custom provider.')
+      }
+      if (data.apiKey !== undefined) {
+        const key = data.apiKey.trim()
+        updateData.apiKey = key.length > 0 ? key : null
+      }
+      updateData.loginEmail = null
+      updateData.loginPassword = null
+      updateData.subscriptionPlan = null
     } else {
-      updateData.baseUrl = null
+      if (data.baseUrl !== undefined) {
+        const trimmed = data.baseUrl.trim()
+        updateData.baseUrl = trimmed
+          ? this.normalizeGenericBaseUrl(trimmed)
+          : null
+      } else if (existing && !OPENAI_COMPATIBLE_LLM_PROVIDERS.includes(normalizedProvider)) {
+        updateData.baseUrl = null
+      }
       if (data.apiKey != null) {
         const key = data.apiKey.trim()
         updateData.apiKey = key.length > 0 ? key : null
@@ -469,6 +495,24 @@ export class UsersService {
     fallbackParsed.search = ''
     fallbackParsed.hash = ''
     return fallbackParsed
+  }
+
+  private normalizeGenericBaseUrl(input: string) {
+    const raw = input.trim().replace(/\/+$/, '')
+    if (!raw) {
+      throw new BadRequestException('Base URL is required.')
+    }
+    const candidate = raw.match(/^[a-z]+:\/\//i) ? raw : `http://${raw}`
+    let parsed: URL
+    try {
+      parsed = new URL(candidate)
+    } catch {
+      throw new BadRequestException('Invalid base URL.')
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new BadRequestException('Base URL must use http or https.')
+    }
+    return parsed.toString().replace(/\/+$/, '')
   }
 
   private normalizeHost(hostname: string) {

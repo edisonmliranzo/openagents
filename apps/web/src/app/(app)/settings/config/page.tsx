@@ -21,10 +21,12 @@ import { LLM_MODEL_OPTIONS, LLM_PROVIDER_CAPABILITIES } from '@openagents/shared
 
 // Types
 
-type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax' | 'perplexity' | 'nvidia' | 'atlascloud'
+type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax' | 'perplexity' | 'nvidia' | 'atlascloud' | 'groq' | 'mistral' | 'deepseek' | 'xai' | 'openrouter' | 'together' | 'custom' | 'meta'
 
-const PROVIDERS: Provider[] = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud', 'ollama']
-const CLOUD_PROVIDERS = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud'] as const
+const PROVIDERS: Provider[] = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'meta', 'custom', 'ollama']
+const CLOUD_PROVIDERS = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'meta', 'custom'] as const
+// Providers speaking the OpenAI chat-completions API — users may override the endpoint.
+const COMPATIBLE_PROVIDERS: Provider[] = ['openai', 'google', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'meta', 'custom']
 const DEFAULT_OLLAMA_BASE_URL = process.env.NEXT_PUBLIC_OLLAMA_BASE_URL?.trim() || 'http://localhost:11434'
 
 interface ProviderCardState {
@@ -49,6 +51,14 @@ const DEFAULTS: Record<Provider, ProviderCardState> = {
   minimax:   { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   nvidia:    { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   atlascloud:{ apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  groq:      { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  mistral:   { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  deepseek:  { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  xai:       { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  openrouter:{ apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  together:  { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  custom:    { apiKey: '', baseUrl: 'http://localhost:1234/v1', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
+  meta:      { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   ollama:    { apiKey: '', baseUrl: DEFAULT_OLLAMA_BASE_URL, showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
 }
 const OLLAMA_FALLBACK_MODELS: string[] = [...(LLM_MODEL_OPTIONS.ollama as unknown as string[])]
@@ -60,6 +70,14 @@ const PROVIDER_PLAN_OPTIONS: Record<Exclude<Provider, 'ollama'>, string[]> = {
   minimax: ['Starter', 'Pro', 'Enterprise'],
   nvidia: ['Free', 'Pro', 'Enterprise'],
   atlascloud: ['Free', 'Pro', 'Enterprise'],
+  groq: ['Free', 'Pro', 'Enterprise'],
+  mistral: ['Free', 'Pro', 'Enterprise'],
+  deepseek: ['Free', 'Pro', 'Enterprise'],
+  xai: ['Free', 'Pro', 'Enterprise'],
+  openrouter: ['Free', 'Pro', 'Enterprise'],
+  together: ['Free', 'Pro', 'Enterprise'],
+  custom: ['Self-hosted'],
+  meta: ['Free', 'Pro', 'Enterprise'],
 }
 
 const PROVIDER_META: Record<Provider, {
@@ -124,6 +142,70 @@ const PROVIDER_META: Record<Provider, {
     gradient: 'from-blue-500 to-purple-600',
     ring: 'ring-blue-400',
     inputLabel: 'AtlasCloud API Key',
+    isKeyless: false,
+  },
+  groq: {
+    label: 'Groq',
+    icon: <Cpu className="h-5 w-5" />,
+    gradient: 'from-orange-500 to-red-600',
+    ring: 'ring-orange-400',
+    inputLabel: 'Groq API Key',
+    isKeyless: false,
+  },
+  mistral: {
+    label: 'Mistral',
+    icon: <Sparkles className="h-5 w-5" />,
+    gradient: 'from-amber-500 to-orange-600',
+    ring: 'ring-amber-400',
+    inputLabel: 'Mistral API Key',
+    isKeyless: false,
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    icon: <Sparkles className="h-5 w-5" />,
+    gradient: 'from-indigo-500 to-blue-600',
+    ring: 'ring-indigo-400',
+    inputLabel: 'DeepSeek API Key',
+    isKeyless: false,
+  },
+  xai: {
+    label: 'xAI Grok',
+    icon: <Cpu className="h-5 w-5" />,
+    gradient: 'from-slate-500 to-slate-700',
+    ring: 'ring-slate-400',
+    inputLabel: 'xAI API Key',
+    isKeyless: false,
+  },
+  openrouter: {
+    label: 'OpenRouter',
+    icon: <Link2 className="h-5 w-5" />,
+    gradient: 'from-teal-500 to-emerald-600',
+    ring: 'ring-teal-400',
+    inputLabel: 'OpenRouter API Key',
+    isKeyless: false,
+  },
+  together: {
+    label: 'Together AI',
+    icon: <Cpu className="h-5 w-5" />,
+    gradient: 'from-blue-500 to-cyan-600',
+    ring: 'ring-blue-400',
+    inputLabel: 'Together API Key',
+    isKeyless: false,
+  },
+  custom: {
+    label: 'Custom endpoint',
+    icon: <Globe2 className="h-5 w-5" />,
+    gradient: 'from-slate-500 to-zinc-600',
+    ring: 'ring-slate-400',
+    inputLabel: 'API Key (optional for local servers)',
+    isKeyless: false,
+  },
+  meta: {
+    label: 'Meta Muse Spark',
+    icon: <Sparkles className="h-5 w-5" />,
+    gradient: 'from-blue-500 to-sky-600',
+    ring: 'ring-blue-400',
+    inputLabel: 'Model API Key',
     isKeyless: false,
   },
   ollama: {
@@ -332,9 +414,19 @@ export default function ConfigPage() {
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [ollamaModelsStatus, setOllamaModelsStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
   const [ollamaModelsError, setOllamaModelsError] = useState('')
+  const [liveModels, setLiveModels] = useState<string[]>([])
+  const [liveModelsStatus, setLiveModelsStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
+  const [liveModelsSource, setLiveModelsSource] = useState<'live' | 'curated'>('curated')
 
   const modelOptions: string[] = (() => {
-    if (activeProvider !== 'ollama') return providerModels(activeProvider)
+    if (activeProvider !== 'ollama') {
+      // Live provider catalog first, then curated entries not already present
+      const merged = [...liveModels]
+      for (const m of providerModels(activeProvider)) {
+        if (!merged.includes(m)) merged.push(m)
+      }
+      return merged
+    }
 
     if (ollamaModels.length > 0) {
       // Installed models first, then append any fallback entries not already present
@@ -359,6 +451,21 @@ export default function ConfigPage() {
       setOllamaModels([])
       setOllamaModelsStatus('error')
       setOllamaModelsError(err?.message ?? 'Failed to load Ollama models')
+    }
+  }, [])
+
+  const loadLiveModels = useCallback(async (provider: Provider, baseUrl?: string) => {
+    if (provider === 'ollama') return
+    setLiveModelsStatus('loading')
+    try {
+      const result = await sdk.agent.listProviderModels(provider, baseUrl || undefined)
+      setLiveModels(result.models ?? [])
+      setLiveModelsSource(result.source ?? 'curated')
+      setLiveModelsStatus('loaded')
+    } catch {
+      setLiveModels([])
+      setLiveModelsSource('curated')
+      setLiveModelsStatus('error')
     }
   }, [])
 
@@ -404,6 +511,14 @@ export default function ConfigPage() {
         minimax: { ...DEFAULTS.minimax },
         nvidia: { ...DEFAULTS.nvidia },
         atlascloud: { ...DEFAULTS.atlascloud },
+        groq: { ...DEFAULTS.groq },
+        mistral: { ...DEFAULTS.mistral },
+        deepseek: { ...DEFAULTS.deepseek },
+        xai: { ...DEFAULTS.xai },
+        openrouter: { ...DEFAULTS.openrouter },
+        together: { ...DEFAULTS.together },
+        custom: { ...DEFAULTS.custom },
+        meta: { ...DEFAULTS.meta },
         ollama: { ...DEFAULTS.ollama },
       }
 
@@ -416,6 +531,7 @@ export default function ConfigPage() {
 
         nextCards[key.provider].loginEmail = key.loginEmail ?? ''
         nextCards[key.provider].subscriptionPlan = key.subscriptionPlan ?? ''
+        if (key.baseUrl) nextCards[key.provider].baseUrl = key.baseUrl
       }
 
       setCards(nextCards)
@@ -445,6 +561,15 @@ export default function ConfigPage() {
       setActiveModel(modelOptions[0] ?? '')
     }
   }, [activeModel, activeProvider, modelOptions])
+
+  // On provider switch, fetch the provider's live model catalog.
+  useEffect(() => {
+    if (activeProvider === 'ollama') return
+    setLiveModels([])
+    setLiveModelsSource('curated')
+    setLiveModelsStatus('idle')
+    void loadLiveModels(activeProvider, cards[activeProvider]?.baseUrl || undefined)
+  }, [activeProvider, loadLiveModels])
 
   // On first switch to Ollama, fetch locally available models.
   useEffect(() => {
@@ -594,8 +719,14 @@ export default function ConfigPage() {
         apiKey: provider !== 'ollama'
           ? (card.apiKey.trim() || card.loginPassword.trim() || undefined)
           : undefined,
-        baseUrl: provider === 'ollama' ? card.baseUrl || undefined : undefined,
-        model: ollamaTestModel,
+        baseUrl: provider === 'ollama' || COMPATIBLE_PROVIDERS.includes(provider)
+          ? card.baseUrl.trim() || undefined
+          : undefined,
+        model: provider === 'ollama'
+          ? ollamaTestModel
+          : provider === activeProvider && activeModel.trim()
+            ? activeModel.trim()
+            : undefined,
       })
       if (result.ok) {
         updateCard(provider, { testStatus: 'ok', testModel: result.model ?? '' })
@@ -665,6 +796,7 @@ export default function ConfigPage() {
 
         await sdk.users.upsertLlmKey(provider, {
           apiKey: hasApiKey ? apiKey : undefined,
+          baseUrl: card.baseUrl.trim() ? card.baseUrl.trim() : undefined,
           loginEmail: shouldSendLoginCredentials ? loginEmail : undefined,
           loginPassword: shouldSendLoginCredentials ? loginPassword : undefined,
           subscriptionPlan: card.subscriptionPlan,
@@ -929,15 +1061,20 @@ export default function ConfigPage() {
                     />
                   )
                 ) : (
-                  <select
-                    value={activeModel}
-                    onChange={(e) => setActiveModel(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100 sm:min-w-[180px]"
-                  >
-                    {modelOptions.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
+                  <>
+                    <input
+                      value={activeModel}
+                      onChange={(e) => setActiveModel(e.target.value)}
+                      placeholder="Pick from catalog or type any model id"
+                      list="oa-model-catalog"
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100 sm:min-w-[180px]"
+                    />
+                    <datalist id="oa-model-catalog">
+                      {modelOptions.map((m) => (
+                        <option key={m} value={m} />
+                      ))}
+                    </datalist>
+                  </>
                 )}
 
                 {activeProvider === 'ollama' && (
@@ -950,6 +1087,16 @@ export default function ConfigPage() {
                     {ollamaModelsStatus === 'loading' ? 'Loading...' : 'Refresh models'}
                   </button>
                 )}
+                {activeProvider !== 'ollama' && (
+                  <button
+                    type="button"
+                    onClick={() => void loadLiveModels(activeProvider, cards[activeProvider]?.baseUrl || undefined)}
+                    disabled={liveModelsStatus === 'loading'}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 sm:w-auto"
+                  >
+                    {liveModelsStatus === 'loading' ? 'Loading...' : 'Refresh models'}
+                  </button>
+                )}
               </div>
 
               {activeProvider === 'ollama' && (
@@ -958,6 +1105,15 @@ export default function ConfigPage() {
                   {ollamaModelsStatus === 'loaded' && ollamaModels.length === 0 && 'No Ollama models found at this endpoint. Run "ollama pull <model>".'}
                   {ollamaModelsStatus === 'error' && `Could not load local models: ${ollamaModelsError}`}
                   {ollamaModelsStatus === 'idle' && 'Load models from your configured Ollama server.'}
+                </span>
+              )}
+              {activeProvider !== 'ollama' && (
+                <span className="text-[11px] text-slate-500">
+                  {liveModelsStatus === 'loading' && 'Loading live model catalog from provider...'}
+                  {liveModelsStatus === 'loaded' && liveModelsSource === 'live' && `Live catalog: ${liveModels.length} models. Pick any, or type a custom id.`}
+                  {liveModelsStatus === 'loaded' && liveModelsSource === 'curated' && 'Live catalog unavailable (missing key?) — showing curated list. You can still type any model id.'}
+                  {liveModelsStatus === 'error' && 'Live catalog unavailable — showing curated list. You can still type any model id.'}
+                  {liveModelsStatus === 'idle' && 'Loading provider model catalog...'}
                 </span>
               )}
             </label>
@@ -1127,7 +1283,7 @@ export default function ConfigPage() {
                           type={card.showKey ? 'text' : 'password'}
                           value={card.apiKey}
                           onChange={(e) => updateCard(provider, { apiKey: e.target.value })}
-                          placeholder={isConfigured ? 'Enter new key to update...' : 'sk-...'}
+                          placeholder={isConfigured ? 'Enter new key to update...' : provider === 'nvidia' ? 'nvapi-...' : 'sk-...'}
                           className="h-9 w-full rounded-lg border border-slate-200 py-0 pl-3 pr-9 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
                         />
                         <button
@@ -1138,7 +1294,45 @@ export default function ConfigPage() {
                           {card.showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
+                      {provider === 'nvidia' && (
+                        <span className="text-[11px] italic text-slate-400">
+                          Keys start with <span className="font-mono not-italic">nvapi-</span> — create one free at{' '}
+                          <a href="https://build.nvidia.com/settings/api-keys" target="_blank" rel="noreferrer noopener" className="not-italic underline underline-offset-2 hover:text-slate-600">
+                            build.nvidia.com
+                          </a>
+                          . The model list shows what your key can use.
+                        </span>
+                      )}
+                      {provider === 'nvidia' && card.apiKey.trim() && !card.apiKey.trim().startsWith('nvapi-') && (
+                        <span className="text-[11px] font-medium text-amber-600">
+                          This doesn&apos;t look like an NVIDIA key — they start with nvapi-.
+                        </span>
+                      )}
                     </label>
+
+                    {COMPATIBLE_PROVIDERS.includes(provider) && (
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-slate-500">
+                          Base URL
+                          {existing?.baseUrl && (
+                            <span className="ml-1 font-normal text-slate-400">(stored)</span>
+                          )}
+                        </span>
+                        <input
+                          type="text"
+                          value={card.baseUrl}
+                          onChange={(e) => updateCard(provider, { baseUrl: e.target.value })}
+                          placeholder={provider === 'custom' ? 'http://localhost:1234/v1' : 'Default endpoint (override optional)'}
+                          className="h-9 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+                        />
+                        {provider === 'custom' && (
+                          <span className="text-[11px] italic text-slate-400">Any OpenAI-compatible /v1 server — LM Studio, vLLM, llama.cpp. Localhost works without extra setup.</span>
+                        )}
+                        {provider === 'meta' && (
+                          <span className="text-[11px] italic text-slate-400">Create a key at dev.meta.ai → API keys. Default endpoint https://api.meta.ai/v1.</span>
+                        )}
+                      </label>
+                    )}
 
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">

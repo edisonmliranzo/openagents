@@ -134,9 +134,9 @@ export class GoalService {
     return goal
   }
 
-  async update(goalId: string, patch: Partial<Pick<Goal, 'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'tags'>>): Promise<Goal | null> {
+  async update(userId: string, goalId: string, patch: Partial<Pick<Goal, 'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'tags'>>): Promise<Goal | null> {
     const goal = this.goals.get(goalId)
-    if (!goal) return null
+    if (!goal || goal.userId !== userId) return null
 
     Object.assign(goal, patch, { updatedAt: new Date().toISOString() })
     if (patch.status === 'completed') {
@@ -147,9 +147,9 @@ export class GoalService {
     return goal
   }
 
-  async completeMilestone(goalId: string, milestoneId: string): Promise<Goal | null> {
+  async completeMilestone(userId: string, goalId: string, milestoneId: string): Promise<Goal | null> {
     const goal = this.goals.get(goalId)
-    if (!goal) return null
+    if (!goal || goal.userId !== userId) return null
 
     const milestone = goal.milestones.find((m) => m.id === milestoneId)
     if (milestone) {
@@ -171,8 +171,9 @@ export class GoalService {
     return goal
   }
 
-  async linkConversation(goalId: string, conversationId: string): Promise<void> {
+  async linkConversation(userId: string, goalId: string, conversationId: string): Promise<void> {
     const goal = this.goals.get(goalId)
+    if (!goal || goal.userId !== userId) return
     if (goal && !goal.conversationIds.includes(conversationId)) {
       goal.conversationIds.push(conversationId)
       await this.syncGoalToMemory(goal.userId, goal)
@@ -187,13 +188,15 @@ export class GoalService {
     return goals
   }
 
-  async get(goalId: string): Promise<Goal | null> {
-    return this.goals.get(goalId) ?? null
+  async get(userId: string, goalId: string): Promise<Goal | null> {
+    const goal = this.goals.get(goalId) ?? null
+    if (!goal || goal.userId !== userId) return null
+    return goal
   }
 
-  async delete(goalId: string): Promise<boolean> {
+  async delete(userId: string, goalId: string): Promise<boolean> {
     const goal = this.goals.get(goalId)
-    if (!goal) return false
+    if (!goal || goal.userId !== userId) return false
     await this.deleteGoalFromMemory(goal.userId, goalId)
     return this.goals.delete(goalId)
   }

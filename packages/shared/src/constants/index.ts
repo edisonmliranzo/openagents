@@ -44,6 +44,46 @@ export const LLM_MODELS = {
     fast: 'meta/llama-4-scout-17b-16e-instruct',
     powerful: 'deepseek-r1',
   },
+  groq: {
+    default: 'llama-3.3-70b-versatile',
+    fast: 'llama-3.1-8b-instant',
+    powerful: 'llama-3.3-70b-versatile',
+  },
+  mistral: {
+    default: 'mistral-large-latest',
+    fast: 'mistral-small-latest',
+    powerful: 'mistral-large-latest',
+  },
+  deepseek: {
+    default: 'deepseek-chat',
+    fast: 'deepseek-chat',
+    powerful: 'deepseek-reasoner',
+  },
+  xai: {
+    default: 'grok-3',
+    fast: 'grok-3-mini',
+    powerful: 'grok-3',
+  },
+  openrouter: {
+    default: 'meta-llama/llama-3.3-70b-instruct',
+    fast: 'meta-llama/llama-3.1-8b-instruct',
+    powerful: 'anthropic/claude-sonnet-4',
+  },
+  together: {
+    default: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    fast: 'meta-llama/Llama-3.1-8B-Instruct-Turbo',
+    powerful: 'deepseek-ai/DeepSeek-R1',
+  },
+  custom: {
+    default: 'default',
+    fast: 'default',
+    powerful: 'default',
+  },
+  meta: {
+    default: 'muse-spark-1.3',
+    fast: 'muse-spark-1.3',
+    powerful: 'muse-spark-1.3',
+  },
 } as const
 
 export const LLM_MODEL_OPTIONS = {
@@ -128,6 +168,10 @@ export const LLM_MODEL_OPTIONS = {
     'meta/llama-3.2-1b-instruct',
     // Nemotron
     'nvidia/llama-3.3-nemotron-super-49b-v1',
+    'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    'nvidia/nemotron-3-nano-30b-a3b',
+    'nvidia/nemotron-mini-4b-instruct',
+    'nvidia/nvidia-nemotron-nano-9b-v2',
     // Mistral via NIM
     'mistralai/mixtral-8x22b-instruct-v0.1',
     // Qwen via NIM
@@ -139,6 +183,57 @@ export const LLM_MODEL_OPTIONS = {
     'deepseek-v3',
     'qwen/qwen2.5-72b-instruct',
     'meta/llama-4-scout-17b-16e-instruct',
+  ],
+  groq: [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'llama3-groq-70b-8192-tool-use-preview',
+    'mixtral-8x7b-32768',
+  ],
+  mistral: [
+    'mistral-large-latest',
+    'mistral-medium-latest',
+    'mistral-small-latest',
+    'mistral-saba-latest',
+    'codestral-latest',
+  ],
+  deepseek: [
+    'deepseek-chat',
+    'deepseek-reasoner',
+  ],
+  xai: [
+    'grok-3',
+    'grok-3-mini',
+    'grok-2-1212',
+    'grok-2-vision-1212',
+  ],
+  openrouter: [
+    // Popular routes — any OpenRouter model id works (type it in chat with /model)
+    'meta-llama/llama-3.3-70b-instruct',
+    'meta-llama/llama-3.1-8b-instruct',
+    'anthropic/claude-sonnet-4',
+    'openai/gpt-4o',
+    'google/gemini-2.5-pro',
+    'deepseek/deepseek-r1',
+  ],
+  together: [
+    'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    'meta-llama/Llama-3.1-8B-Instruct-Turbo',
+    'deepseek-ai/DeepSeek-R1',
+    'deepseek-ai/DeepSeek-V3',
+    'Qwen/Qwen2.5-72B-Instruct-Turbo',
+  ],
+  custom: [
+    // User-defined OpenAI-compatible endpoint — set the model name your server expects
+    'default',
+  ],
+  meta: [
+    // Meta Model API (https://dev.meta.ai) — Muse Spark, OpenAI-compatible
+    'muse-spark-1.3',
+    'muse-spark-1.2',
+    'muse-spark-1.1',
+    'muse-spark-1.3-contributor',
+    'muse-spark-1.2-contributor',
   ],
 } as const
 
@@ -225,6 +320,78 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
     contextProfile: 'large',
     strengths: ['300+ models via one API', 'DeepSeek R1 & V3', 'Llama 4 Scout', 'OpenAI-SDK compatible'],
     cautions: ['requires ATLASCLOUD_API_KEY from atlascloud.ai', 'tool-call quality varies by model'],
+  },
+  groq: {
+    label: 'Groq',
+    bestFor: 'Ultra-fast inference on Llama and Mixtral via Groq LPUs.',
+    toolUse: 'good',
+    latency: 'fast',
+    contextProfile: 'large',
+    strengths: ['fastest time-to-first-token in class', 'generous free tier', 'OpenAI-compatible API'],
+    cautions: ['requires GROQ_API_KEY from console.groq.com', 'tool-call quality varies by model'],
+  },
+  mistral: {
+    label: 'Mistral',
+    bestFor: 'European frontier models — Mistral Large for reasoning, Codestral for code.',
+    toolUse: 'good',
+    latency: 'balanced',
+    contextProfile: 'large',
+    strengths: ['strong multilingual performance', 'Codestral for code completion', 'OpenAI-compatible La Plateforme API'],
+    cautions: ['requires MISTRAL_API_KEY from console.mistral.ai', 'tool-call quality varies by model'],
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    bestFor: 'DeepSeek V3 chat and R1 reasoning at commodity pricing.',
+    toolUse: 'good',
+    latency: 'balanced',
+    contextProfile: 'large',
+    strengths: ['R1 rival-class reasoning traces', 'very low cost per token', 'OpenAI-compatible API'],
+    cautions: ['requires DEEPSEEK_API_KEY from platform.deepseek.com', 'R1 reasons before answering — slower first token'],
+  },
+  xai: {
+    label: 'xAI Grok',
+    bestFor: 'Grok models with real-time X grounding and contrarian reasoning.',
+    toolUse: 'good',
+    latency: 'balanced',
+    contextProfile: 'large',
+    strengths: ['Grok 3 flagship + fast mini variant', 'OpenAI-compatible API'],
+    cautions: ['requires XAI_API_KEY from console.x.ai', 'tool-call quality varies by model'],
+  },
+  openrouter: {
+    label: 'OpenRouter',
+    bestFor: 'One key for 300+ models from every lab — route by price, latency, or capability.',
+    toolUse: 'good',
+    latency: 'balanced',
+    contextProfile: 'large',
+    strengths: ['any model id works — just type it', 'automatic fallbacks and routing', 'OpenAI-compatible API'],
+    cautions: ['requires OPENROUTER_API_KEY from openrouter.ai', 'tool-call quality varies by underlying model'],
+  },
+  together: {
+    label: 'Together AI',
+    bestFor: 'Fast open-model inference — Llama, DeepSeek, Qwen, Flux — on Together GPUs.',
+    toolUse: 'good',
+    latency: 'fast',
+    contextProfile: 'large',
+    strengths: ['broad open-model catalog', 'Turbo endpoints for low latency', 'OpenAI-compatible API'],
+    cautions: ['requires TOGETHER_API_KEY from api.together.xyz', 'tool-call quality varies by model'],
+  },
+  custom: {
+    label: 'Custom (OpenAI-compatible)',
+    bestFor: 'Any OpenAI-compatible server — LM Studio, vLLM, llama.cpp, text-generation-webui, or a corporate gateway.',
+    toolUse: 'good',
+    latency: 'variable',
+    contextProfile: 'standard',
+    strengths: ['works with any /v1 chat-completions server', 'local endpoints (localhost) work out of the box', 'set any model name your server expects'],
+    cautions: ['you provide the base URL and key', 'non-local URLs need ALLOW_CUSTOM_LLM_BASE_URLS=true on the API server'],
+  },
+  meta: {
+    label: 'Meta Muse Spark',
+    bestFor: 'Long-horizon agentic coding and tool orchestration — 1M context, parallel tool calls, streamed arguments.',
+    toolUse: 'strong',
+    latency: 'balanced',
+    contextProfile: 'large',
+    strengths: ['1M-token context window', 'parallel + streamed tool calling', 'reasoning carries across turns', 'OpenAI-SDK compatible'],
+    cautions: ['requires MODEL_API_KEY from dev.meta.ai', 'pay-as-you-go billing on Meta side'],
   },
 } as const
 

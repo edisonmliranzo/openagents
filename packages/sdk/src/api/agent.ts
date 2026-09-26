@@ -17,6 +17,11 @@ export interface OllamaModelsResult {
   models: string[]
 }
 
+export interface ProviderModelsResult {
+  models: string[]
+  source: 'live' | 'curated'
+}
+
 export function createAgentApi(client: OpenAgentsClient) {
   return {
     testLlmConnection: (dto: TestLlmConnectionDto) =>
@@ -25,6 +30,11 @@ export function createAgentApi(client: OpenAgentsClient) {
     listOllamaModels: (baseUrl?: string) => {
       const qs = baseUrl?.trim() ? `?baseUrl=${encodeURIComponent(baseUrl.trim())}` : ''
       return client.get<OllamaModelsResult>(`/api/v1/agent/ollama-models${qs}`)
+    },
+
+    listProviderModels: (provider: string, baseUrl?: string) => {
+      const qs = baseUrl?.trim() ? `?baseUrl=${encodeURIComponent(baseUrl.trim())}` : ''
+      return client.get<ProviderModelsResult>(`/api/v1/agent/models/${encodeURIComponent(provider)}${qs}`)
     },
   }
 }

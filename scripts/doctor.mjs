@@ -24,6 +24,8 @@ Checks:
   - Node.js and pnpm availability
   - workspace dependencies installed
   - required env files present
+  - placeholder auth secrets
+  - Git availability
   - Docker Compose availability
   - local web login page reachability
   - local API health reachability
@@ -92,8 +94,8 @@ async function fetchStatus(url, expectedPredicate) {
   }
 }
 
-const webPort = process.env.WEB_PORT?.trim() || '3000'
-const apiPort = process.env.API_PORT?.trim() || '3001'
+const webPort = process.env.WEB_PORT?.trim() || process.env.PORT?.trim() || '3000'
+const apiPort = process.env.API_PORT?.trim() || process.env.PORT?.trim() || '3001'
 const checks = []
 
 const nodeMajor = Number(process.versions.node.split('.')[0] || '0')
@@ -142,6 +144,45 @@ for (const [label, relativePath, severity, fix] of [
     fix,
   })
 }
+
+const gitVersion = runCapture('git', ['--version'])
+checks.push({
+  id: 'git',
+  label: 'Git available',
+  ok: gitVersion.ok,
+  severity: 'warn',
+  detail: gitVersion.ok ? gitVersion.stdout : (gitVersion.error || gitVersion.stderr || 'git unavailable'),
+  fix: 'Install Git (Windows: git-scm.com/download/win, macOS: xcode-select --install, Ubuntu: sudo apt install git).',
+})
+
+function envValue(relativePath, key) {
+  try {
+    const raw = fs.readFileSync(path.join(rootDir, relativePath), 'utf8')
+    const match = raw.match(new RegExp(`^${key}=(.*)$`, 'm'))
+    return match ? match[1].trim().replace(/^"|"$/g, '') : null
+  } catch {
+    return null
+  }
+}
+
+const defaultSecrets = [
+  ['apps/api/.env', 'JWT_SECRET', ['change-me']],
+  ['apps/api/.env', 'JWT_REFRESH_SECRET', ['change-me']],
+  ['apps/api/.env', 'ENCRYPTION_KEY', ['32-char-hex-key-here', 'change-me']],
+].filter(([rel, key, markers]) => {
+  const value = envValue(rel, key)
+  return value != null && (value === '' || markers.some((m) => value.includes(m)))
+})
+checks.push({
+  id: 'default-secrets',
+  label: 'Auth secrets configured',
+  ok: defaultSecrets.length === 0,
+  severity: 'warn',
+  detail: defaultSecrets.length === 0
+    ? 'No placeholder secrets detected'
+    : `Placeholder secrets remain: ${defaultSecrets.map(([rel, key]) => `${rel}:${key}`).join(', ')}`,
+  fix: 'Delete the placeholder lines and rerun pnpm setup to auto-generate secrets, or set strong random values manually.',
+})
 
 const dockerComposeVersion = runCapture('docker', ['compose', 'version'])
 checks.push({
