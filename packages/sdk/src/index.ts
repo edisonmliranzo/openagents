@@ -36,6 +36,12 @@ export { createAgentPresetsApi } from './api/agent-presets'
 export { createArtifactsApi } from './api/artifacts'
 export { createGoalsApi } from './api/goals'
 export type { MuseGoal, MuseGoalMilestone, CreateMuseGoalInput } from './api/goals'
+export { createProactiveApi } from './api/proactive'
+export type { ProactiveTriggerRow, ProactiveLogRow } from './api/proactive'
+export { createLearningApi } from './api/learning'
+export type { SkillSuggestionRow, UserSkillRow } from './api/learning'
+export { createReflectionApi } from './api/reflection'
+export type { ReflectionResult } from './api/reflection'
 export { createWorkspacesApi } from './api/workspaces'
 export { createPacksApi } from './api/packs'
 
@@ -74,6 +80,9 @@ import { createWebhooksApi } from './api/webhooks'
 import { createAgentPresetsApi } from './api/agent-presets'
 import { createArtifactsApi } from './api/artifacts'
 import { createGoalsApi } from './api/goals'
+import { createProactiveApi } from './api/proactive'
+import { createLearningApi } from './api/learning'
+import { createReflectionApi } from './api/reflection'
 import { createWorkspacesApi } from './api/workspaces'
 import { createPacksApi } from './api/packs'
 import type { SDKConfig } from './client'
@@ -117,6 +126,9 @@ export function createSDK(config: SDKConfig) {
     agentPresets: createAgentPresetsApi(client),
     artifacts: createArtifactsApi(client),
     goals: createGoalsApi(client),
+    proactive: createProactiveApi(client),
+    learning: createLearningApi(client),
+    reflection: createReflectionApi(client),
     workspaces: createWorkspacesApi(client),
     packs: createPacksApi(client),
   }

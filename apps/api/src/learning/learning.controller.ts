@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { LearningService, InteractionEntry } from './learning.service';
+import { SkillSuggesterService } from './skill-suggester.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @ApiTags('learning')
@@ -8,7 +9,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 @UseGuards(JwtAuthGuard)
 @Controller('learning')
 export class LearningController {
-  constructor(private learning: LearningService) {}
+  constructor(
+    private learning: LearningService,
+    private suggester: SkillSuggesterService,
+  ) {}
 
   @Post('track')
   @HttpCode(HttpStatus.OK)
@@ -36,6 +40,33 @@ export class LearningController {
   async getPatterns(@Req() req: any) {
     const patterns = await this.learning.getContextPatterns(req.user.id);
     return { patterns };
+  }
+
+  @Get('suggestions')
+  @ApiOperation({ summary: 'List pending skill suggestions (auto-generated from repeated patterns)' })
+  async listSuggestions(@Req() req: any, @Query('status') status?: string) {
+    return this.suggester.listSuggestions(req.user.id, status ?? 'pending')
+  }
+
+  @Post('suggestions/generate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Force a suggestion sweep over learned patterns' })
+  async generateSuggestions(@Req() req: any) {
+    return this.suggester.generateSuggestions(req.user.id)
+  }
+
+  @Post('suggestions/:id/approve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Approve a suggestion and save it as a reusable skill' })
+  async approveSuggestion(@Req() req: any, @Param('id') id: string) {
+    return this.suggester.approve(req.user.id, id)
+  }
+
+  @Post('suggestions/:id/dismiss')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Dismiss a skill suggestion' })
+  async dismissSuggestion(@Req() req: any, @Param('id') id: string) {
+    return this.suggester.dismiss(req.user.id, id)
   }
 
   @Delete('clear')

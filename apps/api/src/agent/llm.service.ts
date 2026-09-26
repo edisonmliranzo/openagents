@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import type { LLMProvider } from '@openagents/shared'
 import { LLM_MODELS, LLM_MODEL_OPTIONS } from '@openagents/shared'
+import { embedText } from './embeddings'
 
 const SUPPORTED_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
 
@@ -277,6 +278,18 @@ export class LLMService {
 
   async listOllamaModels(baseUrl?: string): Promise<string[]> {
     return this.listLocalOllamaModels(baseUrl, true)
+  }
+
+  /**
+   * Embed text for semantic memory. Tries OpenAI (text-embedding-3-small),
+   * then Ollama (nomic-embed-text), then a deterministic hash embedding so
+   * semantic recall always works, even fully offline.
+   */
+  async embed(text: string): Promise<{ vector: number[]; provider: 'openai' | 'ollama' | 'hash' } | null> {
+    return embedText(text, {
+      openaiKey: this.envApiKeys.openai,
+      ollamaBaseUrl: this.resolveOllamaHttpBaseUrl(),
+    })
   }
 
   /**

@@ -74,6 +74,8 @@ model User {
   learningStats     LearningStats?
   userSkills        UserSkill[]
   goals             Goal[]
+  proactiveTriggers ProactiveTrigger[]
+  skillSuggestions  SkillSuggestion[]
 }
 
 model PasswordResetToken {
@@ -309,6 +311,7 @@ model MemoryEvent {
   freshUntil  DateTime?
   conflictGroup String?
   reinforcedAt DateTime?
+  embedding   String?  // JSON number[] for semantic recall
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -331,6 +334,7 @@ model MemoryFact {
   freshUntil DateTime?
   conflictGroup String?
   reinforcedAt DateTime?
+  embedding  String?  // JSON number[] for semantic recall
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -1287,4 +1291,57 @@ model Goal {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, updatedAt])
+}
+
+// ─── Proactive Triggers (event-driven background agents) ───────────────────
+
+model ProactiveTrigger {
+  id          String    @id @default(cuid())
+  userId      String
+  source      String    // email | slack | github | webhook | system_metric
+  condition   String    @default("*") // keyword match against event payload, "*" = always
+  actionText  String    // instruction given to the agent when fired
+  enabled     Boolean   @default(true)
+  lastFiredAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs   ProactiveLog[]
+
+  @@index([userId, enabled, source])
+}
+
+model ProactiveLog {
+  id        String   @id @default(cuid())
+  triggerId String
+  userId    String
+  event     String   // truncated payload summary
+  status    String   // fired | skipped | failed
+  detail    String?
+  createdAt DateTime @default(now())
+
+  trigger ProactiveTrigger @relation(fields: [triggerId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([triggerId, createdAt])
+}
+
+// ─── Skill Suggestions (agent proposes, user approves) ─────────────────────
+
+model SkillSuggestion {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  description   String
+  steps         String   @default("[]") // JSON array of step strings
+  tags          String   @default("[]")
+  sourcePattern String?  // learned pattern that produced this suggestion
+  status        String   @default("pending") // pending | approved | dismissed
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
 }

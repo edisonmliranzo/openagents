@@ -11,6 +11,8 @@ import { PromptGuardService } from '../tools/prompt-guard.service'
 import { MissionControlService } from '../mission-control/mission-control.service'
 import { RuntimeEventsService } from '../events/runtime-events.service'
 import { ContextCompressorService } from './context-compressor.service'
+import { ModelRouterService } from './model-router.service'
+import { SentinelService } from './sentinel.service'
 import { GoalService } from '../goals/goal.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
@@ -189,6 +191,8 @@ export class AgentService {
     private runtimeEvents: RuntimeEventsService,
     private compressor: ContextCompressorService,
     private goals: GoalService,
+    private modelRouter: ModelRouterService,
+    private sentinel: SentinelService,
   ) {}
 
   async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
@@ -271,7 +275,7 @@ export class AgentService {
       const sessionModel = conversation?.model?.trim() || undefined
       const routing = sessionProvider
         ? { provider: sessionProvider, model: sessionModel, applied: false, preset: 'none' as const }
-        : this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel)
+        : this.modelRouter.adjust(this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel), this.modelRouter.classify(userMessage))
       const provider = routing.provider
       const preferredModel = fastAdvisoryMode
         ? this.resolveFastAdvisoryModel(provider, routing.model)
@@ -287,10 +291,11 @@ export class AgentService {
           : Math.min(NORMAL_CONTEXT_MESSAGE_LIMIT + 4, SHORT_TERM_MEMORY_LIMIT),
       })
 
-      const [memories, promptMemories, filesystemContext] = await Promise.all([
+      const [memories, promptMemories, filesystemContext, semanticMemories] = await Promise.all([
         this.memory.getForUser(userId),
         this.memory.getAgentContextEntries(userId),
         fastAdvisoryMode ? Promise.resolve('') : this.memory.buildFilesystemContext(userId),
+        this.memory.semanticRecall(userId, userMessage, 8).catch(() => []),
       ])
       const lineageMemoryFiles = filesystemContext
         ? ['SOUL.md', 'USER.md', 'MEMORY.md', 'HEARTBEAT.md']
@@ -300,6 +305,10 @@ export class AgentService {
       const lineageApprovals: string[] = []
       const lineageExternalSources = new Set<string>()
       const memoryContext = this.buildMemoryContext(promptMemories, filesystemContext, fastAdvisoryMode)
+      const semanticBlock = semanticMemories.length
+        ? `Related memories (semantic):\n${semanticMemories.map((m) => `- ${m.text}`).join('\n')}`
+        : ''
+      const enrichedMemoryContext = [memoryContext, semanticBlock].filter(Boolean).join('\n\n')
 
       const basePrompt = settings.customSystemPrompt ?? DEFAULT_SYSTEM_PROMPT
       const manusModeEnabled = this.isManusModeEnabled()
@@ -316,8 +325,8 @@ export class AgentService {
         : await this.compressor.getOrCreateSummary(conversationId, userId).catch(() => null)
 
       const baseWithPersonality = personalityPrefix ? `${personalityPrefix}\n\n${basePrompt}` : basePrompt
-      let systemPrompt = memoryContext
-        ? `${baseWithPersonality}\n\nUser context from memory:\n${memoryContext}`
+      let systemPrompt = enrichedMemoryContext
+        ? `${baseWithPersonality}\n\nUser context from memory:\n${enrichedMemoryContext}`
         : baseWithPersonality
       if (compressionSummary) {
         systemPrompt = `${systemPrompt}\n\n${compressionSummary}`
@@ -549,8 +558,35 @@ export class AgentService {
             withinAutonomyWindow: autonomyStatus.withinWindow,
             requiresApprovalByPolicy: toolDef.requiresApproval,
           })
-          const requiresApproval =
+          let requiresApproval =
             toolDef.requiresApproval || outsideAutonomyWindow || !autoApprovedLowRisk
+
+          // Sentinel: an independent LLM vets high-risk actions that the
+          // static policy would otherwise auto-run. Fail-closed to ASK.
+          let sentinelNote = ''
+          if (!requiresApproval && this.sentinel.enabled && this.sentinel.isHighRisk(toolCall.name)) {
+            const verdict = await this.sentinel.review({
+              toolName: toolCall.name,
+              toolInput: toolCall.input,
+              userMessage,
+              provider: activeProvider,
+              apiKey: activeUserApiKey,
+              baseUrl: activeUserBaseUrl,
+            })
+            if (verdict.decision === 'block') {
+              this.logger.warn(`Sentinel blocked ${toolCall.name}: ${verdict.reason}`)
+              runMetrics.toolCalls.push({ name: toolCall.name, requiresApproval: false, status: 'failed' })
+              llmWorkingMessages.push({
+                role: 'assistant',
+                content: `Blocked by Sentinel: ${verdict.reason}`,
+              })
+              continue
+            }
+            if (verdict.decision === 'ask') {
+              requiresApproval = true
+              sentinelNote = ` Sentinel: ${verdict.reason}.`
+            }
+          }
 
           if (risk.level === 'low') runMetrics.riskLow += 1
           else if (risk.level === 'medium') runMetrics.riskMedium += 1
@@ -573,8 +609,8 @@ export class AgentService {
             }
             const approvalAction = this.describeApprovalAction(toolCall.name, toolCall.input)
             const approvalRequestText = outsideAutonomyWindow
-              ? `Outside autonomy window (${autonomyStatus.timezone}). Requesting approval to ${approvalAction} (risk: ${risk.level}, score: ${risk.score}).`
-              : `Requesting approval to ${approvalAction} (risk: ${risk.level}, score: ${risk.score}).`
+              ? `Outside autonomy window (${autonomyStatus.timezone}). Requesting approval to ${approvalAction} (risk: ${risk.level}, score: ${risk.score}).${sentinelNote}`
+              : `Requesting approval to ${approvalAction} (risk: ${risk.level}, score: ${risk.score}).${sentinelNote}`
             runMetrics.toolCalls.push({
               name: toolCall.name,
               requiresApproval: true,

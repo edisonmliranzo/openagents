@@ -87,5 +87,14 @@ export function createMemoryApi(client: OpenAgentsClient) {
       client.delete<{ ok: true }>(`/api/v1/memory/sources/${encodeURIComponent(id)}`),
 
     delete: (id: string) => client.delete<{ count: number }>(`/api/v1/memory/${id}`),
+
+    semanticSearch: (query: string, limit = 10) =>
+      client.post<Array<{ id: string; type: 'fact' | 'event'; text: string; score: number }>>(
+        '/api/v1/memory/semantic',
+        { query, limit },
+      ),
+
+    backfillEmbeddings: (cap?: number) =>
+      client.post<{ embedded: number }>('/api/v1/memory/embed-backfill', { cap }),
   }
 }
