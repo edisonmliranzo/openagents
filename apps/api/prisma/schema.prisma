@@ -76,6 +76,8 @@ model User {
   goals             Goal[]
   proactiveTriggers ProactiveTrigger[]
   skillSuggestions  SkillSuggestion[]
+  answerCache       AnswerCache[]
+  routingOutcomes   RoutingOutcome[]
 }
 
 model PasswordResetToken {
@@ -1344,4 +1346,42 @@ model SkillSuggestion {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, createdAt])
+}
+
+// ─── Semantic Answer Cache (instant repeat answers) ───────────────────────
+
+model AnswerCache {
+  id        String   @id @default(cuid())
+  userId    String
+  question  String
+  answer    String
+  embedding String   // JSON number[]
+  provider  String
+  model     String?
+  taskClass String   @default("general")
+  hits      Int      @default(0)
+  createdAt DateTime @default(now())
+  lastHitAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// ─── Routing Outcomes (learned model selection) ───────────────────────────
+
+model RoutingOutcome {
+  id         String   @id @default(cuid())
+  userId     String
+  taskClass  String   // small-talk | summarize | search | code | reasoning | general
+  provider   String
+  model      String
+  durationMs Int
+  success    Boolean
+  toolCalls  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, taskClass, createdAt])
 }

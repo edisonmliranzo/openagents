@@ -13,6 +13,8 @@ import { RuntimeEventsService } from '../events/runtime-events.service'
 import { ContextCompressorService } from './context-compressor.service'
 import { ModelRouterService } from './model-router.service'
 import { SentinelService } from './sentinel.service'
+import { AnswerCacheService } from './answer-cache.service'
+import { CriticService } from './critic.service'
 import { GoalService } from '../goals/goal.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
@@ -193,6 +195,8 @@ export class AgentService {
     private goals: GoalService,
     private modelRouter: ModelRouterService,
     private sentinel: SentinelService,
+    private answerCache: AnswerCacheService,
+    private critic: CriticService,
   ) {}
 
   async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
@@ -238,6 +242,7 @@ export class AgentService {
     let activeProviderForRun: LLMProvider | null = null
     let activeModelForRun: string | null = null
     const fastAdvisoryMode = this.shouldUseFastAdvisoryMode(userMessage)
+    const taskClass = this.modelRouter.classify(userMessage)
 
     // Instant path for greetings/small-talk: a single no-tools LLM call.
     // Skips memory pulls, tool catalogs, planning loops, and delegation so a
@@ -259,6 +264,43 @@ export class AgentService {
       if (handled) return
     }
 
+    // Semantic answer cache: near-identical recent stable questions return
+    // the previous answer instantly — no LLM call at all.
+    try {
+      const cached = await this.answerCache.lookup(userId, userMessage, taskClass)
+      if (cached) {
+        const agentMsg = await this.prisma.message.create({
+          data: { conversationId, role: 'agent', content: cached.answer, status: 'done' },
+        })
+        emit('message', agentMsg)
+        await this.prisma.agentRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'done',
+            finishedAt: new Date(),
+            metadata: JSON.stringify({ cacheHit: true, provider: cached.provider, model: cached.model }),
+          },
+        })
+        await this.prisma.conversation.update({
+          where: { id: conversationId },
+          data: { lastMessageAt: new Date() },
+        })
+        emit('tokens', {
+          inputTokens: 0,
+          outputTokens: Math.ceil(cached.answer.length / 4),
+          totalTokens: Math.ceil(cached.answer.length / 4),
+          provider: cached.provider,
+          model: cached.model,
+          durationMs: Date.now() - runStartedAtMs,
+          cacheHit: true,
+        })
+        emit('status', { status: 'done' })
+        return
+      }
+    } catch (err) {
+      this.logger.debug(`Answer cache lookup skipped: ${this.safeError(err)}`)
+    }
+
     emit('status', {
       status: 'thinking',
       ...(fastAdvisoryMode ? { mode: 'fast_advisory' } : {}),
@@ -275,7 +317,7 @@ export class AgentService {
       const sessionModel = conversation?.model?.trim() || undefined
       const routing = sessionProvider
         ? { provider: sessionProvider, model: sessionModel, applied: false, preset: 'none' as const }
-        : this.modelRouter.adjust(this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel), this.modelRouter.classify(userMessage))
+        : await this.modelRouter.adjust(this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel), taskClass, userId)
       const provider = routing.provider
       const preferredModel = fastAdvisoryMode
         ? this.resolveFastAdvisoryModel(provider, routing.model)
@@ -970,6 +1012,47 @@ export class AgentService {
         }
       }
 
+      // 8b. Critic pass: a reviewer model checks substantive direct answers
+      // against the request; one revision allowed, never blocking.
+      if (
+        this.critic.shouldReview({
+          taskClass,
+          answerLength: finalResponseContent.length,
+          usedTools: runMetrics.toolCalls.length > 0,
+        })
+      ) {
+        try {
+          const verdict = await this.critic.review({
+            userMessage,
+            draft: finalResponseContent,
+            provider: activeProvider,
+            apiKey: activeUserApiKey,
+            baseUrl: activeUserBaseUrl,
+          })
+          if (verdict.verdict === 'revise') {
+            this.logger.debug(`Critic requested revision: ${verdict.feedback}`)
+            const revised = await this.llm.complete(
+              [
+                ...llmWorkingMessages,
+                { role: 'assistant', content: finalResponseContent },
+                { role: 'user', content: `A reviewer asked for one improvement before your answer is sent: ${verdict.feedback} Output ONLY the corrected final answer.` },
+              ],
+              [],
+              effectiveSystemPrompt,
+              activeProvider,
+              activeUserApiKey,
+              activeUserBaseUrl,
+              activeModel,
+            )
+            const revisedText = (revised.content ?? '').trim()
+            if (revisedText) finalResponseContent = revisedText
+            emit('thinking', { step: 'verifying', message: 'Double-checked the answer' })
+          }
+        } catch {
+          // Critic is best-effort; the draft answer always stands.
+        }
+      }
+
       // 9. Save agent response — strip raw <think>/<thinking> tags before persisting
       finalResponseContent = finalResponseContent
         .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '')
@@ -1022,6 +1105,34 @@ export class AgentService {
         this.memory
           .extractAndStore(userId, userMessage, finalResponseContent)
           .catch((e) => this.logger.error('Memory extraction failed', e))
+      }
+
+      // Learned routing: record how this run went for future model picks.
+      void this.modelRouter
+        .logOutcome({
+          userId,
+          taskClass,
+          provider: activeProvider,
+          model: activeModel ?? undefined,
+          durationMs: Date.now() - runStartedAtMs,
+          success: true,
+          toolCalls: runMetrics.toolCalls.length,
+        })
+        .catch(() => undefined)
+
+      // Feed the semantic answer cache for stable, tool-free answers.
+      if (finalResponseContent) {
+        void this.answerCache
+          .store({
+            userId,
+            question: userMessage,
+            answer: finalResponseContent,
+            provider: activeProvider,
+            model: activeModel,
+            taskClass,
+            usedTools: runMetrics.toolCalls.length > 0,
+          })
+          .catch(() => undefined)
       }
 
       await this.prisma.agentRun.update({
@@ -1092,6 +1203,17 @@ export class AgentService {
       emit('status', { status: 'done' })
     } catch (err: any) {
       this.logger.error('Agent run failed', err)
+      void this.modelRouter
+        .logOutcome({
+          userId,
+          taskClass,
+          provider: activeProviderForRun ?? 'anthropic',
+          model: activeModelForRun ?? undefined,
+          durationMs: Date.now() - runStartedAtMs,
+          success: false,
+          toolCalls: 0,
+        })
+        .catch(() => undefined)
       await this.prisma.agentRun.update({
         where: { id: run.id },
         data: {

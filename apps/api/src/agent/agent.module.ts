@@ -6,6 +6,8 @@ import { ParallelAgentService } from './parallel-agent.service'
 import { ContextCompressorService } from './context-compressor.service'
 import { ModelRouterService } from './model-router.service'
 import { SentinelService } from './sentinel.service'
+import { AnswerCacheService } from './answer-cache.service'
+import { CriticService } from './critic.service'
 import { ToolsModule } from '../tools/tools.module'
 import { MemoryModule } from '../memory/memory.module'
 import { ApprovalsModule } from '../approvals/approvals.module'
@@ -27,7 +29,7 @@ import { GoalsModule } from '../goals/goals.module'
     GoalsModule,
   ],
   controllers: [AgentController],
-  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService],
-  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService],
+  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService],
+  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService],
 })
 export class AgentModule {}
