@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -107,6 +108,67 @@ function ensureFile(targetRel, templateRel) {
   console.log(`- Created ${targetRel} from ${templateRel}`);
 }
 
+function readEnvLine(raw, key) {
+  const match = raw.match(new RegExp(`^${key}=(.*)$`, "m"));
+  return match ? match[1].trim() : null;
+}
+
+function isPlaceholderValue(value, markers) {
+  if (value == null) return false;
+  const unquoted = value.replace(/^"|"$/g, "");
+  if (!unquoted) return true;
+  return markers.some((marker) => unquoted.includes(marker));
+}
+
+// Replaces placeholder secrets with random values. Only touches lines that
+// still contain known placeholder markers, so re-running setup never
+// overwrites real secrets. Works on Windows/macOS/Linux (no shell needed).
+function seedSecrets(targetRel, specs) {
+  const targetPath = path.join(rootDir, targetRel);
+  if (!fs.existsSync(targetPath)) return;
+  let raw = fs.readFileSync(targetPath, "utf8");
+  let changed = false;
+
+  for (const spec of specs) {
+    const current = readEnvLine(raw, spec.key);
+    if (!isPlaceholderValue(current, spec.markers)) continue;
+    raw = raw.replace(new RegExp(`^${spec.key}=.*$`, "m"), `${spec.key}=${spec.value()}`);
+    changed = true;
+    console.log(`- Generated ${spec.key} in ${targetRel}`);
+  }
+
+  if (changed) fs.writeFileSync(targetPath, raw);
+}
+
+function seedApiSecrets() {
+  seedSecrets("apps/api/.env", [
+    { key: "JWT_SECRET", markers: ["change-me"], value: () => `"${crypto.randomBytes(48).toString("hex")}"` },
+    { key: "JWT_REFRESH_SECRET", markers: ["change-me"], value: () => `"${crypto.randomBytes(48).toString("hex")}"` },
+    { key: "ENCRYPTION_KEY", markers: ["32-char-hex-key-here", "change-me"], value: () => `"${crypto.randomBytes(32).toString("hex")}"` },
+  ]);
+}
+
+function seedProdSecrets() {
+  const targetPath = path.join(rootDir, "infra/docker/.env.prod");
+  if (!fs.existsSync(targetPath)) return;
+  seedSecrets("infra/docker/.env.prod", [
+    { key: "JWT_SECRET", markers: ["replace-with", "change-me"], value: () => crypto.randomBytes(48).toString("hex") },
+    { key: "JWT_REFRESH_SECRET", markers: ["replace-with", "change-me"], value: () => crypto.randomBytes(48).toString("hex") },
+    { key: "ENCRYPTION_KEY", markers: ["32-char-hex-key-here", "change-me"], value: () => crypto.randomBytes(32).toString("hex") },
+  ]);
+  // Keep POSTGRES_PASSWORD and DATABASE_URL in sync (prod compose defaults
+  // to change-me when the variables are absent).
+  let raw = fs.readFileSync(targetPath, "utf8");
+  const pw = readEnvLine(raw, "POSTGRES_PASSWORD");
+  if (isPlaceholderValue(pw, ["change-me"])) {
+    const fresh = crypto.randomBytes(24).toString("hex");
+    raw = raw.replace(/^POSTGRES_PASSWORD=.*$/m, `POSTGRES_PASSWORD=${fresh}`);
+    raw = raw.replace(/^(DATABASE_URL=.*postgres:)([^@]*)(@.*)$/m, `$1${fresh}$3`);
+    fs.writeFileSync(targetPath, raw);
+    console.log("- Generated POSTGRES_PASSWORD in infra/docker/.env.prod");
+  }
+}
+
 function requireNode20() {
   const major = Number(process.versions.node.split(".")[0] || "0");
   if (!Number.isFinite(major) || major < 20) {
@@ -154,6 +216,8 @@ try {
   ensureFile("apps/api/.env", "apps/api/.env.example");
   ensureFile("apps/web/.env.local", "apps/web/.env.example");
   ensureFile("infra/docker/.env.prod", "infra/docker/.env.prod.example");
+  seedApiSecrets();
+  seedProdSecrets();
 
   heading("Local infrastructure");
   if (skipDocker) {

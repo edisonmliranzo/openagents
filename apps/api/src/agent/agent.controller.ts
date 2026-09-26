@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Req, Get, Query, BadRequestException } from '@nestjs/common'
+import { Controller, Post, Body, UseGuards, Req, Get, Query, Param, BadRequestException } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsString, IsOptional } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
@@ -119,6 +119,23 @@ export class AgentController {
     } catch (error: any) {
       throw new BadRequestException(error?.message ?? 'Failed to load Ollama models.')
     }
+  }
+
+  @Get('models/:provider')
+  async listProviderModels(@Req() req: any, @Param('provider') provider: string, @Query('baseUrl') baseUrl?: string) {
+    const trimmedBase = baseUrl?.trim() || undefined
+    let apiKey: string | undefined
+    let resolvedBase = trimmedBase
+
+    if (!trimmedBase) {
+      const stored = await this.users.getRawLlmKey(req.user.id, provider).catch(() => null)
+      if (stored?.isActive) {
+        apiKey = stored.apiKey ?? stored.loginPassword ?? undefined
+        resolvedBase = stored.baseUrl ?? undefined
+      }
+    }
+
+    return this.llm.listProviderModels(provider as LLMProvider, apiKey, resolvedBase)
   }
 
   @Post('test-llm')

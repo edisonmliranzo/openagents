@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import type { LLMProvider } from '@openagents/shared'
-import { LLM_MODELS } from '@openagents/shared'
+import { LLM_MODELS, LLM_MODEL_OPTIONS } from '@openagents/shared'
 
-const SUPPORTED_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud']
+const SUPPORTED_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
 
 const PROVIDER_LABELS: Record<LLMProvider, string> = {
   anthropic: 'Anthropic',
@@ -16,6 +16,14 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
   perplexity: 'Perplexity',
   nvidia: 'NVIDIA NIM',
   atlascloud: 'AtlasCloud',
+  groq: 'Groq',
+  mistral: 'Mistral',
+  deepseek: 'DeepSeek',
+  xai: 'xAI Grok',
+  openrouter: 'OpenRouter',
+  together: 'Together AI',
+  custom: 'Custom endpoint',
+  meta: 'Meta Muse Spark',
 }
 
 const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
@@ -26,6 +34,14 @@ const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
   perplexity: ['PERPLEXITY_API_KEY'],
   nvidia: ['NVIDIA_API_KEY'],
   atlascloud: ['ATLASCLOUD_API_KEY'],
+  groq: ['GROQ_API_KEY'],
+  mistral: ['MISTRAL_API_KEY'],
+  deepseek: ['DEEPSEEK_API_KEY'],
+  xai: ['XAI_API_KEY'],
+  openrouter: ['OPENROUTER_API_KEY'],
+  together: ['TOGETHER_API_KEY'],
+  custom: ['CUSTOM_LLM_API_KEY'],
+  meta: ['MODEL_API_KEY', 'META_API_KEY'],
 }
 
 const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LLMProvider, string>> = {
@@ -34,6 +50,14 @@ const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LLMProvider, string>> = {
   perplexity: 'https://api.perplexity.ai',
   nvidia: 'https://integrate.api.nvidia.com/v1',
   atlascloud: 'https://api.atlascloud.ai/v1',
+  groq: 'https://api.groq.com/openai/v1',
+  mistral: 'https://api.mistral.ai/v1',
+  deepseek: 'https://api.deepseek.com/v1',
+  xai: 'https://api.x.ai/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+  together: 'https://api.together.xyz/v1',
+  // NOTE: `custom` intentionally has no default — the user must supply a base URL.
+  meta: 'https://api.meta.ai/v1',
 }
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
 const DEFAULT_OLLAMA_ALLOWED_HOSTS = [
@@ -94,6 +118,14 @@ export class LLMService {
       perplexity: this.readFirstEnv(PROVIDER_ENV_VARS.perplexity),
       nvidia: this.readFirstEnv(PROVIDER_ENV_VARS.nvidia),
       atlascloud: this.readFirstEnv(PROVIDER_ENV_VARS.atlascloud),
+      groq: this.readFirstEnv(PROVIDER_ENV_VARS.groq),
+      mistral: this.readFirstEnv(PROVIDER_ENV_VARS.mistral),
+      deepseek: this.readFirstEnv(PROVIDER_ENV_VARS.deepseek),
+      xai: this.readFirstEnv(PROVIDER_ENV_VARS.xai),
+      openrouter: this.readFirstEnv(PROVIDER_ENV_VARS.openrouter),
+      together: this.readFirstEnv(PROVIDER_ENV_VARS.together),
+      custom: this.readFirstEnv(PROVIDER_ENV_VARS.custom),
+      meta: this.readFirstEnv(PROVIDER_ENV_VARS.meta),
     }
 
     const configured = (config.get<string>('DEFAULT_LLM_PROVIDER') ?? 'anthropic').trim().toLowerCase()
@@ -134,7 +166,7 @@ export class LLMService {
       return this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient, model, userBaseUrl)
     }
 
-    // openai-compatible providers (openai, google gemini, minimax, perplexity, nvidia)
+    // openai-compatible providers (openai plus every OpenAI-compatible cloud/local endpoint)
     return this.completeWithKeyRotation(
       async (key) => {
         const client = this.createOpenAICompatibleClient(p, key, userBaseUrl)
@@ -205,6 +237,53 @@ export class LLMService {
     return this.listLocalOllamaModels(baseUrl, true)
   }
 
+  /**
+   * Live model discovery per provider. Returns the provider's own model
+   * catalog (Ollama /api/tags, Anthropic Models API, or OpenAI-compatible
+   * /v1/models) merged after the curated list. Falls back to the curated
+   * list when the live lookup fails (missing key, offline server, …).
+   */
+  async listProviderModels(
+    provider: LLMProvider,
+    apiKey?: string,
+    baseUrl?: string,
+  ): Promise<{ models: string[]; source: 'live' | 'curated' }> {
+    const requested = String(provider ?? '').trim().toLowerCase()
+    if (!this.isSupportedProvider(requested)) {
+      throw new Error(`Unsupported provider "${provider}".`)
+    }
+    const curated = [...(LLM_MODEL_OPTIONS[requested] as unknown as string[])]
+    const merge = (live: string[]) => {
+      const seen = new Set(curated)
+      const extras = live.map((id) => id.trim()).filter((id) => id && !seen.has(id))
+      return { models: [...curated, ...extras].slice(0, 200), source: (extras.length > 0 || live.length > 0 ? 'live' : 'curated') as 'live' | 'curated' }
+    }
+
+    try {
+      if (requested === 'ollama') {
+        const live = await this.listLocalOllamaModels(baseUrl, true)
+        return live.length > 0 ? merge(live) : { models: curated, source: 'curated' }
+      }
+
+      if (requested === 'anthropic') {
+        const key = this.resolveApiKey('anthropic', apiKey)
+        const response = await fetch('https://api.anthropic.com/v1/models?limit=100', {
+          headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+        })
+        if (!response.ok) throw new Error(`Anthropic models lookup failed (HTTP ${response.status}).`)
+        const json = await response.json() as { data?: Array<{ id?: string }> }
+        const live = (json.data ?? []).map((m) => m.id ?? '').filter(Boolean)
+        return live.length > 0 ? merge(live) : { models: curated, source: 'curated' }
+      }
+
+      const client = this.createOpenAICompatibleClient(requested, apiKey, baseUrl)
+      const live = await this.listModelIds(client)
+      return live.length > 0 ? merge(live) : { models: curated, source: 'curated' }
+    } catch {
+      return { models: curated, source: 'curated' }
+    }
+  }
+
   async runOllamaPrompt(baseUrl: string | undefined, model: string, prompt: string, maxTokens = 200) {
     const client = this.createOllamaClient(baseUrl)
     const response = await client.chat.completions.create({
@@ -268,7 +347,7 @@ export class LLMService {
         }
       }
 
-      // openai-compatible providers (openai, google gemini, minimax, perplexity)
+      // openai-compatible providers (openai plus every OpenAI-compatible cloud/local endpoint)
       const client = this.createOpenAICompatibleClient(requestedProvider, apiKey, baseUrl)
       const res = await client.chat.completions.create({
         model: model ?? LLM_MODELS[requestedProvider].default,
@@ -500,7 +579,13 @@ export class LLMService {
     userBaseUrl?: string,
   ) {
     const baseURL = this.resolveOpenAICompatibleBaseUrl(provider, userBaseUrl)
-    const apiKey = this.resolveApiKey(provider, userApiKey)
+    // Local OpenAI-compatible servers (LM Studio, llama.cpp, …) usually need
+    // no key — send a dummy value instead of failing the "not configured" check.
+    const apiKey = provider === 'custom'
+      && !userApiKey?.trim()
+      && !this.envApiKeys.custom?.trim()
+      ? 'not-needed'
+      : this.resolveApiKey(provider, userApiKey)
     return new OpenAI({
       ...(baseURL ? { baseURL } : {}),
       apiKey,
@@ -599,12 +684,30 @@ export class LLMService {
   ) {
     const override = baseUrl?.trim().replace(/\/+$/, '')
     if (override) {
-      if (!this.allowCustomOpenAIBaseUrls) {
+      // Loopback endpoints (LM Studio, llama.cpp, vLLM on the user's own
+      // machine) are always allowed. Remote overrides need the explicit flag.
+      if (!this.allowCustomOpenAIBaseUrls && !this.isLoopbackUrl(override)) {
         throw new Error('Custom LLM base URLs are disabled. Set ALLOW_CUSTOM_LLM_BASE_URLS=true to enable.')
       }
       return override
     }
-    return OPENAI_COMPATIBLE_BASE_URLS[provider]
+    const fallback = OPENAI_COMPATIBLE_BASE_URLS[provider]
+    if (!fallback) {
+      throw new Error(
+        'This provider needs a Base URL (Settings → Config). Enter your OpenAI-compatible endpoint, e.g. http://localhost:1234/v1.',
+      )
+    }
+    return fallback
+  }
+
+  private isLoopbackUrl(raw: string) {
+    try {
+      const candidate = raw.match(/^[a-z]+:\/\//i) ? raw : `http://${raw}`
+      const host = this.normalizeHost(new URL(candidate).hostname)
+      return this.isLoopbackHost(host)
+    } catch {
+      return false
+    }
   }
 
   private async listModelIds(client: OpenAI) {

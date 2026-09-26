@@ -91,6 +91,16 @@ export class NanobotProviderRouterService {
       || normalized === 'ollama'
       || normalized === 'minimax'
       || normalized === 'perplexity'
+      || normalized === 'nvidia'
+      || normalized === 'atlascloud'
+      || normalized === 'groq'
+      || normalized === 'mistral'
+      || normalized === 'deepseek'
+      || normalized === 'xai'
+      || normalized === 'openrouter'
+      || normalized === 'together'
+      || normalized === 'custom'
+      || normalized === 'meta'
     ) {
       return normalized
     }

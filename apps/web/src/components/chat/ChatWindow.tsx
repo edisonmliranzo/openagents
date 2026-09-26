@@ -29,6 +29,7 @@ import {
 import { PinnedContext, buildPinnedContextBlock, type PinnedItem } from './PinnedContext'
 import { ResponsePresets } from './ResponsePresets'
 import { WebRtcVoiceControls } from './WebRtcVoiceControls'
+import { storageGet, storageSet } from '@/lib/storage'
 import clsx from 'clsx'
 import {
   ArrowUp,
@@ -48,6 +49,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Star,
 } from 'lucide-react'
 
 interface ChatWindowProps {
@@ -181,6 +183,78 @@ function resolveThinkingPatchValue(value: string, binary: boolean) {
   if (!binary) return value
   if (value === 'on') return 'low'
   return value
+}
+
+const FAVORITE_MODELS_STORAGE_KEY = 'openagents.favorite-models'
+
+function loadFavoriteModels(): Record<string, string[]> {
+  const raw = storageGet<Record<string, unknown>>(FAVORITE_MODELS_STORAGE_KEY, {})
+  const out: Record<string, string[]> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (Array.isArray(value)) {
+      out[key] = value.filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+    }
+  }
+  return out
+}
+
+function ModelRow({
+  model,
+  inUse,
+  favorite,
+  onToggleFavorite,
+  onSelect,
+}: {
+  model: string
+  inUse: boolean
+  favorite: boolean
+  onToggleFavorite: () => void
+  onSelect: () => void
+}) {
+  return (
+    <div
+      className={clsx(
+        'flex w-full items-center gap-1 rounded-xl px-1 py-0.5 transition',
+        inUse
+          ? 'bg-[#f4fbf7] dark:bg-[#064e3b]'
+          : 'hover:bg-[#f8fafc] dark:hover:bg-[#232837]',
+      )}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        title={inUse ? `${model} (in use)` : model}
+        className={clsx(
+          'flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[12px]',
+          inUse
+            ? 'font-semibold text-[#10b981] dark:text-[#34d399]'
+            : 'text-[#344054] dark:text-[#c9d1e0]',
+        )}
+      >
+        <span className="truncate">{model}</span>
+        {inUse ? (
+          <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium">
+            In use
+            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
+          </span>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        onClick={onToggleFavorite}
+        title={favorite ? `Remove ${model} from favorites` : `Add ${model} to favorites`}
+        aria-label={favorite ? `Remove ${model} from favorites` : `Add ${model} to favorites`}
+        className={clsx(
+          'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition',
+          favorite
+            ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10'
+            : 'text-slate-300 hover:bg-slate-100 hover:text-amber-500 dark:text-slate-600 dark:hover:bg-slate-800',
+        )}
+      >
+        <Star size={14} fill={favorite ? 'currentColor' : 'none'} />
+      </button>
+    </div>
+  )
 }
 
 function formatCommandError(err: unknown, fallback: string) {
@@ -395,10 +469,12 @@ export function ChatWindow({
   const [runtimeBusy, setRuntimeBusy] = useState<string | null>(null)
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState<string>('')
+  const [liveProviderModels, setLiveProviderModels] = useState<string[]>([])
   const [operatorMessages, setOperatorMessages] = useState<Message[]>([])
   const [controlsExpanded, setControlsExpanded] = useState(false)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
+  const [favoriteModels, setFavoriteModels] = useState<Record<string, string[]>>({})
   const modelPickerRef = useRef<HTMLDivElement>(null)
   const [mcpDropdownOpen, setMcpDropdownOpen] = useState(false)
   const mcpPickerRef = useRef<HTMLDivElement>(null)
@@ -420,13 +496,14 @@ export function ChatWindow({
     [messages, operatorMessages],
   )
 
-  const activeProvider = useMemo<RuntimeProvider>(() => {
-    return 'ollama'
-  }, [])
   const effectiveRuntime = useMemo(
     () => getEffectiveRuntime(runtimeSettings, activeSession),
     [runtimeSettings, activeSession],
   )
+  const activeProvider = useMemo<RuntimeProvider>(() => {
+    const normalized = normalizeProviderId(effectiveRuntime.provider)
+    return isRuntimeProvider(normalized) ? normalized : 'ollama'
+  }, [effectiveRuntime.provider])
   const effectiveProviderLabel = useMemo(() => {
     const normalized = normalizeProviderId(effectiveRuntime.provider)
     return isRuntimeProvider(normalized)
@@ -444,15 +521,75 @@ export function ChatWindow({
             }
             return merged.length > 0 ? merged : OLLAMA_FALLBACK_MODELS
           })()
-        : [...LLM_MODEL_OPTIONS[activeProvider]]
+        : (() => {
+            // Live provider catalog first, then curated entries
+            const merged = [...liveProviderModels]
+            for (const model of [...LLM_MODEL_OPTIONS[activeProvider]]) {
+              if (!merged.includes(model)) merged.push(model)
+            }
+            return merged
+          })()
 
       return withCurrentOption(
         baseOptions,
         runtimeSettings?.preferredModel?.trim() || LLM_MODELS[activeProvider].default,
       )
     },
-    [activeProvider, ollamaModels, runtimeSettings?.preferredModel],
+    [activeProvider, ollamaModels, liveProviderModels, runtimeSettings?.preferredModel],
   )
+
+  // Refresh the live model catalog whenever the runtime provider changes.
+  useEffect(() => {
+    if (activeProvider === 'ollama') {
+      setLiveProviderModels([])
+      return
+    }
+    let cancelled = false
+    sdk.agent
+      .listProviderModels(activeProvider)
+      .then((result) => {
+        if (!cancelled) setLiveProviderModels(result.models ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setLiveProviderModels([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeProvider])
+
+  // Favorite models (per provider, local-only). The in-use model always comes
+  // from the effective runtime (session override wins over user default).
+  useEffect(() => {
+    setFavoriteModels(loadFavoriteModels())
+  }, [])
+
+  const inUseModel = effectiveRuntime.model?.trim() || LLM_MODELS[activeProvider].default
+  const providerFavorites = useMemo(
+    () => favoriteModels[activeProvider] ?? [],
+    [favoriteModels, activeProvider],
+  )
+  const favoriteSet = useMemo(() => new Set(providerFavorites), [providerFavorites])
+  const favoriteOptions = useMemo(
+    () => providerModelOptions.filter((m) => favoriteSet.has(m)),
+    [providerModelOptions, favoriteSet],
+  )
+  const nonFavoriteOptions = useMemo(
+    () => providerModelOptions.filter((m) => !favoriteSet.has(m)),
+    [providerModelOptions, favoriteSet],
+  )
+
+  function toggleFavoriteModel(model: string) {
+    setFavoriteModels((prev) => {
+      const current = prev[activeProvider] ?? []
+      const next = current.includes(model)
+        ? current.filter((m) => m !== model)
+        : [...current, model]
+      const updated = { ...prev, [activeProvider]: next }
+      storageSet(FAVORITE_MODELS_STORAGE_KEY, updated)
+      return updated
+    })
+  }
 
   const sessionProvider = activeSession?.modelProvider ?? runtimeSettings?.preferredProvider ?? null
   const binaryThinking = isBinaryThinkingProvider(sessionProvider)
@@ -943,40 +1080,51 @@ export function ChatWindow({
             )}
             title="Switch model"
           >
-            <span>{runtimeSettings?.preferredModel ? (runtimeSettings.preferredModel.split('/').pop() || runtimeSettings.preferredModel) : 'Select model'}</span>
+            <span>{inUseModel.split('/').pop() || inUseModel}</span>
             <ChevronDown size={14} className={clsx('transition-transform', modelPickerOpen ? 'rotate-180' : '')} />
           </button>
 
           {modelPickerOpen && (
-            <div className="absolute left-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-[18px] border border-[#e4e7ec] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+            <div className="absolute left-0 top-full z-50 mt-2 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-[18px] border border-[#e4e7ec] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
               <div className="border-b border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">Model</p>
               </div>
 
 
-              {/* Model list */}
+              {/* Model list — favorites first, active model marked in use */}
               <div className="max-h-52 overflow-y-auto px-2 pb-3 pt-1">
-                {providerModelOptions.map((model) => {
-                  const active = (runtimeSettings?.preferredModel?.trim() || LLM_MODELS[activeProvider].default) === model
-                  return (
-                    <button
-                      key={model}
-                      type="button"
-                      onClick={() => { void updateRuntimeSettings(activeProvider, model, 'model'); setModelPickerOpen(false) }}
-                      className={clsx(
-                        'flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-[12px] transition',
-                        active
-                          ? 'bg-[#f4fbf7] font-semibold text-[#10b981] dark:bg-[#064e3b] dark:text-[#34d399]'
-                          : 'text-[#344054] hover:bg-[#f8fafc] dark:text-[#c9d1e0] dark:hover:bg-[#232837]',
-                      )}
-                    >
-                      <span className="truncate">{model}</span>
-                      {active && (
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#10b981]" />
-                      )}
-                    </button>
-                  )
-                })}
+                {favoriteOptions.length > 0 && (
+                  <>
+                    <p className="px-3 pb-1 pt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">Favorites</p>
+                    {favoriteOptions.map((model) => (
+                      <ModelRow
+                        key={`fav-${model}`}
+                        model={model}
+                        inUse={inUseModel === model}
+                        favorite
+                        onToggleFavorite={() => toggleFavoriteModel(model)}
+                        onSelect={() => { void updateRuntimeSettings(activeProvider, model, 'model'); setModelPickerOpen(false) }}
+                      />
+                    ))}
+                    <div className="mx-3 my-1 border-t border-[#f2f4f7] dark:border-[#2d3347]" />
+                  </>
+                )}
+                <p className="px-3 pb-1 pt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">
+                  {favoriteOptions.length > 0 ? 'All models' : 'Models'}
+                </p>
+                {nonFavoriteOptions.map((model) => (
+                  <ModelRow
+                    key={model}
+                    model={model}
+                    inUse={inUseModel === model}
+                    favorite={false}
+                    onToggleFavorite={() => toggleFavoriteModel(model)}
+                    onSelect={() => { void updateRuntimeSettings(activeProvider, model, 'model'); setModelPickerOpen(false) }}
+                  />
+                ))}
+                {providerModelOptions.length === 0 && (
+                  <p className="px-3 py-2 text-[12px] text-[#98a2b3]">No models available.</p>
+                )}
               </div>
             </div>
           )}
@@ -1032,7 +1180,7 @@ export function ChatWindow({
                         <Paperclip size={11} className="shrink-0 text-[#98a2b3]" />
                       )}
                       <span className="max-w-[140px] truncate">{file.name}</span>
-                      <button type="button" onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))} className="ml-0.5 text-[#98a2b3] hover:text-[#344054]" aria-label={`Remove ${file.name}`}>×</button>
+                      <button type="button" onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))} className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-[#98a2b3] hover:text-[#344054]" aria-label={`Remove ${file.name}`}>×</button>
                     </div>
                   ))}
                 </div>
@@ -1049,9 +1197,9 @@ export function ChatWindow({
                 className="max-h-48 min-h-[96px] w-full resize-none bg-transparent px-5 pt-5 text-[15px] text-[#101828] outline-none placeholder:text-[#b0b8cc] disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
               />
 
-              <div className="flex items-center justify-between border-t border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
+              <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
                 {/* Left: attach + badge pills */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="*/*" />
                   <button
                     type="button"
@@ -1071,7 +1219,7 @@ export function ChatWindow({
                     className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
                   >
                     <Search size={11} className="text-[#10b981]" />
-                    <span>Search</span>
+                    <span className="hidden min-[400px]:inline">Search</span>
                   </button>
                   <button
                     type="button"
@@ -1083,7 +1231,7 @@ export function ChatWindow({
                     className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
                   >
                     <Code size={11} className="text-[#10b981]" />
-                    <span>Code</span>
+                    <span className="hidden min-[400px]:inline">Code</span>
                   </button>
                   
                   <div ref={mcpPickerRef} className="relative">
@@ -1098,7 +1246,7 @@ export function ChatWindow({
                     </button>
 
                     {mcpDropdownOpen && (
-                      <div className="absolute left-0 bottom-full z-50 mb-2 w-56 overflow-hidden rounded-[14px] border border-[#e4e7ec] bg-white p-3 shadow-lg dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+                      <div className="absolute left-0 bottom-full z-50 mb-2 w-[min(14rem,calc(100vw-2rem))] overflow-hidden rounded-[14px] border border-[#e4e7ec] bg-white p-3 shadow-lg dark:border-[#2d3347] dark:bg-[#1a1f2e]">
                         <p className="text-[11px] font-semibold text-[#10b981] mb-2">Model Context Protocol</p>
                         <p className="text-[11px] text-[#667085] mb-2 dark:text-[#a1a1aa]">Active local servers:</p>
                         <div className="space-y-1.5">
@@ -1127,7 +1275,7 @@ export function ChatWindow({
                     type="button"
                     onClick={() => void handleSend()}
                     disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
                     aria-label="Send message"
                   >
                     <ArrowUp size={15} />
@@ -1176,7 +1324,7 @@ export function ChatWindow({
                       <Paperclip size={11} className="shrink-0 text-[#98a2b3]" />
                     )}
                     <span className="max-w-[140px] truncate">{file.name}</span>
-                    <button type="button" onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))} className="ml-0.5 text-[#98a2b3] hover:text-[#344054]" aria-label={`Remove ${file.name}`}>x</button>
+                    <button type="button" onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))} className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-[#98a2b3] hover:text-[#344054]" aria-label={`Remove ${file.name}`}>x</button>
                   </div>
                 ))}
               </div>
@@ -1193,9 +1341,9 @@ export function ChatWindow({
                 placeholder="Ask anything"
                 className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-base text-[#101828] outline-none placeholder:text-[#a1a1aa] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:text-white"
               />
-              <div className="flex items-center justify-between border-t border-[#f2f4f7] px-3 py-2.5 dark:border-[#2d3347]">
+              <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-[#f2f4f7] px-3 py-2.5 dark:border-[#2d3347]">
                 {/* Left: attach + badge pills */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="*/*" />
                   <button
                     type="button"
@@ -1215,7 +1363,7 @@ export function ChatWindow({
                     className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
                   >
                     <Search size={11} className="text-[#10b981]" />
-                    <span>Search</span>
+                    <span className="hidden min-[400px]:inline">Search</span>
                   </button>
                   <button
                     type="button"
@@ -1227,7 +1375,7 @@ export function ChatWindow({
                     className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
                   >
                     <Code size={11} className="text-[#10b981]" />
-                    <span>Code</span>
+                    <span className="hidden min-[400px]:inline">Code</span>
                   </button>
                   
                   <div ref={mcpPickerRef} className="relative">
@@ -1242,7 +1390,7 @@ export function ChatWindow({
                     </button>
 
                     {mcpDropdownOpen && (
-                      <div className="absolute left-0 bottom-full z-50 mb-2 w-56 overflow-hidden rounded-[14px] border border-[#e4e7ec] bg-white p-3 shadow-lg dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+                      <div className="absolute left-0 bottom-full z-50 mb-2 w-[min(14rem,calc(100vw-2rem))] overflow-hidden rounded-[14px] border border-[#e4e7ec] bg-white p-3 shadow-lg dark:border-[#2d3347] dark:bg-[#1a1f2e]">
                         <p className="text-[11px] font-semibold text-[#10b981] mb-2">Model Context Protocol</p>
                         <p className="text-[11px] text-[#667085] mb-2 dark:text-[#a1a1aa]">Active local servers:</p>
                         <div className="space-y-1.5">
@@ -1271,7 +1419,7 @@ export function ChatWindow({
                     type="button"
                     onClick={() => void handleSend()}
                     disabled={(!input.trim() && attachedFiles.length === 0) || isStreaming || (!gatewayConnected && !inputIsCommand && attachedFiles.length === 0)}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
                     aria-label="Send message"
                   >
                     <ArrowUp size={15} />

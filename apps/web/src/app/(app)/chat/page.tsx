@@ -10,7 +10,7 @@ import {
 } from '@/components/chat/assistantModes'
 import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
-import { ConversationList } from '@/components/chat/ConversationList'
+import { MuseChatLayout } from '@/components/muse/MuseChatLayout'
 import { storageGet, storageSet } from '@/lib/storage'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
@@ -108,7 +108,8 @@ export default function ChatPage() {
   const handleRuntimeLabelChange = useCallback((_label: string) => {}, [])
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-transparent">
+    <MuseChatLayout>
+      <div className="flex h-full min-h-0 w-full overflow-hidden bg-transparent">
       {/* Main chat area */}
       <div className="flex min-w-0 flex-1 flex-col gap-2 p-0 bg-transparent">
         {hasPendingApprovals && (
@@ -135,5 +136,6 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+    </MuseChatLayout>
   )
 }

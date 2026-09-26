@@ -41,7 +41,7 @@ OpenAgents is a **self-hosted AI assistant platform** for complex, long-horizon 
 Before starting, make sure you have:
 
 - **Node.js 20+**
-- **pnpm 9** (or Corepack enabled)
+- **pnpm 9** (via Corepack — no separate download needed, see OS steps below)
 - **Docker Desktop / Docker Engine**
 - **Git**
 
@@ -73,6 +73,12 @@ After startup:
 - Web: `http://localhost:3000/login`
 - API health: `http://localhost:3001/api/v1/health`
 
+> If ports `3000`/`3001` are already taken (e.g. another app), start with alternates instead of `pnpm dev`:
+> ```bash
+> WEB_PORT=3002 API_PORT=3101 NEXT_PUBLIC_API_URL=http://localhost:3101 pnpm dev
+> ```
+> then open `http://localhost:3002/login`.
+
 Then log in and go to **Settings → Config** to add your provider key or connect Ollama.
 
 ---
@@ -91,7 +97,17 @@ Open Docker Desktop and wait until you see **"Engine running"** in the bottom-le
 
 👉 [Download Git for Windows](https://git-scm.com/download/win) — install with all default settings.
 
-**Step 3 — Open PowerShell and run these commands**
+**Step 3 — Install Node.js 20 + pnpm**
+
+👉 [Download Node.js 20 LTS](https://nodejs.org/) — install, then **close and reopen** PowerShell so `PATH` refreshes, and run:
+
+```powershell
+corepack enable
+corepack prepare pnpm@9.0.0 --activate
+pnpm --version
+```
+
+**Step 4 — Open PowerShell and run these commands**
 
 Press `Win + X` → click **Terminal** or **PowerShell**, then paste:
 
@@ -123,9 +139,11 @@ If you want the production Docker stack instead of local dev, use:
 
 ```powershell
 cd infra/docker
-copy .env.prod.example .env.prod
+Copy-Item .env.prod.example .env.prod
 docker compose -f docker-compose.prod.yml up --build -d
 ```
+
+(Git Bash: `cp .env.prod.example .env.prod` instead of `Copy-Item`.)
 
 ---
 
@@ -137,7 +155,17 @@ docker compose -f docker-compose.prod.yml up --build -d
 
 Drag it to your Applications folder, open it, and wait for **"Engine running"**.
 
-**Step 2 — Open Terminal and run these commands**
+**Step 2 — Install Node.js 20 + pnpm**
+
+👉 [Download Node.js 20 LTS](https://nodejs.org/) — install, then reopen Terminal and run:
+
+```bash
+corepack enable
+corepack prepare pnpm@9.0.0 --activate
+pnpm --version
+```
+
+**Step 3 — Open Terminal and run these commands**
 
 Press `Cmd + Space`, type **Terminal**, press Enter, then paste:
 
@@ -226,31 +254,29 @@ curl -fsSL https://get.docker.com | sh && sudo systemctl enable --now docker
 
 ```bash
 git clone https://github.com/edisonmliranzo/openagents.git
-cd openagents/infra/docker
-cp .env.prod.example .env.prod
+cd openagents
+pnpm setup
+# pnpm setup creates infra/docker/.env.prod with generated secrets —
+# or copy manually: cp infra/docker/.env.prod.example infra/docker/.env.prod
 ```
 
-**Step 3 — Edit `.env.prod` before launch**
+**Step 3 — Edit `infra/docker/.env.prod` before launch**
 
-At minimum, change these values:
+`pnpm setup` already generated random `JWT_SECRET`, `JWT_REFRESH_SECRET`, `ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` — verify they are non-placeholder. At minimum, also set:
 
-- `JWT_SECRET`
-- `JWT_REFRESH_SECRET`
-- `ENCRYPTION_KEY`
-- `POSTGRES_PASSWORD`
 - one provider setting such as `OPENAI_API_KEY` or local `OLLAMA_BASE_URL`
 - `FRONTEND_URL` / `NEXT_PUBLIC_API_URL` if not using localhost
 
-**Step 4 — Launch**
+**Step 4 — Launch** (from the repo root)
 
 ```bash
-docker compose -f docker-compose.prod.yml up --build -d
+pnpm prod:deploy
 ```
 
 **Step 5 — Verify the installation**
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
+pnpm prod:ps
 curl http://localhost:3001/api/v1/health
 curl -I http://localhost:3000/login
 ```
@@ -277,10 +303,12 @@ Your installation is not fully usable until these are true:
   - `OPENAI_API_KEY` for DALL-E / TTS
   - `STABILITY_API_KEY` for Stability image generation
   - `ELEVENLABS_API_KEY` for ElevenLabs audio
+- [ ] Mobile (Expo): copy `apps/mobile/.env.example` to `apps/mobile/.env` and set `EXPO_PUBLIC_API_URL` to your machine's LAN URL (not `localhost` — phones can't reach your PC's localhost)
 
 ### Troubleshooting
 
-- If `pnpm setup` fails, confirm **Node.js 20+** and **pnpm 9**.
+- If `pnpm setup` fails, confirm **Node.js 20+** and **pnpm 9** (`corepack enable` then `corepack prepare pnpm@9.0.0 --activate`).
+- If `pnpm` is not recognized after install, close and reopen the terminal so `PATH` refreshes.
 - If chat opens but the agent never answers, configure a provider in **Settings → Config**.
 - If Ollama is selected, verify the Ollama server is running and the base URL is correct.
 - If Docker production healthchecks fail, inspect:
@@ -319,9 +347,11 @@ docker compose -f docker-compose.prod.yml logs --tail=200 api web worker
 
 ### 🔌 LLM Providers
 
-Connect any of these in **Settings → AI Providers**:
+Connect any of these in **Settings → Config** — open a provider card, paste the key, **Test**, then set it as **Active LLM**:
 
-OpenAI · Anthropic · Google Gemini · Groq · Mistral · Cohere · Ollama · and more
+OpenAI · Anthropic · Google Gemini · Ollama (local) · MiniMax · Perplexity · NVIDIA NIM · AtlasCloud · Groq · Mistral · DeepSeek · xAI Grok · OpenRouter · Together AI · **Meta Muse Spark** · **Custom endpoint** (any OpenAI-compatible `/v1` server — LM Studio, vLLM, llama.cpp)
+
+The model picker loads each provider's **live model catalog** automatically (with a curated fallback), and you can type any model id — including new releases the day they ship.
 
 ---
 

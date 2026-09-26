@@ -34,6 +34,8 @@ export { createTriggersApi } from './api/triggers'
 export { createWebhooksApi } from './api/webhooks'
 export { createAgentPresetsApi } from './api/agent-presets'
 export { createArtifactsApi } from './api/artifacts'
+export { createGoalsApi } from './api/goals'
+export type { MuseGoal, MuseGoalMilestone, CreateMuseGoalInput } from './api/goals'
 export { createWorkspacesApi } from './api/workspaces'
 export { createPacksApi } from './api/packs'
 
@@ -71,6 +73,7 @@ import { createTriggersApi } from './api/triggers'
 import { createWebhooksApi } from './api/webhooks'
 import { createAgentPresetsApi } from './api/agent-presets'
 import { createArtifactsApi } from './api/artifacts'
+import { createGoalsApi } from './api/goals'
 import { createWorkspacesApi } from './api/workspaces'
 import { createPacksApi } from './api/packs'
 import type { SDKConfig } from './client'
@@ -113,6 +116,7 @@ export function createSDK(config: SDKConfig) {
     webhooks: createWebhooksApi(client),
     agentPresets: createAgentPresetsApi(client),
     artifacts: createArtifactsApi(client),
+    goals: createGoalsApi(client),
     workspaces: createWorkspacesApi(client),
     packs: createPacksApi(client),
   }

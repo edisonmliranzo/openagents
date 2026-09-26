@@ -425,144 +425,11 @@ export function AppShell({ children }: AppShellProps) {
   if (!accessToken) return null
 
   if (isChatControlRoute) {
+    // Muse-style chat owns its own 3-pane layout (icon rail + chats + activity).
+    // AppShell stays out of the way and renders the chat full-bleed.
     return (
       <div className="dashboard-theme relative min-h-[100dvh] bg-[#f7f8fb] dark:bg-[#0f1117]">
-        {isMobileNavOpen && (
-          <button
-            type="button"
-            aria-label="Close navigation menu"
-            onClick={() => setIsMobileNavOpen(false)}
-            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden"
-          />
-        )}
-
-        <div className="flex h-[100dvh] min-h-[100dvh]">
-          {/* Unified Sidebar */}
-          <aside
-            className={clsx(
-              'fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col border-r border-[#e8ebf2] bg-white px-3 py-4 transition-transform duration-200 lg:sticky lg:top-0 lg:h-[100dvh] lg:z-10 lg:translate-x-0 dark:border-[#2d3347] dark:bg-[#141824]',
-              isMobileNavOpen ? 'translate-x-0' : '-translate-x-full',
-            )}
-          >
-            {/* Header / Logo */}
-            <div className="mb-6 flex items-center gap-2.5 px-2">
-              <div className="oa-brand-badge flex h-7 w-7 items-center justify-center rounded-lg text-[10px] font-bold text-white shrink-0">
-                OA
-              </div>
-              <div className="flex items-baseline gap-1.5 min-w-0">
-                <span className="text-base font-bold text-slate-800 tracking-tight dark:text-white">openagents</span>
-                <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] font-bold text-[#0acf83] tracking-wide uppercase">BETA</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsMobileNavOpen(false)}
-                className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm lg:hidden"
-                aria-label="Close sidebar"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            {/* Menu */}
-            <div className="space-y-1 px-1">
-              <button
-                type="button"
-                onClick={async () => {
-                  setIsMobileNavOpen(false)
-                  const { createConversation } = useChatStore.getState()
-                  await createConversation()
-                }}
-                className="flex w-full items-center gap-2.5 rounded-xl border border-transparent px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <Plus size={16} className="text-slate-400 shrink-0" />
-                <span>New Chat</span>
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2.5 rounded-xl border border-transparent px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <Search size={16} className="text-slate-400 shrink-0" />
-                <span>Search</span>
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2.5 rounded-xl border border-transparent px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <Folder size={16} className="text-slate-400 shrink-0" />
-                <span>Projects</span>
-              </button>
-            </div>
-
-            {/* Train Section */}
-            <div className="mt-5 px-1">
-              <p className="mb-2 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Train
-              </p>
-              <div className="space-y-0.5">
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2.5 rounded-xl border border-transparent px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <Activity size={15} className="text-slate-400 shrink-0" />
-                  <span>Train</span>
-                </button>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2.5 rounded-xl border border-transparent px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <BookOpen size={15} className="text-slate-400 shrink-0" />
-                  <span>Recipes</span>
-                </button>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2.5 rounded-xl border border-transparent px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <Download size={15} className="text-slate-400 shrink-0" />
-                  <span>Export</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Recents Section */}
-            <div className="mt-5 flex-1 min-h-0 flex flex-col px-1">
-              <p className="mb-2 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Recents
-              </p>
-              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-                <ConversationList hideHeader={true} onSelect={() => setIsMobileNavOpen(false)} />
-              </div>
-            </div>
-
-            {/* Footer / Profile Capsule */}
-            <div className="mt-4 border-t border-slate-100 pt-3 dark:border-[#2d3347]">
-              <div className="flex items-center gap-2.5 rounded-xl bg-slate-50/80 p-2 dark:bg-[#1e2433]">
-                <UserInitials name={user?.name} email={user?.email} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-slate-700 dark:text-white">
-                    {user?.name ?? 'User'}
-                  </p>
-                  <p className="truncate font-mono text-[9px] uppercase tracking-[0.1em] text-emerald-600 dark:text-emerald-400 font-medium">
-                    online
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  disabled={isSigningOut}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition disabled:opacity-50 dark:hover:bg-slate-800"
-                  title="Sign out"
-                >
-                  <LogOut size={13} />
-                </button>
-              </div>
-            </div>
-          </aside>
-
-          {/* Main content area */}
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <main className="flex min-h-0 flex-1 overflow-hidden px-3 pb-3 pt-3 sm:px-4">{children}</main>
-          </div>
-        </div>
+        <main className="h-[100dvh] min-h-[100dvh] overflow-hidden">{children}</main>
       </div>
     )
   }
@@ -601,7 +468,7 @@ export function AppShell({ children }: AppShellProps) {
             <button
               type="button"
               onClick={() => setIsMobileNavOpen(false)}
-              className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-subtle)] md:hidden"
+              className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-subtle)] md:hidden"
               aria-label="Close sidebar"
             >
               <X size={14} />
@@ -660,7 +527,7 @@ export function AppShell({ children }: AppShellProps) {
                 type="button"
                 onClick={handleSignOut}
                 disabled={isSigningOut}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-[var(--surface-subtle)] hover:text-[var(--tone-strong)] disabled:opacity-50 dark:hover:text-[var(--tone-inverse)]"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-[var(--surface-subtle)] hover:text-[var(--tone-strong)] disabled:opacity-50 dark:hover:text-[var(--tone-inverse)]"
                 title="Sign out"
               >
                 <LogOut size={13} />
