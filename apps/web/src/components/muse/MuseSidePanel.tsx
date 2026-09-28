@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import {
+  BookOpen,
   CheckSquare,
   Files,
   Lightbulb,
@@ -10,6 +11,7 @@ import {
   MessageCircle,
   Plus,
   Search,
+  Users,
 } from 'lucide-react'
 import { useChatStore } from '@/stores/chat'
 
@@ -143,9 +145,11 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
 const RAIL_ITEMS: Array<{ icon: typeof MessageCircle; label: string; href?: string; action?: 'ideas' }> = [
   { icon: MessageCircle, label: 'Chat', href: '/chat' },
   { icon: Search, label: 'Search', href: '/control/repair' },
-  { icon: Files, label: 'Artifacts', href: '/artifacts' },
+  { icon: Files, label: 'Creations', href: '/creations' },
   { icon: Lightbulb, label: 'Ideas', action: 'ideas' },
   { icon: CheckSquare, label: 'Approvals', href: '/approvals' },
+  { icon: Users, label: 'Team', href: '/team' },
+  { icon: BookOpen, label: 'Library', href: '/library' },
   { icon: LayoutGrid, label: 'Control', href: '/control/overview' },
 ]
 

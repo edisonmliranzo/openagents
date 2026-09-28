@@ -80,6 +80,10 @@ model User {
   routingOutcomes   RoutingOutcome[]
   goldenTasks       GoldenTask[]
   evalRuns          EvalRun[]
+  specialistAgents  SpecialistAgent[]
+  libraryDocuments  LibraryDocument[]
+  libraryChunks     LibraryChunk[]
+  userPlugins       UserPlugin[]
 }
 
 model PasswordResetToken {
@@ -1386,6 +1390,78 @@ model RoutingOutcome {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, taskClass, createdAt])
+}
+
+// ─── Specialist Agents (named identities with budgets) ────────────────────
+
+model SpecialistAgent {
+  id               String   @id @default(cuid())
+  userId           String
+  name             String
+  role             String   // researcher | coder | writer | analyst | ops | custom
+  personaPrompt    String   @default("")
+  emailAlias       String?
+  telegramToken    String?  // per-agent bot token (optional)
+  monthlyBudgetUsd Float    @default(1.0)
+  spentUsd         Float    @default(0)
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId, enabled])
+}
+
+// ─── Library (RAG on user files) ──────────────────────────────────────────
+
+model LibraryDocument {
+  id         String   @id @default(cuid())
+  userId     String
+  title      String
+  source     String   @default("upload") // upload | watch-folder | url
+  mimeType   String   @default("text/plain")
+  status     String   @default("indexed") // indexed | processing | failed
+  chunkCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks LibraryChunk[]
+
+  @@index([userId, updatedAt])
+}
+
+model LibraryChunk {
+  id         String   @id @default(cuid())
+  userId     String
+  documentId String
+  ordinal    Int
+  text       String
+  embedding  String?  // JSON number[]
+  createdAt  DateTime @default(now())
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document LibraryDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, ordinal])
+  @@index([userId])
+}
+
+// ─── User Plugins (installable MCP servers) ───────────────────────────────
+
+model UserPlugin {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String   // catalog key, e.g. "filesystem"
+  enabled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
 }
 
 // ─── Golden Tasks + Eval Runs (measurement loop) ──────────────────────────

@@ -60,6 +60,9 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Get Started', href: '/settings/get-started', icon: Sparkles },
       { label: 'Chat', href: '/chat', icon: MessageSquare },
+      { label: 'Creations', href: '/creations', icon: FileText },
+      { label: 'Team', href: '/team', icon: Users },
+      { label: 'Library', href: '/library', icon: BookOpen },
       { label: 'Overview', href: '/control/overview', icon: Activity },
       { label: 'Sessions', href: '/sessions', icon: Terminal },
       { label: 'Memory', href: '/memory', icon: Brain },
@@ -102,6 +105,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     title: 'Tools',
     items: [
       { label: 'API Keys', href: '/control/apikeys', icon: Key },
+      { label: 'Plugins', href: '/plugins', icon: Wrench },
       { label: 'Export', href: '/control/export', icon: Download },
       { label: 'Channels', href: '/control/channels', icon: Link2 },
       { label: 'Automation', href: '/control/watchers', icon: ShieldCheck },

@@ -4,6 +4,8 @@ import { ToolsController } from './tools.controller'
 import { ParallelAgentTool } from './connectors/parallel-agent.tool'
 import { SideQuestTool } from './connectors/side-quest.tool'
 import { ApiToolProposalTool } from './connectors/api-tool-proposal.tool'
+import { DelegateSpecialistTool } from './connectors/delegate-specialist.tool'
+import { LibrarySearchTool } from './connectors/library-search.tool'
 import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
 import { SkillSaveTool } from './connectors/skill-save.tool'
 import { GmailTool } from './connectors/gmail.tool'
@@ -43,6 +45,7 @@ import { TelegramSendTool } from './connectors/telegram-send.tool'
 import { CronModule } from '../cron/cron.module'
 import { ConnectorsModule } from '../connectors/connectors.module'
 import { MemoryModule } from '../memory/memory.module'
+import { LibraryModule } from '../library/library.module'
 import { McpService } from './mcp.service'
 import { PromptGuardService } from './prompt-guard.service'
 import { OutboundGuardService } from './outbound-guard.service'
@@ -52,7 +55,7 @@ import { LLMService } from '../agent/llm.service'
 import { UsersModule } from '../users/users.module'
 
 @Module({
-  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule, UsersModule],
+  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule, LibraryModule, UsersModule],
   providers: [
     ToolsService,
     GmailTool,
@@ -92,6 +95,8 @@ import { UsersModule } from '../users/users.module'
     ParallelAgentTool,
     SideQuestTool,
     ApiToolProposalTool,
+    DelegateSpecialistTool,
+    LibrarySearchTool,
     MixtureOfAgentsTool,
     SkillSaveTool,
     LLMService,
@@ -100,6 +105,6 @@ import { UsersModule } from '../users/users.module'
     OutboundGuardService,
   ],
   controllers: [ToolsController, ToolsInternalController],
-  exports: [ToolsService, PromptGuardService, OutboundGuardService],
+  exports: [ToolsService, PromptGuardService, OutboundGuardService, McpService],
 })
 export class ToolsModule {}

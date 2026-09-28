@@ -42,6 +42,14 @@ export { createLearningApi } from './api/learning'
 export type { SkillSuggestionRow, UserSkillRow } from './api/learning'
 export { createReflectionApi } from './api/reflection'
 export type { ReflectionResult } from './api/reflection'
+export { createSpecialistsApi } from './api/specialists'
+export type { SpecialistAgentRow } from './api/specialists'
+export { createLibraryApi } from './api/library'
+export type { LibraryDocumentRow, LibraryHit } from './api/library'
+export { createPluginsApi } from './api/plugins'
+export type { PluginRow } from './api/plugins'
+export { createBrowserApi } from './api/browser'
+export type { BrowserSessionRow, BrowserStateResult } from './api/browser'
 export { createWorkspacesApi } from './api/workspaces'
 export { createPacksApi } from './api/packs'
 
@@ -83,6 +91,10 @@ import { createGoalsApi } from './api/goals'
 import { createProactiveApi } from './api/proactive'
 import { createLearningApi } from './api/learning'
 import { createReflectionApi } from './api/reflection'
+import { createSpecialistsApi } from './api/specialists'
+import { createLibraryApi } from './api/library'
+import { createPluginsApi } from './api/plugins'
+import { createBrowserApi } from './api/browser'
 import { createWorkspacesApi } from './api/workspaces'
 import { createPacksApi } from './api/packs'
 import type { SDKConfig } from './client'
@@ -129,6 +141,10 @@ export function createSDK(config: SDKConfig) {
     proactive: createProactiveApi(client),
     learning: createLearningApi(client),
     reflection: createReflectionApi(client),
+    specialists: createSpecialistsApi(client),
+    library: createLibraryApi(client),
+    plugins: createPluginsApi(client),
+    browser: createBrowserApi(client),
     workspaces: createWorkspacesApi(client),
     packs: createPacksApi(client),
   }

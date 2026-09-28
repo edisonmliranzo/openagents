@@ -85,6 +85,55 @@ export class McpService implements OnModuleDestroy {
     return this.serverConfigs.length > 0
   }
 
+  /** Register an MCP server at runtime (plugin install). */
+  registerDynamicServer(input: { id: string; displayName: string; command: string; args: string[]; env?: Record<string, string> }) {
+    const existing = this.serverConfigs.find((server) => server.id === input.id)
+    if (existing) {
+      this.serverStates.set(input.id, {
+        config: existing,
+        client: null,
+        transport: null,
+        tools: null,
+        connectPromise: null,
+        listPromise: null,
+      })
+      return
+    }
+    const config: McpServerConfig = {
+      id: input.id,
+      displayName: input.displayName,
+      command: input.command,
+      args: input.args,
+      env: input.env,
+      enabled: true,
+      stderr: 'pipe',
+      timeoutMs: this.defaultTimeoutMs,
+    }
+    this.serverConfigs.push(config)
+    this.serverStates.set(config.id, {
+      config,
+      client: null,
+      transport: null,
+      tools: null,
+      connectPromise: null,
+      listPromise: null,
+    })
+    this.logger.log(`Dynamically registered MCP server: ${config.id}`)
+  }
+
+  /** Tear down and unregister a runtime MCP server (plugin uninstall). */
+  async removeDynamicServer(id: string) {
+    const state = this.serverStates.get(id)
+    if (state) {
+      await this.disposeState(state)
+      this.serverStates.delete(id)
+    }
+    const index = this.serverConfigs.findIndex((server) => server.id === id)
+    if (index >= 0) this.serverConfigs.splice(index, 1)
+    this.replaceToolIndexForServer(id, [])
+    this.logger.log(`Removed MCP server: ${id}`)
+  }
+
   async listToolDefinitions(): Promise<ToolDefinition[]> {
     if (!this.isEnabled()) return []
 
