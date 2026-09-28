@@ -37,6 +37,8 @@ import { TelegramSendTool } from './connectors/telegram-send.tool'
 import { ParallelAgentTool } from './connectors/parallel-agent.tool'
 import { SideQuestTool } from './connectors/side-quest.tool'
 import { ApiToolProposalTool } from './connectors/api-tool-proposal.tool'
+import { DelegateSpecialistTool } from './connectors/delegate-specialist.tool'
+import { LibrarySearchTool } from './connectors/library-search.tool'
 import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
 import { SkillSaveTool } from './connectors/skill-save.tool'
 import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
@@ -102,6 +104,8 @@ export class ToolsService {
     private parallelAgent: ParallelAgentTool,
     private sideQuest: SideQuestTool,
     private apiToolProposal: ApiToolProposalTool,
+    private delegateSpecialist: DelegateSpecialistTool,
+    private librarySearch: LibrarySearchTool,
     private mixtureOfAgents: MixtureOfAgentsTool,
     private skillSave: SkillSaveTool,
     private mcp: McpService,
@@ -207,6 +211,9 @@ export class ToolsService {
       // Side quests + self-extension
       ['side_quest', { def: this.withBuiltinSource(this.sideQuest.def), execute: this.sideQuest.run.bind(this.sideQuest) }],
       ['propose_api_tool', { def: this.withBuiltinSource(this.apiToolProposal.def), execute: this.apiToolProposal.run.bind(this.apiToolProposal) }],
+      // Team + knowledge
+      ['delegate_to_specialist', { def: this.withBuiltinSource(this.delegateSpecialist.def), execute: this.delegateSpecialist.run.bind(this.delegateSpecialist) }],
+      ['library_search', { def: this.withBuiltinSource(this.librarySearch.def), execute: this.librarySearch.run.bind(this.librarySearch) }],
       // Mixture of agents
       ['mixture_of_agents', { def: this.withBuiltinSource(this.mixtureOfAgents.def), execute: this.mixtureOfAgents.run.bind(this.mixtureOfAgents) }],
       // Skill save

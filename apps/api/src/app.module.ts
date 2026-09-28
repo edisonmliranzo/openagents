@@ -72,6 +72,9 @@ import { LocalDaemonModule } from './local-daemon/local-daemon.module'
 import { ReflectionModule } from './reflection/reflection.module'
 import { EvalModule } from './eval/eval.module'
 import { BriefingModule } from './briefing/briefing.module'
+import { SpecialistsModule } from './specialists/specialists.module'
+import { LibraryModule } from './library/library.module'
+import { PluginsModule } from './plugins/plugins.module'
 
 @Module({
   imports: [
@@ -150,6 +153,9 @@ import { BriefingModule } from './briefing/briefing.module'
     ReflectionModule,
     EvalModule,
     BriefingModule,
+    SpecialistsModule,
+    LibraryModule,
+    PluginsModule,
   ],
 })
 export class AppModule {}
