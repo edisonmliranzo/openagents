@@ -60,6 +60,11 @@ async function bootstrap() {
   const publicBaseOrigin = toOrigin(process.env.PUBLIC_BASE_URL ?? '')
   const publicLoginOrigin = toOrigin(process.env.PUBLIC_LOGIN_URL ?? '')
   const devOrigins = isProduction ? [] : [...defaults, ...getLanOrigins(defaultWebPort)]
+  // In development, allow any loopback port (web may run on 3000, 3002, …).
+  const isDevLoopbackOrigin = (origin: string) => {
+    if (isProduction) return false
+    return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)
+  }
   const fallbackOrigins = [
     ...(legacyOrigin ? [legacyOrigin] : []),
     ...(publicBaseOrigin ? [publicBaseOrigin] : []),
@@ -93,7 +98,7 @@ async function bootstrap() {
         callback(null, true)
         return
       }
-      if (frontendOrigins.includes(origin)) {
+      if (frontendOrigins.includes(origin) || isDevLoopbackOrigin(origin)) {
         callback(null, true)
         return
       }
