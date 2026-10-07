@@ -28,6 +28,7 @@ import {
   expandSlashCommand,
 } from './SlashCommandPalette'
 import { PinnedContext, buildPinnedContextBlock, type PinnedItem } from './PinnedContext'
+import { BrowserActivityCard } from './BrowserActivityCard'
 import { ResponsePresets } from './ResponsePresets'
 import { WebRtcVoiceControls } from './WebRtcVoiceControls'
 import { storageGet, storageSet } from '@/lib/storage'
@@ -1381,6 +1382,8 @@ export function ChatWindow({
               <div ref={bottomRef} />
             </div>
           </div>
+
+          <BrowserActivityCard />
 
           <PinnedContext items={pinnedItems} onRemove={handleRemovePin} onAdd={handleAddPin} />
 

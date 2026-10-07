@@ -26,6 +26,8 @@ export interface MuseIdea {
   title: string
   detail: string
   icon: 'goal' | 'chat' | 'approval' | 'memory' | 'start'
+  emoji: string
+  prompt?: string
   conversationId?: string
 }
 
@@ -43,9 +45,10 @@ function buildIdeas(input: {
   if (pendingApprovals > 0) {
     ideas.push({
       id: 'idea-approvals',
-      title: `${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting`,
-      detail: 'Review pending actions so your agent can continue.',
+      title: `I can walk you through your ${pendingApprovals} pending approval${pendingApprovals === 1 ? '' : 's'}`,
+      detail: 'Actions are waiting on you — approve or deny them so work can continue.',
       icon: 'approval',
+      emoji: '✅',
     })
   }
 
@@ -53,9 +56,15 @@ function buildIdeas(input: {
     const next = goal.milestones.find((m) => !m.completed)
     ideas.push({
       id: `idea-goal-${goal.id}`,
-      title: `Advance "${goal.title}"`,
-      detail: next ? `Next milestone: ${next.title} (${goal.progress}% done)` : `Progress is ${goal.progress}% — ask your agent for the next step.`,
+      title: `I can keep "${goal.title}" moving`,
+      detail: next
+        ? `Next milestone: ${next.title} — ${goal.progress}% done. Want me to work on it now?`
+        : `Progress is ${goal.progress}% — tell me the next step you want done.`,
       icon: 'goal',
+      emoji: '🎯',
+      prompt: next
+        ? `Work on my goal "${goal.title}": complete the next milestone — ${next.title}.`
+        : `Work on my goal "${goal.title}" — propose and execute the next step.`,
     })
   }
 
@@ -66,9 +75,10 @@ function buildIdeas(input: {
   if (stale) {
     ideas.push({
       id: `idea-stale-${stale.id}`,
-      title: `Resume "${stale.title ?? 'Untitled chat'}"`,
-      detail: 'Idle for a few days — pick it back up.',
+      title: `I can pick up where "${stale.title ?? 'your last chat'}" left off`,
+      detail: 'That conversation has been idle for a few days — want me to continue it?',
       icon: 'chat',
+      emoji: '💬',
       conversationId: stale.id,
     })
   }
@@ -76,18 +86,22 @@ function buildIdeas(input: {
   if (goals.filter((g) => g.status === 'active').length === 0) {
     ideas.push({
       id: 'idea-new-goal',
-      title: 'Set a long-term goal',
-      detail: 'Give your agent a goal and it will track milestones for you.',
+      title: 'I can turn a goal into a plan',
+      detail: 'Give me something you want to achieve and I will break it into milestones and track them.',
       icon: 'start',
+      emoji: '🧭',
+      prompt: 'Help me set a goal: ask me what I want to achieve, then break it into milestones.',
     })
   }
 
   if (factCount === 0) {
     ideas.push({
       id: 'idea-memory',
-      title: 'Teach your agent about you',
-      detail: 'Mention preferences or people and OpenAgents saves them to memory.',
+      title: 'I can start remembering what matters to you',
+      detail: 'Mention a preference, person, or project and I will keep it — or tell me to remember something now.',
       icon: 'memory',
+      emoji: '🧠',
+      prompt: 'Remember this about me: ',
     })
   }
 
@@ -131,6 +145,8 @@ export function MuseActivityPanel() {
   const conversations = useChatStore((s) => s.conversations)
   const pendingApprovals = useChatStore((s) => s.pendingApprovals)
   const selectConversation = useChatStore((s) => s.selectConversation)
+  const createConversation = useChatStore((s) => s.createConversation)
+  const sendMessage = useChatStore((s) => s.sendMessage)
   const [tab, setTab] = useState<RightTab>('activity')
   const [goals, setGoals] = useState<MuseGoal[]>([])
   const [goalsLoading, setGoalsLoading] = useState(false)
@@ -141,6 +157,7 @@ export function MuseActivityPanel() {
   const [busySuggestionId, setBusySuggestionId] = useState<string | null>(null)
   const [reflecting, setReflecting] = useState(false)
   const [reflectMsg, setReflectMsg] = useState('')
+  const [startingIdeaId, setStartingIdeaId] = useState<string | null>(null)
 
   const connected = gatewayStatus === 'connected'
   const displayName = (user?.name ?? '').trim() || (user?.email ? user.email.split('@')[0] : 'You')
@@ -299,6 +316,20 @@ export function MuseActivityPanel() {
     if (idea.icon === 'memory') setTab('memory')
   }
 
+  async function handleStartIdea(idea: MuseIdea) {
+    if (!idea.prompt || startingIdeaId) return
+    setStartingIdeaId(idea.id)
+    try {
+      const conversationId = await createConversation()
+      if (conversationId) await selectConversation(conversationId)
+      await sendMessage(idea.prompt)
+    } catch {
+      // The chat store surfaces its own errors; keep the panel usable.
+    } finally {
+      setStartingIdeaId(null)
+    }
+  }
+
   async function handleCreateGoal() {
     if (creatingGoal) return
     setCreatingGoal(true)
@@ -434,20 +465,36 @@ export function MuseActivityPanel() {
             ) : (
               <div className="space-y-2">
                 {ideas.map((idea) => (
-                  <button
+                  <div
                     key={idea.id}
-                    type="button"
-                    onClick={() => handleIdeaClick(idea)}
-                    className="flex w-full items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-2 text-left transition hover:border-amber-200 hover:bg-amber-50"
+                    className="oa-hover-card flex w-full items-start gap-2.5 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-left"
                   >
-                    <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-amber-500 shadow-sm">
-                      <Lightbulb size={13} />
+                    <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-50 text-[14px] dark:bg-[#1a2032]">
+                      {idea.emoji}
                     </span>
-                    <span className="min-w-0">
-                      <span className="block text-[13px] font-medium text-slate-800">{idea.title}</span>
-                      <span className="mt-0.5 block text-[12px] leading-snug text-slate-500">{idea.detail}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-medium text-slate-800 dark:text-slate-100">{idea.title}</span>
+                      <span className="mt-0.5 block text-[12px] leading-snug text-slate-500 dark:text-slate-400">{idea.detail}</span>
+                      {idea.prompt ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleStartIdea(idea)}
+                          disabled={startingIdeaId !== null}
+                          className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                        >
+                          {startingIdeaId === idea.id ? 'Starting…' : 'Start'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleIdeaClick(idea)}
+                          className="mt-2 text-[11px] font-semibold text-[var(--accent-strong)] hover:underline"
+                        >
+                          Open →
+                        </button>
+                      )}
                     </span>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
