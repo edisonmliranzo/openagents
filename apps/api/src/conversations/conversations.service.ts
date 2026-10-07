@@ -65,6 +65,39 @@ export class ConversationsService {
     ])
   }
 
+  /**
+   * Delete a message and everything after it (used by edit & regenerate).
+   * Returns the number of removed messages.
+   */
+  async truncateFrom(userId: string, conversationId: string, fromMessageId: string) {
+    await this.get(conversationId, userId)
+
+    let anchorCreatedAt: Date | null = null
+    if (fromMessageId === 'last-user') {
+      const lastUser = await this.prisma.message.findFirst({
+        where: { conversationId, role: 'user' },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      })
+      anchorCreatedAt = lastUser?.createdAt ?? null
+    } else {
+      const anchor = await this.prisma.message.findFirst({
+        where: { id: fromMessageId, conversationId },
+        select: { createdAt: true },
+      })
+      anchorCreatedAt = anchor?.createdAt ?? null
+    }
+    if (!anchorCreatedAt) throw new NotFoundException('Message not found')
+
+    const result = await this.prisma.message.deleteMany({
+      where: {
+        conversationId,
+        createdAt: { gte: anchorCreatedAt },
+      },
+    })
+    return { ok: true, removed: result.count }
+  }
+
   async search(userId: string, query: string) {
     if (!query.trim()) return []
     const term = `%${query.trim().replace(/[%_]/g, '\\$&')}%`

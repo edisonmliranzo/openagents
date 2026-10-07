@@ -46,6 +46,8 @@ export function createConversationsApi(client: OpenAgentsClient) {
     compress: (id: string) => client.post<{ ok: boolean; summary: string }>(`/api/v1/conversations/${id}/compress`),
     steer: (id: string, content: string) =>
       client.post<{ ok: boolean; queued: number }>(`/api/v1/conversations/${id}/steer`, { content }),
+    truncate: (id: string, fromMessageId: string) =>
+      client.post<{ ok: boolean; removed: number }>(`/api/v1/conversations/${id}/truncate`, { fromMessageId }),
     delete: (id: string) => client.delete<void>(`/api/v1/conversations/${id}`),
   }
 }

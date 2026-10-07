@@ -38,5 +38,11 @@ export function createAgentApi(client: OpenAgentsClient) {
       const qs = baseUrl?.trim() ? `?baseUrl=${encodeURIComponent(baseUrl.trim())}` : ''
       return client.get<ProviderModelsResult>(`/api/v1/agent/models/${encodeURIComponent(provider)}${qs}`)
     },
+
+    suggestions: (conversationId: string) =>
+      client.post<{ suggestions: string[] }>('/api/v1/agent/suggestions', { conversationId }),
+
+    feedback: (messageId: string, vote: 'up' | 'down') =>
+      client.post<{ ok: true }>('/api/v1/agent/feedback', { messageId, vote }),
   }
 }

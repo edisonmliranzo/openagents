@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, UseGuards, Req, Res, Query, HttpCode,
+  BadRequestException, Controller, Get, Post, Delete, Param, Body, UseGuards, Req, Res, Query, HttpCode,
 } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsString, IsOptional } from 'class-validator'
@@ -154,6 +154,18 @@ export class ConversationsController {
     await this.conversations.get(id, req.user.id)
     const depth = this.steering.push(id, dto.content ?? '')
     return { ok: true, queued: depth }
+  }
+
+  @Post(':id/truncate')
+  @HttpCode(200)
+  async truncate(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() body: { fromMessageId?: string },
+  ) {
+    const fromMessageId = String(body?.fromMessageId ?? '').trim()
+    if (!fromMessageId) throw new BadRequestException('fromMessageId is required.')
+    return this.conversations.truncateFrom(req.user.id, id, fromMessageId)
   }
 
   @Post(':id/repair')
