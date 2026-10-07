@@ -1,12 +1,13 @@
-import { Controller, Delete, Post, Body, UseGuards, Req, Get, Query, Param, BadRequestException } from '@nestjs/common'
+import { Controller, Delete, Post, Body, UseGuards, Req, Get, Query, Param, BadRequestException, HttpCode } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsString, IsOptional } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { LLMService } from './llm.service'
 import { AnswerCacheService } from './answer-cache.service'
+import { MemoryService } from '../memory/memory.service'
 import { UsersService } from '../users/users.service'
 import { PrismaService } from '../prisma/prisma.service'
-import type { LLMProvider } from '@openagents/shared'
+import { LLM_MODELS, type LLMProvider } from '@openagents/shared'
 
 class TestLlmDto {
   @IsString() provider: string
@@ -25,7 +26,93 @@ export class AgentController {
     private users: UsersService,
     private prisma: PrismaService,
     private answerCache: AnswerCacheService,
+    private memory: MemoryService,
   ) {}
+
+  @Post('suggestions')
+  @HttpCode(200)
+  async suggestions(@Req() req: any, @Body() body: { conversationId?: string }) {
+    const conversationId = String(body?.conversationId ?? '').trim()
+    if (!conversationId) return { suggestions: [] }
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, userId: req.user.id },
+      select: { id: true },
+    })
+    if (!conv) return { suggestions: [] }
+
+    const messages = await this.prisma.message.findMany({
+      where: { conversationId, role: { in: ['user', 'agent'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 4,
+      select: { role: true, content: true },
+    })
+    if (messages.length === 0) return { suggestions: [] }
+
+    const transcript = messages
+      .slice()
+      .reverse()
+      .map((m) => `${m.role}: ${m.content.slice(0, 500)}`)
+      .join('\n')
+
+    const settings = await this.users.getSettings(req.user.id)
+    const provider = (settings.preferredProvider ?? 'ollama') as LLMProvider
+    const key = await this.users.getRawLlmKey(req.user.id, provider).catch(() => null)
+    const apiKey = key?.isActive ? (key.apiKey ?? key.loginPassword ?? undefined) : undefined
+    const baseUrl = key?.isActive ? (key.baseUrl ?? undefined) : undefined
+
+    try {
+      const res = await this.llm.complete(
+        [
+          {
+            role: 'user',
+            content: `Conversation so far:\n${transcript}\n\nWrite exactly 3 short follow-up questions the user might naturally ask next. Each under 60 characters, plain text, one per line. No numbering, no quotes.`,
+          },
+        ],
+        [],
+        'You output exactly 3 lines and nothing else.',
+        provider,
+        apiKey,
+        baseUrl,
+        LLM_MODELS[provider].fast,
+      )
+      const lines = (res.content ?? '')
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^[\d.\-\s"'`]+/, '').trim())
+        .filter(Boolean)
+        .slice(0, 3)
+      return { suggestions: lines }
+    } catch {
+      return { suggestions: [] }
+    }
+  }
+
+  @Post('feedback')
+  @HttpCode(200)
+  async feedback(@Req() req: any, @Body() body: { messageId?: string; vote?: string }) {
+    const vote = String(body?.vote ?? '')
+    const messageId = String(body?.messageId ?? '').trim()
+    if (vote !== 'up' && vote !== 'down') throw new BadRequestException('vote must be up or down')
+    if (!messageId) throw new BadRequestException('messageId is required')
+
+    if (vote === 'down') {
+      const msg = await this.prisma.message.findFirst({
+        where: { id: messageId, conversation: { userId: req.user.id } },
+        select: { content: true },
+      })
+      if (msg) {
+        await this.memory
+          .upsertFact(req.user.id, {
+            entity: 'feedback',
+            key: `dissatisfied-${Date.now()}`,
+            value: `User was unhappy with an answer about: ${msg.content.slice(0, 160)}. Do not repeat that style of answer.`,
+            confidence: 0.8,
+            sourceRef: messageId,
+          })
+          .catch(() => undefined)
+      }
+    }
+    return { ok: true }
+  }
 
   @Get('intelligence')
   async intelligence(@Req() req: any) {

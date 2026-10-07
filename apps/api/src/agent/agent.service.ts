@@ -266,6 +266,7 @@ export class AgentService implements OnModuleInit {
     let activeModelForRun: string | null = null
     const fastAdvisoryMode = this.shouldUseFastAdvisoryMode(userMessage)
     const taskClass = this.modelRouter.classify(userMessage)
+    let planTotal = 0
 
     // Instant path for greetings/small-talk: a single no-tools LLM call.
     // Skips memory pulls, tool catalogs, planning loops, and delegation so a
@@ -466,6 +467,15 @@ export class AgentService implements OnModuleInit {
           if (planText) {
             effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n## Execution plan (follow step by step, adapt when needed)\n${planText.slice(0, 2000)}`
             emit('thinking', { step: 'planning', message: 'Approach planned — executing now' })
+            const planSteps = planText
+              .split(/\r?\n/)
+              .map((line) => line.replace(/^\s*\d+[.)]\s*/, '').trim())
+              .filter((line) => line.length > 2 && line.length <= 160)
+              .slice(0, 8)
+            if (planSteps.length > 0) {
+              planTotal = planSteps.length
+              emit('plan', { steps: planSteps, total: planSteps.length })
+            }
           }
         } catch {
           // Planning is best-effort; the run proceeds without it.
@@ -1014,6 +1024,10 @@ export class AgentService implements OnModuleInit {
               : `Tool ${toolCall.name} failed after ${toolExecution.attempts} attempt(s).\nTool result:\n${resultContent}\nAdjust inputs or choose an alternative tool before finalizing.`,
           })
           executedAnyTool = true
+        }
+
+        if (planTotal > 0) {
+          emit('plan_progress', { done: Math.min(toolRound, planTotal), total: planTotal })
         }
 
         if (!executedAnyTool) {

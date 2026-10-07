@@ -3,8 +3,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { sdk } from '@/stores/auth'
+import { useChatStore } from '@/stores/chat'
 import type { DataLineageRecord, Message, MessageArtifact, MessageMeta } from '@openagents/shared'
-import { Brain, ChevronDown, ChevronRight, Copy, FileText, Film, ImageIcon, Link2, Music4 } from 'lucide-react'
+import { Brain, ChevronDown, ChevronRight, Copy, FileText, Film, ImageIcon, Link2, Music4, Pencil, RotateCcw, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { BranchButton } from '@/components/branch-button'
 import { GenerativeUIWidget } from './GenerativeUIWidget'
 import { BrowserPreview } from './BrowserPreview'
@@ -217,12 +218,20 @@ export function MessageBubble({
   message,
   conversationId,
   messageIndex,
+  isLast = false,
 }: {
   message: Message
   conversationId?: string
   messageIndex?: number
+  isLast?: boolean
 }) {
   const isUser = message.role === 'user'
+  const isStreaming = useChatStore((s) => s.isStreaming)
+  const editAndResend = useChatStore((s) => s.editAndResend)
+  const regenerateLast = useChatStore((s) => s.regenerateLast)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [vote, setVote] = useState<'up' | 'down' | null>(null)
   const { thinking, visible } = useMemo(
     () => extractThinkingBlocks(message.content ?? ''),
     [message.content],
@@ -295,13 +304,70 @@ export function MessageBubble({
 
   // ── User bubble ──────────────────────────────────────────────────────────────
   if (isUser) {
+    if (editing) {
+      return (
+        <div className="flex flex-col items-end gap-2">
+          <div className="w-full max-w-[90%] sm:max-w-[75%] xl:max-w-[62%]">
+            <textarea
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  if (draft.trim()) {
+                    setEditing(false)
+                    void editAndResend(message.id, draft)
+                  }
+                }
+                if (e.key === 'Escape') setEditing(false)
+              }}
+              rows={Math.min(6, Math.max(2, draft.split('\n').length))}
+              className="oa-composer w-full resize-none px-4 py-3 text-sm text-slate-800 outline-none dark:text-slate-100"
+            />
+            <div className="mt-1.5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="rounded-full px-3 py-1.5 text-[12px] font-medium text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!draft.trim() || isStreaming}
+                onClick={() => {
+                  setEditing(false)
+                  void editAndResend(message.id, draft)
+                }}
+                className="oa-send-button rounded-full px-4 py-1.5 text-[12px] font-semibold"
+              >
+                Save & resend
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
-      <div className="oa-message-enter flex flex-col items-end gap-1.5">
+      <div className="oa-message-enter group flex flex-col items-end gap-1.5">
         <div className="oa-bubble-user max-w-[90%] px-4 py-2.5 text-sm shadow-none sm:max-w-[75%] xl:max-w-[62%]">
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         </div>
-        <span className="oa-meta-row pr-1">
+        <span className="oa-meta-row flex items-center gap-1.5 pr-1">
           {roleLabel(message.role)} · {formatClock(message.createdAt)}
+          <button
+            type="button"
+            title="Edit & resend"
+            onClick={() => {
+              setDraft(message.content)
+              setEditing(true)
+            }}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-300 opacity-0 transition hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100 dark:hover:bg-slate-800"
+          >
+            <Pencil size={11} />
+          </button>
         </span>
       </div>
     )
@@ -432,6 +498,45 @@ export function MessageBubble({
 
         {/* action row */}
         <div className="oa-meta-row mt-2 flex flex-wrap items-center gap-2 px-1">
+          {isLast && message.status === 'done' && (
+            <>
+              <button
+                type="button"
+                onClick={() => void regenerateLast()}
+                disabled={isStreaming}
+                title="Regenerate response"
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)] disabled:opacity-40"
+              >
+                <RotateCcw size={11} />
+                Regenerate
+              </button>
+              <button
+                type="button"
+                title="Good answer"
+                onClick={() => {
+                  setVote('up')
+                  void sdk.agent.feedback(message.id, 'up').catch(() => undefined)
+                }}
+                className={vote === 'up' ? 'text-emerald-600' : 'transition hover:text-emerald-600'}
+              >
+                <ThumbsUp size={12} />
+              </button>
+              <button
+                type="button"
+                title="Not what I wanted"
+                onClick={() => {
+                  setVote('down')
+                  void sdk.agent.feedback(message.id, 'down').catch(() => undefined)
+                }}
+                className={vote === 'down' ? 'text-red-500' : 'transition hover:text-red-500'}
+              >
+                <ThumbsDown size={12} />
+              </button>
+              {vote === 'down' && (
+                <span className="text-[10px] text-slate-400">Noted — I&rsquo;ll adjust.</span>
+              )}
+            </>
+          )}
           {canShowLineage && (
             <button
               type="button"

@@ -29,6 +29,8 @@ import {
 } from './SlashCommandPalette'
 import { PinnedContext, buildPinnedContextBlock, type PinnedItem } from './PinnedContext'
 import { BrowserActivityCard } from './BrowserActivityCard'
+import { SuggestionChips } from './SuggestionChips'
+import { PlanChecklist } from './PlanChecklist'
 import { ResponsePresets } from './ResponsePresets'
 import { WebRtcVoiceControls } from './WebRtcVoiceControls'
 import { storageGet, storageSet } from '@/lib/storage'
@@ -462,7 +464,11 @@ export function ChatWindow({
     learnedSkill,
     runStatus,
     pendingApprovals,
+    plan,
+    clearPlan,
   } = useChatStore()
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const wasStreamingRef = useRef(false)
   const [input, setInput] = useState('')
   const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([])
   const [slashQuery, setSlashQuery] = useState<string | null>(null)
@@ -720,6 +726,22 @@ export function ChatWindow({
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [mcpDropdownOpen])
+
+  // When a run finishes, ask the assistant what the user might want next.
+  useEffect(() => {
+    if (wasStreamingRef.current && !isStreaming && activeConversationId) {
+      const lastAgent = [...messages].reverse().find((m) => m.role === 'agent' && m.status === 'done')
+      if (lastAgent && lastAgent.content.trim().length > 40) {
+        void sdk.agent
+          .suggestions(activeConversationId)
+          .then((res) => setSuggestions(Array.isArray(res?.suggestions) ? res.suggestions.slice(0, 3) : []))
+          .catch(() => setSuggestions([]))
+      } else {
+        setSuggestions([])
+      }
+    }
+    wasStreamingRef.current = isStreaming
+  }, [isStreaming, messages, activeConversationId])
 
   function focusComposer() {
     requestAnimationFrame(() => textareaRef.current?.focus())
@@ -998,6 +1020,7 @@ export function ChatWindow({
 
     setSlashQuery(null)
     setInput('')
+    setSuggestions([])
 
     const files = attachedFiles
     setAttachedFiles([])
@@ -1377,11 +1400,24 @@ export function ChatWindow({
                   message={message}
                   conversationId={activeConversationId ?? undefined}
                   messageIndex={idx + 1}
+                  isLast={idx === visibleMessages.length - 1}
                 />
               ))}
               <div ref={bottomRef} />
             </div>
           </div>
+
+          {plan && (
+            <div className="px-4 pb-2 sm:px-7">
+              <PlanChecklist plan={plan} onDismiss={clearPlan} />
+            </div>
+          )}
+
+          {!isStreaming && (
+            <div className="px-4 sm:px-7">
+              <SuggestionChips suggestions={suggestions} onPick={(text) => void dispatchMessage(text)} />
+            </div>
+          )}
 
           <BrowserActivityCard />
 

@@ -411,11 +411,15 @@ interface ChatState {
   gatewayMessage: string
   lastError: string | null
   thinkingSteps: Array<{ step: string; message: string; timestamp: number }>
+  plan: { steps: string[]; done: number; total: number } | null
 
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
   createConversation: () => Promise<string>
   sendMessage: (content: string, options?: { displayContent?: string; mode?: string }) => Promise<void>
+  editAndResend: (messageId: string, newContent: string) => Promise<void>
+  regenerateLast: () => Promise<void>
+  clearPlan: () => void
   approveAction: (approvalId: string) => Promise<void>
   denyAction: (approvalId: string) => Promise<void>
   refreshActiveHandoff: () => Promise<void>
@@ -441,6 +445,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   gatewayMessage: 'connecting...',
   lastError: null,
   thinkingSteps: [],
+  plan: null,
 
   async loadConversations() {
     set({ conversationsLoading: true })
@@ -502,6 +507,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamToolEvents: [],
         runStatus: null,
         learnedSkill: null,
+        plan: null,
         isStreaming: false,
         gatewayStatus: 'connected',
         gatewayMessage: 'connected',
@@ -554,6 +560,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamToolEvents: [],
       runStatus: 'thinking',
       learnedSkill: null,
+      plan: null,
       isStreaming: true,
       gatewayStatus: 'connected',
       gatewayMessage: 'connected',
@@ -628,6 +635,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }))
           }
 
+          if (data.event === 'plan') {
+            const steps = Array.isArray(data.data?.steps)
+              ? (data.data.steps as unknown[]).map(String).slice(0, 8)
+              : []
+            if (steps.length > 0) {
+              set({ plan: { steps, done: 0, total: steps.length } })
+            }
+          }
+
+          if (data.event === 'plan_progress') {
+            const done = Number(data.data?.done)
+            const total = Number(data.data?.total)
+            if (Number.isFinite(done) && Number.isFinite(total)) {
+              set((s) => (s.plan ? { plan: { ...s.plan, done, total } } : {}))
+            }
+          }
+
           if (data.event === 'status') {
             const nextStatus = typeof data.data?.status === 'string' ? data.data.status : null
             const eventData = data.data && typeof data.data === 'object'
@@ -689,7 +713,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 m.id === agentTempId
                   ? {
                       ...m,
+                      id: typeof data.data?.id === 'string' ? data.data.id : m.id,
                       content: data.data.content,
+                      createdAt: typeof data.data?.createdAt === 'string' ? data.data.createdAt : m.createdAt,
                       status: 'done',
                       metadata: mergeMessageMeta(m.metadata, {
                         progress: { stage: 'done', label: 'Completed', percent: 100 },
@@ -854,6 +880,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       }
     })
+  },
+
+  clearPlan() {
+    set({ plan: null })
+  },
+
+  async editAndResend(messageId, newContent) {
+    const { activeConversationId, messages, isStreaming } = get()
+    if (!activeConversationId || isStreaming) return
+    const clean = newContent.trim()
+    if (!clean) return
+    const index = messages.findIndex((m) => m.id === messageId)
+    if (index < 0) return
+    // Optimistic temp ids cannot be resolved server-side; fall back to the
+    // last real user message (editing the latest turn is the common case).
+    const anchorId = messageId.startsWith('temp-') ? 'last-user' : messageId
+    try {
+      await sdk.conversations.truncate(activeConversationId, anchorId)
+    } catch {
+      set({ lastError: 'Failed to edit that message.' })
+      return
+    }
+    set({ messages: messages.slice(0, index), plan: null })
+    await get().sendMessage(clean)
+  },
+
+  async regenerateLast() {
+    const { activeConversationId, messages, isStreaming } = get()
+    if (!activeConversationId || isStreaming) return
+    const lastUserIndex = messages.map((m) => m.role).lastIndexOf('user')
+    if (lastUserIndex < 0) return
+    const lastUser = messages[lastUserIndex]!
+    try {
+      await sdk.conversations.truncate(activeConversationId, 'last-user')
+    } catch {
+      set({ lastError: 'Failed to regenerate.' })
+      return
+    }
+    set({ messages: messages.slice(0, lastUserIndex), plan: null })
+    await get().sendMessage(lastUser.content)
   },
 
   async approveAction(approvalId) {
