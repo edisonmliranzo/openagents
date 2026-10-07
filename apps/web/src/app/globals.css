@@ -901,6 +901,100 @@ body {
 
 /* ─── Premium layer: shared surfaces, motion, and accents ─────────────── */
 
+/* Muse-style soft canvas */
+.oa-canvas {
+  background:
+    radial-gradient(120% 80% at 12% 0%, rgba(255, 255, 255, 0.9), transparent 55%),
+    linear-gradient(165deg, #f3f6fd 0%, #eaeef9 45%, #dfe7f6 100%);
+}
+
+/* Floating frosted card */
+.oa-float-card {
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 28px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 24px 64px -24px rgba(15, 23, 42, 0.18);
+}
+
+:root.theme-dark .oa-float-card,
+:root.dark .oa-float-card {
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(17, 23, 40, 0.72);
+  box-shadow:
+    0 1px 2px rgba(2, 6, 23, 0.5),
+    0 24px 64px -24px rgba(2, 6, 23, 0.7);
+}
+
+/* Soft gray agent bubble (Muse style) */
+.oa-bubble-agent {
+  border-radius: 18px;
+  background: rgba(233, 235, 241, 0.9);
+  color: #1c2333;
+}
+
+:root.theme-dark .oa-bubble-agent,
+:root.dark .oa-bubble-agent {
+  background: rgba(38, 46, 66, 0.85);
+  color: #e6eaf3;
+}
+
+/* Soft blue user bubble */
+.oa-bubble-user {
+  border-radius: 18px;
+  background: #d8e6fb;
+  color: #1e2a3d;
+}
+
+:root.theme-dark .oa-bubble-user,
+:root.dark .oa-bubble-user {
+  background: rgba(59, 98, 175, 0.45);
+  color: #e8eefb;
+}
+
+/* Floating bottom pill navigation */
+.oa-pill-nav {
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 999px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 18px 44px -16px rgba(15, 23, 42, 0.28);
+}
+
+:root.theme-dark .oa-pill-nav,
+:root.dark .oa-pill-nav {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(20, 27, 45, 0.85);
+}
+
+/* Small pill button inside floating bars */
+.oa-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.14s ease;
+}
+
+.oa-pill-btn:hover {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.oa-pill-btn:active {
+  transform: scale(0.94);
+}
+
+:root.theme-dark .oa-pill-btn:hover,
+:root.dark .oa-pill-btn:hover {
+  background: rgba(148, 163, 184, 0.14);
+}
+
 @keyframes messageIn {
   from {
     opacity: 0;
