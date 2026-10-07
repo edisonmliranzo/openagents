@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import {
@@ -451,6 +452,7 @@ export function ChatWindow({
   onRuntimeLabelChange,
   onOpenMobileSessions,
 }: ChatWindowProps) {
+  const router = useRouter()
   const {
     messages,
     sendMessage,
@@ -1093,9 +1095,9 @@ export function ChatWindow({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-slate-200/70 bg-white/60 shadow-[0_2px_4px_rgba(15,23,42,0.03),0_24px_64px_-24px_rgba(15,23,42,0.14)] backdrop-blur-2xl dark:border-[#2d3347] dark:bg-[#10141f]/60">
-      <div className="flex items-center justify-between border-b border-slate-200/70 bg-white/70 px-4 py-2.5 backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141824]/70 sm:px-6">
-        {/* Left: clean model select dropdown */}
-        <div ref={modelPickerRef} className="relative">
+      <div className="relative flex items-center justify-between border-b border-slate-200/60 bg-white/50 px-4 py-3 backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141824]/50 sm:px-6">
+        {/* Left: model select */}
+        <div ref={modelPickerRef} className="relative z-10">
           <button
             type="button"
             onClick={() => setModelPickerOpen((o) => !o)}
@@ -1188,17 +1190,37 @@ export function ChatWindow({
           )}
         </div>
 
-        {/* Right: mobile menu toggle */}
-        {onOpenMobileSessions && (
+        {/* Center: agent identity */}
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center gap-0.5">
+          <div className="oa-avatar-ring-gradient">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-orange-100 text-[13px]">
+              🤖
+            </div>
+          </div>
+          <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">OpenAgents</p>
+        </div>
+
+        {/* Right: invite + mobile menu */}
+        <div className="relative z-10 flex items-center gap-1.5">
           <button
             type="button"
-            onClick={onOpenMobileSessions}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e4e7ec] bg-white text-[#667085] transition hover:bg-[#f8fafc] xl:hidden dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
-            title="Menu"
+            onClick={() => router.push('/team')}
+            className="hidden rounded-full border border-slate-200/80 bg-white/80 px-3.5 py-1.5 text-[12px] font-medium text-slate-600 shadow-sm backdrop-blur transition hover:bg-white sm:inline-flex dark:border-[#2d3347] dark:bg-[#1a2032]/80 dark:text-slate-300"
+            title="Invite teammates"
           >
-            <Menu size={16} />
+            Invite
           </button>
-        )}
+          {onOpenMobileSessions && (
+            <button
+              type="button"
+              onClick={onOpenMobileSessions}
+              className="oa-pill-btn h-8 w-8 border border-[#e4e7ec] bg-white text-[#667085] xl:hidden dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+              title="Menu"
+            >
+              <Menu size={15} />
+            </button>
+          )}
+        </div>
       </div>
 
       {visibleMessages.length === 0 ? (

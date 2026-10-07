@@ -2,75 +2,126 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PanelLeft, PanelRight } from 'lucide-react'
+import {
+  BookOpen,
+  CheckSquare,
+  Lightbulb,
+  MessageCircle,
+  PanelRight,
+  Users,
+} from 'lucide-react'
 import { MuseActivityPanel } from './MuseActivityPanel'
-import { MuseIconRail, MuseSidePanel } from './MuseSidePanel'
+import { MuseSidePanel } from './MuseSidePanel'
+import clsx from 'clsx'
+
+const TAB_ITEMS = [
+  { icon: MessageCircle, label: 'Chat', href: '/chat' },
+  { icon: BookOpen, label: 'Library', href: '/library' },
+  { icon: Lightbulb, label: 'Ideas', action: 'ideas' },
+  { icon: CheckSquare, label: 'Approvals', href: '/approvals' },
+  { icon: Users, label: 'Team', href: '/team' },
+]
 
 export function MuseChatLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
 
-  return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-gradient-to-br from-[#f8fafc] via-white to-[#fff5f2]">
-      {/* Far-left icon rail (desktop) */}
-      <div className="hidden md:block">
-        <MuseIconRail onNavigate={(href) => router.push(href)} />
-      </div>
+  function handleTab(item: (typeof TAB_ITEMS)[number]) {
+    if (item.action === 'ideas') {
+      window.dispatchEvent(new CustomEvent('openagents:show-ideas'))
+      setRightOpen(true)
+      return
+    }
+    if (item.href) router.push(item.href)
+  }
 
-      {/* Chats column (desktop) */}
-      <aside className="hidden w-[240px] shrink-0 flex-col border-r border-slate-200/70 bg-white/70 backdrop-blur-xl md:flex">
+  return (
+    <div className="oa-canvas flex h-full min-h-0 w-full gap-3 overflow-hidden p-3 sm:p-4">
+      {/* Left floating chat card (desktop) */}
+      <aside className="oa-float-card hidden w-[250px] shrink-0 flex-col overflow-hidden md:flex">
         <MuseSidePanel onNavigate={(href) => router.push(href)} />
       </aside>
 
-      {/* Center */}
+      {/* Center column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-1 border-b border-slate-200 bg-white px-2 py-1.5 lg:hidden">
+        {/* Mobile top bar */}
+        <div className="mb-2 flex items-center justify-between px-1 md:hidden">
           <button
             type="button"
-            aria-label="Toggle chats"
-            onClick={() => setLeftOpen((v) => !v)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+            aria-label="Open chats"
+            onClick={() => setLeftOpen(true)}
+            className="oa-pill-btn h-9 w-9 bg-white/70 text-slate-500 shadow-sm"
           >
-            <PanelLeft size={16} />
+            <MessageCircle size={16} />
           </button>
-          <p className="flex-1 text-center text-[13px] font-medium text-slate-600">OpenAgents</p>
           <button
             type="button"
-            aria-label="Toggle activity"
-            onClick={() => setRightOpen((v) => !v)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+            aria-label="Open activity"
+            onClick={() => setRightOpen(true)}
+            className="oa-pill-btn h-9 w-9 bg-white/70 text-slate-500 shadow-sm"
           >
             <PanelRight size={16} />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+        <div className="min-h-0 flex-1 overflow-hidden pb-20 md:pb-16">{children}</div>
 
+        {/* Floating bottom pill nav */}
+        <nav
+          aria-label="Primary"
+          className="oa-pill-nav fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 px-2 py-1.5"
+        >
+          {TAB_ITEMS.map((item) => {
+            const Icon = item.icon
+            const isCurrent = item.href === '/chat'
+            return (
+              <button
+                key={item.label}
+                type="button"
+                title={item.label}
+                aria-label={item.label}
+                onClick={() => handleTab(item)}
+                className={clsx(
+                  'oa-pill-btn h-10 w-11',
+                  isCurrent ? 'bg-slate-900 text-white hover:bg-slate-700' : 'text-slate-500',
+                )}
+              >
+                <Icon size={17} />
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* Mobile left drawer */}
         {leftOpen && (
-          <div className="fixed inset-0 z-40 lg:hidden">
-            <button type="button" aria-label="Close chats" onClick={() => setLeftOpen(false)} className="absolute inset-0 bg-black/20" />
-            <div className="absolute inset-y-0 left-0 flex w-[min(320px,85vw)] bg-white shadow-xl">
-              <MuseIconRail onNavigate={(href) => { setLeftOpen(false); router.push(href) }} />
-              <div className="min-w-0 flex-1">
-                <MuseSidePanel onNavigate={(href) => { setLeftOpen(false); router.push(href) }} onCloseMobile={() => setLeftOpen(false)} />
-              </div>
+          <div className="fixed inset-0 z-50 md:hidden">
+            <button type="button" aria-label="Close chats" onClick={() => setLeftOpen(false)} className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" />
+            <div className="oa-float-card absolute inset-y-4 left-4 flex w-[min(300px,85vw)] flex-col overflow-hidden">
+              <MuseSidePanel
+                onNavigate={(href) => {
+                  setLeftOpen(false)
+                  router.push(href)
+                }}
+                onCloseMobile={() => setLeftOpen(false)}
+              />
             </div>
           </div>
         )}
 
+        {/* Mobile right drawer */}
         {rightOpen && (
-          <div className="fixed inset-0 z-40 lg:hidden">
-            <button type="button" aria-label="Close activity" onClick={() => setRightOpen(false)} className="absolute inset-0 bg-black/20" />
-            <div className="absolute inset-y-0 right-0 w-[min(300px,85vw)] bg-white shadow-xl">
+          <div className="fixed inset-0 z-50 md:hidden">
+            <button type="button" aria-label="Close activity" onClick={() => setRightOpen(false)} className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" />
+            <div className="oa-float-card absolute inset-y-4 right-4 flex w-[min(320px,88vw)] flex-col overflow-hidden">
               <MuseActivityPanel />
             </div>
           </div>
         )}
       </div>
 
-      {/* Right activity column (desktop) */}
-      <aside className="hidden w-[300px] shrink-0 flex-col border-l border-slate-200/70 bg-white/70 backdrop-blur-xl lg:flex">
+      {/* Right floating activity card (desktop) */}
+      <aside className="oa-float-card hidden w-[300px] shrink-0 flex-col overflow-hidden xl:flex">
         <MuseActivityPanel />
       </aside>
     </div>

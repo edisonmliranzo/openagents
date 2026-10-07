@@ -297,7 +297,7 @@ export function MessageBubble({
   if (isUser) {
     return (
       <div className="oa-message-enter flex flex-col items-end gap-1.5">
-        <div className="oa-message-user max-w-[90%] px-4 py-2.5 text-sm shadow-none sm:max-w-[75%] xl:max-w-[62%]">
+        <div className="oa-bubble-user max-w-[90%] px-4 py-2.5 text-sm shadow-none sm:max-w-[75%] xl:max-w-[62%]">
           <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         </div>
         <span className="oa-meta-row pr-1">
@@ -329,7 +329,7 @@ export function MessageBubble({
 
         <ArtifactGallery artifacts={artifacts} />
 
-        <div className="oa-message-agent px-5 py-4 text-[14px] leading-relaxed text-[#101828] dark:text-white">
+        <div className="oa-bubble-agent px-4 py-3 text-[14px] leading-relaxed">
           {visible ? (
             (() => {
               let codeIdx = -1
