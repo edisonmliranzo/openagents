@@ -100,6 +100,16 @@ export function BrowserPreview({ sessionId, url, status, lastScreenshot }: Props
             Live
           </div>
         )}
+        {liveUrl && liveUrl !== 'about:blank' && (
+          <a
+            href={liveUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm backdrop-blur transition hover:bg-white"
+          >
+            Open browser ↗
+          </a>
+        )}
       </div>
     </div>
   )
