@@ -1,2 +1,2 @@
-FROM hf.co/unsloth/gemma-4-12b-it-GGUF:latest
+FROM hf.co/Venastine-Research/Xing4.0-29B-A4B-GGUF:latest
 PARAMETER num_ctx 10240
