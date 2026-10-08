@@ -15,6 +15,7 @@
     "ml:calendar": "python ml/automation.py --config ml/config.yaml calendar-watch",
     "ml:api": "python ml/automation.py --config ml/config.yaml serve --host 0.0.0.0 --port 8010",
     "dev": "turbo run dev",
+    "dev:watch": "node scripts/dev-watchdog.mjs",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
