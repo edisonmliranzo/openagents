@@ -20,9 +20,9 @@ export const LLM_MODELS = {
     powerful: 'gemini-2.5-pro',
   },
   ollama: {
-    default: 'hf.co/Venastine-Research/Xing4.0-29B-A4B-GGUF',
-    fast: 'hf.co/unsloth/gemma-4-E2B-it-GGUF',
-    powerful: 'hf.co/prism-ml/Ternary-Bonsai-2-27B-gguf',
+    default: 'hf.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M',
+    fast: 'phi4-mini',
+    powerful: 'hf.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M',
   },
   minimax: {
     default: 'MiniMax-M2.7',
@@ -130,14 +130,17 @@ export const LLM_MODEL_OPTIONS = {
     'gemini-2.0-flash-lite',
   ],
   ollama: [
-    // Xing 4.0 — MoE: 29B-class quality, only 4B active (great on CPU)
+    // Qwen3.8 27B — trending main brain: tools + thinking + vision, CPU-viable
+    'hf.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M',
+    // Xing 4.0 — MoE (needs newer llama.cpp; keep for reference)
     'hf.co/Venastine-Research/Xing4.0-29B-A4B-GGUF',
-    // Ternary-Bonsai — 2-bit 27B, runs in ~11GB RAM
-    'hf.co/prism-ml/Ternary-Bonsai-2-27B-gguf',
     // Gemma 4 (12B / E4B / E2B)
     'hf.co/unsloth/gemma-4-12b-it-GGUF',
     'hf.co/unsloth/gemma-4-E4B-it-GGUF',
     'hf.co/unsloth/gemma-4-E2B-it-GGUF',
+    // Fast local smalls
+    'phi4-mini',
+    'deepseek-r1:8b',
   ],
   minimax: [
     // M2.7 — latest reasoning series
@@ -275,7 +278,7 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
     toolUse: 'basic',
     latency: 'variable',
     contextProfile: 'local',
-    strengths: ['local execution — no API cost', 'Xing 4.0 MoE default (4B-active, CPU-friendly)', 'Ternary-Bonsai 27B for max quality', 'works offline'],
+    strengths: ['local execution — no API cost', 'Qwen3.8 27B main brain (tools + thinking + vision)', 'phi4-mini fast tier for casual turns', 'works offline'],
     cautions: ['quality depends on installed model', 'tool-heavy runs may be less reliable'],
   },
   minimax: {
