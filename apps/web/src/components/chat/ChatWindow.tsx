@@ -111,7 +111,7 @@ function controlButtonClass() {
 function getDefaultRuntime(settings?: Pick<UserSettings, 'preferredProvider' | 'preferredModel'> | null) {
   return {
     provider: settings?.preferredProvider?.trim() || 'ollama',
-    model: settings?.preferredModel?.trim() || 'hf.co/Venastine-Research/Xing4.0-29B-A4B-GGUF',
+    model: settings?.preferredModel?.trim() || 'hf.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M',
   }
 }
 

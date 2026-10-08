@@ -1,2 +1,2 @@
-FROM hf.co/Venastine-Research/Xing4.0-29B-A4B-GGUF:latest
+FROM hf.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M
 PARAMETER num_ctx 10240
