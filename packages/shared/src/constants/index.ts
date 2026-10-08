@@ -20,9 +20,9 @@ export const LLM_MODELS = {
     powerful: 'gemini-2.5-pro',
   },
   ollama: {
-    default: 'hf.co/unsloth/gemma-4-12b-it-GGUF',
-    fast: 'llama3.2',
-    powerful: 'llama3.3:70b',
+    default: 'hf.co/Venastine-Research/Xing4.0-29B-A4B-GGUF',
+    fast: 'hf.co/unsloth/gemma-4-E2B-it-GGUF',
+    powerful: 'hf.co/prism-ml/Ternary-Bonsai-2-27B-gguf',
   },
   minimax: {
     default: 'MiniMax-M2.7',
@@ -130,7 +130,11 @@ export const LLM_MODEL_OPTIONS = {
     'gemini-2.0-flash-lite',
   ],
   ollama: [
-    // Gemma 4 (E4B / E2B)
+    // Xing 4.0 — MoE: 29B-class quality, only 4B active (great on CPU)
+    'hf.co/Venastine-Research/Xing4.0-29B-A4B-GGUF',
+    // Ternary-Bonsai — 2-bit 27B, runs in ~11GB RAM
+    'hf.co/prism-ml/Ternary-Bonsai-2-27B-gguf',
+    // Gemma 4 (12B / E4B / E2B)
     'hf.co/unsloth/gemma-4-12b-it-GGUF',
     'hf.co/unsloth/gemma-4-E4B-it-GGUF',
     'hf.co/unsloth/gemma-4-E2B-it-GGUF',
@@ -271,7 +275,7 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
     toolUse: 'basic',
     latency: 'variable',
     contextProfile: 'local',
-    strengths: ['local execution — no API cost', 'Gemma 4 (E4B) default model', 'Llama 4 Scout/Maverick available', 'works offline'],
+    strengths: ['local execution — no API cost', 'Xing 4.0 MoE default (4B-active, CPU-friendly)', 'Ternary-Bonsai 27B for max quality', 'works offline'],
     cautions: ['quality depends on installed model', 'tool-heavy runs may be less reliable'],
   },
   minimax: {
