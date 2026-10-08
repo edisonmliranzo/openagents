@@ -2,10 +2,18 @@
 // Dev watchdog: keeps the API and web dev servers alive, restarting them on
 // crash or accidental kill. Run detached: `node scripts/dev-watchdog.mjs`
 import { spawn } from 'node:child_process'
+import net from 'node:net'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const OLLAMA_PORT = Number(process.env.OLLAMA_PORT || 11434)
+const OLLAMA_EXE = path.join(
+  process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
+  'Programs', 'Ollama', 'Ollama.exe',
+)
 
 const TARGETS = [
   {
@@ -55,5 +63,29 @@ function supervise(target) {
   start()
 }
 
-console.log(`[${stamp()}] dev-watchdog starting: api(:3101) + web(:3002)`)
+function portOpen(port) {
+  return new Promise((resolve) => {
+    const socket = net.connect(port, '127.0.0.1')
+    socket.setTimeout(1000)
+    socket.on('connect', () => { socket.destroy(); resolve(true) })
+    socket.on('error', () => resolve(false))
+    socket.on('timeout', () => { socket.destroy(); resolve(false) })
+  })
+}
+
+function superviseOllama() {
+  if (process.platform !== 'win32' || !fs.existsSync(OLLAMA_EXE)) return
+  let lastAttempt = 0
+  setInterval(async () => {
+    if (await portOpen(OLLAMA_PORT)) return
+    if (Date.now() - lastAttempt < 60000) return
+    lastAttempt = Date.now()
+    console.log(`[${stamp()}] [ollama] port ${OLLAMA_PORT} down — launching ${OLLAMA_EXE}`)
+    const child = spawn(OLLAMA_EXE, { detached: true, stdio: 'ignore', shell: true })
+    child.unref()
+  }, 15000).unref()
+}
+
+console.log(`[${stamp()}] dev-watchdog starting: api(:3101) + web(:3002) + ollama(:${OLLAMA_PORT})`)
 for (const target of TARGETS) supervise(target)
+superviseOllama()
