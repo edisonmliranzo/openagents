@@ -6,6 +6,7 @@ import { SideQuestTool } from './connectors/side-quest.tool'
 import { ApiToolProposalTool } from './connectors/api-tool-proposal.tool'
 import { DelegateSpecialistTool } from './connectors/delegate-specialist.tool'
 import { LibrarySearchTool } from './connectors/library-search.tool'
+import { LibrarySaveTool } from './connectors/library-save.tool'
 import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
 import { SkillSaveTool } from './connectors/skill-save.tool'
 import { GmailTool } from './connectors/gmail.tool'
@@ -97,6 +98,7 @@ import { UsersModule } from '../users/users.module'
     ApiToolProposalTool,
     DelegateSpecialistTool,
     LibrarySearchTool,
+    LibrarySaveTool,
     MixtureOfAgentsTool,
     SkillSaveTool,
     LLMService,

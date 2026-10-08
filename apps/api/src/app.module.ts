@@ -75,6 +75,7 @@ import { BriefingModule } from './briefing/briefing.module'
 import { SpecialistsModule } from './specialists/specialists.module'
 import { LibraryModule } from './library/library.module'
 import { PluginsModule } from './plugins/plugins.module'
+import { StudyModule } from './study/study.module'
 
 @Module({
   imports: [
@@ -156,6 +157,7 @@ import { PluginsModule } from './plugins/plugins.module'
     SpecialistsModule,
     LibraryModule,
     PluginsModule,
+    StudyModule,
   ],
 })
 export class AppModule {}

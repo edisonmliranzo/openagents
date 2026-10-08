@@ -39,6 +39,7 @@ import { SideQuestTool } from './connectors/side-quest.tool'
 import { ApiToolProposalTool } from './connectors/api-tool-proposal.tool'
 import { DelegateSpecialistTool } from './connectors/delegate-specialist.tool'
 import { LibrarySearchTool } from './connectors/library-search.tool'
+import { LibrarySaveTool } from './connectors/library-save.tool'
 import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
 import { SkillSaveTool } from './connectors/skill-save.tool'
 import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
@@ -106,6 +107,7 @@ export class ToolsService {
     private apiToolProposal: ApiToolProposalTool,
     private delegateSpecialist: DelegateSpecialistTool,
     private librarySearch: LibrarySearchTool,
+    private librarySave: LibrarySaveTool,
     private mixtureOfAgents: MixtureOfAgentsTool,
     private skillSave: SkillSaveTool,
     private mcp: McpService,
@@ -214,6 +216,7 @@ export class ToolsService {
       // Team + knowledge
       ['delegate_to_specialist', { def: this.withBuiltinSource(this.delegateSpecialist.def), execute: this.delegateSpecialist.run.bind(this.delegateSpecialist) }],
       ['library_search', { def: this.withBuiltinSource(this.librarySearch.def), execute: this.librarySearch.run.bind(this.librarySearch) }],
+      ['library_save', { def: this.withBuiltinSource(this.librarySave.def), execute: this.librarySave.run.bind(this.librarySave) }],
       // Mixture of agents
       ['mixture_of_agents', { def: this.withBuiltinSource(this.mixtureOfAgents.def), execute: this.mixtureOfAgents.run.bind(this.mixtureOfAgents) }],
       // Skill save

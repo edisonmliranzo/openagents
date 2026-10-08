@@ -84,6 +84,7 @@ model User {
   libraryDocuments  LibraryDocument[]
   libraryChunks     LibraryChunk[]
   userPlugins       UserPlugin[]
+  knowledgeGaps     KnowledgeGap[]
 }
 
 model PasswordResetToken {
@@ -1462,6 +1463,25 @@ model UserPlugin {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, key])
+}
+
+// ─── Knowledge Gaps (the agent studies what it doesn't know) ──────────────
+
+model KnowledgeGap {
+  id        String   @id @default(cuid())
+  userId    String
+  topic     String   // normalized topic slug
+  label     String   // human-readable topic
+  evidence  String   @default("") // last question snippet that revealed the gap
+  count     Int      @default(1)
+  status    String   @default("open") // open | studying | studied
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topic])
+  @@index([userId, status, count])
 }
 
 // ─── Golden Tasks + Eval Runs (measurement loop) ──────────────────────────

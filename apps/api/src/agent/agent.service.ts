@@ -18,6 +18,9 @@ import { CriticService } from './critic.service'
 import { PersonaService } from './persona.service'
 import { SteeringService } from './steering.service'
 import { SkillSuggesterService } from '../learning/skill-suggester.service'
+import { EffortService } from './effort.service'
+import { ExpertiseService } from './expertise.service'
+import { StudyService } from '../study/study.service'
 import { GoalService } from '../goals/goal.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
@@ -35,6 +38,7 @@ export interface AgentRunParams {
   emit: (event: string, data: unknown) => void
   systemPromptAppendix?: string
   mode?: string
+  effort?: string
 }
 
 const DEFAULT_SYSTEM_PROMPT = `${OPENAGENTS_SUPPORT_IDENTITY_PROMPT}
@@ -203,6 +207,9 @@ export class AgentService implements OnModuleInit {
     private persona: PersonaService,
     private steering: SteeringService,
     private skillSuggester: SkillSuggesterService,
+    private effort: EffortService,
+    private expertise: ExpertiseService,
+    private study: StudyService,
   ) {}
 
   async onModuleInit() {
@@ -221,7 +228,7 @@ export class AgentService implements OnModuleInit {
     }
   }
 
-  async run({ conversationId, userId, userMessage, emit, systemPromptAppendix }: AgentRunParams) {
+  async run({ conversationId, userId, userMessage, emit, systemPromptAppendix, effort: effortOverride }: AgentRunParams) {
     // 1. Save user message
     const userMsg = await this.prisma.message.create({
       data: { conversationId, role: 'user', content: userMessage, status: 'done' },
@@ -266,7 +273,9 @@ export class AgentService implements OnModuleInit {
     let activeModelForRun: string | null = null
     const fastAdvisoryMode = this.shouldUseFastAdvisoryMode(userMessage)
     const taskClass = this.modelRouter.classify(userMessage)
+    const effort = this.effort.resolve(userMessage, taskClass, effortOverride)
     let planTotal = 0
+    void this.expertise.observe(userId, userMessage).catch(() => undefined)
 
     // Instant path for greetings/small-talk: a single no-tools LLM call.
     // Skips memory pulls, tool catalogs, planning loops, and delegation so a
@@ -286,6 +295,16 @@ export class AgentService implements OnModuleInit {
         return false
       })
       if (handled) return
+    }
+
+    // Ask before guessing: vague, context-free asks get one sharp clarifying
+    // question instead of a confident wrong guess.
+    if (effort === 'direct' && this.isAmbiguous(userMessage)) {
+      const clarified = await this.tryRunClarify({ conversationId, userId, userMessage, emit, runId: run.id, runStartedAtMs }).catch((err) => {
+        this.logger.warn(`Clarify path failed, continuing full run: ${this.safeError(err)}`)
+        return false
+      })
+      if (clarified) return
     }
 
     // Semantic answer cache: near-identical recent stable questions return
@@ -412,13 +431,14 @@ export class AgentService implements OnModuleInit {
         openAgentsInstallAppendix,
         this.persona.enabled ? this.persona.appendixFor(taskClass) : '',
         freshnessNote,
+        await this.expertise.summaryForPrompt(userId).catch(() => ''),
       ].filter(Boolean)
       let effectiveSystemPrompt = promptAppendices.length
         ? `${systemPrompt}\n\n${promptAppendices.join('\n\n')}`
         : systemPrompt
 
       // 5. Get available tools for this user
-      const availableTools = fastAdvisoryMode
+      const availableTools = fastAdvisoryMode || effort === 'instant'
         ? []
         : await this.tools.getAvailableForUser(userId)
 
@@ -450,8 +470,7 @@ export class AgentService implements OnModuleInit {
       if (
         this.readBooleanEnv('THINKING_MODE', true) &&
         !fastAdvisoryMode &&
-        (taskClass === 'reasoning' || taskClass === 'code') &&
-        userMessage.trim().length > 80
+        this.effort.usesPlanning(effort)
       ) {
         try {
           const plan = await this.llm.complete(
@@ -482,7 +501,7 @@ export class AgentService implements OnModuleInit {
         }
       }
 
-      const maxToolRounds = this.readToolLoopSetting(
+      const baseMaxToolRounds = this.readToolLoopSetting(
         'AGENT_MAX_TOOL_ROUNDS',
         DEFAULT_MAX_TOOL_ROUNDS,
         MANUS_LITE_MAX_TOOL_ROUNDS,
@@ -490,6 +509,9 @@ export class AgentService implements OnModuleInit {
         1,
         20,
       )
+      const maxToolRounds = this.effort.isMax(effort)
+        ? Math.min(baseMaxToolRounds + 4, 24)
+        : baseMaxToolRounds
       const toolRetryAttempts = this.readToolLoopSetting(
         'AGENT_TOOL_RETRY_ATTEMPTS',
         DEFAULT_TOOL_RETRY_ATTEMPTS,
@@ -1124,6 +1146,7 @@ export class AgentService implements OnModuleInit {
       // 8b. Critic pass: a reviewer model checks substantive direct answers
       // against the request; one revision allowed, never blocking.
       if (
+        this.effort.isMax(effort) ||
         this.critic.shouldReview({
           taskClass,
           answerLength: finalResponseContent.length,
@@ -1173,6 +1196,16 @@ export class AgentService implements OnModuleInit {
           data: { conversationId, role: 'agent', content: finalResponseContent, status: 'done' },
         })
         emit('message', agentMsg)
+        void this.scoreConfidence({
+          userId,
+          messageId: agentMsg.id,
+          userMessage,
+          answer: finalResponseContent,
+          provider: activeProvider,
+          apiKey: activeUserApiKey,
+          baseUrl: activeUserBaseUrl,
+          emit,
+        }).catch(() => undefined)
         await this.lineage
           .recordMessage({
             userId,
@@ -1324,6 +1357,9 @@ export class AgentService implements OnModuleInit {
       emit('status', { status: 'done' })
     } catch (err: any) {
       this.logger.error('Agent run failed', err)
+      void this.study
+        .logGap(userId, userMessage.slice(0, 80), `run error: ${this.safeError(err)}`)
+        .catch(() => undefined)
       void this.modelRouter
         .logOutcome({
           userId,
@@ -1875,6 +1911,125 @@ export class AgentService implements OnModuleInit {
     if (normalized.length <= maxLength) return normalized
     const head = normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()
     return `${head}...`
+  }
+
+  // Vague, context-free asks ("do that thing", "about the stuff") — better to
+  // ask one sharp question than to guess confidently.
+  private isAmbiguous(userMessage: string): boolean {
+    const m = userMessage.trim()
+    if (m.length < 4 || m.length > 140) return false
+    if (/[?？]/.test(m)) return false
+    const vague = /\b(this|that|these|those|it|them|stuff|things|whatever|somewhere|the usual|you know)\b/i.test(m)
+    const hasClearVerb = /\b(make|create|build|send|write|find|search|check|book|buy|sell|add|remove|fix|run|show|tell|explain|summarize|draft|plan|schedule|remind)\b/i.test(m)
+    return vague && !hasClearVerb
+  }
+
+  // One-shot clarifying question instead of a full agent run.
+  private async tryRunClarify(input: {
+    conversationId: string
+    userId: string
+    userMessage: string
+    emit: (event: string, data: unknown) => void
+    runId: string
+    runStartedAtMs: number
+  }): Promise<boolean> {
+    const { conversationId, userId, userMessage, emit, runId, runStartedAtMs } = input
+
+    // If the agent just asked something, "that" likely answers it — run normally.
+    const lastAgent = await this.prisma.message.findFirst({
+      where: { conversationId, role: 'agent' },
+      orderBy: { createdAt: 'desc' },
+      select: { content: true },
+    })
+    if (lastAgent?.content.trim().endsWith('?')) return false
+
+    const settings = await this.users.getSettings(userId)
+    const routing = this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel)
+    const userLlmKey = await this.users.getRawLlmKey(userId, routing.provider).catch(() => null)
+    const apiKey = userLlmKey?.isActive ? (userLlmKey.apiKey ?? userLlmKey.loginPassword ?? undefined) : undefined
+    const baseUrl = userLlmKey?.isActive ? (userLlmKey.baseUrl ?? undefined) : undefined
+
+    const response = await this.llm.complete(
+      [{ role: 'user', content: `The user sent this ambiguous message: "${userMessage.slice(0, 300)}"\n\nWrite ONE short, friendly clarifying question (max 120 chars) that resolves exactly what they want. Offer two concrete options when possible. Output only the question.` }],
+      [],
+      'You ask one precise clarifying question. Never guess.',
+      routing.provider,
+      apiKey,
+      baseUrl,
+      LLM_MODELS[routing.provider].fast,
+    )
+
+    const content = (response.content ?? '').trim()
+    if (!content) return false
+
+    const agentMsg = await this.prisma.message.create({
+      data: { conversationId, role: 'agent', content, status: 'done' },
+    })
+    emit('message', agentMsg)
+    await this.prisma.agentRun.update({
+      where: { id: runId },
+      data: { status: 'done', finishedAt: new Date(), metadata: JSON.stringify({ clarify: true }) },
+    })
+    await this.prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date() } })
+    emit('tokens', {
+      inputTokens: 0,
+      outputTokens: Math.ceil(content.length / 4),
+      totalTokens: Math.ceil(content.length / 4),
+      provider: routing.provider,
+      model: routing.model ?? null,
+      durationMs: Date.now() - runStartedAtMs,
+    })
+    emit('status', { status: 'done' })
+    return true
+  }
+
+  // Calibrated confidence: score the answer, store it on the message, emit it.
+  private async scoreConfidence(input: {
+    userId: string
+    messageId: string
+    userMessage: string
+    answer: string
+    provider: LLMProvider
+    apiKey?: string
+    baseUrl?: string
+    emit: (event: string, data: unknown) => void
+  }): Promise<void> {
+    const raw = String(process.env.CONFIDENCE_SCORING ?? 'true').trim().toLowerCase()
+    if (['0', 'false', 'no', 'off'].includes(raw)) return
+    try {
+      const res = await this.llm.complete(
+        [
+          {
+            role: 'user',
+            content: `Question: ${input.userMessage.slice(0, 600)}\n\nAnswer: ${input.answer.slice(0, 1500)}\n\nHow confident (0-100) is this answer in being correct and complete for THIS user? Output only an integer.`,
+          },
+        ],
+        [],
+        'You are a calibration model. Output only an integer 0-100.',
+        input.provider,
+        input.apiKey,
+        input.baseUrl,
+        LLM_MODELS[input.provider].fast,
+      )
+      const match = (res.content ?? '').match(/\d+/)
+      if (!match) return
+      const score = Math.max(0, Math.min(100, parseInt(match[0], 10)))
+      const existing = await this.prisma.message.findUnique({ where: { id: input.messageId }, select: { metadata: true } })
+      let meta: Record<string, unknown> = {}
+      try {
+        meta = existing?.metadata ? JSON.parse(String(existing.metadata)) : {}
+      } catch {
+        meta = {}
+      }
+      meta.confidence = score
+      await this.prisma.message.update({
+        where: { id: input.messageId },
+        data: { metadata: JSON.stringify(meta) },
+      })
+      input.emit('confidence', { messageId: input.messageId, score })
+    } catch {
+      // Confidence is best-effort; never break the answer flow.
+    }
   }
 
   // Pure small-talk (greetings, thanks, goodbyes): safe to answer instantly

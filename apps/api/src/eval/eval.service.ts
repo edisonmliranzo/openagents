@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from '../agent/llm.service'
 import { UsersService } from '../users/users.service'
+import { NotificationsService } from '../notifications/notifications.service'
 import type { LLMProvider } from '@openagents/shared'
 
 const EVAL_INTERVAL_MS = 6 * 60 * 60 * 1000
@@ -23,6 +24,7 @@ export class EvalService implements OnModuleInit, OnModuleDestroy {
     private readonly llm: LLMService,
     private readonly users: UsersService,
     private readonly config: ConfigService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onModuleInit() {
@@ -145,7 +147,37 @@ export class EvalService implements OnModuleInit, OnModuleDestroy {
       ? Number((results.reduce((sum, r) => sum + r.score, 0) / results.length).toFixed(1))
       : null
     this.logger.log(`Eval suite for ${userId}: ${results.length} tasks, avg ${averageScore}/10.`)
+    await this.checkDrift(userId).catch(() => undefined)
     return { ran: results.length, averageScore, results }
+  }
+
+  /** Alert when recent scores drop meaningfully vs the prior window. */
+  async checkDrift(userId: string): Promise<{ dropped: boolean; recentAvg: number; priorAvg: number }> {
+    const runs = await this.prisma.evalRun.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { score: true },
+    })
+    if (runs.length < 6) return { dropped: false, recentAvg: 0, priorAvg: 0 }
+    const recent = runs.slice(0, Math.max(3, Math.floor(runs.length / 2)))
+    const prior = runs.slice(recent.length)
+    if (prior.length === 0) return { dropped: false, recentAvg: 0, priorAvg: 0 }
+    const avg = (rows: Array<{ score: number }>) => rows.reduce((sum, r) => sum + r.score, 0) / rows.length
+    const recentAvg = Number(avg(recent).toFixed(1))
+    const priorAvg = Number(avg(prior).toFixed(1))
+    const dropped = priorAvg - recentAvg >= 1.5
+    if (dropped) {
+      await this.notifications
+        .create(
+          userId,
+          'Quality drift detected',
+          `Average eval score dropped from ${priorAvg} to ${recentAvg}/10. Check recent model/routing changes before trusting new answers.`,
+          'warning',
+        )
+        .catch(() => undefined)
+    }
+    return { dropped, recentAvg, priorAvg }
   }
 
   async results(userId: string) {
