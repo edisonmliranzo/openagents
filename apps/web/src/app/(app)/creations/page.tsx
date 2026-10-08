@@ -66,7 +66,7 @@ export default function CreationsPage() {
           <h1 className="oa-gradient-text text-2xl font-semibold">Creations</h1>
           <p className="mt-1 text-sm text-slate-500">Everything your agent has built — slides, sites, reports, media.</p>
         </div>
-        <div className="oa-segment flex gap-1 p-1">
+        <div className="oa-segment flex max-w-full flex-wrap items-center gap-1 p-1">
           {FILTERS.map((f) => (
             <button
               key={f}

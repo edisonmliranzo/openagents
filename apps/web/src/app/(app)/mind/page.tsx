@@ -81,7 +81,7 @@ export default function MindPage() {
           <h1 className="oa-gradient-text text-2xl font-semibold">Mind</h1>
           <p className="mt-1 text-sm text-slate-500">What your agent knows, how it routes, what it&apos;s learning.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => void studyNow()}

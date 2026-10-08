@@ -1136,7 +1136,7 @@ export function ChatWindow({
             )}
             title="Switch model"
           >
-            <span>{inUseModel.split('/').pop() || inUseModel}</span>
+            <span className="max-w-[120px] truncate sm:max-w-[200px]">{inUseModel.split('/').pop() || inUseModel}</span>
             <ChevronDown size={14} className={clsx('transition-transform', modelPickerOpen ? 'rotate-180' : '')} />
           </button>
 

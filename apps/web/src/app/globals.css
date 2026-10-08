@@ -942,6 +942,23 @@ body {
   color: #e6eaf3;
 }
 
+/* Keep code blocks and tables scrollable inside bubbles on narrow screens */
+.oa-bubble-agent pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.oa-bubble-agent table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.oa-bubble-agent img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Soft blue user bubble */
 .oa-bubble-user {
   border-radius: 18px;
