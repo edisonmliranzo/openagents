@@ -20,7 +20,7 @@ export const LLM_MODELS = {
     powerful: 'gemini-2.5-pro',
   },
   ollama: {
-    default: 'hf.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M',
+    default: 'phi4-mini',
     fast: 'phi4-mini',
     powerful: 'hf.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M',
   },
