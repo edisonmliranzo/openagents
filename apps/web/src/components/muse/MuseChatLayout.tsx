@@ -45,21 +45,22 @@ export function MuseChatLayout({ children }: { children: React.ReactNode }) {
 
       {/* Center column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile top bar */}
-        <div className="mb-2 flex items-center justify-between px-1 md:hidden">
+        {/* Top bar for drawer access below xl (left chats only below md) */}
+        <div className="mb-2 flex items-center justify-between px-1 xl:hidden">
           <button
             type="button"
             aria-label="Open chats"
             onClick={() => setLeftOpen(true)}
-            className="oa-pill-btn h-9 w-9 bg-white/70 text-slate-500 shadow-sm"
+            className="oa-pill-btn h-9 w-9 bg-white/70 text-slate-500 shadow-sm md:hidden"
           >
             <MessageCircle size={16} />
           </button>
+          <span className="hidden flex-1 md:block" />
           <button
             type="button"
             aria-label="Open activity"
             onClick={() => setRightOpen(true)}
-            className="oa-pill-btn h-9 w-9 bg-white/70 text-slate-500 shadow-sm"
+            className="oa-pill-btn ml-auto h-9 w-9 bg-white/70 text-slate-500 shadow-sm"
           >
             <PanelRight size={16} />
           </button>
@@ -70,7 +71,7 @@ export function MuseChatLayout({ children }: { children: React.ReactNode }) {
         {/* Floating bottom pill nav */}
         <nav
           aria-label="Primary"
-          className="oa-pill-nav fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 px-2 py-1.5"
+          className="oa-pill-nav fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] left-1/2 z-40 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto px-2 py-1.5"
         >
           {TAB_ITEMS.map((item) => {
             const Icon = item.icon
@@ -109,9 +110,9 @@ export function MuseChatLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Mobile right drawer */}
+        {/* Mobile/tablet right drawer (below xl where the card is inline) */}
         {rightOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
+          <div className="fixed inset-0 z-50 xl:hidden">
             <button type="button" aria-label="Close activity" onClick={() => setRightOpen(false)} className="absolute inset-0 bg-black/25 backdrop-blur-[2px]" />
             <div className="oa-float-card absolute inset-y-4 right-4 flex w-[min(320px,88vw)] flex-col overflow-hidden">
               <MuseActivityPanel />
