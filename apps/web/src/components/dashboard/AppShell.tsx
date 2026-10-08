@@ -63,6 +63,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
       { label: 'Creations', href: '/creations', icon: FileText },
       { label: 'Team', href: '/team', icon: Users },
       { label: 'Library', href: '/library', icon: BookOpen },
+      { label: 'Mind', href: '/mind', icon: Brain },
       { label: 'Overview', href: '/control/overview', icon: Activity },
       { label: 'Sessions', href: '/sessions', icon: Terminal },
       { label: 'Memory', href: '/memory', icon: Brain },

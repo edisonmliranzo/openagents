@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { LLMService } from './llm.service'
 import { AnswerCacheService } from './answer-cache.service'
 import { MemoryService } from '../memory/memory.service'
+import { StudyService } from '../study/study.service'
 import { UsersService } from '../users/users.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { LLM_MODELS, type LLMProvider } from '@openagents/shared'
@@ -27,6 +28,7 @@ export class AgentController {
     private prisma: PrismaService,
     private answerCache: AnswerCacheService,
     private memory: MemoryService,
+    private study: StudyService,
   ) {}
 
   @Post('suggestions')
@@ -80,9 +82,51 @@ export class AgentController {
         .map((line) => line.replace(/^[\d.\-\s"'`]+/, '').trim())
         .filter(Boolean)
         .slice(0, 3)
+
+      // Prefetch: warm the answer cache so clicking a chip feels instant.
+      if (lines.length > 0) {
+        void this.prefetchSuggestions(req.user.id, lines, provider, apiKey, baseUrl, settings.preferredModel ?? undefined).catch(() => undefined)
+      }
+
       return { suggestions: lines }
     } catch {
       return { suggestions: [] }
+    }
+  }
+
+  private async prefetchSuggestions(
+    userId: string,
+    questions: string[],
+    provider: LLMProvider,
+    apiKey?: string,
+    baseUrl?: string,
+    model?: string,
+  ): Promise<void> {
+    for (const question of questions.slice(0, 2)) {
+      try {
+        const warm = await this.llm.complete(
+          [{ role: 'user', content: question }],
+          [],
+          'You are a helpful assistant. Answer directly and concisely.',
+          provider,
+          apiKey,
+          baseUrl,
+          model,
+        )
+        const answer = (warm.content ?? '').trim()
+        if (!answer) continue
+        await this.answerCache.store({
+          userId,
+          question,
+          answer,
+          provider,
+          model: model ?? null,
+          taskClass: 'general',
+          usedTools: false,
+        })
+      } catch {
+        // Prefetch is best-effort; a miss just means the real run happens.
+      }
     }
   }
 
@@ -97,9 +141,17 @@ export class AgentController {
     if (vote === 'down') {
       const msg = await this.prisma.message.findFirst({
         where: { id: messageId, conversation: { userId: req.user.id } },
-        select: { content: true },
+        select: { content: true, conversationId: true },
       })
       if (msg) {
+        const prevUser = await this.prisma.message.findFirst({
+          where: { conversationId: msg.conversationId, role: 'user' },
+          orderBy: { createdAt: 'desc' },
+          select: { content: true },
+        }).catch(() => null)
+        void this.study
+          .logGap(req.user.id, prevUser?.content?.slice(0, 80) ?? msg.content.slice(0, 80), 'user gave a thumbs-down')
+          .catch(() => undefined)
         await this.memory
           .upsertFact(req.user.id, {
             entity: 'feedback',

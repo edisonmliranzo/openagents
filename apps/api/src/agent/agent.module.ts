@@ -11,6 +11,9 @@ import { AnswerCacheService } from './answer-cache.service'
 import { CriticService } from './critic.service'
 import { PersonaService } from './persona.service'
 import { SteeringService } from './steering.service'
+import { EffortService } from './effort.service'
+import { ExpertiseService } from './expertise.service'
+import { StudyModule } from '../study/study.module'
 import { ToolsModule } from '../tools/tools.module'
 import { MemoryModule } from '../memory/memory.module'
 import { ApprovalsModule } from '../approvals/approvals.module'
@@ -31,9 +34,10 @@ import { GoalsModule } from '../goals/goals.module'
     EventsModule,
     GoalsModule,
     LearningModule,
+    StudyModule,
   ],
   controllers: [AgentController],
-  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService],
-  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService],
+  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],
+  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],
 })
 export class AgentModule {}

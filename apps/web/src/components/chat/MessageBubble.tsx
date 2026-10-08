@@ -598,6 +598,20 @@ export function MessageBubble({
       <span className="oa-meta-row flex items-center gap-1.5 pl-0.5">
         <span className="oa-brand-badge inline-flex h-3.5 w-3.5 items-center justify-center rounded-[5px] text-[7px] font-bold text-white">OA</span>
         {roleLabel(message.role)} · {formatClock(message.createdAt)}
+        {typeof (parsedMetadata as { confidence?: unknown } | undefined)?.confidence === 'number' && (
+          <span
+            title="The agent's own confidence in this answer"
+            className={
+              ((parsedMetadata as { confidence: number }).confidence >= 75)
+                ? 'rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300'
+                : ((parsedMetadata as { confidence: number }).confidence >= 50)
+                  ? 'rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600 dark:bg-amber-500/15 dark:text-amber-300'
+                  : 'rounded-full bg-red-50 px-1.5 py-0.5 text-[9px] font-semibold text-red-600 dark:bg-red-500/15 dark:text-red-300'
+            }
+          >
+            {(parsedMetadata as { confidence: number }).confidence}% sure
+          </span>
+        )}
       </span>
     </div>
   )

@@ -416,7 +416,7 @@ interface ChatState {
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
   createConversation: () => Promise<string>
-  sendMessage: (content: string, options?: { displayContent?: string; mode?: string }) => Promise<void>
+  sendMessage: (content: string, options?: { displayContent?: string; mode?: string; effort?: string }) => Promise<void>
   editAndResend: (messageId: string, newContent: string) => Promise<void>
   regenerateLast: () => Promise<void>
   clearPlan: () => void
@@ -591,8 +591,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await sdk.conversations.sendMessage(
         activeConversationId,
         content,
-        (chunk) => {
-          try {
+        (chunk) => {          try {
           const data = JSON.parse(chunk)
           if (data.event === 'error') {
             const rawMessage =
@@ -649,6 +648,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const total = Number(data.data?.total)
             if (Number.isFinite(done) && Number.isFinite(total)) {
               set((s) => (s.plan ? { plan: { ...s.plan, done, total } } : {}))
+            }
+          }
+
+          if (data.event === 'confidence') {
+            const mid = typeof data.data?.messageId === 'string' ? data.data.messageId : ''
+            const score = Number(data.data?.score)
+            if (mid && Number.isFinite(score)) {
+              set((s) => ({
+                messages: s.messages.map((m) =>
+                  m.id === mid
+                    ? { ...m, metadata: mergeMessageMeta(m.metadata, { confidence: score }) }
+                    : m,
+                ),
+              }))
             }
           }
 
@@ -793,7 +806,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         } catch {}
       },
-      options?.mode ? { mode: options.mode } : undefined)
+      options?.mode || options?.effort
+        ? { ...(options.mode ? { mode: options.mode } : {}), ...(options.effort ? { effort: options.effort } : {}) }
+        : undefined)
 
       // Reload messages to get server-side IDs
       const messages = ensureArrayResponse<Message>(

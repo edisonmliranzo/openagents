@@ -25,6 +25,7 @@ class CreateConversationDto {
 class ChatDto {
   @IsString() content: string
   @IsString() @IsOptional() mode?: string
+  @IsString() @IsOptional() effort?: string
 }
 
 @ApiTags('conversations')
@@ -132,6 +133,7 @@ export class ConversationsController {
         userMessage: dto.content,
         emit,
         ...(dto.mode ? { systemPromptAppendix: `User-selected mode: ${dto.mode}\nApply this mode's execution rules.` } : {}),
+        ...(dto.effort ? { effort: dto.effort } : {}),
       })
     } catch (err: any) {
       emit('error', { message: err.message })

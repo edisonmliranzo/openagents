@@ -401,8 +401,7 @@ function buildFileBlock(file: AttachedFile): string {
   if (file.isImage) {
     return [
       `[Attached image: ${file.name} (${sizeLabel})]`,
-      `data:${file.mimeType};base64 below:`,
-      file.content,
+      `data:${file.mimeType};base64,${file.content}`,
     ].join('\n')
   }
 
@@ -468,6 +467,7 @@ export function ChatWindow({
     clearPlan,
   } = useChatStore()
   const [suggestions, setSuggestions] = useState<string[]>([])
+  const [effort, setEffort] = useState<'auto' | 'instant' | 'planned' | 'max'>('auto')
   const wasStreamingRef = useRef(false)
   const [input, setInput] = useState('')
   const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([])
@@ -1036,7 +1036,11 @@ export function ChatWindow({
     const fileNames = files.length > 0 ? ` [${files.map((f) => f.name).join(', ')}]` : ''
     const displayWithFiles = displayContent ? `${displayContent}${fileNames}` : fileNames.trim()
 
-    await sendMessage(content, { displayContent: displayWithFiles || displayContent, mode: assistantMode })
+    await sendMessage(content, {
+      displayContent: displayWithFiles || displayContent,
+      mode: assistantMode,
+      ...(effort !== 'auto' ? { effort } : {}),
+    })
   }
 
   async function handleSend() {
@@ -1548,6 +1552,29 @@ export function ChatWindow({
 
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#98a2b3]">
               <span>{assistantModeDefinition.label} mode</span>
+              <span className="inline-flex items-center gap-0.5">
+                {(['auto', 'instant', 'planned', 'max'] as const).map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => setEffort(level)}
+                    title={
+                      level === 'auto' ? 'Agent decides effort per message'
+                        : level === 'instant' ? 'Fastest: no tools, short answers'
+                          : level === 'planned' ? 'Plan first, then execute'
+                            : 'Max: plan + more steps + verified answer'
+                    }
+                    className={clsx(
+                      'rounded-full px-2 py-0.5 font-medium transition',
+                      effort === level
+                        ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-800',
+                    )}
+                  >
+                    {level === 'auto' ? 'Auto' : level === 'instant' ? '⚡ Fast' : level === 'planned' ? '🧠 Plan' : '🚀 Max'}
+                  </button>
+                ))}
+              </span>
               <span className="inline-flex items-center gap-1"><Command size={10} />/ commands</span>
               <span>{assistantStatusText}</span>
             </div>
