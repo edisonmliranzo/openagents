@@ -5,10 +5,14 @@ import { EmbeddingService } from '../memory/embedding.service'
 import { cosineSimilarity, parseEmbedding } from './embeddings'
 
 const CACHE_TTL_HOURS = 24
+const FRESH_TTL_MINUTES = 15
 const CACHE_THRESHOLD = 0.94
 const CACHE_MAX_ROWS_PER_USER = 500
 const CACHE_MAX_ANSWER_CHARS = 1500
 const CACHEABLE_CLASSES = new Set(['small-talk', 'general', 'summarize'])
+// Time-sensitive answers (news, prices, scores) cache briefly so "what's the
+// news" twice in 15 minutes dedupes, but stale news never survives.
+const FRESH_CLASSES = new Set(['search'])
 
 export interface CachedAnswer {
   id: string
@@ -34,18 +38,22 @@ export class AnswerCacheService {
   }
 
   /**
-   * Look for a recent, semantically-near cached answer. Only stable task
-   * classes are served from cache — search/code/reasoning always run fresh.
+   * Look for a recent, semantically-near cached answer. Stable classes use a
+   * 24h window; time-sensitive classes (search) use a 15-minute window.
+   * Code and reasoning always run fresh.
    */
   async lookup(userId: string, question: string, taskClass: string): Promise<CachedAnswer | null> {
-    if (!this.enabled || !CACHEABLE_CLASSES.has(taskClass)) return null
+    const stable = CACHEABLE_CLASSES.has(taskClass)
+    const fresh = FRESH_CLASSES.has(taskClass)
+    if (!this.enabled || (!stable && !fresh)) return null
     const trimmed = question.trim()
     if (!trimmed || trimmed.length > 400) return null
 
     const embedded = await this.embeddings.embed(trimmed)
     if (!embedded) return null
 
-    const since = new Date(Date.now() - CACHE_TTL_HOURS * 60 * 60 * 1000)
+    const ttlMs = fresh ? FRESH_TTL_MINUTES * 60 * 1000 : CACHE_TTL_HOURS * 60 * 60 * 1000
+    const since = new Date(Date.now() - ttlMs)
     const rows = await this.prisma.answerCache.findMany({
       where: { userId, createdAt: { gte: since }, taskClass },
       orderBy: { createdAt: 'desc' },
@@ -82,8 +90,12 @@ export class AnswerCacheService {
     usedTools: boolean
   }): Promise<void> {
     if (!this.enabled) return
-    if (input.usedTools) return
-    if (!CACHEABLE_CLASSES.has(input.taskClass)) return
+    const stable = CACHEABLE_CLASSES.has(input.taskClass)
+    const fresh = FRESH_CLASSES.has(input.taskClass)
+    if (!stable && !fresh) return
+    // Tool-free for stable answers; tool-backed search answers are cacheable
+    // but only live for the short freshness window.
+    if (input.usedTools && !fresh) return
     const answer = input.answer.trim()
     if (!answer || answer.length > CACHE_MAX_ANSWER_CHARS) return
 

@@ -1204,6 +1204,7 @@ export class AgentService implements OnModuleInit {
           provider: activeProvider,
           apiKey: activeUserApiKey,
           baseUrl: activeUserBaseUrl,
+          timeSensitive: taskClass === 'search' || this.needsFreshData(userMessage),
           emit,
         }).catch(() => undefined)
         await this.lineage
@@ -1992,16 +1993,20 @@ export class AgentService implements OnModuleInit {
     provider: LLMProvider
     apiKey?: string
     baseUrl?: string
+    timeSensitive?: boolean
     emit: (event: string, data: unknown) => void
   }): Promise<void> {
     const raw = String(process.env.CONFIDENCE_SCORING ?? 'true').trim().toLowerCase()
     if (['0', 'false', 'no', 'off'].includes(raw)) return
+    const freshnessHint = input.timeSensitive
+      ? 'This answer is TIME-SENSITIVE (news, prices, current events) and may already be outdated — be conservative and score at most 70 unless the answer itself hedges.'
+      : ''
     try {
       const res = await this.llm.complete(
         [
           {
             role: 'user',
-            content: `Question: ${input.userMessage.slice(0, 600)}\n\nAnswer: ${input.answer.slice(0, 1500)}\n\nHow confident (0-100) is this answer in being correct and complete for THIS user? Output only an integer.`,
+            content: `Question: ${input.userMessage.slice(0, 600)}\n\nAnswer: ${input.answer.slice(0, 1500)}\n\n${freshnessHint}\n\nHow confident (0-100) is this answer in being correct and complete for THIS user? Output only an integer.`,
           },
         ],
         [],
