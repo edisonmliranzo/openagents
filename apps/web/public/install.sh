@@ -7,6 +7,7 @@ REPO_REF="${OPENAGENTS_INSTALL_GIT_REF:-main}"
 RUN_DEV=0
 SKIP_DOCKER=0
 SKIP_MIGRATE=0
+WITH_OLLAMA=0
 
 usage() {
   cat <<'EOF'
@@ -17,9 +18,10 @@ Usage:
 
 Options:
   --dir <path>       Target clone directory. Default: ~/openagents
-  --run-dev          Start `pnpm dev` after setup completes
+  --run-dev          Start the self-healing server (pnpm dev:watch) after setup
   --skip-docker      Skip Docker startup and run the lighter setup path
   --skip-migrate     Skip Prisma migrate during setup
+  --with-ollama      Install Ollama (free local AI models)
   --help             Show this help
 
 Environment:
@@ -43,6 +45,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-migrate)
       SKIP_MIGRATE=1
+      shift
+      ;;
+    --with-ollama)
+      WITH_OLLAMA=1
       shift
       ;;
     --help|-h)
@@ -220,9 +226,76 @@ run_setup_with_sudo_docker() {
   fi
 }
 
+install_ollama() {
+  log_step "Ollama (local AI models)"
+  if has ollama; then
+    printf 'Ollama is already installed.\n'
+  elif [[ "${os_name}" == "Darwin" ]]; then
+    run brew install --cask ollama || printf 'Could not install Ollama via brew. Get it from https://ollama.com\n'
+  else
+    curl -fsSL https://ollama.com/install.sh | sudo_run tee /tmp/ollama-install.sh >/dev/null && sudo_run sh /tmp/ollama-install.sh \
+      || printf 'Could not install Ollama. Get it from https://ollama.com\n'
+  fi
+
+  if [[ "${os_name}" == "Darwin" ]] && [[ -d /Applications/Ollama.app ]]; then
+    open -a Ollama || true
+  fi
+}
+
+register_watchdog_service() {
+  log_step "Self-heal service"
+  local node_bin
+  node_bin="$(command -v node || true)"
+  if [[ -z "${node_bin}" ]]; then
+    printf 'node not found; skipping auto-revive service. Start manually with the launcher.\n'
+    return
+  fi
+
+  if [[ "${os_name}" == "Darwin" ]]; then
+    local plist="$HOME/Library/LaunchAgents/com.openagents.dev-watchdog.plist"
+    mkdir -p "$(dirname "${plist}")"
+    cat > "${plist}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.openagents.dev-watchdog</string>
+<key>ProgramArguments</key><array>
+<string>${node_bin}</string><string>${INSTALL_DIR}/scripts/dev-watchdog.mjs</string>
+</array>
+<key>WorkingDirectory</key><string>${INSTALL_DIR}</string>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><true/>
+<key>StandardOutPath</key><string>${INSTALL_DIR}/.dev-watchdog.log</string>
+<key>StandardErrorPath</key><string>${INSTALL_DIR}/.dev-watchdog.log</string>
+</dict></plist>
+EOF
+    launchctl unload "${plist}" 2>/dev/null || true
+    launchctl load "${plist}" 2>/dev/null \
+      || printf 'Could not load the LaunchAgent. Start manually with OpenAgents.command.\n'
+  else
+    local unit="$HOME/.config/systemd/user/openagents-dev-watchdog.service"
+    mkdir -p "$(dirname "${unit}")"
+    cat > "${unit}" <<EOF
+[Unit]
+Description=OpenAgents dev stack watchdog
+[Service]
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=${node_bin} ${INSTALL_DIR}/scripts/dev-watchdog.mjs
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=default.target
+EOF
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now openagents-dev-watchdog.service 2>/dev/null \
+      || printf 'Could not enable the systemd user service. Start manually with openagents-start.sh.\n'
+  fi
+}
+
 create_launcher_files() {
   local command_launcher="${INSTALL_DIR}/OpenAgents.command"
   local shell_launcher="${INSTALL_DIR}/openagents-start.sh"
+  local stop_launcher="${INSTALL_DIR}/openagents-stop.sh"
   local start_here="${INSTALL_DIR}/OPENAGENTS-START-HERE.txt"
   local launcher_hint
 
@@ -231,7 +304,9 @@ create_launcher_files() {
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
-pnpm dev
+echo "OpenAgents self-healing server. Keep this window open while you use the app."
+echo "App: http://localhost:3000 - open it in Chrome/Edge and choose Install as app."
+pnpm dev:watch
 EOF
 
   cat > "${shell_launcher}" <<'EOF'
@@ -239,10 +314,22 @@ EOF
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
-pnpm dev
+pnpm dev:watch
 EOF
 
-  chmod +x "${command_launcher}" "${shell_launcher}"
+  cat > "${stop_launcher}" <<EOF
+#!/usr/bin/env bash
+SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+pkill -f "dev-watchdog.mjs" 2>/dev/null || true
+if [[ "\$(uname -s)" == "Darwin" ]]; then
+  launchctl unload "\$HOME/Library/LaunchAgents/com.openagents.dev-watchdog.plist" 2>/dev/null || true
+else
+  systemctl --user disable --now openagents-dev-watchdog.service 2>/dev/null || true
+fi
+echo "OpenAgents stopped and auto-revive disabled. Run the launcher again to start."
+EOF
+
+  chmod +x "${command_launcher}" "${shell_launcher}" "${stop_launcher}"
 
   if [[ "${os_name}" == "Darwin" ]]; then
     launcher_hint="Double-click OpenAgents.command"
@@ -260,8 +347,17 @@ Branch or tag:
 ${REPO_REF}
 
 Start OpenAgents:
-- ${launcher_hint}
-- or run: cd "${INSTALL_DIR}" && pnpm dev
+- ${launcher_hint} (self-healing server; keep the window open)
+- It also auto-starts via the ${os_name} watchdog service
+
+Install as a desktop app (recommended):
+1. Start OpenAgents and open http://localhost:3000 in Chrome or Edge
+2. Sign in once
+3. Browser menu > Apps > "Install this site as an app"
+4. Pin the OpenAgents icon to the Dock/taskbar - it launches as its own window
+
+Stop OpenAgents:
+- Run ./openagents-stop.sh (also disables auto-revive)
 
 Update OpenAgents:
 - Rerun the same install command you used the first time.
@@ -271,6 +367,10 @@ Health check:
 
 Backup:
 - Run: cd "${INSTALL_DIR}" && pnpm backup:create
+
+Local AI (optional):
+- Ollama models power the free local brain. Install from https://ollama.com
+  or rerun the installer with --with-ollama.
 
 Login:
 - http://localhost:3000/login
@@ -318,7 +418,12 @@ case "${os_name}" in
     ;;
 esac
 
+if (( WITH_OLLAMA )); then
+  install_ollama
+fi
+
 create_launcher_files
+register_watchdog_service
 
 printf '\nOpenAgents is installed.\n'
 printf 'Repo: %s\n' "${INSTALL_DIR}"
@@ -328,9 +433,10 @@ if [[ "${os_name}" == "Darwin" ]]; then
 else
   printf 'Launcher: %s\n' "${INSTALL_DIR}/openagents-start.sh"
 fi
+printf 'Stop script: %s\n' "${INSTALL_DIR}/openagents-stop.sh"
 printf 'Instructions: %s\n' "${INSTALL_DIR}/OPENAGENTS-START-HERE.txt"
 printf 'Start it with:\n'
-printf '  cd %q && pnpm dev\n' "${INSTALL_DIR}"
+printf '  cd %q && pnpm dev:watch\n' "${INSTALL_DIR}"
 if [[ "${os_name}" == "Darwin" ]]; then
   printf 'Or double-click %s\n' "${INSTALL_DIR}/OpenAgents.command"
 else
@@ -340,10 +446,11 @@ printf 'Doctor command:\n'
 printf '  cd %q && pnpm doctor\n' "${INSTALL_DIR}"
 printf 'Backup command:\n'
 printf '  cd %q && pnpm backup:create\n' "${INSTALL_DIR}"
-printf 'Then open http://localhost:3000/login\n'
+printf 'Then open http://localhost:3000/login and install it as an app:\n'
+printf '  Browser menu > Apps > Install OpenAgents as an app\n'
 
 if (( RUN_DEV )); then
-  log_step "Start development server"
+  log_step "Start self-healing development server"
   cd "${INSTALL_DIR}"
-  run pnpm dev
+  run pnpm dev:watch
 fi
