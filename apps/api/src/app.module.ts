@@ -77,6 +77,7 @@ import { LibraryModule } from './library/library.module'
 import { PluginsModule } from './plugins/plugins.module'
 import { StudyModule } from './study/study.module'
 import { FrontierModule } from './frontier/frontier.module'
+import { TasksModule } from './tasks/tasks.module'
 
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { GlobalAuthGuard } from './auth/guards/global-auth.guard'
@@ -164,6 +165,7 @@ import { UserScopeInterceptor } from './auth/user-scope.interceptor'
     PluginsModule,
     StudyModule,
     FrontierModule,
+    TasksModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalAuthGuard },

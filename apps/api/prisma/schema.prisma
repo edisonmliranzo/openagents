@@ -86,6 +86,7 @@ model User {
   userPlugins       UserPlugin[]
   knowledgeGaps     KnowledgeGap[]
   watchTasks        WatchTask[]
+  agentTasks       AgentTask[]
   promptPatches     PromptPatch[]
 }
 
@@ -1561,4 +1562,44 @@ model PromptPatch {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, taskClass, active])
+}
+
+model AgentTask {
+  id              String    @id @default(cuid())
+  userId          String
+  title           String
+  goal            String
+  successCriteria String    @default("")
+  target          String    @default("server") // server | local
+  status          String    @default("planning") // planning | running | awaiting_approval | done | failed | cancelled
+  plan            String    @default("[]") // JSON array of steps
+  cursor          Int       @default(0)
+  replans         Int       @default(0)
+  maxSteps        Int       @default(12)
+  result          String?
+  verdict         String?   // JSON from the verifier
+  error           String?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events AgentTaskEvent[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model AgentTaskEvent {
+  id        String    @id @default(cuid())
+  taskId    String
+  kind      String    // planned | step_started | step_done | step_failed | approval_needed | approved | replanned | verified | cancelled | error
+  message   String
+  data      String?
+  createdAt DateTime  @default(now())
+
+  task AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
 }
