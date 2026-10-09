@@ -85,6 +85,8 @@ model User {
   libraryChunks     LibraryChunk[]
   userPlugins       UserPlugin[]
   knowledgeGaps     KnowledgeGap[]
+  watchTasks        WatchTask[]
+  promptPatches     PromptPatch[]
 }
 
 model PasswordResetToken {
@@ -1516,4 +1518,41 @@ model EvalRun {
 
   @@index([userId, createdAt])
   @@index([goldenTaskId, createdAt])
+}
+
+model WatchTask {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  kind        String    @default("url") // url | keyword
+  target      String    // URL to fetch or topic to re-evaluate
+  condition   String    // natural-language trigger condition
+  intervalMin Int       @default(60)
+  enabled     Boolean   @default(true)
+  lastCheckAt DateTime?
+  lastFiredAt DateTime?
+  lastStatus  String?   // ok | fired | error
+  lastDetail  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
+}
+
+model PromptPatch {
+  id        String   @id @default(cuid())
+  userId    String
+  taskClass String   // small-talk | summarize | search | code | reasoning | general
+  rule      String   // injected instruction text
+  reason    String   @default("") // why it was generated
+  source    String   @default("auto-repair") // auto-repair | manual
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, taskClass, active])
 }

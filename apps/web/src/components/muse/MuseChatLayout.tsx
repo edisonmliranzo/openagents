@@ -8,6 +8,7 @@ import {
   Lightbulb,
   MessageCircle,
   PanelRight,
+  Sparkles,
   Users,
 } from 'lucide-react'
 import { MuseActivityPanel } from './MuseActivityPanel'
@@ -20,6 +21,7 @@ const TAB_ITEMS = [
   { icon: Lightbulb, label: 'Ideas', action: 'ideas' },
   { icon: CheckSquare, label: 'Approvals', href: '/approvals' },
   { icon: Users, label: 'Team', href: '/team' },
+  { icon: Sparkles, label: 'Frontier', href: '/frontier' },
 ]
 
 export function MuseChatLayout({ children }: { children: React.ReactNode }) {

@@ -76,6 +76,7 @@ import { SpecialistsModule } from './specialists/specialists.module'
 import { LibraryModule } from './library/library.module'
 import { PluginsModule } from './plugins/plugins.module'
 import { StudyModule } from './study/study.module'
+import { FrontierModule } from './frontier/frontier.module'
 
 @Module({
   imports: [
@@ -158,6 +159,7 @@ import { StudyModule } from './study/study.module'
     LibraryModule,
     PluginsModule,
     StudyModule,
+    FrontierModule,
   ],
 })
 export class AppModule {}
