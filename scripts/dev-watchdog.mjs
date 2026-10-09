@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Dev watchdog: keeps the API and web dev servers alive, restarting them on
-// crash or accidental kill. Run detached: `node scripts/dev-watchdog.mjs`
-import { spawn } from 'node:child_process'
+// crash or accidental kill. Also revives Ollama when its port goes dark.
+//   node scripts/dev-watchdog.mjs           — supervise in this terminal
+//   node scripts/dev-watchdog.mjs --ensure  — make sure a supervisor is running
+const ENSURE = process.argv.includes('--ensure')
+import { spawn, spawnSync } from 'node:child_process'
 import net from 'node:net'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -85,6 +88,34 @@ function superviseOllama() {
     child.unref()
   }, 15000).unref()
 }
+
+const PID_FILE = path.join(os.tmpdir(), 'openagents-dev-watchdog.pid')
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0)
+    const probe = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/NH'])
+    return /node(\.exe)?/i.test(probe.stdout.toString())
+  } catch {
+    return false
+  }
+}
+
+if (ENSURE) {
+  const recorded = Number(fs.existsSync(PID_FILE) ? fs.readFileSync(PID_FILE, 'utf8').trim() : 0)
+  if (recorded && pidAlive(recorded)) process.exit(0)
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
+    cwd: rootDir,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  })
+  child.unref()
+  process.exit(0)
+}
+
+fs.writeFileSync(PID_FILE, String(process.pid))
+process.on('exit', () => { try { fs.unlinkSync(PID_FILE) } catch {} })
 
 console.log(`[${stamp()}] dev-watchdog starting: api(:3101) + web(:3002) + ollama(:${OLLAMA_PORT})`)
 for (const target of TARGETS) supervise(target)
