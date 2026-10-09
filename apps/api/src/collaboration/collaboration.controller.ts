@@ -23,6 +23,7 @@ import type {
   MessageType,
 } from './collaboration.types'
 
+import { CurrentUserId } from '../auth/current-user-id.decorator'
 @Controller('collaboration')
 export class CollaborationController {
   constructor(private readonly collaborationService: CollaborationService) {}
@@ -31,7 +32,7 @@ export class CollaborationController {
 
   @Post('teams')
   createTeam(
-    @Query('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Body() input: CreateAgentTeamInput,
   ) {
     if (!userId) throw new BadRequestException('userId is required')
@@ -40,7 +41,7 @@ export class CollaborationController {
 
   @Get('teams')
   listTeams(
-    @Query('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('limit') limit?: number,
   ) {
     if (!userId) throw new BadRequestException('userId is required')
@@ -49,7 +50,7 @@ export class CollaborationController {
 
   @Get('teams/:teamId')
   getTeam(
-    @Query('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Param('teamId', ParseUUIDPipe) teamId: string,
   ) {
     if (!userId) throw new BadRequestException('userId is required')

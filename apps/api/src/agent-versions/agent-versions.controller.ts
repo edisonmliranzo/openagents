@@ -8,6 +8,7 @@ import {
   AgentVersionSettingsSnapshot
 } from '@openagents/shared'
 
+import { CurrentUserId } from '../auth/current-user-id.decorator'
 @Controller('agent-versions')
 export class AgentVersionsController {
   constructor(private readonly agentVersionsService: AgentVersionsService) {}
@@ -15,15 +16,16 @@ export class AgentVersionsController {
   @Post(':agentId')
   async createVersion(
     @Param('agentId') agentId: string,
-    @Body() body: { userId: string; input: CreateAgentVersionInput; snapshot: AgentVersionSettingsSnapshot },
+    @CurrentUserId() userId: string,
+    @Body() body: { input: CreateAgentVersionInput; snapshot: AgentVersionSettingsSnapshot },
   ): Promise<AgentVersionSnapshot> {
-    return this.agentVersionsService.createVersion(body.userId, agentId, body.input, body.snapshot)
+    return this.agentVersionsService.createVersion(userId, agentId, body.input, body.snapshot)
   }
 
   @Get(':agentId')
   async getVersions(
     @Param('agentId') agentId: string,
-    @Query('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('limit') limit?: number,
   ): Promise<AgentVersionSnapshot[]> {
     return this.agentVersionsService.getVersions(userId, agentId, limit)
@@ -32,7 +34,7 @@ export class AgentVersionsController {
   @Get(':agentId/latest')
   async getLatestVersion(
     @Param('agentId') agentId: string,
-    @Query('userId') userId: string,
+    @CurrentUserId() userId: string,
   ): Promise<AgentVersionSnapshot | null> {
     return this.agentVersionsService.getLatestVersion(userId, agentId)
   }
@@ -40,7 +42,7 @@ export class AgentVersionsController {
   @Get('/id/:id')
   async getVersion(
     @Param('id') id: string,
-    @Query('userId') userId: string,
+    @CurrentUserId() userId: string,
   ): Promise<AgentVersionSnapshot> {
     return this.agentVersionsService.getVersion(userId, id)
   }
@@ -57,8 +59,8 @@ export class AgentVersionsController {
   async rollbackToVersion(
     @Param('agentId') agentId: string,
     @Param('versionId') versionId: string,
-    @Body() body: { userId: string },
+    @CurrentUserId() userId: string,
   ): Promise<AgentVersionRollbackResult> {
-    return this.agentVersionsService.rollbackToVersion(body.userId, agentId, versionId)
+    return this.agentVersionsService.rollbackToVersion(userId, agentId, versionId)
   }
 }

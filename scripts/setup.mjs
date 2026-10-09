@@ -140,12 +140,43 @@ function seedSecrets(targetRel, specs) {
   if (changed) fs.writeFileSync(targetPath, raw);
 }
 
+// Worker/webhook tokens. The endpoints fail closed when these are unset, so
+// setup must create them or the internal workers and channel webhooks reject
+// every request.
+const WORKER_TOKEN_KEYS = [
+  "APPROVAL_WORKER_TOKEN",
+  "CI_HEALER_TOKEN",
+  "CI_HEALER_WORKER_TOKEN",
+  "EXTRACTION_WORKER_TOKEN",
+  "TOOL_RUN_WORKER_TOKEN",
+  "WORKFLOW_WORKER_TOKEN",
+  "WHATSAPP_WEBHOOK_TOKEN",
+  "TELEGRAM_WEBHOOK_SECRET",
+];
+
+function ensureMissingKeys(targetRel, keys) {
+  const targetPath = path.join(rootDir, targetRel);
+  if (!fs.existsSync(targetPath)) return;
+  let raw = fs.readFileSync(targetPath, "utf8");
+  const added = [];
+  for (const key of keys) {
+    if (new RegExp(`^${key}=`, "m").test(raw)) continue;
+    raw = `${raw.replace(/\s*$/, "")}\n${key}="${crypto.randomBytes(32).toString("hex")}"\n`;
+    added.push(key);
+  }
+  if (added.length) {
+    fs.writeFileSync(targetPath, raw);
+    console.log(`- Generated ${added.join(", ")} in ${targetRel}`);
+  }
+}
+
 function seedApiSecrets() {
   seedSecrets("apps/api/.env", [
     { key: "JWT_SECRET", markers: ["change-me"], value: () => `"${crypto.randomBytes(48).toString("hex")}"` },
     { key: "JWT_REFRESH_SECRET", markers: ["change-me"], value: () => `"${crypto.randomBytes(48).toString("hex")}"` },
     { key: "ENCRYPTION_KEY", markers: ["32-char-hex-key-here", "change-me"], value: () => `"${crypto.randomBytes(32).toString("hex")}"` },
   ]);
+  ensureMissingKeys("apps/api/.env", WORKER_TOKEN_KEYS);
 }
 
 function seedProdSecrets() {

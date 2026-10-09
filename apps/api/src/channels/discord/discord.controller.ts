@@ -27,7 +27,9 @@ class CreatePairingDto {
   expiresInMinutes?: number
 }
 
+import { Public } from '../../common/public.decorator'
 @ApiTags('channels')
+@Public()
 @Controller('channels/discord')
 export class DiscordController {
   private readonly logger = new Logger(DiscordController.name)

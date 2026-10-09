@@ -7,7 +7,9 @@ import { ProactiveAgentService } from './proactive-agents.service'
  * email relays, monitors). Only fires triggers the user explicitly created
  * for the given source; no data is returned beyond match/fire counts.
  */
+import { Public } from '../common/public.decorator'
 @ApiTags('proactive')
+@Public()
 @Controller('proactive/webhook')
 export class ProactiveWebhookController {
   constructor(private readonly service: ProactiveAgentService) {}

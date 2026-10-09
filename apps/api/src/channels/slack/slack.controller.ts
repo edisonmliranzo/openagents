@@ -27,7 +27,9 @@ class CreatePairingDto {
   expiresInMinutes?: number
 }
 
+import { Public } from '../../common/public.decorator'
 @ApiTags('channels')
+@Public()
 @Controller('channels/slack')
 export class SlackController {
   private readonly logger = new Logger(SlackController.name)

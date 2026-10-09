@@ -2,20 +2,22 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { AnomalyService } from './anomaly.service'
 import { AnomalyDetection, AnomalyConfig, AnomalyType } from '@openagents/shared'
 
+import { CurrentUserId } from '../auth/current-user-id.decorator'
 @Controller('anomaly')
 export class AnomalyController {
   constructor(private readonly anomalyService: AnomalyService) {}
 
   @Post('detect')
   async detect(
-    @Body() body: { userId: string; type: AnomalyType; value: number },
+    @CurrentUserId() userId: string,
+    @Body() body: { type: AnomalyType; value: number },
   ) {
-    return this.anomalyService.detect(body.userId, body.type, body.value)
+    return this.anomalyService.detect(userId, body.type, body.value)
   }
 
   @Get(':userId')
   async getAnomalies(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('limit') limit?: number,
   ): Promise<AnomalyDetection[]> {
     return this.anomalyService.getAnomalies(userId, limit)
@@ -30,13 +32,13 @@ export class AnomalyController {
   }
 
   @Get(':userId/config')
-  async getConfig(@Param('userId') userId: string): Promise<AnomalyConfig> {
+  async getConfig(@CurrentUserId() userId: string): Promise<AnomalyConfig> {
     return this.anomalyService.getConfig(userId)
   }
 
   @Patch(':userId/config')
   async updateConfig(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Body() config: Partial<AnomalyConfig>,
   ): Promise<AnomalyConfig> {
     return this.anomalyService.updateConfig(userId, config)

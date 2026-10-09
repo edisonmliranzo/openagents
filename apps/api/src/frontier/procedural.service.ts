@@ -113,9 +113,14 @@ export class ProceduralService {
       )
       const match = res.content.match(/\{[\s\S]*\}/)
       const parsed = match ? JSON.parse(match[0]) : null
-      if (parsed?.name && typeof parsed.name === 'string') {
-        return { name: parsed.name.trim().slice(0, 60) }
-      }
+      const candidate = typeof parsed?.name === 'string' ? parsed.name.trim() : ''
+      // Reject prompt echoes and junk ("short title <=50 chars", quotes, markup).
+      const looksValid =
+        candidate.length >= 3 &&
+        candidate.length <= 60 &&
+        /^[A-Za-z0-9][A-Za-z0-9 \-&:'().,]+$/.test(candidate) &&
+        !/[<>]|chars|title|name/i.test(candidate)
+      if (looksValid) return { name: candidate }
     } catch (err: any) {
       this.logger.debug(`Routine naming skipped: ${err?.message ?? err}`)
     }

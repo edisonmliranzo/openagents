@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common'
 import { ResearchService } from './research.service'
 
+import { CurrentUserId } from '../auth/current-user-id.decorator'
 @Controller('research')
 export class ResearchController {
   constructor(private readonly research: ResearchService) {}
@@ -36,23 +37,23 @@ export class ResearchController {
   // ── Chat endpoints ────────────────────────────────────────────────────────────
 
   @Post('chats')
-  async createChat(@Body() body: { userId: string }) {
-    return this.research.createNewChat(body.userId)
+  async createChat(@CurrentUserId() userId: string) {
+    return this.research.createNewChat(userId)
   }
 
   @Get('chats/:userId')
-  async listChats(@Param('userId') userId: string) {
+  async listChats(@CurrentUserId() userId: string) {
     return this.research.getUserChats(userId)
   }
 
   @Get('chats/:userId/:chatId')
-  async getChat(@Param('userId') userId: string, @Param('chatId') chatId: string) {
+  async getChat(@CurrentUserId() userId: string, @Param('chatId') chatId: string) {
     return this.research.getChatHistory(userId, chatId)
   }
 
   @Post('chats/:userId/:chatId/message')
   async sendMessage(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Param('chatId') chatId: string,
     @Body() body: { message: string },
   ) {
@@ -60,7 +61,7 @@ export class ResearchController {
   }
 
   @Delete('chats/:userId/:chatId')
-  async archiveChat(@Param('userId') userId: string, @Param('chatId') chatId: string) {
+  async archiveChat(@CurrentUserId() userId: string, @Param('chatId') chatId: string) {
     await this.research.archiveChat(userId, chatId)
     return { archived: true }
   }

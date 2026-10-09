@@ -40,7 +40,9 @@ class ProcessWorkflowRunDto {
   input?: Record<string, unknown>
 }
 
+import { Public } from '../common/public.decorator'
 @ApiTags('workflows')
+@Public()
 @Controller('workflows/internal')
 export class WorkflowsInternalController {
   constructor(private readonly workflows: WorkflowsService) {}
@@ -53,7 +55,7 @@ export class WorkflowsInternalController {
 
   private assertToken(token?: string) {
     const expected = (process.env.WORKFLOW_WORKER_TOKEN ?? '').trim()
-    if (!expected) return
+    if (!expected) throw new UnauthorizedException('Worker token is not configured')
     if ((token ?? '').trim() !== expected) {
       throw new UnauthorizedException('Invalid workflow worker token')
     }

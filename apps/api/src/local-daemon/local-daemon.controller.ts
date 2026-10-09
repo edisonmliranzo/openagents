@@ -1,13 +1,14 @@
 import { Controller, Post, Body, Param } from '@nestjs/common'
 import { LocalDaemonService } from './local-daemon.service'
 
-@Controller('api/v1/daemon')
+import { CurrentUserId } from '../auth/current-user-id.decorator'
+@Controller('daemon')
 export class LocalDaemonController {
   constructor(private readonly service: LocalDaemonService) {}
 
   @Post('register')
-  register(@Body() body: { userId: string, hostname: string, capabilities: string[] }) {
-    return this.service.registerDaemon(body.userId, body.hostname, body.capabilities)
+  register(@CurrentUserId() userId: string, @Body() body: { hostname: string, capabilities: string[] }) {
+    return this.service.registerDaemon(userId, body.hostname, body.capabilities)
   }
 
   @Post(':id/execute')

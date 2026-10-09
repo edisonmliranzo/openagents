@@ -4,6 +4,7 @@ import { EncryptionService } from './encryption.service'
 import { AuditService } from './audit.service'
 import { ComplianceService } from './compliance.service'
 
+import { CurrentUserId } from '../auth/current-user-id.decorator'
 @Controller('security')
 export class SecurityController {
   constructor(
@@ -56,7 +57,7 @@ export class SecurityController {
    */
   @Get('audit')
   async getAuditEvents(
-    @Query('userId') userId?: string,
+    @CurrentUserId() userId?: string,
     @Query('category') category?: string,
     @Query('severity') severity?: string,
     @Query('limit') limit?: number,
@@ -89,7 +90,7 @@ export class SecurityController {
    * Export user data (GDPR)
    */
   @Get('export-data/:userId')
-  async exportUserData(@Param('userId') userId: string) {
+  async exportUserData(@CurrentUserId() userId: string) {
     return this.complianceService.exportUserData(userId)
   }
 

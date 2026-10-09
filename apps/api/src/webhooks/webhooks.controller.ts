@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { WebhooksService } from './webhooks.service'
 import { WebhookEventType, CreateWebhookDto, UpdateWebhookDto } from '@openagents/shared'
 
-@Controller('api/v1/webhooks')
+@Controller('webhooks')
 @UseGuards(JwtAuthGuard)
 export class WebhooksController {
   constructor(private readonly webhooksService: WebhooksService) {}

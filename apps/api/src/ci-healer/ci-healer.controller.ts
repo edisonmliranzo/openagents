@@ -61,10 +61,14 @@ class CreateCiIncidentDto implements CreateCiIncidentInput {
   metadata?: Record<string, unknown>
 }
 
+import { Public } from '../common/public.decorator'
 @ApiTags('ci')
 @Controller('ci')
 export class CiHealerController {
   constructor(private readonly ciHealer: CiHealerService) {}
+
+  @Public()
+
 
   @Post('failure')
   reportFailure(
@@ -106,7 +110,7 @@ export class CiHealerController {
 
   private assertWebhookToken(token?: string) {
     const expected = (process.env.CI_HEALER_TOKEN ?? '').trim()
-    if (!expected) return
+    if (!expected) throw new UnauthorizedException('CI healer token is not configured')
     const actual = (token ?? '').trim()
     if (actual !== expected) {
       throw new UnauthorizedException('Invalid CI healer token')

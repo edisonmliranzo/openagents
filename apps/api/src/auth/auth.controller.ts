@@ -42,21 +42,25 @@ class ResetPasswordDto {
   newPassword: string
 }
 
+import { Public } from '../common/public.decorator'
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
 
+  @Public()
   @Post('register')
   register(@Body() dto: RegisterDto, @Req() req: any) {
     return this.auth.register(dto.email, dto.password, dto.name, this.getClientIp(req), this.getUserAgent(req))
   }
 
+  @Public()
   @Post('login')
   login(@Body() dto: LoginDto, @Req() req: any) {
     return this.auth.login(dto.email, dto.password, this.getClientIp(req), this.getUserAgent(req))
   }
 
+  @Public()
   @Post('refresh')
   refresh(@Body() dto: RefreshDto) {
     return this.auth.refresh(dto.refreshToken)
@@ -84,6 +88,7 @@ export class AuthController {
     return this.auth.changePassword(req.user.id, dto.currentPassword, dto.newPassword)
   }
 
+  @Public()
   @Post('forgot-password')
   @HttpCode(200)
   forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: any) {
@@ -93,6 +98,7 @@ export class AuthController {
     return this.auth.forgotPassword(dto.email, baseUrl)
   }
 
+  @Public()
   @Post('reset-password')
   @HttpCode(200)
   resetPassword(@Body() dto: ResetPasswordDto) {

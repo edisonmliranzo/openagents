@@ -1,7 +1,8 @@
 import { Controller, Post, Get, Delete, Param, Body, Query } from '@nestjs/common'
 import { SchedulerService } from './scheduler.service'
 
-@Controller('api/v1/scheduler')
+import { CurrentUserId } from '../auth/current-user-id.decorator'
+@Controller('scheduler')
 export class SchedulerController {
   constructor(private scheduler: SchedulerService) {}
 
@@ -9,7 +10,7 @@ export class SchedulerController {
   create(@Body() body: any) { return this.scheduler.create(body) }
 
   @Get('tasks')
-  list(@Query('userId') userId: string) { return this.scheduler.list(userId) }
+  list(@CurrentUserId() userId: string) { return this.scheduler.list(userId) }
 
   @Get('tasks/:id')
   get(@Param('id') id: string) { return this.scheduler.get(id) }

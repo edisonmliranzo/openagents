@@ -78,6 +78,9 @@ import { PluginsModule } from './plugins/plugins.module'
 import { StudyModule } from './study/study.module'
 import { FrontierModule } from './frontier/frontier.module'
 
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
+import { GlobalAuthGuard } from './auth/guards/global-auth.guard'
+import { UserScopeInterceptor } from './auth/user-scope.interceptor'
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -94,6 +97,8 @@ import { FrontierModule } from './frontier/frontier.module'
     HandoffsModule,
     SkillReputationModule,
     AuthModule,
+    ConversationSearchModule,
+
     ConversationsModule,
     AgentModule,
     ToolsModule,
@@ -139,7 +144,6 @@ import { FrontierModule } from './frontier/frontier.module'
     VisionModule,
     DelegationModule,
     GoalsModule,
-    ConversationSearchModule,
     TemplatesModule,
     PinsModule,
     ReactionsModule,
@@ -161,5 +165,10 @@ import { FrontierModule } from './frontier/frontier.module'
     StudyModule,
     FrontierModule,
   ],
+  providers: [
+    { provide: APP_GUARD, useClass: GlobalAuthGuard },
+    { provide: APP_INTERCEPTOR, useClass: UserScopeInterceptor },
+  ],
+
 })
 export class AppModule {}

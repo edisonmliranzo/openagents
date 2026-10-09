@@ -1,12 +1,13 @@
 import { Controller, Post, Get, Delete, Param, Body, Query } from '@nestjs/common'
 import { TemplateService } from './template.service'
 
-@Controller('api/v1/templates')
+import { CurrentUserId } from '../auth/current-user-id.decorator'
+@Controller('templates')
 export class TemplateController {
   constructor(private templates: TemplateService) {}
 
   @Get()
-  list(@Query('userId') userId?: string, @Query('category') category?: string) {
+  list(@CurrentUserId() userId?: string, @Query('category') category?: string) {
     return this.templates.list(userId, category)
   }
 

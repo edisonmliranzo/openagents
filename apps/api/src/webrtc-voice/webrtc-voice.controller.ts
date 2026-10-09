@@ -1,13 +1,14 @@
 import { Controller, Post, Body, Param, Delete } from '@nestjs/common'
 import { WebRTCVoiceService } from './webrtc-voice.service'
 
-@Controller('api/v1/voice/webrtc')
+import { CurrentUserId } from '../auth/current-user-id.decorator'
+@Controller('voice/webrtc')
 export class WebRTCVoiceController {
   constructor(private readonly service: WebRTCVoiceService) {}
 
   @Post('sessions')
-  create(@Body() body: { userId: string, conversationId: string }) { 
-    return this.service.createSession(body.userId, body.conversationId) 
+  create(@CurrentUserId() userId: string, @Body() body: { conversationId: string }) { 
+    return this.service.createSession(userId, body.conversationId) 
   }
 
   @Post('sessions/:id/answer')

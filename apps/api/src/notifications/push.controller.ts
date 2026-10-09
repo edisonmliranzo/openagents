@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { PushService, PushSubscription } from './push.service'
 
 @ApiTags('push')
-@Controller('api/v1/push')
+@Controller('push')
 @UseGuards(JwtAuthGuard)
 export class PushController {
   constructor(private readonly push: PushService) {}
