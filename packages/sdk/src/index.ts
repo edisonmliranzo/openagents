@@ -52,6 +52,8 @@ export { createBrowserApi } from './api/browser'
 export type { BrowserSessionRow, BrowserStateResult } from './api/browser'
 export { createStudyApi } from './api/study'
 export { createFrontierApi } from './api/frontier'
+export { createTasksApi } from './api/tasks'
+export type { CreateTaskInput, TaskDetail, TaskEventRow, TaskRow } from './api/tasks'
 export type { FrontierStatus, TimelineHit, WatchTaskRow, PromptPatchRow, DebateResult, RoundtableResult, LearnedSkillRow } from './api/frontier'
 export type { KnowledgeGapRow } from './api/study'
 export { createWorkspacesApi } from './api/workspaces'
@@ -101,6 +103,7 @@ import { createPluginsApi } from './api/plugins'
 import { createBrowserApi } from './api/browser'
 import { createStudyApi } from './api/study'
 import { createFrontierApi } from './api/frontier'
+import { createTasksApi } from './api/tasks'
 import { createWorkspacesApi } from './api/workspaces'
 import { createPacksApi } from './api/packs'
 import type { SDKConfig } from './client'
@@ -153,6 +156,7 @@ export function createSDK(config: SDKConfig) {
     browser: createBrowserApi(client),
     study: createStudyApi(client),
     frontier: createFrontierApi(client),
+    tasks: createTasksApi(client),
     workspaces: createWorkspacesApi(client),
     packs: createPacksApi(client),
   }

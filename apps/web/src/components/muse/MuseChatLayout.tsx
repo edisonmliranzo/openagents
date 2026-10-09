@@ -6,6 +6,7 @@ import {
   BookOpen,
   CheckSquare,
   Lightbulb,
+  ListChecks,
   MessageCircle,
   PanelRight,
   Sparkles,
@@ -20,6 +21,7 @@ const TAB_ITEMS = [
   { icon: BookOpen, label: 'Library', href: '/library' },
   { icon: Lightbulb, label: 'Ideas', action: 'ideas' },
   { icon: CheckSquare, label: 'Approvals', href: '/approvals' },
+  { icon: ListChecks, label: 'Tasks', href: '/tasks' },
   { icon: Users, label: 'Team', href: '/team' },
   { icon: Sparkles, label: 'Frontier', href: '/frontier' },
 ]
