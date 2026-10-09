@@ -491,6 +491,41 @@ export function ChatWindow({
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [isOffline, setIsOffline] = useState(false)
+  const [offlineQueue, setOfflineQueue] = useState<string[]>([])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const saved = JSON.parse(window.localStorage.getItem('oa-offline-queue') ?? '[]')
+      if (Array.isArray(saved)) setOfflineQueue(saved.filter((x: unknown): x is string => typeof x === 'string'))
+    } catch { /* ignore corrupt queue */ }
+    setIsOffline(!navigator.onLine)
+    const goOnline = () => {
+      setIsOffline(false)
+      setOfflineQueue((queue) => {
+        const rest = [...queue]
+        window.setTimeout(() => {
+          rest.forEach((text) => void sendMessage(text).catch(() => undefined))
+        }, 800)
+        return []
+      })
+    }
+    const goOffline = () => setIsOffline(true)
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [sendMessage])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('oa-offline-queue', JSON.stringify(offlineQueue))
+    } catch { /* storage full or unavailable */ }
+  }, [offlineQueue])
   const learnedIntentLabel = formatIntentLabel(learnedSkill?.intent)
   const beginnerMode = Boolean(runtimeSettings?.beginnerMode)
   const assistantModeDefinition = useMemo(
@@ -1016,6 +1051,14 @@ export function ChatWindow({
       return
     }
 
+    if (!navigator.onLine) {
+      const queued = displayContent || '(file attached — queued offline)'
+      setOfflineQueue((q) => [...q, queued])
+      setInput('')
+      setAttachedFiles([])
+      return
+    }
+
     if (!gatewayConnected) return
 
     setSlashQuery(null)
@@ -1123,6 +1166,12 @@ export function ChatWindow({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-slate-200/70 bg-white/60 shadow-[0_2px_4px_rgba(15,23,42,0.03),0_24px_64px_-24px_rgba(15,23,42,0.14)] backdrop-blur-2xl dark:border-[#2d3347] dark:bg-[#10141f]/60">
+      {isOffline && (
+        <div className="flex items-center justify-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800">
+          Offline — messages queue locally and send automatically when you reconnect.
+          {offlineQueue.length > 0 && <span className="rounded-full bg-amber-200 px-2 py-0.5">{offlineQueue.length} queued</span>}
+        </div>
+      )}
       <div className="relative flex items-center justify-between border-b border-slate-200/60 bg-white/50 px-4 py-3 backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141824]/50 sm:px-6">
         {/* Left: model select */}
         <div ref={modelPickerRef} className="relative z-10">

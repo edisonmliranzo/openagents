@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common'
+import { Module, forwardRef } from '@nestjs/common'
 import { LearningModule } from '../learning/learning.module'
+import { FrontierModule } from '../frontier/frontier.module'
 import { AgentService } from './agent.service'
 import { AgentController } from './agent.controller'
 import { LLMService } from './llm.service'
@@ -35,6 +36,7 @@ import { GoalsModule } from '../goals/goals.module'
     GoalsModule,
     LearningModule,
     StudyModule,
+    forwardRef(() => FrontierModule),
   ],
   controllers: [AgentController],
   providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],

@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from './llm.service'
 import { ToolsService } from '../tools/tools.service'
@@ -21,6 +21,10 @@ import { SkillSuggesterService } from '../learning/skill-suggester.service'
 import { EffortService } from './effort.service'
 import { ExpertiseService } from './expertise.service'
 import { StudyService } from '../study/study.service'
+import { StakesService } from '../frontier/stakes.service'
+import { PiiRouterService } from '../frontier/pii-router.service'
+import { AutopilotService } from '../frontier/autopilot.service'
+import { PromptRepairService } from '../frontier/prompt-repair.service'
 import { GoalService } from '../goals/goal.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
@@ -210,6 +214,10 @@ export class AgentService implements OnModuleInit {
     private effort: EffortService,
     private expertise: ExpertiseService,
     private study: StudyService,
+    @Optional() private stakes: StakesService | null,
+    @Optional() private pii: PiiRouterService | null,
+    @Optional() private autopilot: AutopilotService | null,
+    @Optional() private promptPatches: PromptRepairService | null,
   ) {}
 
   async onModuleInit() {
@@ -248,6 +256,15 @@ export class AgentService implements OnModuleInit {
       },
     })
 
+    // Privacy router: cloud providers only ever see redacted text; the
+    // placeholders are restored before the answer reaches the user.
+    let piiState: { map: Record<string, string>; counter: number } | null = null
+    if (this.pii?.enabled) {
+      const redacted = this.pii.redact(userMessage)
+      userMessage = redacted.text
+      piiState = redacted.state
+    }
+
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       select: { title: true, personality: true, model: true, modelProvider: true },
@@ -274,6 +291,7 @@ export class AgentService implements OnModuleInit {
     const fastAdvisoryMode = this.shouldUseFastAdvisoryMode(userMessage)
     const taskClass = this.modelRouter.classify(userMessage)
     const effort = this.effort.resolve(userMessage, taskClass, effortOverride)
+    const stakes = this.stakes?.enabled ? await this.stakes.assess(userMessage) : 'medium'
     let planTotal = 0
     void this.expertise.observe(userId, userMessage).catch(() => undefined)
 
@@ -290,6 +308,7 @@ export class AgentService implements OnModuleInit {
         runStartedAtMs,
         providerOverride: this.normalizeProvider(conversation?.modelProvider),
         modelOverride: conversation?.model?.trim() || undefined,
+        piiState,
       }).catch((err) => {
         this.logger.warn(`Small-talk fast path failed, falling back to full run: ${this.safeError(err)}`)
         return false
@@ -298,9 +317,10 @@ export class AgentService implements OnModuleInit {
     }
 
     // Ask before guessing: vague, context-free asks get one sharp clarifying
-    // question instead of a confident wrong guess.
-    if (effort === 'direct' && this.isAmbiguous(userMessage)) {
-      const clarified = await this.tryRunClarify({ conversationId, userId, userMessage, emit, runId: run.id, runStartedAtMs }).catch((err) => {
+    // question instead of a confident wrong guess. High-stakes asks (money,
+    // sending, deleting) confirm too — a wrong guess there is expensive.
+    if (effort === 'direct' && (this.isAmbiguous(userMessage) || (this.stakes?.enabled && stakes === 'high'))) {
+      const clarified = await this.tryRunClarify({ conversationId, userId, userMessage, emit, runId: run.id, runStartedAtMs, piiState }).catch((err) => {
         this.logger.warn(`Clarify path failed, continuing full run: ${this.safeError(err)}`)
         return false
       })
@@ -313,7 +333,7 @@ export class AgentService implements OnModuleInit {
       const cached = await this.answerCache.lookup(userId, userMessage, taskClass)
       if (cached) {
         const agentMsg = await this.prisma.message.create({
-          data: { conversationId, role: 'agent', content: cached.answer, status: 'done' },
+          data: { conversationId, role: 'agent', content: piiState && this.pii ? this.pii.restore(cached.answer, piiState) : cached.answer, status: 'done' },
         })
         emit('message', agentMsg)
         await this.prisma.agentRun.update({
@@ -362,9 +382,17 @@ export class AgentService implements OnModuleInit {
         ? { provider: sessionProvider, model: sessionModel, applied: false, preset: 'none' as const }
         : await this.modelRouter.adjust(this.resolveRoutingPreset(settings.preferredProvider, settings.preferredModel), taskClass, userId)
       const provider = routing.provider
-      const preferredModel = fastAdvisoryMode
+      let preferredModel = fastAdvisoryMode
         ? this.resolveFastAdvisoryModel(provider, routing.model)
         : routing.model
+      // Cost autopilot: budget burn pins the fast tier; high stakes with
+      // headroom earns the powerful local model.
+      if (this.autopilot?.enabled) {
+        const ap = await this.autopilot.decide(userId, stakes)
+        if (ap.forceFast) preferredModel = this.resolveFastAdvisoryModel(provider, preferredModel)
+        else if (ap.upgrade && provider === 'ollama') preferredModel = LLM_MODELS.ollama.powerful
+        if (ap.reason) emit('thinking', { step: 'autopilot', message: ap.reason })
+      }
       let autonomyStatus = await this.memory.getAutonomyStatus(userId)
 
       // 4. Build context: recent messages + long-term memory
@@ -375,6 +403,10 @@ export class AgentService implements OnModuleInit {
           ? Math.min(FAST_CONTEXT_MESSAGE_LIMIT + 2, SHORT_TERM_MEMORY_LIMIT)
           : Math.min(NORMAL_CONTEXT_MESSAGE_LIMIT + 4, SHORT_TERM_MEMORY_LIMIT),
       })
+
+      if (piiState && this.pii) {
+        for (const m of recentMessages) m.content = this.pii.redact(m.content, piiState).text
+      }
 
       const [memories, promptMemories, filesystemContext, semanticMemories] = await Promise.all([
         this.memory.getForUser(userId),
@@ -419,6 +451,13 @@ export class AgentService implements OnModuleInit {
       const goalSummary = await this.goals.getActiveGoalSummary(userId)
       if (goalSummary) {
         systemPrompt = `${systemPrompt}\n\nActive Goals:\n${goalSummary}`
+      }
+      // Prompt self-repair: rules learned from past failures in this task class.
+      if (this.promptPatches?.enabled) {
+        const rules = await this.promptPatches.rulesFor(userId, taskClass).catch(() => [] as string[])
+        if (rules.length) {
+          systemPrompt = `${systemPrompt}\n\nLearned rules (from past failures in ${taskClass} tasks):\n${rules.map((r) => `- ${r}`).join('\n')}`
+        }
       }
       const freshnessNote = this.needsFreshData(userMessage)
         ? 'This request may depend on current information. Use web_search/web_fetch to verify facts that change over time before answering — do not rely on stale training data.'
@@ -1191,6 +1230,8 @@ export class AgentService implements OnModuleInit {
         .replace(/<think(?:ing)?>[\s\S]*/gi, '')  // unclosed tags mid-content
         .trim()
 
+      if (piiState && this.pii) finalResponseContent = this.pii.restore(finalResponseContent, piiState)
+
       if (finalResponseContent) {
         const agentMsg = await this.prisma.message.create({
           data: { conversationId, role: 'agent', content: finalResponseContent, status: 'done' },
@@ -1933,8 +1974,9 @@ export class AgentService implements OnModuleInit {
     emit: (event: string, data: unknown) => void
     runId: string
     runStartedAtMs: number
+    piiState?: { map: Record<string, string>; counter: number } | null
   }): Promise<boolean> {
-    const { conversationId, userId, userMessage, emit, runId, runStartedAtMs } = input
+    const { conversationId, userId, userMessage, emit, runId, runStartedAtMs, piiState } = input
 
     // If the agent just asked something, "that" likely answers it — run normally.
     const lastAgent = await this.prisma.message.findFirst({
@@ -1964,7 +2006,7 @@ export class AgentService implements OnModuleInit {
     if (!content) return false
 
     const agentMsg = await this.prisma.message.create({
-      data: { conversationId, role: 'agent', content, status: 'done' },
+      data: { conversationId, role: 'agent', content: piiState && this.pii ? this.pii.restore(content, piiState) : content, status: 'done' },
     })
     emit('message', agentMsg)
     await this.prisma.agentRun.update({
@@ -2063,8 +2105,9 @@ export class AgentService implements OnModuleInit {
     runStartedAtMs: number
     providerOverride?: LLMProvider | null
     modelOverride?: string
+    piiState?: { map: Record<string, string>; counter: number } | null
   }): Promise<boolean> {
-    const { conversationId, userId, userMessage, emit, runId, runStartedAtMs } = input
+    const { conversationId, userId, userMessage, emit, runId, runStartedAtMs, piiState } = input
 
     // Never fast-path when the user might be answering something real.
     const [pendingApprovals, lastAgentMessage] = await Promise.all([
@@ -2124,7 +2167,7 @@ export class AgentService implements OnModuleInit {
     if (!content) return false
 
     const agentMsg = await this.prisma.message.create({
-      data: { conversationId, role: 'agent', content, status: 'done' },
+      data: { conversationId, role: 'agent', content: piiState && this.pii ? this.pii.restore(content, piiState) : content, status: 'done' },
     })
     emit('message', agentMsg)
     await this.prisma.agentRun.update({
