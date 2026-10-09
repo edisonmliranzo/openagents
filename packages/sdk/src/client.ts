@@ -107,6 +107,20 @@ export class OpenAgentsClient {
   }
 
   private async tryRefresh(): Promise<boolean> {
+    // Concurrent 401s must share one refresh: the API rotates (deletes) the
+    // refresh token on use, so parallel refreshes would race and the losers
+    // would be logged out.
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.doRefresh().finally(() => {
+        this.refreshPromise = null
+      })
+    }
+    return this.refreshPromise
+  }
+
+  private refreshPromise: Promise<boolean> | null = null
+
+  private async doRefresh(): Promise<boolean> {
     try {
       const refreshUrl = `${this.baseUrl}/api/v1/auth/refresh`
       const res = await this.fetchWithNetworkGuard(refreshUrl, {
