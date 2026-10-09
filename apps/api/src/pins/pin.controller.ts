@@ -1,7 +1,8 @@
 import { Controller, Post, Delete, Get, Param, Body, Query } from '@nestjs/common'
 import { PinService } from './pin.service'
 
-@Controller('api/v1/pins')
+import { CurrentUserId } from '../auth/current-user-id.decorator'
+@Controller('pins')
 export class PinController {
   constructor(private pins: PinService) {}
 
@@ -17,7 +18,7 @@ export class PinController {
   }
 
   @Get('user/:userId')
-  listForUser(@Param('userId') uid: string, @Query('limit') limit?: string) {
+  listForUser(@CurrentUserId() uid: string, @Query('limit') limit?: string) {
     return this.pins.listForUser(uid, limit ? parseInt(limit, 10) : undefined)
   }
 }

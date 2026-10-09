@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Param, Body, Patch } from '@nestjs/common'
 import { GenerativeUIService } from './generative-ui.service'
 
-@Controller('api/v1/generative-ui')
+@Controller('generative-ui')
 export class GenerativeUIController {
   constructor(private readonly service: GenerativeUIService) {}
 

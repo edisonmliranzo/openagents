@@ -1,13 +1,14 @@
 import { Controller, Post, Body, Param } from '@nestjs/common'
 import { WarRoomService } from './war-rooms.service'
 
-@Controller('api/v1/war-rooms')
+import { CurrentUserId } from '../auth/current-user-id.decorator'
+@Controller('war-rooms')
 export class WarRoomsController {
   constructor(private readonly service: WarRoomService) {}
 
   @Post()
-  create(@Body() body: { userId: string, name: string, agents: string[] }) {
-    return this.service.createRoom(body.userId, body.name, body.agents)
+  create(@CurrentUserId() userId: string, @Body() body: { name: string, agents: string[] }) {
+    return this.service.createRoom(userId, body.name, body.agents)
   }
 
   @Post(':id/messages')

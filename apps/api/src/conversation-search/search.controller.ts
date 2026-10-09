@@ -1,14 +1,15 @@
 import { Controller, Get, Query } from '@nestjs/common'
 import { ConversationSearchService } from './search.service'
 
-@Controller('api/v1/conversations/search')
+import { CurrentUserId } from '../auth/current-user-id.decorator'
+@Controller('conversations/search')
 export class ConversationSearchController {
   constructor(private search: ConversationSearchService) {}
 
   @Get()
   searchConversations(
     @Query('q') query: string,
-    @Query('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('conversationId') conversationId?: string,
     @Query('role') role?: string,
     @Query('limit') limit?: string,

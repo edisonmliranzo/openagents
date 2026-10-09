@@ -7,6 +7,7 @@ import { AnalyticsService } from './analytics.service'
 import { Request } from 'express'
 import { User } from '@prisma/client'
 
+import { CurrentUserId } from '../auth/current-user-id.decorator'
 @ApiTags('Analytics')
 @Controller('analytics')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -20,7 +21,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Analytics summary retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getAnalyticsSummary(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('timeframe') timeframe: '7d' | '30d' | '90d' = '30d',
   ) {
     return this.analyticsService.getAnalyticsSummary(userId, timeframe)
@@ -32,7 +33,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Token metrics retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getTokenUsage(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('timeframe') timeframe: '7d' | '30d' | '90d' = '30d',
   ) {
     return this.analyticsService.getTokenUsageMetrics(userId, timeframe)
@@ -44,7 +45,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Cost analysis retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getCostAnalysis(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('timeframe') timeframe: '7d' | '30d' | '90d' = '30d',
   ) {
     return this.analyticsService.getCostAnalysis(userId, timeframe)
@@ -56,7 +57,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Performance metrics retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getPerformanceMetrics(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('timeframe') timeframe: '7d' | '30d' | '90d' = '30d',
   ) {
     return this.analyticsService.getPerformanceMetrics(userId, timeframe)
@@ -68,7 +69,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Usage trends retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getUsageTrends(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('timeframe') timeframe: '7d' | '30d' | '90d' = '30d',
   ) {
     return this.analyticsService.getUsageTrends(userId, timeframe)
@@ -80,7 +81,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Predictive analytics retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getPredictiveAnalytics(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('timeframe') timeframe: '7d' | '30d' | '90d' = '30d',
   ) {
     return this.analyticsService.getPredictiveAnalytics(userId, timeframe)
@@ -91,7 +92,7 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'Get analytics alerts' })
   @ApiResponse({ status: 200, description: 'Analytics alerts retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getAlerts(@Param('userId') userId: string) {
+  async getAlerts(@CurrentUserId() userId: string) {
     // Implementation for getting alerts
     return []
   }
@@ -103,7 +104,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async acknowledgeAlert(
     @Param('alertId') alertId: string,
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
   ) {
     // Implementation for acknowledging alerts
     return { success: true }
@@ -114,7 +115,7 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'Get analytics reports' })
   @ApiResponse({ status: 200, description: 'Analytics reports retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getReports(@Param('userId') userId: string) {
+  async getReports(@CurrentUserId() userId: string) {
     // Implementation for getting reports
     return []
   }
@@ -125,7 +126,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Report generated successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async generateReport(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Body() reportConfig: any,
   ) {
     // Implementation for generating reports
@@ -137,7 +138,7 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'Get user dashboards' })
   @ApiResponse({ status: 200, description: 'Dashboards retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getDashboards(@Param('userId') userId: string) {
+  async getDashboards(@CurrentUserId() userId: string) {
     // Implementation for getting dashboards
     return []
   }
@@ -148,7 +149,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Dashboard created successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async createDashboard(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Body() dashboardConfig: any,
   ) {
     // Implementation for creating dashboards
@@ -162,7 +163,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async addWidgetToDashboard(
     @Param('dashboardId') dashboardId: string,
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Body() widgetConfig: any,
   ) {
     // Implementation for adding widgets
@@ -175,7 +176,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Data exported successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async exportData(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Query('format') format: 'csv' | 'json' | 'xlsx' = 'csv',
     @Query('timeframe') timeframe: '7d' | '30d' | '90d' = '30d',
   ) {
@@ -208,7 +209,7 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'Get usage limits and quotas' })
   @ApiResponse({ status: 200, description: 'Usage limits retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getUsageLimits(@Param('userId') userId: string) {
+  async getUsageLimits(@CurrentUserId() userId: string) {
     // Implementation for usage limits
     return {
       tokenLimit: 1000000,
@@ -224,7 +225,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Optimization recommendations retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getOptimizationRecommendations(
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
     @Body() optimizationRequest: any,
   ) {
     // Implementation for optimization recommendations

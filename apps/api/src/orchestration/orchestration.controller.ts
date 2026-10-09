@@ -5,6 +5,7 @@ import { AuthGuard } from '@nestjs/passport'
 import { OrchestrationService, OrchestrationPlan, AgentTask } from './orchestration.service'
 import { AuditService } from '../security/audit.service'
 
+import { CurrentUserId } from '../auth/current-user-id.decorator'
 export interface CreateOrchestrationPlanDto {
   objective: string
   context?: any
@@ -40,7 +41,7 @@ export class OrchestrationController {
   @ApiResponse({ status: 400, description: 'Invalid input' })
   async createPlan(
     @Body() createPlanDto: CreateOrchestrationPlanDto,
-    @Param('userId') userId: string,
+    @CurrentUserId() userId: string,
   ): Promise<OrchestrationPlan> {
     const plan = await this.orchestrationService.createOrchestrationPlan(
       userId,
@@ -65,7 +66,7 @@ export class OrchestrationController {
   @ApiParam({ name: 'planId', description: 'ID of the orchestration plan' })
   @ApiResponse({ status: 200, description: 'Orchestration plan retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Plan not found' })
-  async getPlan(@Param('planId') planId: string, @Param('userId') userId: string): Promise<OrchestrationPlan | null> {
+  async getPlan(@Param('planId') planId: string, @CurrentUserId() userId: string): Promise<OrchestrationPlan | null> {
     const plan = this.orchestrationService.getPlanStatus(planId)
 
     await this.auditService.logEvent(userId, {
@@ -83,7 +84,7 @@ export class OrchestrationController {
   @Get('plans')
   @ApiOperation({ summary: 'List all active orchestration plans' })
   @ApiResponse({ status: 200, description: 'Active plans retrieved successfully' })
-  async listPlans(@Param('userId') userId: string): Promise<OrchestrationPlan[]> {
+  async listPlans(@CurrentUserId() userId: string): Promise<OrchestrationPlan[]> {
     const plans = this.orchestrationService.listActivePlans()
 
     await this.auditService.logEvent(userId, {
@@ -103,7 +104,7 @@ export class OrchestrationController {
   @ApiParam({ name: 'planId', description: 'ID of the orchestration plan' })
   @ApiResponse({ status: 200, description: 'Plan execution initiated successfully' })
   @ApiResponse({ status: 404, description: 'Plan not found' })
-  async executePlan(@Param('planId') planId: string, @Param('userId') userId: string): Promise<void> {
+  async executePlan(@Param('planId') planId: string, @CurrentUserId() userId: string): Promise<void> {
     await this.orchestrationService.executePlan(planId, userId)
 
     await this.auditService.logEvent(userId, {
@@ -121,7 +122,7 @@ export class OrchestrationController {
   @ApiParam({ name: 'planId', description: 'ID of the orchestration plan' })
   @ApiResponse({ status: 200, description: 'Plan cancelled successfully' })
   @ApiResponse({ status: 404, description: 'Plan not found' })
-  async cancelPlan(@Param('planId') planId: string, @Param('userId') userId: string): Promise<boolean> {
+  async cancelPlan(@Param('planId') planId: string, @CurrentUserId() userId: string): Promise<boolean> {
     const result = this.orchestrationService.cancelPlan(planId, userId)
 
     await this.auditService.logEvent(userId, {
@@ -141,7 +142,7 @@ export class OrchestrationController {
   @ApiParam({ name: 'planId', description: 'ID of the orchestration plan' })
   @ApiResponse({ status: 200, description: 'Tasks retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Plan not found' })
-  async getPlanTasks(@Param('planId') planId: string, @Param('userId') userId: string): Promise<AgentTask[]> {
+  async getPlanTasks(@Param('planId') planId: string, @CurrentUserId() userId: string): Promise<AgentTask[]> {
     const plan = this.orchestrationService.getPlanStatus(planId)
     
     if (!plan) {
@@ -165,7 +166,7 @@ export class OrchestrationController {
   @ApiParam({ name: 'planId', description: 'ID of the orchestration plan' })
   @ApiResponse({ status: 200, description: 'Execution order retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Plan not found' })
-  async getExecutionOrder(@Param('planId') planId: string, @Param('userId') userId: string): Promise<string[]> {
+  async getExecutionOrder(@Param('planId') planId: string, @CurrentUserId() userId: string): Promise<string[]> {
     const plan = this.orchestrationService.getPlanStatus(planId)
     
     if (!plan) {
@@ -187,7 +188,7 @@ export class OrchestrationController {
   @Get('health')
   @ApiOperation({ summary: 'Get orchestration system health status' })
   @ApiResponse({ status: 200, description: 'Health status retrieved successfully' })
-  async getHealthStatus(@Param('userId') userId: string): Promise<{ activePlans: number; totalTasks: number; systemStatus: string }> {
+  async getHealthStatus(@CurrentUserId() userId: string): Promise<{ activePlans: number; totalTasks: number; systemStatus: string }> {
     const plans = this.orchestrationService.listActivePlans()
     const totalTasks = plans.reduce((sum, plan) => sum + plan.tasks.length, 0)
 
@@ -214,7 +215,7 @@ export class OrchestrationController {
   @ApiParam({ name: 'planId', description: 'ID of the orchestration plan' })
   @ApiResponse({ status: 200, description: 'Plan deleted successfully' })
   @ApiResponse({ status: 404, description: 'Plan not found' })
-  async deletePlan(@Param('planId') planId: string, @Param('userId') userId: string): Promise<boolean> {
+  async deletePlan(@Param('planId') planId: string, @CurrentUserId() userId: string): Promise<boolean> {
     const plan = this.orchestrationService.getPlanStatus(planId)
     
     if (!plan) {

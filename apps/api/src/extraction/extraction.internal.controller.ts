@@ -9,7 +9,9 @@ class ProcessExtractionJobDto {
   extractionId!: string
 }
 
+import { Public } from '../common/public.decorator'
 @ApiTags('extract')
+@Public()
 @Controller('extract/internal')
 export class ExtractionInternalController {
   constructor(private readonly extraction: ExtractionService) {}
@@ -26,9 +28,9 @@ export class ExtractionInternalController {
 
   private assertWorkerToken(token?: string) {
     const expected = (process.env.EXTRACTION_WORKER_TOKEN ?? '').trim()
-    if (!expected) return
+    if (!expected) throw new UnauthorizedException('Worker token is not configured')
     const actual = (token ?? '').trim()
-    if (actual !== expected) {
+    if (!expected || actual !== expected) {
       throw new UnauthorizedException('Invalid extraction worker token')
     }
   }

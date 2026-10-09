@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from '../agent/llm.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { flag, clamp } from './frontier.util'
+import { assertPublicHttpUrl, safeFetchText } from './safe-fetch'
 
 const POLL_MS = 60 * 1000
 
@@ -35,6 +36,13 @@ export class WatchService {
 
   async create(userId: string, input: { name: string; kind?: string; target: string; condition: string; intervalMin?: number }) {
     const kind = input.kind === 'time' ? 'time' : 'url'
+    if (kind === 'url') {
+      try {
+        await assertPublicHttpUrl(input.target.trim())
+      } catch (err: any) {
+        throw new BadRequestException(err?.message ?? 'Invalid watch URL')
+      }
+    }
     return this.prisma.watchTask.create({
       data: {
         userId,
@@ -93,12 +101,7 @@ export class WatchService {
         return { fired: false }
       }
 
-      const res = await fetch(task.target, {
-        redirect: 'follow',
-        signal: AbortSignal.timeout(15000),
-        headers: { 'User-Agent': 'OpenAgents-Watch/1.0' },
-      })
-      const html = await res.text()
+      const html = await safeFetchText(task.target)
       const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
       const judge = await this.llm.complete(
         [{ role: 'user', content: `Condition: ${task.condition}\n\nPage content (truncated):\n${clamp(text, 3800)}\n\nReply JSON only: {"met": true|false, "detail": "<=140 chars evidence"}` }],

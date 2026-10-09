@@ -1,7 +1,8 @@
 import { Controller, Post, Get, Param, Body, Query } from '@nestjs/common'
 import { DelegationService } from './delegation.service'
 
-@Controller('api/v1/delegation')
+import { CurrentUserId } from '../auth/current-user-id.decorator'
+@Controller('delegation')
 export class DelegationController {
   constructor(private delegation: DelegationService) {}
 
@@ -16,7 +17,7 @@ export class DelegationController {
   }
 
   @Get('tasks')
-  listTasks(@Query('userId') userId: string, @Query('limit') limit?: string) {
+  listTasks(@CurrentUserId() userId: string, @Query('limit') limit?: string) {
     return this.delegation.listTasks(userId, limit ? parseInt(limit, 10) : undefined)
   }
 

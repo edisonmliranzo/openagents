@@ -8,6 +8,7 @@ import type {
   ProviderConnection,
 } from '@openagents/shared'
 
+import { Public } from '../common/public.decorator'
 @ApiTags('oauth')
 @Controller('auth/oauth')
 export class OAuthController {
@@ -16,6 +17,7 @@ export class OAuthController {
   /**
    * Initiate OAuth flow for a provider
    */
+  @Public()
   @Get('authorize/:provider')
   @ApiOperation({ summary: 'Initiate OAuth authorization' })
   @ApiResponse({ status: 200, description: 'OAuth URL generated successfully' })
@@ -33,6 +35,7 @@ export class OAuthController {
   /**
    * Handle OAuth callback
    */
+  @Public()
   @Get('callback')
   @ApiOperation({ summary: 'Handle OAuth callback' })
   @ApiResponse({ status: 200, description: 'OAuth callback handled successfully' })

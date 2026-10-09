@@ -13,7 +13,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { MetricsService } from './metrics.service'
 import { PrismaService } from '../prisma/prisma.service'
 
-@Controller('api/v1/metrics')
+@Controller('metrics')
 @UseGuards(JwtAuthGuard)
 export class MetricsController {
   constructor(

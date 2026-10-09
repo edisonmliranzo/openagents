@@ -9,7 +9,9 @@ class ProcessCiIncidentDto {
   incidentId!: string
 }
 
+import { Public } from '../common/public.decorator'
 @ApiTags('ci')
+@Public()
 @Controller('ci/internal')
 export class CiHealerInternalController {
   constructor(private readonly ciHealer: CiHealerService) {}
@@ -26,9 +28,9 @@ export class CiHealerInternalController {
 
   private assertWorkerToken(token?: string) {
     const expected = (process.env.CI_HEALER_WORKER_TOKEN ?? '').trim()
-    if (!expected) return
+    if (!expected) throw new UnauthorizedException('Worker token is not configured')
     const actual = (token ?? '').trim()
-    if (actual !== expected) {
+    if (!expected || actual !== expected) {
       throw new UnauthorizedException('Invalid CI healer worker token')
     }
   }

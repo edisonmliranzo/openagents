@@ -1,7 +1,7 @@
 import { Controller, Post, Delete, Get, Param, Body } from '@nestjs/common'
 import { ReactionService } from './reaction.service'
 
-@Controller('api/v1/reactions')
+@Controller('reactions')
 export class ReactionController {
   constructor(private reactions: ReactionService) {}
 

@@ -13,7 +13,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { TriggersService } from './triggers.service'
 
-@Controller('api/v1/triggers')
+@Controller('triggers')
 @UseGuards(JwtAuthGuard)
 export class TriggersController {
   constructor(private readonly triggersService: TriggersService) {}

@@ -32,7 +32,9 @@ class RegisterWebhookDto {
   webhookUrl!: string
 }
 
+import { Public } from '../../common/public.decorator'
 @ApiTags('channels')
+@Public()
 @Controller('channels/telegram')
 export class TelegramController {
   private readonly logger = new Logger(TelegramController.name)
@@ -94,7 +96,7 @@ export class TelegramController {
 
   private assertWebhookSecret(secret?: string) {
     const expected = (process.env.TELEGRAM_WEBHOOK_SECRET ?? '').trim()
-    if (!expected) return
+    if (!expected) throw new UnauthorizedException('TELEGRAM webhook secret is not configured')
     if ((secret ?? '').trim() !== expected) {
       throw new UnauthorizedException('Invalid Telegram webhook secret')
     }

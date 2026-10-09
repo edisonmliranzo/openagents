@@ -37,7 +37,9 @@ class AllowWhatsAppDeviceDto {
   label?: string
 }
 
+import { Public } from '../../common/public.decorator'
 @ApiTags('channels')
+@Public()
 @Controller('channels/whatsapp')
 export class WhatsAppController {
   private readonly logger = new Logger(WhatsAppController.name)
@@ -103,7 +105,7 @@ export class WhatsAppController {
 
   private assertWebhookToken(token?: string) {
     const expected = (process.env.WHATSAPP_WEBHOOK_TOKEN ?? '').trim()
-    if (!expected) return
+    if (!expected) throw new UnauthorizedException('WHATSAPP webhook secret is not configured')
     const actual = (token ?? '').trim()
     if (actual !== expected) {
       throw new UnauthorizedException('Invalid webhook token')

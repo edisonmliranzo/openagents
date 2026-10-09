@@ -1,7 +1,8 @@
 import { Controller, Post, Get, Patch, Delete, Param, Body, Query } from '@nestjs/common'
 import { ToolBuilderService } from './tool-builder.service'
 
-@Controller('api/v1/tool-builder')
+import { CurrentUserId } from '../auth/current-user-id.decorator'
+@Controller('tool-builder')
 export class ToolBuilderController {
   constructor(private toolBuilder: ToolBuilderService) {}
 
@@ -9,7 +10,7 @@ export class ToolBuilderController {
   create(@Body() body: any) { return this.toolBuilder.create(body) }
 
   @Get()
-  list(@Query('userId') userId: string) { return this.toolBuilder.list(userId) }
+  list(@CurrentUserId() userId: string) { return this.toolBuilder.list(userId) }
 
   @Get(':id')
   get(@Param('id') id: string) { return this.toolBuilder.get(id) }
@@ -24,5 +25,5 @@ export class ToolBuilderController {
   delete(@Param('id') id: string) { return this.toolBuilder.delete(id) }
 
   @Get('definitions')
-  definitions(@Query('userId') userId: string) { return this.toolBuilder.getToolDefinitions(userId) }
+  definitions(@CurrentUserId() userId: string) { return this.toolBuilder.getToolDefinitions(userId) }
 }

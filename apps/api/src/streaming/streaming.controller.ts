@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import { StreamingService } from './streaming.service'
 
-@Controller('api/v1/streaming')
+@Controller('streaming')
 export class StreamingController {
   constructor(private streaming: StreamingService) {}
 

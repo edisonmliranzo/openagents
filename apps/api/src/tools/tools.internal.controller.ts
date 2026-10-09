@@ -20,7 +20,9 @@ class ProcessToolRunDto {
   toolInput!: Record<string, unknown>
 }
 
+import { Public } from '../common/public.decorator'
 @ApiTags('tools')
+@Public()
 @Controller('tools/internal')
 export class ToolsInternalController {
   constructor(private readonly tools: ToolsService) {}
@@ -37,9 +39,9 @@ export class ToolsInternalController {
 
   private assertWorkerToken(token?: string) {
     const expected = (process.env.TOOL_RUN_WORKER_TOKEN ?? '').trim()
-    if (!expected) return
+    if (!expected) throw new UnauthorizedException('Worker token is not configured')
     const actual = (token ?? '').trim()
-    if (actual !== expected) {
+    if (!expected || actual !== expected) {
       throw new UnauthorizedException('Invalid tool-run worker token')
     }
   }
