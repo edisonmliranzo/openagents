@@ -1,8 +1,9 @@
-param(
+﻿param(
   [string]$InstallDir = (Join-Path $HOME 'openagents'),
   [switch]$RunDev,
   [switch]$SkipDocker,
   [switch]$SkipMigrate,
+  [switch]$InstallOllama,
   [switch]$Help
 )
 
@@ -169,6 +170,7 @@ function Wait-ForDocker([int]$TimeoutSeconds = 240) {
         return
       }
     } catch {
+      # Keep waiting for Docker Desktop.
     }
     Start-Sleep -Seconds 2
   }
@@ -213,12 +215,46 @@ function Run-Setup {
   Invoke-External 'pnpm' @($scriptName) $InstallDir
 }
 
+function Register-WatchdogTask {
+  $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $nodeCmd) {
+    return
+  }
+
+  try {
+    $scriptPath = Join-Path $InstallDir 'scripts\dev-watchdog.mjs'
+    $action = New-ScheduledTaskAction -Execute $nodeCmd.Source `
+      -Argument "`"$scriptPath`" --ensure" -WorkingDirectory $InstallDir
+    $triggers = @(
+      (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME),
+      (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5))
+    )
+    $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable
+    Register-ScheduledTask -TaskName 'OpenAgentsDevWatchdog' -Action $action -Trigger $triggers -Settings $settings -Force | Out-Null
+    Write-Host 'Self-heal task registered: OpenAgentsDevWatchdog (revives api+web+Ollama every 5 min and at sign-in)'
+  } catch {
+    Write-Host "Could not register the self-heal task ($($_.Exception.Message)). OpenAgents still works - start it with OpenAgents.cmd." -ForegroundColor Yellow
+  }
+}
+
 function New-LauncherFiles {
   $cmdLauncherPath = Join-Path $InstallDir 'OpenAgents.cmd'
   $cmdLauncher = @'
 @echo off
 cd /d "%~dp0"
-pnpm dev
+schtasks /Change /TN "OpenAgentsDevWatchdog" /Enable >nul 2>&1
+echo OpenAgents self-healing server. Keep this window open while you use the app.
+echo App: http://localhost:3000  -  browser menu > Install/OpenAgents as app
+pnpm dev:watch
+pause
+'@
+
+  $stopLauncherPath = Join-Path $InstallDir 'StopOpenAgents.cmd'
+  $stopLauncher = @'
+@echo off
+schtasks /Change /TN "OpenAgentsDevWatchdog" /Disable >nul 2>&1
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'dev-watchdog' } | ForEach-Object { taskkill /PID $_.ProcessId /T /F }" >nul 2>&1
+echo OpenAgents stopped and auto-revive disabled. Run OpenAgents.cmd to start again.
 pause
 '@
 
@@ -226,8 +262,12 @@ pause
   $psLauncher = @'
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
-pnpm dev
+pnpm dev:watch
 '@
+
+  $desktopDir = [Environment]::GetFolderPath('Desktop')
+  $urlShortcut = Join-Path $desktopDir 'OpenAgents.url'
+  $urlContent = "[InternetShortcut]`r`nURL=http://localhost:3000/`r`n"
 
   $readmePath = Join-Path $InstallDir 'OPENAGENTS-START-HERE.txt'
   $readmeText = @"
@@ -240,8 +280,17 @@ Branch or tag:
 $RepoRef
 
 Start OpenAgents:
-- Double-click OpenAgents.cmd
-- or run: Set-Location '$InstallDir'; pnpm dev
+- Double-click OpenAgents.cmd (self-healing server; keep the window open)
+- It also auto-starts at sign-in via the OpenAgentsDevWatchdog task
+
+Install as a desktop app (recommended):
+1. Start OpenAgents and open http://localhost:3000 in Chrome or Edge
+2. Sign in once
+3. Browser menu > Apps > "Install this site as an app" (Edge: ... > Apps > Install OpenAgents as an app)
+4. Pin the OpenAgents icon to the taskbar - it launches as its own window
+
+Stop OpenAgents:
+- Double-click StopOpenAgents.cmd (also disables auto-revive)
 
 Update OpenAgents:
 - Rerun the same install command you used the first time.
@@ -252,12 +301,18 @@ Health check:
 Backup:
 - Run: Set-Location '$InstallDir'; pnpm backup:create
 
+Local AI (optional):
+- Ollama models power the free local brain. Install from https://ollama.com
+  or rerun the installer with -InstallOllama.
+
 Login:
 - http://localhost:3000/login
 "@
 
   Write-AsciiFile -Path $cmdLauncherPath -Content $cmdLauncher
+  Write-AsciiFile -Path $stopLauncherPath -Content $stopLauncher
   Write-AsciiFile -Path $psLauncherPath -Content $psLauncher
+  Write-AsciiFile -Path $urlShortcut -Content $urlContent
   Write-AsciiFile -Path $readmePath -Content $readmeText
 }
 
@@ -270,9 +325,10 @@ Usage:
 
 Options:
   -InstallDir <path>  Target clone directory. Default: $HOME\openagents
-  -RunDev             Start `pnpm dev` after setup completes
+  -RunDev             Start the self-healing server (pnpm dev:watch) after setup
   -SkipDocker         Skip Docker startup and run the lighter setup path
   -SkipMigrate        Skip Prisma migrate during setup
+  -InstallOllama      Install Ollama (free local AI models) via winget
   -Help               Show this help
 
 Environment:
@@ -291,6 +347,16 @@ try {
   Write-Step 'Repository'
   Clone-Or-UpdateRepo
 
+  if ($InstallOllama) {
+    Write-Step 'Ollama (local AI models)'
+    Ensure-Package 'Ollama' 'ollama' 'Ollama.Ollama'
+    $ollamaExe = Join-Path $Env:LocalAppData 'Programs\Ollama\Ollama.exe'
+    if (Test-Path $ollamaExe) {
+      Start-Process -FilePath $ollamaExe | Out-Null
+      Write-Host 'Ollama started - OpenAgents will use it as the free local brain.'
+    }
+  }
+
   if (-not $SkipDocker) {
     Write-Step 'Docker Desktop'
     Start-DockerDesktop
@@ -300,25 +366,28 @@ try {
   Write-Step 'OpenAgents setup'
   Run-Setup
   New-LauncherFiles
+  Register-WatchdogTask
 
   Write-Host ''
   Write-Host 'OpenAgents is installed.' -ForegroundColor Green
   Write-Host "Repo: $InstallDir"
   Write-Host "Git ref: $RepoRef"
   Write-Host "Launcher: $(Join-Path $InstallDir 'OpenAgents.cmd')"
+  Write-Host "Desktop shortcut: OpenAgents.url (double-click to open the app)"
   Write-Host "Instructions: $(Join-Path $InstallDir 'OPENAGENTS-START-HERE.txt')"
   Write-Host 'Start it with:'
-  Write-Host "  Set-Location '$InstallDir'; pnpm dev"
+  Write-Host "  Set-Location '$InstallDir'; pnpm dev:watch"
   Write-Host "Or double-click $(Join-Path $InstallDir 'OpenAgents.cmd')"
   Write-Host 'Doctor command:'
   Write-Host "  Set-Location '$InstallDir'; pnpm doctor"
   Write-Host 'Backup command:'
   Write-Host "  Set-Location '$InstallDir'; pnpm backup:create"
-  Write-Host 'Then open http://localhost:3000/login'
+  Write-Host 'Then open http://localhost:3000/login and install it as an app:'
+  Write-Host '  Browser menu > Apps > Install OpenAgents as an app'
 
   if ($RunDev) {
-    Write-Step 'Start development server'
-    Invoke-External 'pnpm' @('dev') $InstallDir
+    Write-Step 'Start self-healing development server'
+    Invoke-External 'pnpm' @('dev:watch') $InstallDir
   }
 } catch {
   Write-Host ''

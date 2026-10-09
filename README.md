@@ -58,8 +58,10 @@ From the repo root, run:
 
 ```bash
 pnpm setup
-pnpm dev
+pnpm dev:watch
 ```
+
+`pnpm dev:watch` is the self-healing server: it restarts the API/web if they crash and revives Ollama when its port goes dark (plain `pnpm dev` still works too).
 
 What `pnpm setup` does:
 
@@ -80,6 +82,16 @@ After startup:
 > then open `http://localhost:3002/login`.
 
 Then log in and go to **Settings → Config** to add your provider key or connect Ollama.
+
+### Install as a desktop app
+
+Once OpenAgents is running:
+
+1. Open `http://localhost:3000` in **Chrome or Edge** and sign in
+2. Browser menu → **Apps** → **Install this site as an app**
+3. Pin the OpenAgents icon — it launches in its own window with its own icon
+
+The one-shot installers (`scripts/install.ps1`, `scripts/install.sh`) do the full job hands-free: prerequisites, optional Ollama (`-InstallOllama` / `--with-ollama`), a self-healing launcher that revives the app and Ollama if either stops (auto-starts at sign-in), plus a desktop shortcut and `OPENAGENTS-START-HERE.txt`.
 
 ---
 
@@ -120,7 +132,7 @@ pnpm setup
 **Step 4 — Start OpenAgents**
 
 ```powershell
-pnpm dev
+pnpm dev:watch
 ```
 
 **Step 5 — Open your browser**
@@ -178,7 +190,7 @@ pnpm setup
 **Step 3 — Start OpenAgents**
 
 ```bash
-pnpm dev
+pnpm dev:watch
 ```
 
 **Step 4 — Open your browser**
@@ -229,7 +241,7 @@ cd openagents
 
 ```bash
 pnpm setup
-pnpm dev
+pnpm dev:watch
 ```
 
 Go to **Settings → Config** to add your API key or connect Ollama.
