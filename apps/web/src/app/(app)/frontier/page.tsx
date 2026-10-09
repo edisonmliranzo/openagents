@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { sdk } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
-import type { FrontierStatus, TimelineHit, WatchTaskRow, PromptPatchRow, DebateResult, RoundtableResult } from '@openagents/sdk'
+import type { FrontierStatus, TimelineHit, WatchTaskRow, PromptPatchRow, DebateResult, RoundtableResult, LearnedSkillRow } from '@openagents/sdk'
 import { Activity, AlarmClock, BrainCircuit, GitCompareArrows, Loader2, MessagesSquare, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
 
 function Section({ icon: Icon, title, subtitle, children }: { icon: any; title: string; subtitle?: string; children: React.ReactNode }) {
@@ -46,6 +46,7 @@ export default function FrontierPage() {
   const [wTarget, setWTarget] = useState('')
   const [wCond, setWCond] = useState('')
   const [patches, setPatches] = useState<PromptPatchRow[]>([])
+  const [skills, setSkills] = useState<LearnedSkillRow[]>([])
 
   const load = useCallback(async () => {
     const [st, dg, ws, ps] = await Promise.allSettled([
@@ -58,6 +59,7 @@ export default function FrontierPage() {
     if (dg.status === 'fulfilled' && dg.value) setDigest({ content: dg.value.content, createdAt: dg.value.createdAt })
     if (ws.status === 'fulfilled') setWatches(ws.value)
     if (ps.status === 'fulfilled') setPatches(ps.value)
+    sdk.frontier.skills.list().then(setSkills).catch(() => undefined)
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -187,6 +189,42 @@ export default function FrontierPage() {
                 <span className={`min-w-0 flex-1 ${p.active ? '' : 'line-through opacity-50'}`}>{p.rule}</span>
                 <button onClick={() => run('p', async () => { await sdk.frontier.patches.setActive(p.id, !p.active); await load() })}>{p.active ? 'Off' : 'On'}</button>
                 <button aria-label="Delete" onClick={() => run('p', async () => { await sdk.frontier.patches.remove(p.id); await load() })}><Trash2 size={14} /></button>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        <Section icon={Sparkles} title="Learned skills" subtitle="Repeated requests you make are distilled into reusable skills and applied automatically when they fit">
+          <div className="flex items-center gap-2">
+            <button className={btnCls} disabled={busy === 'sk'} onClick={() => run('sk', async () => {
+              const r = await sdk.frontier.skills.learn()
+              setSkills(await sdk.frontier.skills.list())
+              addToast('success', `Learned ${r.created} new, updated ${r.updated} (from ${r.scanned} prompts)`)
+            })}>
+              {busy === 'sk' ? <Loader2 size={15} className="animate-spin" /> : 'Learn from my prompts'}
+            </button>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {skills.length === 0 && <li className="text-sm text-[var(--muted)]">No skills yet. They appear after you repeat a kind of request about three times.</li>}
+            {skills.map((s) => (
+              <li key={s.id} className="rounded-xl border border-[var(--border)] bg-white/70 px-3 py-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px]">{s.source === 'auto' ? 'auto' : 'manual'}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-[var(--tone-strong)]">{s.name}</span>
+                  <span className="text-[11px] text-[var(--muted)]">used {s.timesUsed}×</span>
+                  <select
+                    aria-label="Skill status"
+                    value={s.status}
+                    onChange={(e) => run('sk', async () => { await sdk.frontier.skills.setStatus(s.id, e.target.value as LearnedSkillRow['status']); setSkills(await sdk.frontier.skills.list()) })}
+                    className="oa-input-surface h-7 rounded-lg px-2 text-xs"
+                  >
+                    <option value="active">active</option>
+                    <option value="draft">draft</option>
+                    <option value="disabled">disabled</option>
+                  </select>
+                  <button aria-label="Delete skill" onClick={() => run('sk', async () => { await sdk.frontier.skills.remove(s.id); setSkills(await sdk.frontier.skills.list()) })}><Trash2 size={14} /></button>
+                </div>
+                <p className="mt-1 text-xs text-[var(--muted)]">{s.description}</p>
               </li>
             ))}
           </ul>

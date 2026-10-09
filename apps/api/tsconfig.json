@@ -12,6 +12,13 @@
     "strictNullChecks": false,
     "strictPropertyInitialization": false
   },
-  "include": ["src", "prisma"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src",
+    "prisma"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/*.test.ts"
+  ]
 }

@@ -1270,6 +1270,11 @@ model UserSkill {
   toolsUsed    String   @default("[]") // JSON array of tool names
   tags         String   @default("[]") // JSON array
   triggerPhrase String?
+  source       String   @default("manual") // manual | auto
+  status       String   @default("active") // active | draft | disabled
+  sourceKey    String?  // signature of the prompt cluster that produced an auto skill
+  confidence   Float    @default(0)
+  sourceCount  Int      @default(1)
   timesUsed    Int      @default(0)
   lastUsedAt   DateTime?
   createdAt    DateTime @default(now())
@@ -1279,6 +1284,7 @@ model UserSkill {
 
   @@index([userId, createdAt])
   @@index([userId, timesUsed])
+  @@index([userId, status])
 }
 
 // ─── Long-Term Goals (Muse-style goal tracking, persisted) ────────────────

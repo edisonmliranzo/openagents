@@ -12,6 +12,7 @@ export interface FrontierStatus {
   costAutopilot: boolean
   stakesAware: boolean
   privacyRouter: boolean
+  skillLearning?: boolean
 }
 
 export interface TimelineHit {
@@ -61,6 +62,22 @@ export interface RoundtableResult {
   speakers: string[]
 }
 
+export interface LearnedSkillRow {
+  id: string
+  name: string
+  description: string
+  triggerPhrase: string | null
+  steps: string
+  tags: string
+  source: 'manual' | 'auto'
+  status: 'active' | 'draft' | 'disabled'
+  confidence: number
+  sourceCount: number
+  timesUsed: number
+  lastUsedAt: string | null
+  createdAt: string
+}
+
 export function createFrontierApi(client: OpenAgentsClient) {
   return {
     status: () => client.get<FrontierStatus>('/api/v1/frontier/status'),
@@ -89,6 +106,12 @@ export function createFrontierApi(client: OpenAgentsClient) {
       list: () => client.get<PromptPatchRow[]>('/api/v1/frontier/patches'),
       setActive: (id: string, active: boolean) => client.patch(`/api/v1/frontier/patches/${id}`, { active }),
       remove: (id: string) => client.delete(`/api/v1/frontier/patches/${id}`),
+    },
+    skills: {
+      list: () => client.get<LearnedSkillRow[]>('/api/v1/frontier/skills'),
+      learn: () => client.post<{ scanned: number; created: number; updated: number }>('/api/v1/frontier/skills/learn'),
+      setStatus: (id: string, status: 'active' | 'draft' | 'disabled') => client.patch(`/api/v1/frontier/skills/${id}`, { status }),
+      remove: (id: string) => client.delete(`/api/v1/frontier/skills/${id}`),
     },
     autopilot: () => client.get<{ forceFast: boolean; upgrade: boolean; reason: string | null; spentUsd: number; ceilingUsd: number }>('/api/v1/frontier/autopilot'),
   }
