@@ -674,7 +674,7 @@ export class LLMService {
       baseURL: this.resolveOllamaBaseUrl(baseUrl),
       apiKey: 'ollama',
       // Fail fast instead of hanging the chat on "thinking" forever.
-      timeout: 120_000,
+      timeout: 300_000,
       maxRetries: 1,
     })
   }
@@ -696,7 +696,7 @@ export class LLMService {
       ...(baseURL ? { baseURL } : {}),
       apiKey,
       // Fail fast instead of hanging the chat on "thinking" forever.
-      timeout: 120_000,
+      timeout: 300_000,
       maxRetries: 1,
     })
   }
