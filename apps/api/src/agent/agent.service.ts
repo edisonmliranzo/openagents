@@ -25,6 +25,7 @@ import { StakesService } from '../frontier/stakes.service'
 import { PiiRouterService } from '../frontier/pii-router.service'
 import { AutopilotService } from '../frontier/autopilot.service'
 import { PromptRepairService } from '../frontier/prompt-repair.service'
+import { SkillLearnerService } from '../frontier/skill-learner.service'
 import { GoalService } from '../goals/goal.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
@@ -218,6 +219,7 @@ export class AgentService implements OnModuleInit {
     @Optional() private pii: PiiRouterService | null,
     @Optional() private autopilot: AutopilotService | null,
     @Optional() private promptPatches: PromptRepairService | null,
+    @Optional() private skillLearner: SkillLearnerService | null,
   ) {}
 
   async onModuleInit() {
@@ -451,6 +453,12 @@ export class AgentService implements OnModuleInit {
       const goalSummary = await this.goals.getActiveGoalSummary(userId)
       if (goalSummary) {
         systemPrompt = `${systemPrompt}\n\nActive Goals:\n${goalSummary}`
+      }
+      // Learned skills: matching user-taught workflows guide the approach (never policy).
+      if (this.skillLearner?.enabled) {
+        const matched = await this.skillLearner.matchForMessage(userId, userMessage).catch(() => [])
+        const block = this.skillLearner.renderBlock(matched)
+        if (block) systemPrompt = `${systemPrompt}\n\n${block}`
       }
       // Prompt self-repair: rules learned from past failures in this task class.
       if (this.promptPatches?.enabled) {

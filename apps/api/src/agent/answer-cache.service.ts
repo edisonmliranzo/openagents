@@ -13,6 +13,7 @@ const CACHEABLE_CLASSES = new Set(['small-talk', 'general', 'summarize'])
 // Time-sensitive answers (news, prices, scores) cache briefly so "what's the
 // news" twice in 15 minutes dedupes, but stale news never survives.
 const FRESH_CLASSES = new Set(['search'])
+const JUNK_ANSWER = /I completed the tool execution|let me know if you need anything else|the results have been processed/i
 
 export interface CachedAnswer {
   id: string
@@ -98,6 +99,8 @@ export class AnswerCacheService {
     if (input.usedTools && !fresh) return
     const answer = input.answer.trim()
     if (!answer || answer.length > CACHE_MAX_ANSWER_CHARS) return
+    // Never cache generic filler produced after a tool run; it is not an answer.
+    if (answer.length < 20 || JUNK_ANSWER.test(answer)) return
 
     try {
       const embedded = await this.embeddings.embed(input.question.trim())

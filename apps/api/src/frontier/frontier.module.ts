@@ -17,6 +17,7 @@ import { WatchService } from './watch.service'
 import { RoundtableService } from './roundtable.service'
 import { AutodocService } from './autodoc.service'
 import { FrontierController } from './frontier.controller'
+import { SkillLearnerService } from './skill-learner.service'
 
 @Module({
   imports: [PrismaModule, forwardRef(() => AgentModule), MemoryModule, UsersModule, NotificationsModule, LibraryModule],
@@ -33,7 +34,8 @@ import { FrontierController } from './frontier.controller'
     WatchService,
     RoundtableService,
     AutodocService,
+    SkillLearnerService,
   ],
-  exports: [StakesService, PiiRouterService, AutopilotService, PromptRepairService, AutodocService],
+  exports: [StakesService, PiiRouterService, AutopilotService, PromptRepairService, AutodocService, SkillLearnerService],
 })
 export class FrontierModule {}

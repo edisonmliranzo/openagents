@@ -12,6 +12,7 @@ import { PromptRepairService } from './prompt-repair.service'
 import { AutopilotService } from './autopilot.service'
 import { StakesService } from './stakes.service'
 import { PiiRouterService } from './pii-router.service'
+import { SkillLearnerService } from './skill-learner.service'
 
 @ApiTags('frontier')
 @ApiBearerAuth()
@@ -30,6 +31,7 @@ export class FrontierController {
     private readonly autopilot: AutopilotService,
     private readonly stakes: StakesService,
     private readonly pii: PiiRouterService,
+    private readonly skills: SkillLearnerService,
   ) {}
 
   @Get('status')
@@ -46,6 +48,7 @@ export class FrontierController {
       costAutopilot: this.autopilot.enabled,
       stakesAware: this.stakes.enabled,
       privacyRouter: this.pii.enabled,
+      skillLearning: this.skills.enabled,
     }
   }
 
@@ -152,6 +155,26 @@ export class FrontierController {
   @Post('patches/run')
   patchesRun(@Req() req: any) {
     return this.promptRepair.repairFor(req.user.id, 'general').then((rules) => ({ ok: true, rules }))
+  }
+
+  @Get('skills')
+  listSkills(@Req() req: any) {
+    return this.skills.list(req.user.id)
+  }
+
+  @Post('skills/learn')
+  learnSkills(@Req() req: any) {
+    return this.skills.learnForUser(req.user.id)
+  }
+
+  @Patch('skills/:id')
+  setSkillStatus(@Req() req: any, @Param('id') id: string, @Body() body: { status: string }) {
+    return this.skills.setStatus(req.user.id, id, String(body?.status ?? ''))
+  }
+
+  @Delete('skills/:id')
+  deleteSkill(@Req() req: any, @Param('id') id: string) {
+    return this.skills.remove(req.user.id, id)
   }
 
   @Get('autopilot')
