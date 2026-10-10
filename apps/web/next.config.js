@@ -1,15 +1,27 @@
 /** @type {import('next').NextConfig} */
+const isStaticExport =
+  process.env.CF_PAGES === '1' ||
+  process.env.STATIC_EXPORT === '1' ||
+  process.env.NEXT_PUBLIC_IS_CLOUD_PORTAL === 'true'
+
 const nextConfig = {
   transpilePackages: ['@openagents/shared', '@openagents/sdk'],
-  async rewrites() {
-    const apiBase = process.env.OPENAGENTS_INTERNAL_API_URL || 'http://localhost:3001'
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${apiBase}/api/:path*`,
-      },
-    ]
-  },
+  ...(isStaticExport
+    ? {
+        output: 'export',
+        images: { unoptimized: true },
+      }
+    : {
+        async rewrites() {
+          const apiBase = process.env.OPENAGENTS_INTERNAL_API_URL || 'http://localhost:3001'
+          return [
+            {
+              source: '/api/:path*',
+              destination: `${apiBase}/api/:path*`,
+            },
+          ]
+        },
+      }),
 }
 
 module.exports = nextConfig

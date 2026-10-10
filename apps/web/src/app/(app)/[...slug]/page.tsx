@@ -14,6 +14,10 @@ function formatSectionName(slug: string[]) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+export function generateStaticParams() {
+  return [{ slug: ['dashboard'] }]
+}
+
 export default function PlaceholderPage({ params }: PlaceholderPageProps) {
   const slug = params.slug ?? []
 
