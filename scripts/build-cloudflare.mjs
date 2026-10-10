@@ -15,8 +15,16 @@ execSync('pnpm --filter @openagents/shared build', {
   env: { ...process.env, CI: 'true' }
 })
 
-// 2. Build @openagents/web with static export
-console.log('[build-cloudflare] Step 2: Building @openagents/web static export...')
+// 2. Build @openagents/sdk (required by apps/web)
+console.log('[build-cloudflare] Step 2: Building @openagents/sdk...')
+execSync('pnpm --filter @openagents/sdk build', {
+  cwd: rootDir,
+  stdio: 'inherit',
+  env: { ...process.env, CI: 'true' }
+})
+
+// 3. Build @openagents/web with static export
+console.log('[build-cloudflare] Step 3: Building @openagents/web static export...')
 execSync('pnpm --filter @openagents/web build', {
   cwd: rootDir,
   stdio: 'inherit',
