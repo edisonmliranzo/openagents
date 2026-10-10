@@ -14,7 +14,7 @@ usage() {
 OpenAgents macOS / Ubuntu installer
 
 Usage:
-  bash install.sh [options]
+  bash scripts/install.sh [options]
 
 Options:
   --dir <path>       Target clone directory. Default: ~/openagents

@@ -267,7 +267,7 @@ pnpm dev:watch
 
   $desktopDir = [Environment]::GetFolderPath('Desktop')
   $urlShortcut = Join-Path $desktopDir 'OpenAgents.url'
-  $urlContent = "[InternetShortcut]`r`nURL=http://localhost:3000/`r`n"
+  $urlContent = "[InternetShortcut]`r`nURL=http://localhost:3000/chat`r`n"
 
   $readmePath = Join-Path $InstallDir 'OPENAGENTS-START-HERE.txt'
   $readmeText = @"

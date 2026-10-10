@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$InstallDir = (Join-Path $HOME 'openagents'),
   [switch]$RunDev,
   [switch]$SkipDocker,
@@ -267,7 +267,7 @@ pnpm dev:watch
 
   $desktopDir = [Environment]::GetFolderPath('Desktop')
   $urlShortcut = Join-Path $desktopDir 'OpenAgents.url'
-  $urlContent = "[InternetShortcut]`r`nURL=http://localhost:3000/`r`n"
+  $urlContent = "[InternetShortcut]`r`nURL=http://localhost:3000/chat`r`n"
 
   $readmePath = Join-Path $InstallDir 'OPENAGENTS-START-HERE.txt'
   $readmeText = @"
@@ -321,7 +321,7 @@ if ($Help) {
 OpenAgents Windows installer
 
 Usage:
-  powershell -ExecutionPolicy Bypass -File install.ps1 [options]
+  powershell -ExecutionPolicy Bypass -File scripts/install.ps1 [options]
 
 Options:
   -InstallDir <path>  Target clone directory. Default: $HOME\openagents
