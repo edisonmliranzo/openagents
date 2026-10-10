@@ -1,0 +1,7 @@
+name = "openagents"
+compatibility_date = "2024-09-23"
+
+[assets]
+directory = "./apps/web/out"
+not_found_handling = "single-page-application"
+html_handling = "auto-trailing-slash"
