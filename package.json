@@ -17,6 +17,7 @@
     "dev": "turbo run dev",
     "dev:watch": "node scripts/dev-watchdog.mjs",
     "build": "turbo run build",
+    "build:pages": "pnpm --filter @openagents/shared build && pnpm --filter @openagents/web build",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "test": "turbo run test",
