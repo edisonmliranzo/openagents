@@ -29,6 +29,10 @@ export class AuthService {
     this.validatePasswordStrength(password)
     const shouldAssignOwner = this.isCreatorEmail(normalizedEmail)
 
+    if (!shouldAssignOwner) {
+      throw new BadRequestException('Public registration is currently closed. Please join the waitlist on the homepage.')
+    }
+
     const existing = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
     if (existing) throw new ConflictException('Email already in use')
 
@@ -53,6 +57,10 @@ export class AuthService {
   async login(email: string, password: string, clientIp = 'unknown', userAgent = 'unknown') {
     const normalizedEmail = this.normalizeEmail(email)
     this.authRateLimit.assertLoginAllowed(normalizedEmail, clientIp)
+
+    if (!this.isCreatorEmail(normalizedEmail)) {
+      throw new UnauthorizedException('Access restricted to platform administrator (edison0220@gmail.com). Public access is not open yet.')
+    }
 
     let user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
     if (!user) {

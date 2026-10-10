@@ -12,7 +12,7 @@ export default function LoginPage() {
 
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState('edison0220@gmail.com')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -57,6 +57,18 @@ export default function LoginPage() {
         throw new Error('Unable to initialize auth actions. Please refresh the page.')
       }
 
+      if (email.trim().toLowerCase() !== 'edison0220@gmail.com') {
+        setError('Access is restricted to platform administrator (edison0220@gmail.com). Public access is not open yet.')
+        setLoading(false)
+        return
+      }
+
+      if (mode === 'register') {
+        setError('Public registration is currently closed. Only administrator accounts can sign in.')
+        setLoading(false)
+        return
+      }
+
       if (mode === 'login') {
         await safeLogin(email, password)
       } else {
@@ -95,6 +107,16 @@ export default function LoginPage() {
           </p>
         </div>
 
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-3.5 text-xs text-rose-900">
+          <p className="font-bold flex items-center gap-1.5 text-rose-700">
+            <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+            Private Beta • Administrator Sign-In Only
+          </p>
+          <p className="mt-1 text-[11px] text-rose-600 leading-normal">
+            Platform access is restricted exclusively to <strong>edison0220@gmail.com</strong>. Public registration is closed.
+          </p>
+        </div>
+
         {/* Tab toggle */}
         <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
           <button
@@ -103,27 +125,9 @@ export default function LoginPage() {
               setMode('login')
               setError('')
             }}
-            className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-              mode === 'login'
-                ? 'oa-brand-badge text-white shadow-sm'
-                : 'text-[var(--muted)] hover:text-[var(--tone-strong)]'
-            }`}
+            className="flex-1 rounded-md py-2 text-sm font-semibold oa-brand-badge text-white shadow-sm"
           >
-            Sign in
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('register')
-              setError('')
-            }}
-            className={`flex-1 rounded-md py-2 text-sm font-medium transition ${
-              mode === 'register'
-                ? 'oa-brand-badge text-white shadow-sm'
-                : 'text-[var(--muted)] hover:text-[var(--tone-strong)]'
-            }`}
-          >
-            Register
+            Admin Sign In
           </button>
         </div>
 

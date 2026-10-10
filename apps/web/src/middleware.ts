@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const PROTECTED_PREFIXES = [
-  '/',
+  '/admin',
   '/chat',
   '/settings',
   '/memory',
@@ -11,6 +11,7 @@ const PROTECTED_PREFIXES = [
   '/control',
   '/agent',
   '/sessions',
+  '/tasks',
 ]
 
 export function middleware(request: NextRequest) {
