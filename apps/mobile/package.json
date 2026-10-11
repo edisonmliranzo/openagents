@@ -8,6 +8,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "build": "expo export",
+    "build:apk": "eas build -p android --profile preview",
+    "build:aab": "eas build -p android --profile production",
+    "build:ios": "eas build -p ios --profile preview",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

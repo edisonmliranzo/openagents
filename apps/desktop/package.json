@@ -1,0 +1,68 @@
+{
+  "name": "@openagents/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OpenAgents Desktop - Autonomous AI Operating System for Windows, macOS, and Linux",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build:main": "tsc -p tsconfig.json",
+    "build": "pnpm run build:main",
+    "dev": "pnpm run build:main && electron dist/main/index.js",
+    "package:win": "pnpm run build && electron-builder --win",
+    "package:mac": "pnpm run build && electron-builder --mac",
+    "package:linux": "pnpm run build && electron-builder --linux",
+    "package:dir": "pnpm run build && electron-builder --dir"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.4.0"
+  },
+  "build": {
+    "appId": "com.openagents.desktop",
+    "productName": "OpenAgents",
+    "copyright": "Copyright © 2026 OpenAgents Inc.",
+    "directories": {
+      "output": "release"
+    },
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "resources/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "resources/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OpenAgents"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "resources/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "icon": "resources/icon.png"
+    }
+  }
+}
