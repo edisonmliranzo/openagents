@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element -- marketing logos from local/public SVGs */
 
 import React, { useState, useEffect } from 'react'
 import Image from 'next/image'

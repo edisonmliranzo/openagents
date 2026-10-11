@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- live browser screenshot from arbitrary origins */
 import { useState, useEffect } from 'react'
 import { sdk } from '@/stores/auth'
 

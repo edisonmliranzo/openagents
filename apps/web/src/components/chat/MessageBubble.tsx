@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element -- renders agent screenshots/data URLs from arbitrary origins */
 
 import { useCallback, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'

@@ -574,14 +574,15 @@ export default function ConfigPage() {
   }, [activeModel, activeProvider, modelOptions])
 
   // On provider switch, fetch the provider's live model catalog.
+  const activeProviderBaseUrl = cards[activeProvider]?.baseUrl
   useEffect(() => {
     if (activeProvider === 'ollama') return
     setLiveModels([])
     setLiveModelsSource('curated')
     setLiveModelsProvider(null)
     setLiveModelsStatus('idle')
-    void loadLiveModels(activeProvider, cards[activeProvider]?.baseUrl || undefined)
-  }, [activeProvider, loadLiveModels])
+    void loadLiveModels(activeProvider, activeProviderBaseUrl || undefined)
+  }, [activeProvider, activeProviderBaseUrl, loadLiveModels])
 
   // On first switch to Ollama, fetch locally available models.
   useEffect(() => {
