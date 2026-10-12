@@ -7,7 +7,8 @@
   "scripts": {
     "build:main": "tsc -p tsconfig.json",
     "build": "pnpm run build:main",
-    "dev": "pnpm run build:main && electron dist/main/index.js",
+    "dev": "tsc -p tsconfig.json --watch",
+    "dev:gui": "pnpm run build:main && electron dist/main/index.js",
     "package:win": "pnpm run build && electron-builder --win",
     "package:mac": "pnpm run build && electron-builder --mac",
     "package:linux": "pnpm run build && electron-builder --linux",
@@ -33,6 +34,12 @@
       "dist/**/*",
       "package.json",
       "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
     ],
     "win": {
       "target": [

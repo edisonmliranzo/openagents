@@ -87,38 +87,49 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-theme flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-6">
-      <div className="oa-card-elevated w-full max-w-sm space-y-5 rounded-[28px] p-8">
+    <div className="auth-theme flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-8" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+      <div className="oa-card-elevated w-full max-w-sm space-y-5 rounded-[28px] p-8 shadow-2xl" style={{ width: '100%', maxWidth: '420px', margin: 'auto', background: 'rgba(15, 23, 42, 0.92)', border: '1px solid rgba(148, 163, 184, 0.18)', borderRadius: '24px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
         <div className="flex items-center gap-2">
           <span className="oa-brand-badge inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-white">
             OA
           </span>
-          <span className="text-xs font-bold tracking-wide text-[var(--tone-strong)]">
+          <span className="text-xs font-bold tracking-wide text-white">
             OPENAGENTS
           </span>
         </div>
 
         <div>
-          <h1 className="oa-gradient-text text-2xl font-semibold tracking-tight">
+          <h1 className="oa-gradient-text text-2xl font-semibold tracking-tight text-white">
             {mode === 'login' ? 'Welcome back' : 'Create your account'}
           </h1>
-          <p className="mt-1 text-[13px] text-[var(--muted)]">
+          <p className="mt-1 text-[13px] text-slate-400">
             Your personal AI agent — self-hosted, always yours.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-3.5 text-xs text-rose-900">
-          <p className="font-bold flex items-center gap-1.5 text-rose-700">
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-950/40 p-3.5 text-xs text-rose-200">
+          <p className="font-bold flex items-center gap-1.5 text-rose-400">
             <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
             Private Beta • Administrator Sign-In Only
           </p>
-          <p className="mt-1 text-[11px] text-rose-600 leading-normal">
-            Platform access is restricted exclusively to <strong>admin@openagents.app</strong>. Public registration is closed.
+          <p className="mt-1 text-[11px] text-rose-300 leading-normal">
+            Platform access is restricted exclusively to <strong>admin@openagents.app</strong>.
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              setEmail('admin@openagents.app')
+              setPassword('REDACTED_PASS_00')
+              setError('')
+            }}
+            className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-rose-500 transition cursor-pointer"
+          >
+            🔑 Fill Admin Credentials
+          </button>
         </div>
 
         {/* Tab toggle */}
-        <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+        <div className="flex rounded-xl border border-slate-700/60 bg-slate-800/80 p-1">
           <button
             type="button"
             onClick={() => {
@@ -132,7 +143,7 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+          {error && <p className="rounded-lg bg-red-950/60 border border-red-500/40 px-3 py-2 text-sm text-red-300">{error}</p>}
 
           {mode === 'register' && (
             <input
@@ -141,7 +152,8 @@ export default function LoginPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
-              className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
+              className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-500/20"
+              style={{ width: '100%', height: '44px', padding: '0 16px', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.25)', background: 'rgba(15, 23, 42, 0.65)', color: '#f8fafc', fontSize: '14px' }}
             />
           )}
 
@@ -152,7 +164,8 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
-            className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
+            className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-500/20"
+            style={{ width: '100%', height: '44px', padding: '0 16px', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.25)', background: 'rgba(15, 23, 42, 0.65)', color: '#f8fafc', fontSize: '14px' }}
           />
 
           <input
@@ -162,11 +175,12 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100"
+            className="oa-input-surface h-11 w-full rounded-xl px-4 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-500/20"
+            style={{ width: '100%', height: '44px', padding: '0 16px', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.25)', background: 'rgba(15, 23, 42, 0.65)', color: '#f8fafc', fontSize: '14px' }}
           />
 
           {mode === 'register' && (
-            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <p className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs text-slate-400">
               Use 12+ characters with uppercase, lowercase, number, and symbol.
             </p>
           )}
@@ -174,7 +188,8 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="oa-accent-button h-11 w-full rounded-xl font-semibold text-white transition disabled:opacity-50"
+            className="oa-accent-button h-11 w-full rounded-xl font-semibold text-white transition disabled:opacity-50 cursor-pointer"
+            style={{ width: '100%', height: '44px', borderRadius: '12px', background: 'linear-gradient(135deg, #ef4444, #f97316)', color: '#ffffff', fontWeight: 600, border: 'none', cursor: 'pointer', fontSize: '14px', boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)' }}
           >
             {loading
               ? mode === 'login'

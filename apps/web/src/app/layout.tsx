@@ -38,7 +38,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${plusJakarta.variable} ${ibmPlexMono.variable}`}>
+    <html lang="en" className={`dark theme-dark ${plusJakarta.variable} ${ibmPlexMono.variable}`}>
       <body>
         {children}
         {process.env.NODE_ENV === 'production' && (
