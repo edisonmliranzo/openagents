@@ -46,3 +46,10 @@ apps/api/prisma/dev.db
 apps/api/data/
 ml/artifacts/
 ml/.calendar_state.json
+
+# Desktop build artifacts (large binaries, generated installers)
+OpenAgents-Setup-*.exe
+apps/desktop/dist/
+apps/desktop/release/
+*.exe
+!apps/desktop/resources/*.ico

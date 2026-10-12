@@ -107,12 +107,14 @@ async function bootstrap() {
     credentials: true,
   })
 
-  const swagger = new DocumentBuilder()
-    .setTitle('OpenAgents API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build()
-  SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, swagger))
+  if (!isProduction) {
+    const swagger = new DocumentBuilder()
+      .setTitle('OpenAgents API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build()
+    SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, swagger))
+  }
 
   const port = process.env.API_PORT ?? process.env.PORT ?? 3001
   await app.listen(port)

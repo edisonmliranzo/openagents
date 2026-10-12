@@ -18,8 +18,6 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY apps/mobile/package.json apps/mobile/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
-COPY packages/db/package.json packages/db/package.json
-COPY packages/server/package.json packages/server/package.json
 
 RUN pnpm install --no-frozen-lockfile
 
@@ -52,7 +50,7 @@ COPY --from=api-build /prod/api /app
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "pnpm exec prisma db push --accept-data-loss && node dist/main.js"]
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push --accept-data-loss && node dist/main.js"]
 
 FROM base AS web-build
 ARG NEXT_PUBLIC_API_URL=http://localhost:3000
@@ -80,7 +78,7 @@ COPY --from=web-build /prod/web /app
 
 EXPOSE 3000
 
-CMD ["pnpm", "run", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]
 
 FROM base AS worker-build
 RUN pnpm --filter @openagents/worker run build \

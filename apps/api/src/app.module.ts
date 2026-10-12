@@ -82,9 +82,13 @@ import { TasksModule } from './tasks/tasks.module'
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { GlobalAuthGuard } from './auth/guards/global-auth.guard'
 import { UserScopeInterceptor } from './auth/user-scope.interceptor'
+import { ThrottlerModule } from '@nestjs/throttler'
+import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 300 }]),
     // BullModule disabled for local dev (requires Redis).
     // Enable when running with Docker: BullModule.forRoot({ redis: process.env.REDIS_URL })
     PrismaModule,
@@ -168,6 +172,7 @@ import { UserScopeInterceptor } from './auth/user-scope.interceptor'
     TasksModule,
   ],
   providers: [
+    { provide: APP_GUARD, useClass: CustomThrottlerGuard },
     { provide: APP_GUARD, useClass: GlobalAuthGuard },
     { provide: APP_INTERCEPTOR, useClass: UserScopeInterceptor },
   ],

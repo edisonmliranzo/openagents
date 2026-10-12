@@ -16,7 +16,10 @@ const envExampleFile = path.join(rootDir, 'infra/docker/.env.prod.example')
 const composeFile = path.join(rootDir, 'infra/docker/docker-compose.prod.yml')
 
 const command = (process.argv[2] ?? 'deploy').trim().toLowerCase()
-const dockerComposeArgs = ['compose', '--env-file', envFile, '-f', composeFile]
+// Project isolation: keeps prod containers/networks/volumes separate from any
+// dev stack sharing this compose directory (dev uses the default project name).
+const projectName = (process.env.OPENAGENTS_COMPOSE_PROJECT ?? 'openagents-prod').trim()
+const dockerComposeArgs = ['compose', '--env-file', envFile, '-f', composeFile, '-p', projectName]
 const NO_SPACE_PATTERN = /no space left on device|resourceexhausted/i
 const LOW_DISK_THRESHOLD_BYTES = 4n * 1024n * 1024n * 1024n
 
@@ -145,10 +148,12 @@ function getDockerDiskCheckPath() {
 
 function safeDockerCleanup() {
   console.log('\n[openagents:prod] Running safe Docker cleanup to free space...')
+  // Builder cache is host-wide but only build layers — safe to drop.
   run('docker', ['builder', 'prune', '-af'], { allowFailure: true })
-  run('docker', ['image', 'prune', '-af'], { allowFailure: true })
-  run('docker', ['container', 'prune', '-f'], { allowFailure: true })
-  run('docker', ['network', 'prune', '-f'], { allowFailure: true })
+  // Everything else is scoped to THIS compose project. Never prune containers,
+  // images or networks globally: other stacks on this host would lose them.
+  runCompose(['down', '--remove-orphans', '--rmi', 'local'], { allowFailure: true })
+  run('docker', ['image', 'prune', '-f'], { allowFailure: true })
 }
 
 function ensureBuildDiskSpace() {

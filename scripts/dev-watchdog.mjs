@@ -18,20 +18,35 @@ const OLLAMA_EXE = path.join(
   'Programs', 'Ollama', 'Ollama.exe',
 )
 
+// Ports come from apps/api/.env so the watchdog never fights a stack that was
+// started with different ports. Defaults match infra/docker/.env.prod.example.
+function readEnvPort(name, fallback) {
+  try {
+    const text = fs.readFileSync(path.join(rootDir, 'apps', 'api', '.env'), 'utf8')
+    const match = text.match(new RegExp(`^${name}=(\\d+)\\s*$`, 'm'))
+    return match ? Number(match[1]) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const API_PORT = Number(process.env.API_PORT || readEnvPort('API_PORT', 3001))
+const WEB_PORT = Number(process.env.WEB_PORT || readEnvPort('WEB_PORT', 3000))
+
 const TARGETS = [
   {
     name: 'api',
     args: ['--filter', '@openagents/api', 'run', 'dev'],
-    env: { API_PORT: '3101', PORT: '3101', WEB_PORT: '3002' },
+    env: { API_PORT: String(API_PORT), PORT: String(API_PORT), WEB_PORT: String(WEB_PORT) },
   },
   {
     name: 'web',
     args: ['--filter', '@openagents/web', 'run', 'dev'],
     env: {
-      WEB_PORT: '3002',
-      API_PORT: '3101',
-      NEXT_PUBLIC_API_URL: 'http://localhost:3101',
-      OPENAGENTS_INTERNAL_API_URL: 'http://127.0.0.1:3101',
+      WEB_PORT: String(WEB_PORT),
+      API_PORT: String(API_PORT),
+      NEXT_PUBLIC_API_URL: `http://localhost:${API_PORT}`,
+      OPENAGENTS_INTERNAL_API_URL: `http://127.0.0.1:${API_PORT}`,
     },
   },
 ]
@@ -104,6 +119,9 @@ function pidAlive(pid) {
 if (ENSURE) {
   const recorded = Number(fs.existsSync(PID_FILE) ? fs.readFileSync(PID_FILE, 'utf8').trim() : 0)
   if (recorded && pidAlive(recorded)) process.exit(0)
+  // Supervisor died but the stack may still be up (children survive on
+  // Windows). Never spawn a second stack over a healthy one.
+  if ((await portOpen(API_PORT)) && (await portOpen(WEB_PORT))) process.exit(0)
   const child = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
     cwd: rootDir,
     detached: true,
@@ -117,6 +135,6 @@ if (ENSURE) {
 fs.writeFileSync(PID_FILE, String(process.pid))
 process.on('exit', () => { try { fs.unlinkSync(PID_FILE) } catch {} })
 
-console.log(`[${stamp()}] dev-watchdog starting: api(:3101) + web(:3002) + ollama(:${OLLAMA_PORT})`)
+console.log(`[${stamp()}] dev-watchdog starting: api(:${API_PORT}) + web(:${WEB_PORT}) + ollama(:${OLLAMA_PORT})`)
 for (const target of TARGETS) supervise(target)
 superviseOllama()

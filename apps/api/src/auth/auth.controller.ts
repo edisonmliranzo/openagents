@@ -1,8 +1,13 @@
-import { Controller, Post, Get, Body, UseGuards, Req, HttpCode } from '@nestjs/common'
+﻿import { Controller, Post, Get, Body, UseGuards, Req, HttpCode } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsEmail, IsString, MinLength, IsOptional, Matches } from 'class-validator'
 import { AuthService } from './auth.service'
 import { JwtAuthGuard } from './guards/jwt.guard'
+import { Throttle } from '@nestjs/throttler'
+
+// Brute-force protection on unauthenticated credential routes. The auth
+// service also enforces per-identity lockout; this caps request volume per IP.
+const AUTH_LIMITS = { default: { limit: 10, ttl: 60_000 } }
 
 class RegisterDto {
   @IsEmail() email: string
@@ -49,18 +54,21 @@ export class AuthController {
   constructor(private auth: AuthService) {}
 
   @Public()
+  @Throttle(AUTH_LIMITS)
   @Post('register')
   register(@Body() dto: RegisterDto, @Req() req: any) {
     return this.auth.register(dto.email, dto.password, dto.name, this.getClientIp(req), this.getUserAgent(req))
   }
 
   @Public()
+  @Throttle(AUTH_LIMITS)
   @Post('login')
   login(@Body() dto: LoginDto, @Req() req: any) {
     return this.auth.login(dto.email, dto.password, this.getClientIp(req), this.getUserAgent(req))
   }
 
   @Public()
+  @Throttle(AUTH_LIMITS)
   @Post('refresh')
   refresh(@Body() dto: RefreshDto) {
     return this.auth.refresh(dto.refreshToken)
@@ -89,6 +97,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_LIMITS)
   @Post('forgot-password')
   @HttpCode(200)
   forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: any) {
@@ -99,6 +108,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_LIMITS)
   @Post('reset-password')
   @HttpCode(200)
   resetPassword(@Body() dto: ResetPasswordDto) {
