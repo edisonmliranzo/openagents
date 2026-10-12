@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from '../agent/llm.service'
 import { ToolsService } from '../tools/tools.service'
 import { NotificationsService } from '../notifications/notifications.service'
+import { RulesService } from '../life/rules.service'
+import { ShadowService } from '../life/shadow.service'
 import { LLM_MODELS } from '@openagents/shared'
 import {
   describeInputSchema,
@@ -22,6 +24,10 @@ const MAX_OUTPUT_CHARS = 4000
 /** Pseudo-tool the planner can emit when the goal lacks information. */
 const ASK_HUMAN_TOOL = 'ask_human'
 
+function taskId0(task: { id: string }): string {
+  return task.id
+}
+
 type StoredPlan = PlanStep & { approved?: boolean; answer?: string }
 
 @Injectable()
@@ -36,6 +42,8 @@ export class TasksService implements OnModuleInit {
     private readonly tools: ToolsService,
     private readonly config: ConfigService,
     private readonly notifications: NotificationsService,
+    private readonly rules: RulesService,
+    private readonly shadow: ShadowService,
   ) {}
 
   /** Verifier model: configurable, defaults to the fast local model for CPU boxes. */
@@ -235,9 +243,21 @@ export class TasksService implements OnModuleInit {
 
       const step = plan[task.cursor]
       if (step.kind === 'tool' && step.tool && isSideEffectTool(step.tool) && !step.approved) {
-        await this.save(taskId, { status: 'awaiting_approval' })
-        await this.event(taskId, 'approval_needed', `Needs your approval: ${step.tool}`, { input: step.input, why: step.instruction })
-        return
+        // Delegated approval rules can auto-allow (or hard-deny) without pausing.
+        const ruleDecision = await this.rules.decide(task.userId, step.tool).catch(() => null)
+        if (ruleDecision === 'deny') {
+          step.status = 'failed'
+          step.error = 'Blocked by an approval rule'
+          await this.save(taskId, { plan: JSON.stringify(plan) })
+          await this.event(taskId, 'approval_needed', `Blocked by rule: ${step.tool}`)
+          return
+        }
+        if (ruleDecision !== 'allow') {
+          await this.save(taskId, { status: 'awaiting_approval' })
+          await this.event(taskId, 'approval_needed', `Needs your approval: ${step.tool}`, { input: step.input, why: step.instruction })
+          return
+        }
+        await this.event(taskId, 'approved', `Auto-approved by rule: ${step.tool}`)
       }
 
       // Clarifying question: park the task until the user answers.
@@ -301,6 +321,13 @@ export class TasksService implements OnModuleInit {
 
   private async execute(task: any, step: StoredPlan, prior: StoredPlan[]): Promise<string> {
     if (step.kind === 'tool' && step.tool) {
+      // Dry-run mode: simulate side effects, execute read-only tools normally.
+      const shadow = isSideEffectTool(step.tool) && (await this.shadow.isEnabled(task.userId).catch(() => false))
+      if (shadow) {
+        const out = `SHADOW MODE — did not execute. Would call ${step.tool} with: ${truncate(JSON.stringify(step.input ?? {}), 300)}`
+        await this.event(taskId0(task), 'shadow', out)
+        return out
+      }
       let input = step.input ?? {}
       const schema = (await this.tools.getAvailableForUser(task.userId).catch(() => [] as any[])).find((t: any) => t.name === step.tool)?.inputSchema as Record<string, unknown> | undefined
       if (missingRequired(schema, input).length) {

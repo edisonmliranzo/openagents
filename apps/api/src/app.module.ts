@@ -79,6 +79,7 @@ import { StudyModule } from './study/study.module'
 import { FrontierModule } from './frontier/frontier.module'
 import { TasksModule } from './tasks/tasks.module'
 import { AutonomyModule } from './autonomy/autonomy.module'
+import { LifeModule } from './life/life.module'
 
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { GlobalAuthGuard } from './auth/guards/global-auth.guard'
@@ -172,6 +173,7 @@ import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
     FrontierModule,
     TasksModule,
     AutonomyModule,
+    LifeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: CustomThrottlerGuard },

@@ -54,6 +54,8 @@ export { createStudyApi } from './api/study'
 export { createFrontierApi } from './api/frontier'
 export { createTasksApi } from './api/tasks'
 export { createAutonomyApi } from './api/autonomy'
+export { createLifeApi } from './api/life'
+export type { JanitorRunRow, JanitorMove, InboxDigestRow, CrmPersonRow, ClipRow, ApprovalRuleRow, AnticipationRow, ReplayDay, AgentTokenRow } from './api/life'
 export type { MissionRow, MissionDetail, QuestionRow, JournalRow, GraphData, HandoffLinkRow } from './api/autonomy'
 export type { CreateTaskInput, TaskDetail, TaskEventRow, TaskRow } from './api/tasks'
 export type { FrontierStatus, TimelineHit, WatchTaskRow, PromptPatchRow, DebateResult, RoundtableResult, LearnedSkillRow } from './api/frontier'
@@ -107,6 +109,7 @@ import { createStudyApi } from './api/study'
 import { createFrontierApi } from './api/frontier'
 import { createTasksApi } from './api/tasks'
 import { createAutonomyApi } from './api/autonomy'
+import { createLifeApi } from './api/life'
 import { createWorkspacesApi } from './api/workspaces'
 import { createPacksApi } from './api/packs'
 import type { SDKConfig } from './client'
@@ -161,6 +164,7 @@ export function createSDK(config: SDKConfig) {
     frontier: createFrontierApi(client),
     tasks: createTasksApi(client),
     autonomy: createAutonomyApi(client),
+    life: createLifeApi(client),
     workspaces: createWorkspacesApi(client),
     packs: createPacksApi(client),
   }

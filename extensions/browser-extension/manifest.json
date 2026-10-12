@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "OpenAgents — Save to Agent",
+  "version": "1.0.0",
+  "description": "Clip any page or selection into your personal OpenAgents memory with one click.",
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "activeTab",
+    "scripting",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

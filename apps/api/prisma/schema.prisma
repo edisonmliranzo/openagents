@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// SQLite-compatible schema (no enums, Json→String, arrays→String)
+// SQLite-compatible schema (no enums, Jsonâ†’String, arraysâ†’String)
 
 model User {
   id           String   @id @default(cuid())
@@ -93,6 +93,119 @@ model User {
   actionJournal     ActionJournalEntry[]
   entityNodes       EntityNode[]
   handoffLinks      HandoffLink[]
+  approvalRules     ApprovalRule[]
+  agentApiTokens    AgentApiToken[]
+  anticipations     Anticipation[]
+  memoryClips       MemoryClip[]
+  inboxDigests      InboxDigest[]
+  janitorRuns       JanitorRun[]
+  userFlags         UserFlag[]
+}
+
+model ApprovalRule {
+  id          String   @id @default(cuid())
+  userId      String
+  toolPattern String // glob, e.g. gmail_* or calendar_*
+  decision    String   @default("allow") // allow | deny
+  maxRunsPerDay Int    @default(0) // 0 = unlimited
+  note        String   @default("")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
+}
+
+model AgentApiToken {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  tokenHash   String    @unique
+  tokenPrefix String
+  scopes      String    @default("[\"tasks:write\",\"tasks:read\"]") // JSON array
+  budgetUsd   Float     @default(5)
+  spentUsd    Float     @default(0)
+  callCount   Int       @default(0)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Anticipation {
+  id          String    @id @default(cuid())
+  userId      String
+  patternText String // canonical example of the recurring request
+  exampleCount Int     @default(2)
+  cadenceDays Int       @default(14)
+  lastSeenAt  DateTime
+  nextDueAt   DateTime
+  lastTaskId  String?
+  status      String    @default("active") // active | paused | done
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, nextDueAt])
+}
+
+model MemoryClip {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String   // image | text | link
+  sourceUrl String?
+  imagePath String?
+  text      String   @default("")
+  caption   String?
+  tags      String? // JSON array
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model InboxDigest {
+  id        String   @id @default(cuid())
+  userId    String
+  summary   String
+  items     String // JSON: [{from, subject, bucket, action}]
+  triagedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, triagedAt])
+}
+
+model JanitorRun {
+  id        String    @id @default(cuid())
+  userId    String
+  folder    String
+  plan      String // JSON: [{from, to, action, reason}]
+  status    String    @default("planned") // planned | applied | failed
+  appliedAt DateTime?
+  error     String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model UserFlag {
+  id     String @id @default(cuid())
+  userId String
+  key    String
+  value  String @default("")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
 }
 
 model PasswordResetToken {
@@ -662,7 +775,7 @@ model WhatsAppPairing {
   @@index([userId, status, createdAt])
 }
 
-// ─── LLM API Key Fallbacks (for multi-key rotation / failover) ────────────────
+// â”€â”€â”€ LLM API Key Fallbacks (for multi-key rotation / failover) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model LlmApiKeyFallback {
   id        String    @id @default(cuid())
@@ -682,7 +795,7 @@ model LlmApiKeyFallback {
   @@index([userId, provider, priority])
 }
 
-// ─── Telegram ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Telegram â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model TelegramChat {
   id                 String    @id @default(cuid())
@@ -717,7 +830,7 @@ model TelegramPairing {
   @@index([userId, status, createdAt])
 }
 
-// ─── Slack ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Slack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model SlackWorkspace {
   id                 String    @id @default(cuid())
@@ -753,7 +866,7 @@ model SlackPairing {
   @@index([userId, status, createdAt])
 }
 
-// ─── Discord ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Discord â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model DiscordServer {
   id                 String    @id @default(cuid())
@@ -789,7 +902,7 @@ model DiscordPairing {
   @@index([userId, status, createdAt])
 }
 
-// ─── Webhooks ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Webhooks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Webhook {
   id        String   @id @default(cuid())
@@ -832,7 +945,7 @@ model WebhookDelivery {
   @@index([userId, createdAt])
 }
 
-// ─── Metrics & Analytics ──────────────────────────────────────────────────────
+// â”€â”€â”€ Metrics & Analytics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Trigger {
   id          String   @id @default(cuid())
@@ -916,7 +1029,7 @@ model BudgetLimit {
   @@index([userId, periodStart])
 }
 
-// ─── Conversation Summarization ─────────────────────────────────────────────────
+// â”€â”€â”€ Conversation Summarization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model ConversationSummary {
   id              String   @id @default(cuid())
@@ -1265,7 +1378,7 @@ model LearningStats {
   @@index([userId, lastActiveAt])
 }
 
-// ─── User-defined Skills ─────────────────────────────────────────────────────
+// â”€â”€â”€ User-defined Skills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model UserSkill {
   id           String   @id @default(cuid())
@@ -1293,7 +1406,7 @@ model UserSkill {
   @@index([userId, status])
 }
 
-// ─── Long-Term Goals (Muse-style goal tracking, persisted) ────────────────
+// â”€â”€â”€ Long-Term Goals (Muse-style goal tracking, persisted) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Goal {
   id              String   @id
@@ -1316,7 +1429,7 @@ model Goal {
   @@index([userId, status, updatedAt])
 }
 
-// ─── Proactive Triggers (event-driven background agents) ───────────────────
+// â”€â”€â”€ Proactive Triggers (event-driven background agents) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model ProactiveTrigger {
   id          String    @id @default(cuid())
@@ -1350,7 +1463,7 @@ model ProactiveLog {
   @@index([triggerId, createdAt])
 }
 
-// ─── Skill Suggestions (agent proposes, user approves) ─────────────────────
+// â”€â”€â”€ Skill Suggestions (agent proposes, user approves) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model SkillSuggestion {
   id            String   @id @default(cuid())
@@ -1369,7 +1482,7 @@ model SkillSuggestion {
   @@index([userId, status, createdAt])
 }
 
-// ─── Semantic Answer Cache (instant repeat answers) ───────────────────────
+// â”€â”€â”€ Semantic Answer Cache (instant repeat answers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model AnswerCache {
   id        String   @id @default(cuid())
@@ -1389,7 +1502,7 @@ model AnswerCache {
   @@index([userId, createdAt])
 }
 
-// ─── Routing Outcomes (learned model selection) ───────────────────────────
+// â”€â”€â”€ Routing Outcomes (learned model selection) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model RoutingOutcome {
   id         String   @id @default(cuid())
@@ -1407,7 +1520,7 @@ model RoutingOutcome {
   @@index([userId, taskClass, createdAt])
 }
 
-// ─── Specialist Agents (named identities with budgets) ────────────────────
+// â”€â”€â”€ Specialist Agents (named identities with budgets) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model SpecialistAgent {
   id               String   @id @default(cuid())
@@ -1429,7 +1542,7 @@ model SpecialistAgent {
   @@index([userId, enabled])
 }
 
-// ─── Library (RAG on user files) ──────────────────────────────────────────
+// â”€â”€â”€ Library (RAG on user files) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model LibraryDocument {
   id         String   @id @default(cuid())
@@ -1464,7 +1577,7 @@ model LibraryChunk {
   @@index([userId])
 }
 
-// ─── User Plugins (installable MCP servers) ───────────────────────────────
+// â”€â”€â”€ User Plugins (installable MCP servers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model UserPlugin {
   id        String   @id @default(cuid())
@@ -1479,7 +1592,7 @@ model UserPlugin {
   @@unique([userId, key])
 }
 
-// ─── Knowledge Gaps (the agent studies what it doesn't know) ──────────────
+// â”€â”€â”€ Knowledge Gaps (the agent studies what it doesn't know) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model KnowledgeGap {
   id        String   @id @default(cuid())
@@ -1498,7 +1611,7 @@ model KnowledgeGap {
   @@index([userId, status, count])
 }
 
-// ─── Golden Tasks + Eval Runs (measurement loop) ──────────────────────────
+// â”€â”€â”€ Golden Tasks + Eval Runs (measurement loop) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model GoldenTask {
   id        String   @id @default(cuid())

@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: system-ui, sans-serif; width: 280px; padding: 12px; margin: 0; }
+      label { font-size: 11px; font-weight: 600; color: #334; display: block; margin-bottom: 4px; }
+      input { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid #ccc; border-radius: 8px; font-size: 12px; margin-bottom: 10px; }
+      button { width: 100%; padding: 8px; border: 0; border-radius: 8px; background: #0f172a; color: #fff; font-weight: 600; cursor: pointer; }
+      .hint { font-size: 10px; color: #667; margin-top: 8px; line-height: 1.4; }
+      .ok { color: #059669; font-size: 11px; font-weight: 600; margin-top: 6px; display: none; }
+    </style>
+  </head>
+  <body>
+    <label>OpenAgents URL</label>
+    <input id="apiBase" placeholder="http://localhost:3000" />
+    <label>Agent API token</label>
+    <input id="token" placeholder="oat_..." />
+    <button id="save">Save</button>
+    <p class="ok" id="ok">Saved.</p>
+    <p class="hint">Create a token in OpenAgents: Autonomy &rarr; API tokens. Then right-click any page or selection to clip it. The token is stored only in this browser.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>
