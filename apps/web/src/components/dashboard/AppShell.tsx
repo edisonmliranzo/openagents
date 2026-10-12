@@ -8,6 +8,7 @@ import {
   Activity,
   Bell,
   BookOpen,
+  Bot,
   Brain,
   ChevronDown,
   Download,
@@ -60,6 +61,8 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Get Started', href: '/settings/get-started', icon: Sparkles },
       { label: 'Chat', href: '/chat', icon: MessageSquare },
+      { label: 'Tasks', href: '/tasks', icon: Play },
+      { label: 'Autonomy', href: '/autonomy', icon: Bot },
       { label: 'Creations', href: '/creations', icon: FileText },
       { label: 'Team', href: '/team', icon: Users },
       { label: 'Library', href: '/library', icon: BookOpen },

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { sdk } from './auth'
+import { speak, stopSpeaking, voiceEnabled } from '@/lib/voice'
 import type { Conversation, Message, Approval, HumanHandoffTicket, MessageArtifact, MessageMeta, MessageProgressState, MessageWorkflowState, MessageWorkflowStep } from '@openagents/shared'
 
 type GatewayStatus = 'connecting' | 'connected' | 'disconnected'
@@ -528,6 +529,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return
     }
 
+    // Voice mode: a new message interrupts the current reading.
+    stopSpeaking()
+
     const userVisibleContent = options?.displayContent?.trim() || content.trim()
     const startedAt = new Date().toISOString()
     const optimisticTitle = deriveConversationTitle(userVisibleContent)
@@ -868,6 +872,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         gatewayMessage: 'connected',
         lastError: streamError,
       })
+
+      // Voice mode: read the finished reply aloud.
+      if (!streamError && voiceEnabled()) {
+        const lastAgent = [...nextMessages].reverse().find((m) => m.role === 'agent' && m.status !== 'error')
+        if (lastAgent) speak(lastAgent.content)
+      }
     } catch (err: unknown) {
       const failure = deriveGatewayFailure(err, 'Failed while streaming agent response.')
       set((s) => ({

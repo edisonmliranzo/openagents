@@ -12,6 +12,8 @@ import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { MuseChatLayout } from '@/components/muse/MuseChatLayout'
 import { storageGet, storageSet } from '@/lib/storage'
+import { setVoiceEnabled, voiceEnabled } from '@/lib/voice'
+import { Volume2, VolumeX } from 'lucide-react'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 
@@ -135,7 +137,49 @@ export default function ChatPage() {
           />
         </div>
       </div>
+      <VoiceToggle />
     </div>
     </MuseChatLayout>
+  )
+}
+
+/** Small floating control that reads agent replies aloud (browser speech). */
+function VoiceToggle() {
+  const [on, setOn] = useState(false)
+
+  useEffect(() => {
+    setOn(voiceEnabled())
+  }, [])
+
+  function toggle() {
+    const next = !on
+    setOn(next)
+    setVoiceEnabled(next)
+  }
+
+  if (!on) {
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        title="Speak agent replies aloud"
+        className="fixed bottom-24 right-4 z-40 flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] shadow-md transition hover:text-[var(--tone-strong)] md:bottom-6 md:right-6"
+        aria-label="Enable voice replies"
+      >
+        <VolumeX size={15} />
+      </button>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      title="Stop voice replies"
+      className="fixed bottom-24 right-4 z-40 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md transition hover:bg-emerald-500 md:bottom-6 md:right-6"
+      aria-label="Disable voice replies"
+    >
+      <Volume2 size={15} />
+    </button>
   )
 }

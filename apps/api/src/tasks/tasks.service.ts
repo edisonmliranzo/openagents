@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from '../agent/llm.service'
 import { ToolsService } from '../tools/tools.service'
+import { NotificationsService } from '../notifications/notifications.service'
 import { LLM_MODELS } from '@openagents/shared'
 import {
   describeInputSchema,
@@ -18,8 +19,10 @@ import {
 const MAX_REPLANS = 2
 const MAX_STEPS_DEFAULT = 12
 const MAX_OUTPUT_CHARS = 4000
+/** Pseudo-tool the planner can emit when the goal lacks information. */
+const ASK_HUMAN_TOOL = 'ask_human'
 
-type StoredPlan = PlanStep & { approved?: boolean }
+type StoredPlan = PlanStep & { approved?: boolean; answer?: string }
 
 @Injectable()
 export class TasksService implements OnModuleInit {
@@ -32,6 +35,7 @@ export class TasksService implements OnModuleInit {
     private readonly llm: LLMService,
     private readonly tools: ToolsService,
     private readonly config: ConfigService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Verifier model: configurable, defaults to the fast local model for CPU boxes. */
@@ -125,6 +129,16 @@ export class TasksService implements OnModuleInit {
     return task
   }
 
+  /** Public hook for other modules (questions inbox) to re-drive a paused task. */
+  async resume(taskId: string): Promise<void> {
+    await this.drive(taskId)
+  }
+
+  /** Public hook for missions: run a mission-created task through the loop. */
+  async driveMissionRun(taskId: string): Promise<void> {
+    await this.drive(taskId)
+  }
+
   private readPlan(raw: string): StoredPlan[] {
     try {
       const v = JSON.parse(raw)
@@ -160,8 +174,9 @@ export class TasksService implements OnModuleInit {
       await this.runSteps(taskId)
     } catch (err: any) {
       this.logger.error(`Task ${taskId} crashed: ${err?.message ?? err}`)
-      await this.save(taskId, { status: 'failed', error: truncate(String(err?.message ?? err), 500), finishedAt: new Date() }).catch(() => undefined)
+      const failed = await this.save(taskId, { status: 'failed', error: truncate(String(err?.message ?? err), 500), finishedAt: new Date() }).catch(() => undefined)
       await this.event(taskId, 'error', String(err?.message ?? err))
+      if (failed) await this.onFinished(failed as any)
     } finally {
       this.driving.delete(taskId)
     }
@@ -178,7 +193,7 @@ export class TasksService implements OnModuleInit {
       [
         {
           role: 'user',
-          content: `Goal: ${task.goal}\nSuccess criteria: ${task.successCriteria || 'the goal is fully answered with concrete findings'}\n\nAvailable tools (use only these names):\n${toolList || '(none)'}\n\nReply with JSON only: {"steps":[{"kind":"tool","tool":"<name>","input":{...},"instruction":"why"} or {"kind":"llm","instruction":"what to write or decide"}]}. At most ${task.maxSteps} steps, each instruction under 15 words, no commentary. Gather facts with tools before writing with llm steps.`,
+          content: `Goal: ${task.goal}\nSuccess criteria: ${task.successCriteria || 'the goal is fully answered with concrete findings'}\n\nAvailable tools (use only these names):\n${toolList || '(none)'}\n- ask_human({question, options?}): ask the user a clarifying question when a required detail is missing or ambiguous; the run pauses until they answer.\n\nReply with JSON only: {"steps":[{"kind":"tool","tool":"<name>","input":{...},"instruction":"why"} or {"kind":"llm","instruction":"what to write or decide"}]}. At most ${task.maxSteps} steps, each instruction under 15 words, no commentary. Gather facts with tools before writing with llm steps. Ask ask_human early when a key detail is missing rather than guessing.`,
         },
       ],
       [],
@@ -214,6 +229,7 @@ export class TasksService implements OnModuleInit {
       if (executed >= task.maxSteps) {
         await this.save(taskId, { status: 'failed', error: 'Step budget exhausted', finishedAt: new Date() })
         await this.event(taskId, 'error', 'Step budget exhausted')
+        await this.onFinished({ ...task, status: 'failed', result: null, error: 'Step budget exhausted' })
         return
       }
 
@@ -221,6 +237,26 @@ export class TasksService implements OnModuleInit {
       if (step.kind === 'tool' && step.tool && isSideEffectTool(step.tool) && !step.approved) {
         await this.save(taskId, { status: 'awaiting_approval' })
         await this.event(taskId, 'approval_needed', `Needs your approval: ${step.tool}`, { input: step.input, why: step.instruction })
+        return
+      }
+
+      // Clarifying question: park the task until the user answers.
+      if (step.kind === 'tool' && step.tool === ASK_HUMAN_TOOL) {
+        const question = String((step.input as any)?.question ?? step.instruction ?? 'I need more detail to continue.').slice(0, 500)
+        const options = Array.isArray((step.input as any)?.options) ? (step.input as any).options.slice(0, 6).map((o: unknown) => String(o)) : null
+        await this.prisma.agentQuestion.create({
+          data: {
+            userId: task.userId,
+            taskId,
+            question,
+            options: options ? JSON.stringify(options) : null,
+          },
+        })
+        await this.save(taskId, { status: 'awaiting_input' })
+        await this.event(taskId, 'question', question, options ? { options } : undefined)
+        await this.notifications
+          .create(task.userId, 'Your agent has a question', question.slice(0, 300), 'warning')
+          .catch(() => undefined)
         return
       }
 
@@ -235,6 +271,20 @@ export class TasksService implements OnModuleInit {
         step.error = undefined
         await this.save(taskId, { plan: JSON.stringify(plan), cursor: task.cursor + 1 })
         await this.event(taskId, 'step_done', truncate(step.output, 200))
+        // Journal side effects so the run can be undone later.
+        if (step.kind === 'tool' && step.tool && isSideEffectTool(step.tool)) {
+          await this.prisma.actionJournalEntry
+            .create({
+              data: {
+                userId: task.userId,
+                taskId,
+                tool: step.tool.slice(0, 120),
+                input: truncate(JSON.stringify(step.input ?? {}), 4000),
+                output: truncate(String(step.output ?? ''), 4000),
+              },
+            })
+            .catch(() => undefined)
+        }
       } catch (err: any) {
         step.status = 'failed'
         step.error = truncate(String(err?.message ?? err), 500)
@@ -353,6 +403,29 @@ export class TasksService implements OnModuleInit {
       finishedAt: new Date(),
     })
     await this.event(taskId, 'verified', verdict.met ? 'Verified: goal met' : 'Finished without meeting criteria', verdict)
+    await this.onFinished(task)
     return false
+  }
+
+  /** Mission bookkeeping + user notification when a task reaches an end state. */
+  private async onFinished(task: { id: string; userId: string; title: string; missionId: string | null; status: string; result: string | null; error: string | null }) {
+    if (task.missionId) {
+      const message = task.status === 'done'
+        ? `Run finished: ${truncate(task.result ?? 'completed', 300)}`
+        : `Run ended without success: ${truncate(task.error ?? 'unknown reason', 300)}`
+      await this.prisma.missionEvent
+        .create({ data: { missionId: task.missionId, kind: task.status === 'done' ? 'run_finished' : 'error', message } })
+        .catch(() => undefined)
+    }
+    await this.notifications
+      .create(
+        task.userId,
+        task.status === 'done' ? 'Task finished' : 'Task needs attention',
+        task.status === 'done'
+          ? `"${task.title}" completed. ${truncate(task.result ?? '', 200)}`
+          : `"${task.title}" did not finish: ${truncate(task.error ?? '', 200)}`,
+        task.status === 'done' ? 'success' : 'error',
+      )
+      .catch(() => undefined)
   }
 }

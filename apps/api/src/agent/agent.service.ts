@@ -427,7 +427,9 @@ export class AgentService implements OnModuleInit {
       const semanticBlock = semanticMemories.length
         ? `Related memories (semantic):\n${semanticMemories.map((m) => `- ${m.text}`).join('\n')}`
         : ''
-      const enrichedMemoryContext = [memoryContext, semanticBlock].filter(Boolean).join('\n\n')
+      // Entity graph: what/who the agent already knows, for continuity.
+      const graphBlock = fastAdvisoryMode ? '' : await this.entityGraphContext(userId)
+      const enrichedMemoryContext = [memoryContext, semanticBlock, graphBlock].filter(Boolean).join('\n\n')
 
       const basePrompt = settings.customSystemPrompt ?? DEFAULT_SYSTEM_PROMPT
       const manusModeEnabled = this.isManusModeEnabled()
@@ -2279,6 +2281,23 @@ export class AgentService implements OnModuleInit {
       })
       return acc
     }, [])
+  }
+
+  /** Compact entity-graph summary for the system prompt (top nodes + edges). */
+  private async entityGraphContext(userId: string): Promise<string> {
+    try {
+      const nodes = await this.prisma.entityNode.findMany({
+        where: { userId },
+        orderBy: [{ mentions: 'desc' }, { updatedAt: 'desc' }],
+        take: 10,
+        select: { name: true, type: true, summary: true },
+      })
+      if (nodes.length === 0) return ''
+      const lines = nodes.map((n) => `- ${n.name} (${n.type})${n.summary ? `: ${n.summary}` : ''}`)
+      return `Known entities:\n${lines.join('\n')}`
+    } catch {
+      return ''
+    }
   }
 
   private buildMemoryContext(

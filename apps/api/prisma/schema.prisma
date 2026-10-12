@@ -86,8 +86,13 @@ model User {
   userPlugins       UserPlugin[]
   knowledgeGaps     KnowledgeGap[]
   watchTasks        WatchTask[]
-  agentTasks       AgentTask[]
+  agentTasks        AgentTask[]
   promptPatches     PromptPatch[]
+  missions          Mission[]
+  agentQuestions    AgentQuestion[]
+  actionJournal     ActionJournalEntry[]
+  entityNodes       EntityNode[]
+  handoffLinks      HandoffLink[]
 }
 
 model PasswordResetToken {
@@ -1571,11 +1576,12 @@ model AgentTask {
   goal            String
   successCriteria String    @default("")
   target          String    @default("server") // server | local
-  status          String    @default("planning") // planning | running | awaiting_approval | done | failed | cancelled
+  status          String    @default("planning") // planning | running | awaiting_approval | awaiting_input | done | failed | cancelled
   plan            String    @default("[]") // JSON array of steps
   cursor          Int       @default(0)
   replans         Int       @default(0)
   maxSteps        Int       @default(12)
+  missionId       String?
   result          String?
   verdict         String?   // JSON from the verifier
   error           String?
@@ -1584,8 +1590,9 @@ model AgentTask {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events AgentTaskEvent[]
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission  Mission?        @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  events   AgentTaskEvent[]
 
   @@index([userId, createdAt])
   @@index([status])
@@ -1602,4 +1609,123 @@ model AgentTaskEvent {
   task AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId, createdAt])
+}
+
+model Mission {
+  id              String    @id @default(cuid())
+  userId          String
+  title           String
+  goal            String
+  successCriteria String    @default("")
+  intervalHours   Int       @default(24) // run cadence
+  status          String    @default("active") // active | paused | archived
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  lastReport      String?
+  reportSince     DateTime? // events after this go into the next report
+  runCount        Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events MissionEvent[]
+  tasks  AgentTask[]
+
+  @@index([userId, status])
+  @@index([status, nextRunAt])
+}
+
+model MissionEvent {
+  id        String   @id @default(cuid())
+  missionId String
+  kind      String   // run_started | run_finished | report | error
+  message   String
+  data      String?
+  createdAt DateTime @default(now())
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@index([missionId, createdAt])
+}
+
+model AgentQuestion {
+  id         String    @id @default(cuid())
+  userId     String
+  taskId     String
+  question   String
+  options    String? // JSON array of suggested answers
+  answer     String?
+  status     String    @default("open") // open | answered | expired
+  answeredAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([taskId])
+}
+
+model ActionJournalEntry {
+  id           String    @id @default(cuid())
+  userId       String
+  taskId       String?
+  tool         String
+  input        String    @default("{}") // JSON
+  output       String?
+  compensation String? // JSON {tool, input} that reverts this action; null = manual undo only
+  undoneAt     DateTime?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([taskId])
+}
+
+model EntityNode {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  type      String   // person | company | project | topic | place | other
+  summary   String   @default("")
+  mentions  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  edgesFrom EntityEdge[] @relation("EdgeFrom")
+  edgesTo   EntityEdge[] @relation("EdgeTo")
+
+  @@unique([userId, name, type])
+  @@index([userId, mentions])
+}
+
+model EntityEdge {
+  id       String @id @default(cuid())
+  userId   String
+  fromId   String
+  toId     String
+  relation String
+  weight   Int    @default(1)
+
+  from EntityNode @relation("EdgeFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   EntityNode @relation("EdgeTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fromId, toId, relation])
+  @@index([userId, weight])
+}
+
+model HandoffLink {
+  id        String    @id @default(cuid())
+  userId    String
+  taskId    String
+  token     String    @unique
+  label     String    @default("")
+  views     Int       @default(0)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
 }
