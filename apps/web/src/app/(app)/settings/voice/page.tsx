@@ -24,8 +24,10 @@ export default function VoiceSettingsPage() {
   const [cfg, setCfg] = useState<TtsConfigView | null>(null)
   const [provider, setProvider] = useState('')
   const [elKey, setElKey] = useState('')
+  const [elKeyDirty, setElKeyDirty] = useState(false)
   const [elVoice, setElVoice] = useState('')
   const [fishKey, setFishKey] = useState('')
+  const [fishKeyDirty, setFishKeyDirty] = useState(false)
   const [fishVoice, setFishVoice] = useState('')
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -52,19 +54,43 @@ export default function VoiceSettingsPage() {
   async function save() {
     setBusy(true)
     try {
-      await sdk.life.ttsSetConfig({
-        provider: provider as 'elevenlabs' | 'fish' | '',
-        elevenlabsKey: elKey ? elKey : undefined,
-        elevenlabsVoice: elVoice,
-        fishKey: fishKey ? fishKey : undefined,
-        fishVoice: fishVoice,
-      })
-      addToast('success', 'Voice settings saved')
-      setElKey('')
-      setFishKey('')
+      // Save in parts: settings always, each key only if the user typed one.
+      // One rejected key must never block the rest (e.g. a valid Fish key
+      // behind an invalid ElevenLabs key).
+      const problems: string[] = []
+      try {
+        await sdk.life.ttsSetConfig({
+          provider: provider as 'elevenlabs' | 'fish' | '',
+          elevenlabsVoice: elVoice,
+          fishVoice: fishVoice,
+        })
+      } catch (err: any) {
+        problems.push(String(err?.message ?? 'settings save failed').slice(0, 160))
+      }
+      if (elKeyDirty && elKey.trim()) {
+        try {
+          await sdk.life.ttsSetConfig({ elevenlabsKey: elKey.trim() })
+          setElKey('')
+          setElKeyDirty(false)
+        } catch (err: any) {
+          problems.push(`ElevenLabs key: ${String(err?.message ?? 'rejected').slice(0, 160)}`)
+        }
+      }
+      if (fishKeyDirty && fishKey.trim()) {
+        try {
+          await sdk.life.ttsSetConfig({ fishKey: fishKey.trim() })
+          setFishKey('')
+          setFishKeyDirty(false)
+        } catch (err: any) {
+          problems.push(`Fish Audio key: ${String(err?.message ?? 'rejected').slice(0, 160)}`)
+        }
+      }
+      if (problems.length) {
+        addToast('error', problems.join(' · '))
+      } else {
+        addToast('success', 'Voice settings saved')
+      }
       await load()
-    } catch (err: any) {
-      addToast('error', String(err?.message ?? 'Save failed').slice(0, 200))
     } finally {
       setBusy(false)
     }
@@ -132,9 +158,10 @@ export default function VoiceSettingsPage() {
           <input
             className={inputCls}
             type="password"
+            autoComplete="new-password"
             placeholder={cfg?.hasElevenlabsKey ? '•••••••• (saved — paste to replace)' : 'sk_...'}
             value={elKey}
-            onChange={(e) => setElKey(e.target.value)}
+            onChange={(e) => { setElKey(e.target.value); setElKeyDirty(true) }}
           />
           <label className="mb-1 mt-3 block text-xs text-[var(--muted)]">Voice ID (leave empty for the default voice)</label>
           <input className={inputCls} placeholder="21m00Tcm4TlvDq8ikWAM" value={elVoice} onChange={(e) => setElVoice(e.target.value)} />
@@ -164,9 +191,10 @@ export default function VoiceSettingsPage() {
           <input
             className={inputCls}
             type="password"
+            autoComplete="new-password"
             placeholder={cfg?.hasFishKey ? '•••••••• (saved — paste to replace)' : 'fish api key'}
             value={fishKey}
-            onChange={(e) => setFishKey(e.target.value)}
+            onChange={(e) => { setFishKey(e.target.value); setFishKeyDirty(true) }}
           />
           <label className="mb-1 mt-3 block text-xs text-[var(--muted)]">Reference ID (voice/model id from fish.audio library)</label>
           <input className={inputCls} placeholder="Voice model id" value={fishVoice} onChange={(e) => setFishVoice(e.target.value)} />
