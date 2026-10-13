@@ -687,6 +687,73 @@ export class AgentService implements OnModuleInit {
       }
 
       const llmWorkingMessages = [...llmMessages]
+      // Time-sensitive asks ("latest news", prices, weather): small local
+      // models often never emit a tool call and answer from stale memory.
+      // Force one web_search pre-pass so current facts are on the table
+      // before the model speaks.
+      if (taskClass === 'search' && availableTools.some((t) => t.name === 'web_search')) {
+        emit('thinking', { step: 'searching', message: 'Searching the web for current information...' })
+        try {
+          const searchRes: any = await this.tools.execute('web_search', { query: userMessage }, userId)
+          const payload = searchRes?.data ?? searchRes?.output ?? searchRes
+          const resultsText = typeof payload === 'string' ? payload : JSON.stringify(payload)
+          if (resultsText && resultsText.length > 40) {
+            llmWorkingMessages.push({
+              role: 'user',
+              content: `[web_search results for "${userMessage}"]\n${this.clipContextText(resultsText, 6000)}\n\nBase time-sensitive facts ONLY on these results and name the sources. If they do not cover it, say so plainly.`,
+            })
+          }
+          // Search snippets are often thin (homepage links, no headline
+          // text). Fetch the most promising result page so real content is
+          // available — without it the model can only apologize again.
+          const hits: Array<{ url?: string; title?: string; snippet?: string }> =
+            Array.isArray(payload?.results) ? payload.results : []
+          const fetchable = availableTools.some((t) => t.name === 'web_fetch')
+          const top = hits
+            .filter((h) => typeof h.url === 'string' && /^https?:\/\//.test(h.url))
+            .filter((h) => !/news\.google\.|bing\.com|duckduckgo\.com|localhost/i.test(h.url))
+            .slice(0, 2)
+          if (fetchable && top.length > 0) {
+            for (const hit of top) {
+              try {
+                const fetched: any = await this.tools.execute('web_fetch', { url: hit.url }, userId)
+                const fText = String(fetched?.data?.text ?? fetched?.data?.content ?? fetched?.output ?? '')
+                if (fText.length > 200) {
+                  llmWorkingMessages.push({
+                    role: 'user',
+                    content: `[web_fetch of ${hit.url} (${hit.title ?? 'result'})]\n${this.clipContextText(fText, 4000)}\n\nExtract the concrete facts (headlines, numbers, dates) from this page when relevant.`,
+                  })
+                  break // one good page is enough for a fresh-answer seed
+                }
+              } catch {
+                // fetch failures are fine — the search results still stand
+              }
+            }
+          }
+          // News homepages are usually JS-walled; their RSS feeds are not.
+          // If no page fetch produced content, pull headlines from the feed.
+          if (fetchable && !llmWorkingMessages.some((m) => m.content.startsWith('[web_fetch of'))) {
+            try {
+              const feed = await this.tools.execute(
+                'web_fetch',
+                { url: `https://news.google.com/rss/search?q=${encodeURIComponent(userMessage.slice(0, 120))}&hl=en-US&gl=US&ceid=US:en` },
+                userId,
+              )
+              const feedText = String((feed?.output as any)?.text ?? (feed?.output as any)?.content ?? (typeof feed?.output === 'string' ? feed.output : ''))
+              if (feedText.length > 200) {
+                llmWorkingMessages.push({
+                  role: 'user',
+                  content: `[news RSS headlines]\n${this.clipContextText(feedText, 4000)}\n\nThese are current headlines with dates and sources. Summarize the top stories from them.`,
+                })
+              }
+            } catch {
+              // feed failures are fine — the search results still stand
+            }
+          }
+        } catch (err) {
+          this.logger.warn(`Forced search pre-pass failed: ${this.safeError(err)}`)
+        }
+      }
       let finalResponseContent = ''
       let toolRound = 0
 
