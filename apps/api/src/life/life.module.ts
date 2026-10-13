@@ -16,6 +16,7 @@ import { PodcastService } from './podcast.service'
 import { ReplayService } from './replay.service'
 import { AnticipationService } from './anticipation.service'
 import { TokensService } from './tokens.service'
+import { TtsService } from './tts.service'
 
 @Module({
   imports: [PrismaModule, TasksModule, AgentModule, ToolsModule, NotificationsModule, AutonomyModule, LifeCoreModule],
@@ -29,6 +30,7 @@ import { TokensService } from './tokens.service'
     ReplayService,
     AnticipationService,
     TokensService,
+    TtsService,
   ],
   exports: [TokensService, AnticipationService],
 })

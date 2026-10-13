@@ -134,5 +134,13 @@ export function createLifeApi(client: OpenAgentsClient) {
     createToken: (input: { name: string; scopes?: string[]; budgetUsd?: number }) =>
       client.post<{ token: string; scopes: string[]; name: string }>('/api/v1/life/tokens', input),
     revokeToken: (id: string) => client.delete<{ ok: boolean }>(`/api/v1/life/tokens/${id}`),
+
+    // Realistic TTS (ElevenLabs / Fish Audio)
+    ttsStatus: () => client.get<{ provider: string | null; elevenlabs: boolean; fish: boolean; defaultVoice: string }>('/api/v1/life/tts/status'),
+    ttsVoices: () => client.get<Array<{ id: string; name: string; provider: string; labels?: Record<string, string> }>>('/api/v1/life/tts/voices'),
+    tts: (text: string, opts?: { voiceId?: string; provider?: string }) =>
+      client.post<{ audioBase64: string; mimeType: string; provider: string; voiceId: string; cached: boolean }>('/api/v1/life/tts', { text, ...opts }),
+    ttsClone: (input: { name: string; audioBase64: string; mimeType?: string }) =>
+      client.post<{ voiceId: string; provider: string }>('/api/v1/life/tts/clone', input),
   }
 }

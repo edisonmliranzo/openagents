@@ -11,6 +11,7 @@ import { ShadowService } from './shadow.service'
 import { ReplayService } from './replay.service'
 import { AnticipationService } from './anticipation.service'
 import { TokensService } from './tokens.service'
+import { TtsService } from './tts.service'
 
 @ApiTags('life')
 @ApiBearerAuth()
@@ -27,6 +28,7 @@ export class LifeController {
     private readonly replay: ReplayService,
     private readonly anticipation: AnticipationService,
     private readonly tokens: TokensService,
+    private readonly tts: TtsService,
   ) {}
 
   // ---- Downloads janitor ----
@@ -169,5 +171,27 @@ export class LifeController {
   @Delete('tokens/:id')
   revokeToken(@CurrentUserId() userId: string, @Param('id') id: string) {
     return this.tokens.revoke(userId, id)
+  }
+
+  // ---- Realistic TTS (ElevenLabs / Fish Audio) ----
+
+  @Get('tts/status')
+  ttsStatus() {
+    return this.tts.status()
+  }
+
+  @Get('tts/voices')
+  ttsVoices(@CurrentUserId() userId: string) {
+    return this.tts.voices(userId)
+  }
+
+  @Post('tts')
+  ttsSpeak(@CurrentUserId() userId: string, @Body() body: { text: string; voiceId?: string; provider?: string }) {
+    return this.tts.speak(userId, body.text, { voiceId: body.voiceId, provider: body.provider })
+  }
+
+  @Post('tts/clone')
+  ttsClone(@CurrentUserId() userId: string, @Body() body: { name: string; audioBase64: string; mimeType?: string }) {
+    return this.tts.clone(userId, body)
   }
 }
