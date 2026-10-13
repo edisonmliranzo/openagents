@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { sdk } from '@/stores/auth'
 import {
   KeyRound,
@@ -15,6 +16,7 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  Mic,
 } from 'lucide-react'
 import type { LlmApiKey, UserDomain, UserDomainProvider, UserDomainStatus } from '@openagents/shared'
 import { LLM_MODEL_OPTIONS, LLM_PROVIDER_CAPABILITIES } from '@openagents/shared'
@@ -1012,6 +1014,21 @@ export default function ConfigPage() {
           {isLoading ? 'Refreshing...' : 'Refresh'}
         </button>
       </header>
+
+      {/* Voice keys shortcut */}
+      <Link
+        href="/settings/voice"
+        className="flex items-center gap-3 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-fuchsia-50 p-4 shadow-sm transition hover:border-violet-300"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white">
+          <Mic size={16} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-900">Voice API keys (ElevenLabs / Fish Audio)</span>
+          <span className="block text-xs text-slate-500">Add your text-to-speech keys here so chat replies and briefings use a realistic human voice.</span>
+        </span>
+        <span className="text-xs font-semibold text-violet-700">Open →</span>
+      </Link>
 
       {/* Active Provider Bar */}
       <section className="relative overflow-hidden rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-orange-50 p-5 shadow-sm">
