@@ -79,12 +79,17 @@ export class TtsService {
     patch: { provider?: string; elevenlabsKey?: string | null; elevenlabsVoice?: string; fishKey?: string | null; fishVoice?: string },
   ): Promise<{ saved: true }> {
     const current = await this.getUserConfig(userId)
+    // Trim paste artifacts (newlines/spaces) — the #1 cause of "invalid_api_key".
+    const nextElKey = patch.elevenlabsKey === null ? '' : patch.elevenlabsKey !== undefined && patch.elevenlabsKey.trim() !== '' ? patch.elevenlabsKey.trim() : current.elevenlabsKey
+    const nextFishKey = patch.fishKey === null ? '' : patch.fishKey !== undefined && patch.fishKey.trim() !== '' ? patch.fishKey.trim() : current.fishKey
+    // Validate NEW keys before storing so a typo never saves silently.
+    if (nextElKey && nextElKey !== current.elevenlabsKey) await this.validateElevenLabs(nextElKey)
+    if (nextFishKey && nextFishKey !== current.fishKey) await this.validateFish(nextFishKey)
     const next: UserTtsConfig = {
       provider: patch.provider === 'elevenlabs' || patch.provider === 'fish' || patch.provider === '' ? patch.provider : current.provider,
-      // Empty string = keep existing; explicit empty string clears via null.
-      elevenlabsKey: patch.elevenlabsKey === null ? '' : patch.elevenlabsKey !== undefined && patch.elevenlabsKey !== '' ? patch.elevenlabsKey : current.elevenlabsKey,
+      elevenlabsKey: nextElKey,
       elevenlabsVoice: patch.elevenlabsVoice !== undefined ? patch.elevenlabsVoice.trim().slice(0, 200) : current.elevenlabsVoice,
-      fishKey: patch.fishKey === null ? '' : patch.fishKey !== undefined && patch.fishKey !== '' ? patch.fishKey : current.fishKey,
+      fishKey: nextFishKey,
       fishVoice: patch.fishVoice !== undefined ? patch.fishVoice.trim().slice(0, 200) : current.fishVoice,
     }
     const sealed = {
@@ -100,6 +105,39 @@ export class TtsService {
       update: { value: JSON.stringify(sealed) },
     })
     return { saved: true }
+  }
+
+  /** Reject bad ElevenLabs keys at save time instead of at speak time. */
+  private async validateElevenLabs(key: string): Promise<void> {
+    try {
+      const res = await fetch('https://api.elevenlabs.io/v1/user', {
+        headers: { 'xi-api-key': key },
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (res.ok) return
+      const detail = await res.text().catch(() => '')
+      throw new BadRequestException(
+        `ElevenLabs rejected this key (${res.status}). Check you copied the full xi-api-key. ${detail.slice(0, 160)}`,
+      )
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err
+      // Network hiccup: allow saving, the speak path will surface it again.
+      this.logger.warn(`ElevenLabs key validation unreachable: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+
+  private async validateFish(key: string): Promise<void> {
+    try {
+      const res = await fetch('https://api.fish.audio/wallet/self-api', {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (res.ok) return
+      throw new BadRequestException(`Fish Audio rejected this key (${res.status}). Check you copied the full API key.`)
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err
+      this.logger.warn(`Fish key validation unreachable: ${err instanceof Error ? err.message : err}`)
+    }
   }
 
   /** Safe view for the settings UI — never returns raw keys. */
@@ -191,29 +229,51 @@ export class TtsService {
 
     const keys = await this.resolveKeys(userId)
     const requested = (opts?.provider ?? '').trim().toLowerCase()
-    const provider = requested === 'elevenlabs' || requested === 'fish' ? requested : keys.provider
-    if (!provider) {
+    const primary = requested === 'elevenlabs' || requested === 'fish' ? requested : keys.provider
+    if (!primary) {
       throw new ServiceUnavailableException(
         'No TTS provider configured. Add your ElevenLabs or Fish Audio key in Settings → Voice.',
       )
     }
 
-    const voiceId = (opts?.voiceId ?? '').trim() || keys.defaultVoice
-    const key = createHash('sha1').update(`${provider}:${voiceId}:${clean}`).digest('hex')
+    const voiceFallback = (p: 'elevenlabs' | 'fish') =>
+      p === 'elevenlabs' ? (opts?.voiceId ?? '').trim() || cfg.elevenlabsVoice || (this.config.get<string>('ELEVENLABS_VOICE_ID') ?? '').trim() : (opts?.voiceId ?? '').trim() || cfg.fishVoice || (this.config.get<string>('FISH_REFERENCE_ID') ?? '').trim()
+    const cfg = await this.getUserConfig(userId).catch(() => ({ ...EMPTY_CONFIG }))
 
-    const mem = this.memCache.get(key)
-    if (mem) return { ...mem, cached: true }
+    // Try the primary provider; on auth failure fall over to the other one
+    // when it has a key, so one bad key never kills the voice entirely.
+    const attempts: Array<'elevenlabs' | 'fish'> = [primary]
+    const other = primary === 'elevenlabs' ? 'fish' : 'elevenlabs'
+    if ((other === 'elevenlabs' && keys.elevenlabsKey) || (other === 'fish' && keys.fishKey)) attempts.push(other)
 
-    const disk = await this.readDiskCache(key, provider, voiceId).catch(() => null)
-    if (disk) {
-      this.memCache.set(key, disk)
-      return { ...disk, cached: true }
+    let lastError: unknown = null
+    for (const provider of attempts) {
+      const voiceId = voiceFallback(provider) || keys.defaultVoice
+      const cacheKey = createHash('sha1').update(`${provider}:${voiceId}:${clean}`).digest('hex')
+      try {
+        const mem = this.memCache.get(cacheKey)
+        if (mem) return { ...mem, cached: true }
+        const disk = await this.readDiskCache(cacheKey, provider, voiceId).catch(() => null)
+        if (disk) {
+          this.memCache.set(cacheKey, disk)
+          return { ...disk, cached: true }
+        }
+        const result =
+          provider === 'elevenlabs'
+            ? await this.speakElevenLabs(clean, voiceId, keys.elevenlabsKey)
+            : await this.speakFish(clean, voiceId, keys.fishKey)
+        this.memCache.set(cacheKey, result)
+        void this.writeDiskCache(cacheKey, result).catch((err) => this.logger.warn(`TTS cache write failed: ${err?.message ?? err}`))
+        return result
+      } catch (err) {
+        lastError = err
+        const msg = String(err?.message ?? err)
+        const authFailed = /\(401\)|\(403\)|invalid_api_key|unauthorized/i.test(msg)
+        if (!authFailed || provider === attempts[attempts.length - 1]) throw err
+        this.logger.warn(`TTS provider ${provider} rejected the key — falling over to ${other}`)
+      }
     }
-
-    const result = provider === 'elevenlabs' ? await this.speakElevenLabs(clean, voiceId, keys.elevenlabsKey) : await this.speakFish(clean, voiceId, keys.fishKey)
-    this.memCache.set(key, result)
-    void this.writeDiskCache(key, result).catch((err) => this.logger.warn(`TTS cache write failed: ${err?.message ?? err}`))
-    return result
+    throw lastError ?? new ServiceUnavailableException('TTS failed')
   }
 
   private async speakElevenLabs(text: string, voiceId: string, apiKey: string): Promise<TtsResult> {
