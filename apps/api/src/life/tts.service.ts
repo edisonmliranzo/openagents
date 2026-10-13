@@ -346,19 +346,35 @@ export class TtsService {
     }
     const fish = keys.fishKey
     if (fish) {
-      try {
-        const res = await fetch('https://api.fish.audio/voice/list?self=true&page_size=25', {
-          headers: { Authorization: `Bearer ${fish}` },
-          signal: AbortSignal.timeout(20_000),
-        })
-        if (res.ok) {
+      // Fish Audio lists voices through /model. Prefer the user's own cloned
+      // voices; fall back to the public library when they have none yet.
+      const fetchModels = async (selfOnly: boolean): Promise<Array<{ _id: string; title: string }>> => {
+        const url = selfOnly
+          ? 'https://api.fish.audio/model?self=true&page_size=30&page_num=1'
+          : 'https://api.fish.audio/model?page_size=30&page_num=1&sort_by=task_count'
+        try {
+          const res = await fetch(url, {
+            headers: { Authorization: `Bearer ${fish}` },
+            signal: AbortSignal.timeout(20_000),
+          })
+          if (!res.ok) return []
           const body = (await res.json()) as { items?: Array<{ _id: string; title: string }> }
-          for (const v of body.items ?? []) {
-            out.push({ id: v._id, name: v.title, provider: 'fish' })
-          }
+          return body.items ?? []
+        } catch (err) {
+          this.logger.warn(`Fish voice list failed (self=${selfOnly}): ${err instanceof Error ? err.message : err}`)
+          return []
         }
-      } catch (err) {
-        this.logger.warn(`Fish voice list failed: ${err instanceof Error ? err.message : err}`)
+      }
+      const own = await fetchModels(true)
+      const seen = new Set(own.map((v) => v._id))
+      for (const v of own) out.push({ id: v._id, name: v.title || 'My voice', provider: 'fish' })
+      if (own.length === 0) {
+        const popular = await fetchModels(false)
+        for (const v of popular) {
+          if (seen.has(v._id)) continue
+          seen.add(v._id)
+          out.push({ id: v._id, name: v.title || 'Voice', provider: 'fish' })
+        }
       }
     }
     return out
