@@ -36,11 +36,13 @@ const WEB_PORT = Number(process.env.WEB_PORT || readEnvPort('WEB_PORT', 3000))
 const TARGETS = [
   {
     name: 'api',
+    port: API_PORT,
     args: ['--filter', '@openagents/api', 'run', 'dev'],
     env: { API_PORT: String(API_PORT), PORT: String(API_PORT), WEB_PORT: String(WEB_PORT) },
   },
   {
     name: 'web',
+    port: WEB_PORT,
     args: ['--filter', '@openagents/web', 'run', 'dev'],
     env: {
       WEB_PORT: String(WEB_PORT),
@@ -59,7 +61,12 @@ function stamp() {
 
 function supervise(target) {
   let restarts = 0
-  const start = () => {
+  let running = false
+  const start = async () => {
+    // Each service is supervised independently: never spawn over an instance
+    // that is already serving the port (manual starts, prod stacks, etc.).
+    if (running || (await portOpen(target.port))) return
+    running = true
     const child = spawn(PNPX, target.args, {
       cwd: rootDir,
       env: { ...process.env, ...target.env },
@@ -69,6 +76,7 @@ function supervise(target) {
     child.stdout.on('data', (chunk) => process.stdout.write(`[${stamp()}] [${target.name}] ${chunk}`))
     child.stderr.on('data', (chunk) => process.stderr.write(`[${stamp()}] [${target.name}!] ${chunk}`))
     child.on('exit', (code, signal) => {
+      running = false
       restarts += 1
       const delay = Math.min(3000 * restarts, 30000)
       console.log(`[${stamp()}] [${target.name}] exited (code=${code} signal=${signal}) — restart #${restarts} in ${delay / 1000}s`)
@@ -79,6 +87,8 @@ function supervise(target) {
     })
   }
   start()
+  // Periodically adopt services that died while we were not their parent.
+  setInterval(() => void start(), 15000).unref?.()
 }
 
 function portOpen(port) {

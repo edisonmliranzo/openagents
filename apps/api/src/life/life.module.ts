@@ -6,6 +6,7 @@ import { ToolsModule } from '../tools/tools.module'
 import { NotificationsModule } from '../notifications/notifications.module'
 import { AutonomyModule } from '../autonomy/autonomy.module'
 import { LifeCoreModule } from './life-core.module'
+import { SecurityModule } from '../security/security.module'
 import { LifeController } from './life.controller'
 import { AgentApiController } from './agent-api.controller'
 import { JanitorService } from './janitor.service'
@@ -19,7 +20,7 @@ import { TokensService } from './tokens.service'
 import { TtsService } from './tts.service'
 
 @Module({
-  imports: [PrismaModule, TasksModule, AgentModule, ToolsModule, NotificationsModule, AutonomyModule, LifeCoreModule],
+  imports: [PrismaModule, TasksModule, AgentModule, ToolsModule, NotificationsModule, AutonomyModule, LifeCoreModule, SecurityModule],
   controllers: [LifeController, AgentApiController],
   providers: [
     JanitorService,

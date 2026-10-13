@@ -21,6 +21,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Mic,
   Moon,
   Play,
   RefreshCw,
@@ -121,6 +122,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     title: 'Settings',
     items: [
       { label: 'Config', href: '/settings/config', icon: Settings2 },
+      { label: 'Voice', href: '/settings/voice', icon: Mic },
       { label: 'Doctor', href: '/settings/doctor', icon: Wrench },
       { label: 'Logs', href: '/settings/logs', icon: ScrollText },
       { label: 'Debug', href: '/settings/debug', icon: Terminal },

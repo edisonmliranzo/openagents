@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config'
 import { createHash } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
+import { PrismaService } from '../prisma/prisma.service'
+import { EncryptionService } from '../security/encryption.service'
 
 export interface TtsResult {
   audioBase64: string
@@ -19,26 +21,146 @@ export interface VoiceOption {
   labels?: Record<string, string>
 }
 
+/** Per-user provider keys, stored encrypted in a UserFlag. */
+export interface UserTtsConfig {
+  provider: 'elevenlabs' | 'fish' | ''
+  elevenlabsKey: string
+  elevenlabsVoice: string
+  fishKey: string
+  fishVoice: string
+}
+
+const TTS_FLAG_KEY = 'tts_config'
+const EMPTY_CONFIG: UserTtsConfig = { provider: '', elevenlabsKey: '', elevenlabsVoice: '', fishKey: '', fishVoice: '' }
+
 @Injectable()
 export class TtsService {
   private readonly logger = new Logger(TtsService.name)
   private readonly memCache = new Map<string, TtsResult>()
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+    private readonly encryption: EncryptionService,
+  ) {}
 
-  /** Which provider is ready with the current env keys. */
-  activeProvider(): 'elevenlabs' | 'fish' | null {
-    if (this.elevenKey()) return 'elevenlabs'
-    if (this.fishKey()) return 'fish'
-    return null
+  // ---- Per-user config (encrypted at rest) ----
+
+  async getUserConfig(userId: string): Promise<UserTtsConfig> {
+    const flag = await this.prisma.userFlag.findUnique({
+      where: { userId_key: { userId, key: TTS_FLAG_KEY } },
+      select: { value: true },
+    })
+    if (!flag?.value) return { ...EMPTY_CONFIG }
+    try {
+      const stored = JSON.parse(flag.value) as Record<string, unknown>
+      const unseal = (v: unknown): string => {
+        if (typeof v !== 'string' || !v) return ''
+        try {
+          return this.encryption.decryptApiKey(v)
+        } catch {
+          return ''
+        }
+      }
+      return {
+        provider: stored.provider === 'elevenlabs' || stored.provider === 'fish' ? stored.provider : '',
+        elevenlabsKey: unseal(stored.elevenlabsKey),
+        elevenlabsVoice: typeof stored.elevenlabsVoice === 'string' ? stored.elevenlabsVoice : '',
+        fishKey: unseal(stored.fishKey),
+        fishVoice: typeof stored.fishVoice === 'string' ? stored.fishVoice : '',
+      }
+    } catch {
+      return { ...EMPTY_CONFIG }
+    }
+  }
+
+  async setUserConfig(
+    userId: string,
+    patch: { provider?: string; elevenlabsKey?: string | null; elevenlabsVoice?: string; fishKey?: string | null; fishVoice?: string },
+  ): Promise<{ saved: true }> {
+    const current = await this.getUserConfig(userId)
+    const next: UserTtsConfig = {
+      provider: patch.provider === 'elevenlabs' || patch.provider === 'fish' || patch.provider === '' ? patch.provider : current.provider,
+      // Empty string = keep existing; explicit empty string clears via null.
+      elevenlabsKey: patch.elevenlabsKey === null ? '' : patch.elevenlabsKey !== undefined && patch.elevenlabsKey !== '' ? patch.elevenlabsKey : current.elevenlabsKey,
+      elevenlabsVoice: patch.elevenlabsVoice !== undefined ? patch.elevenlabsVoice.trim().slice(0, 200) : current.elevenlabsVoice,
+      fishKey: patch.fishKey === null ? '' : patch.fishKey !== undefined && patch.fishKey !== '' ? patch.fishKey : current.fishKey,
+      fishVoice: patch.fishVoice !== undefined ? patch.fishVoice.trim().slice(0, 200) : current.fishVoice,
+    }
+    const sealed = {
+      provider: next.provider,
+      elevenlabsKey: next.elevenlabsKey ? this.encryption.encryptApiKey(next.elevenlabsKey) : '',
+      elevenlabsVoice: next.elevenlabsVoice,
+      fishKey: next.fishKey ? this.encryption.encryptApiKey(next.fishKey) : '',
+      fishVoice: next.fishVoice,
+    }
+    await this.prisma.userFlag.upsert({
+      where: { userId_key: { userId, key: TTS_FLAG_KEY } },
+      create: { userId, key: TTS_FLAG_KEY, value: JSON.stringify(sealed) },
+      update: { value: JSON.stringify(sealed) },
+    })
+    return { saved: true }
+  }
+
+  /** Safe view for the settings UI — never returns raw keys. */
+  async configView(userId: string) {
+    const cfg = await this.getUserConfig(userId)
+    return {
+      provider: cfg.provider || null,
+      elevenlabsVoice: cfg.elevenlabsVoice,
+      fishVoice: cfg.fishVoice,
+      hasElevenlabsKey: Boolean(cfg.elevenlabsKey),
+      hasFishKey: Boolean(cfg.fishKey),
+      envElevenlabs: Boolean((this.config.get<string>('ELEVENLABS_API_KEY') ?? '').trim()),
+      envFish: Boolean((this.config.get<string>('FISH_API_KEY') ?? '').trim()),
+    }
+  }
+
+  /** Effective keys: per-user config first, env fallback. */
+  private async resolveKeys(userId: string): Promise<{ elevenlabsKey: string; fishKey: string; provider: 'elevenlabs' | 'fish' | null; defaultVoice: string }> {
+    const cfg = await this.getUserConfig(userId).catch(() => ({ ...EMPTY_CONFIG }))
+    const elevenlabsKey = cfg.elevenlabsKey || (this.config.get<string>('ELEVENLABS_API_KEY') ?? '').trim()
+    const fishKey = cfg.fishKey || (this.config.get<string>('FISH_API_KEY') ?? '').trim()
+    const envElevenVoice = (this.config.get<string>('ELEVENLABS_VOICE_ID') ?? '').trim()
+    const envFishVoice = (this.config.get<string>('FISH_REFERENCE_ID') ?? '').trim()
+    const provider: 'elevenlabs' | 'fish' | null =
+      cfg.provider === 'elevenlabs' || cfg.provider === 'fish'
+        ? cfg.provider
+        : elevenlabsKey
+          ? 'elevenlabs'
+          : fishKey
+            ? 'fish'
+            : null
+    const defaultVoice =
+      provider === 'elevenlabs'
+        ? cfg.elevenlabsVoice || envElevenVoice
+        : provider === 'fish'
+          ? cfg.fishVoice || envFishVoice
+          : ''
+    return { elevenlabsKey, fishKey, provider, defaultVoice }
   }
 
   status() {
     return {
-      provider: this.activeProvider(),
+      provider: this.elevenKey()
+        ? 'elevenlabs'
+        : this.fishKey()
+          ? 'fish'
+          : null,
       elevenlabs: Boolean(this.elevenKey()),
       fish: Boolean(this.fishKey()),
       defaultVoice: this.defaultVoice(),
+    }
+  }
+
+  /** Status for a specific user: their saved keys first, then env. */
+  async statusFor(userId: string) {
+    const keys = await this.resolveKeys(userId)
+    return {
+      provider: keys.provider,
+      elevenlabs: Boolean(keys.elevenlabsKey),
+      fish: Boolean(keys.fishKey),
+      defaultVoice: keys.defaultVoice,
     }
   }
 
@@ -67,15 +189,16 @@ export class TtsService {
     if (!clean) throw new BadRequestException('text is required')
     if (clean.length > 5000) throw new BadRequestException('text too long (max 5000 chars)')
 
+    const keys = await this.resolveKeys(userId)
     const requested = (opts?.provider ?? '').trim().toLowerCase()
-    const provider = requested === 'elevenlabs' || requested === 'fish' ? requested : this.activeProvider()
+    const provider = requested === 'elevenlabs' || requested === 'fish' ? requested : keys.provider
     if (!provider) {
       throw new ServiceUnavailableException(
-        'No TTS provider configured. Add ELEVENLABS_API_KEY (elevenlabs.io) or FISH_API_KEY (fish.audio) to apps/api/.env and restart.',
+        'No TTS provider configured. Add your ElevenLabs or Fish Audio key in Settings → Voice.',
       )
     }
 
-    const voiceId = (opts?.voiceId ?? '').trim() || this.defaultVoice()
+    const voiceId = (opts?.voiceId ?? '').trim() || keys.defaultVoice
     const key = createHash('sha1').update(`${provider}:${voiceId}:${clean}`).digest('hex')
 
     const mem = this.memCache.get(key)
@@ -87,15 +210,15 @@ export class TtsService {
       return { ...disk, cached: true }
     }
 
-    const result = provider === 'elevenlabs' ? await this.speakElevenLabs(clean, voiceId) : await this.speakFish(clean, voiceId)
+    const result = provider === 'elevenlabs' ? await this.speakElevenLabs(clean, voiceId, keys.elevenlabsKey) : await this.speakFish(clean, voiceId, keys.fishKey)
     this.memCache.set(key, result)
     void this.writeDiskCache(key, result).catch((err) => this.logger.warn(`TTS cache write failed: ${err?.message ?? err}`))
     return result
   }
 
-  private async speakElevenLabs(text: string, voiceId: string): Promise<TtsResult> {
-    const key = this.elevenKey()
-    if (!key) throw new ServiceUnavailableException('ELEVENLABS_API_KEY is not set')
+  private async speakElevenLabs(text: string, voiceId: string, apiKey: string): Promise<TtsResult> {
+    const key = apiKey
+    if (!key) throw new ServiceUnavailableException('Add your ElevenLabs API key in Settings → Voice')
     const voice = voiceId || '21m00Tcm4TlvDq8ikWAM' // ElevenLabs default "Rachel"
     const model = (this.config.get<string>('ELEVENLABS_MODEL') ?? 'eleven_multilingual_v2').trim()
 
@@ -117,12 +240,12 @@ export class TtsService {
     return { audioBase64: buf.toString('base64'), mimeType: 'audio/mpeg', provider: 'elevenlabs', voiceId: voice, cached: false }
   }
 
-  private async speakFish(text: string, voiceId: string): Promise<TtsResult> {
-    const key = this.fishKey()
-    if (!key) throw new ServiceUnavailableException('FISH_API_KEY is not set')
+  private async speakFish(text: string, voiceId: string, apiKey: string): Promise<TtsResult> {
+    const key = apiKey
+    if (!key) throw new ServiceUnavailableException('Add your Fish Audio API key in Settings → Voice')
     if (!voiceId) {
       throw new ServiceUnavailableException(
-        'Fish Audio needs a voice: set FISH_REFERENCE_ID in apps/api/.env (a voice/model id from fish.audio) or pass voiceId.',
+        'Fish Audio needs a voice: set a Reference ID in Settings → Voice (a voice/model id from fish.audio).',
       )
     }
 
@@ -143,7 +266,8 @@ export class TtsService {
   /** List voices from the configured providers (best effort). */
   async voices(userId: string): Promise<VoiceOption[]> {
     const out: VoiceOption[] = []
-    const eleven = this.elevenKey()
+    const keys = await this.resolveKeys(userId).catch(() => ({ elevenlabsKey: '', fishKey: '' }) as { elevenlabsKey: string; fishKey: string })
+    const eleven = keys.elevenlabsKey
     if (eleven) {
       try {
         const res = await fetch('https://api.elevenlabs.io/v1/voices', {
@@ -160,7 +284,7 @@ export class TtsService {
         this.logger.warn(`ElevenLabs voice list failed: ${err instanceof Error ? err.message : err}`)
       }
     }
-    const fish = this.fishKey()
+    const fish = keys.fishKey
     if (fish) {
       try {
         const res = await fetch('https://api.fish.audio/voice/list?self=true&page_size=25', {
@@ -185,8 +309,9 @@ export class TtsService {
    * get a voice_id back. Store the returned id like any voice id.
    */
   async clone(userId: string, input: { name: string; audioBase64: string; mimeType?: string }): Promise<{ voiceId: string; provider: 'elevenlabs' }> {
-    const key = this.elevenKey()
-    if (!key) throw new ServiceUnavailableException('Voice cloning needs ELEVENLABS_API_KEY in apps/api/.env')
+    const keys = await this.resolveKeys(userId)
+    const key = keys.elevenlabsKey
+    if (!key) throw new ServiceUnavailableException('Voice cloning needs an ElevenLabs API key in Settings → Voice')
     const name = String(input.name ?? '').trim() || `OpenAgents voice ${new Date().toISOString().slice(0, 10)}`
     const b64 = String(input.audioBase64 ?? '').replace(/^data:[^;]+;base64,/, '')
     if (!b64 || b64.length < 1000) throw new BadRequestException('Provide a clean voice sample as audioBase64 (10-60 seconds).')

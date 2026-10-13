@@ -137,6 +137,23 @@ export function createLifeApi(client: OpenAgentsClient) {
 
     // Realistic TTS (ElevenLabs / Fish Audio)
     ttsStatus: () => client.get<{ provider: string | null; elevenlabs: boolean; fish: boolean; defaultVoice: string }>('/api/v1/life/tts/status'),
+    ttsGetConfig: () =>
+      client.get<{
+        provider: string | null
+        elevenlabsVoice: string
+        fishVoice: string
+        hasElevenlabsKey: boolean
+        hasFishKey: boolean
+        envElevenlabs: boolean
+        envFish: boolean
+      }>('/api/v1/life/tts/config'),
+    ttsSetConfig: (patch: {
+      provider?: string
+      elevenlabsKey?: string | null
+      elevenlabsVoice?: string
+      fishKey?: string | null
+      fishVoice?: string
+    }) => client.put<{ saved: boolean }>('/api/v1/life/tts/config', patch),
     ttsVoices: () => client.get<Array<{ id: string; name: string; provider: string; labels?: Record<string, string> }>>('/api/v1/life/tts/voices'),
     tts: (text: string, opts?: { voiceId?: string; provider?: string }) =>
       client.post<{ audioBase64: string; mimeType: string; provider: string; voiceId: string; cached: boolean }>('/api/v1/life/tts', { text, ...opts }),
