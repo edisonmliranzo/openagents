@@ -12,12 +12,13 @@ export class LocalDaemonController {
   }
 
   @Post(':id/execute')
-  execute(@Param('id') id: string, @Body('command') command: string) {
-    return this.service.executeLocalCommand(id, command)
+  execute(@CurrentUserId() userId: string, @Param('id') id: string, @Body('command') command: string) {
+    return this.service.executeLocalCommand(userId, id, command)
   }
 
   @Post(':id/ping')
-  ping(@Param('id') id: string) {
-    return this.service.ping(id)
+  ping(@CurrentUserId() userId: string, @Param('id') id: string) {
+    return this.service.ping(userId, id)
   }
 }
+

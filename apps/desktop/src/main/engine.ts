@@ -26,7 +26,6 @@ export function freePortIfOccupied(port: number) {
 export function findProjectRootDir(): string {
   const candidates = [
     process.env.OPENAGENTS_DIR,
-    'c:\\Users\\edinson\\Music\\openagents',
     process.cwd(),
     path.resolve(__dirname, '../../../..'),
     path.resolve(__dirname, '../../..'),
@@ -42,7 +41,7 @@ export function findProjectRootDir(): string {
       }
     } catch {}
   }
-  return 'c:\\Users\\edinson\\Music\\openagents'
+  return process.cwd()
 }
 
 export function isEngineRunning(port = 3002): Promise<boolean> {
@@ -118,7 +117,6 @@ export function startEngine(projectRootDir: string): ChildProcess | null {
   let command = 'pnpm'
   if (isWindows) {
     const knownPnpmPaths = [
-      'C:\\Users\\edinson\\AppData\\Roaming\\npm\\pnpm.cmd',
       path.join(process.env.APPDATA || '', 'npm', 'pnpm.cmd'),
       'pnpm.cmd',
       'pnpm'
@@ -134,10 +132,9 @@ export function startEngine(projectRootDir: string): ChildProcess | null {
   // Ensure extended PATH for node, pnpm, and docker
   const extraPaths = isWindows
     ? [
-        'C:\\Users\\edinson\\AppData\\Roaming\\npm',
+        path.join(process.env.APPDATA || '', 'npm'),
         'C:\\Program Files\\nodejs',
         'C:\\Program Files\\Docker\\Docker\\resources\\bin',
-        path.join(process.env.APPDATA || '', 'npm')
       ]
     : ['/usr/local/bin', '/usr/bin', '/bin']
 

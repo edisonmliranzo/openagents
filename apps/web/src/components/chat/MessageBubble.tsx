@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import type { DataLineageRecord, Message, MessageArtifact, MessageMeta } from '@openagents/shared'
-import { Brain, ChevronDown, ChevronRight, Copy, FileText, Film, ImageIcon, Link2, Music4, Pencil, RotateCcw, ThumbsDown, ThumbsUp, X } from 'lucide-react'
+import { Brain, ChevronDown, ChevronRight, Columns, Copy, FileText, Film, ImageIcon, Link2, Music4, Pencil, RotateCcw, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { BranchButton } from '@/components/branch-button'
 import { GenerativeUIWidget } from './GenerativeUIWidget'
 import { BrowserPreview } from './BrowserPreview'
@@ -545,6 +545,26 @@ export function MessageBubble({
               className="rounded-full px-2 py-0.5 transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
             >
               Why this answer
+            </button>
+          )}
+          {visible && (
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent('openagents:open-canvas', {
+                    detail: {
+                      title: `OpenAgents Artifact (${formatClock(message.createdAt)})`,
+                      content: visible,
+                    },
+                  }),
+                )
+              }}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
+              title="Open this response in the Side-by-Side Split-Screen Artifact Canvas"
+            >
+              <Columns size={11} />
+              Open in Canvas
             </button>
           )}
           {codeBlocks.length > 0 && (

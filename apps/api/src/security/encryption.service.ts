@@ -15,12 +15,17 @@ export class EncryptionService {
   private readonly key: Buffer
 
   constructor(private configService: ConfigService) {
-    const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY')
-    if (!encryptionKey) {
-      this.logger.warn('ENCRYPTION_KEY not set, using default key (INSECURE)')
+    const rawKey = (this.configService.get<string>('ENCRYPTION_KEY') ?? '').trim()
+    const isPlaceholder = !rawKey || rawKey === '32-char-hex-key-here' || rawKey.includes('change-me')
+    const isProd = (this.configService.get<string>('NODE_ENV') ?? '').trim().toLowerCase() === 'production'
+    if (isPlaceholder && isProd) {
+      throw new Error('ENCRYPTION_KEY must be set to a strong secret in production.')
     }
-    // Use provided key or generate a default (for development only)
-    this.key = crypto.createHash('sha256').update(encryptionKey || 'default-dev-key-change-in-production').digest()
+    const fallbackSecret = (this.configService.get<string>('JWT_SECRET') ?? '').trim() || 'default-dev-key-change-in-production'
+    if (isPlaceholder) {
+      this.logger.warn('ENCRYPTION_KEY not set, deriving local development key from environment secret')
+    }
+    this.key = crypto.createHash('sha256').update(isPlaceholder ? fallbackSecret : rawKey).digest()
   }
 
   /**

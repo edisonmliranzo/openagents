@@ -1,5 +1,10 @@
 const VOICE_ENABLED_KEY = 'openagents-voice-enabled'
 
+/**
+ * Spoken replies are strictly OFF by default.
+ * Users must explicitly configure Fish Audio 2.0 (or ElevenLabs) in Settings -> Voice
+ * and enable spoken replies. Never falls back to robotic browser speechSynthesis.
+ */
 export function voiceEnabled(): boolean {
   try {
     return typeof window !== 'undefined' && window.localStorage.getItem(VOICE_ENABLED_KEY) === '1'
@@ -11,6 +16,7 @@ export function voiceEnabled(): boolean {
 export function setVoiceEnabled(on: boolean) {
   try {
     window.localStorage.setItem(VOICE_ENABLED_KEY, on ? '1' : '0')
+    window.dispatchEvent(new CustomEvent('openagents:voice-settings-changed'))
   } catch {
     // ignore storage failures
   }
@@ -18,7 +24,7 @@ export function setVoiceEnabled(on: boolean) {
 }
 
 /** Strip markdown noise so the speech engine reads clean prose. */
-function speakable(text: string): string {
+export function speakable(text: string): string {
   return String(text ?? '')
     .replace(/```[\s\S]*?```/g, ' code block omitted. ')
     .replace(/`([^`]+)`/g, '$1')
@@ -31,11 +37,16 @@ function speakable(text: string): string {
 
 let currentAudio: HTMLAudioElement | null = null
 
-/** Speak via the server's realistic TTS (ElevenLabs / Fish Audio); fall back to the browser voice. */
-export async function speak(text: string): Promise<void> {
+/**
+ * Speak exclusively via configured neural TTS (Fish Audio 2.0 / ElevenLabs).
+ * Never falls back to robotic browser speechSynthesis.
+ */
+export async function speak(
+  text: string,
+  callbacks?: { onStart?: () => void; onEnd?: () => void; onError?: (err: unknown) => void },
+): Promise<boolean> {
   const clean = speakable(text)
-  if (!clean) return
-  if (typeof window === 'undefined') return
+  if (!clean || typeof window === 'undefined') return false
 
   try {
     const { sdk } = await import('@/stores/auth')
@@ -43,28 +54,20 @@ export async function speak(text: string): Promise<void> {
     stopSpeaking()
     const audio = new Audio(`data:${tts.mimeType};base64,${tts.audioBase64}`)
     currentAudio = audio
+    callbacks?.onStart?.()
     audio.onended = () => {
       if (currentAudio === audio) currentAudio = null
+      callbacks?.onEnd?.()
+    }
+    audio.onerror = (e) => {
+      if (currentAudio === audio) currentAudio = null
+      callbacks?.onError?.(e)
     }
     await audio.play()
-    return
-  } catch {
-    // No TTS provider configured or request failed — use the browser voice.
-  }
-
-  browserSpeak(clean)
-}
-
-function browserSpeak(clean: string) {
-  if (!('speechSynthesis' in window)) return
-  try {
-    window.speechSynthesis.cancel()
-    const utter = new SpeechSynthesisUtterance(clean)
-    utter.rate = 1.05
-    utter.lang = 'en-US'
-    window.speechSynthesis.speak(utter)
-  } catch {
-    // speech synthesis unavailable or blocked
+    return true
+  } catch (err) {
+    callbacks?.onError?.(err)
+    return false
   }
 }
 

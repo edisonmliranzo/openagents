@@ -14,12 +14,22 @@ export class JanitorService {
   private resolve(folder: string): string {
     const raw = String(folder ?? '').trim()
     if (!raw) throw new BadRequestException('Give a folder path.')
-    const expanded = raw.startsWith('~') ? join(homedir(), raw.slice(1)) : raw
-    const abs = isAbsolute(expanded) ? expanded : join(process.cwd(), expanded)
-    // Refuse to run on obviously dangerous roots.
-    const danger = [dirname(homedir()), homedir(), 'C:\\', 'C:/', '/']
-    if (danger.some((d) => abs.toLowerCase() === d.toLowerCase())) {
-      throw new BadRequestException('Choose a specific folder (e.g. ~/Downloads), not a drive or profile root.')
+    const home = homedir()
+    const expanded = raw.startsWith('~') ? join(home, raw.slice(1)) : raw
+    const abs = isAbsolute(expanded) ? expanded : join(home, expanded)
+    const normAbs = abs.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+    const normHome = home.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+    const normCwd = process.cwd().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+
+    // Refuse roots, paths outside user home directory, or paths inside the running application repository
+    const danger = [dirname(home), home, 'C:\\', 'C:/', '/']
+    if (
+      danger.some((d) => abs.toLowerCase() === d.toLowerCase()) ||
+      !normAbs.startsWith(`${normHome}/`) ||
+      normAbs.startsWith(normCwd) ||
+      /(^|\/)(\.git|node_modules|\.env)(\/|$)/i.test(normAbs)
+    ) {
+      throw new BadRequestException('Choose a specific user folder inside your home directory (e.g. ~/Downloads), outside the application directory.')
     }
     return abs
   }

@@ -15,7 +15,10 @@ release/
 .env.prod
 .env.local
 .env.*.local
+.env.*
 !.env.example
+!.env.prod.example
+.codex-tmp/
 
 # Turbo
 .turbo/

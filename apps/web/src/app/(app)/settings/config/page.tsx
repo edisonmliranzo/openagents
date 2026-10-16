@@ -204,7 +204,7 @@ const PROVIDER_META: Record<Provider, {
     isKeyless: false,
   },
   meta: {
-    label: 'Meta Muse Spark',
+    label: 'Meta Llama',
     icon: <Sparkles className="h-5 w-5" />,
     gradient: 'from-blue-500 to-sky-600',
     ring: 'ring-blue-400',
@@ -1018,16 +1018,20 @@ export default function ConfigPage() {
       {/* Voice keys shortcut */}
       <Link
         href="/settings/voice"
-        className="flex items-center gap-3 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-fuchsia-50 p-4 shadow-sm transition hover:border-violet-300"
+        className="flex items-center gap-3 rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-orange-50 p-4 shadow-sm transition hover:border-rose-300"
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-orange-500 text-white">
           <Mic size={16} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-slate-900">Voice API keys (ElevenLabs / Fish Audio)</span>
-          <span className="block text-xs text-slate-500">Add your text-to-speech keys here so chat replies and briefings use a realistic human voice.</span>
+          <span className="block text-sm font-semibold text-slate-900">
+            Fish Audio 2.0 & Neural Voice Settings (Off by Default)
+          </span>
+          <span className="block text-xs text-slate-500">
+            Robotic browser voices are disabled. Add your free Fish Audio 2.0 developer key here and pick an American voice when you want spoken replies.
+          </span>
         </span>
-        <span className="text-xs font-semibold text-violet-700">Open →</span>
+        <span className="text-xs font-semibold text-rose-600">Configure Voice →</span>
       </Link>
 
       {/* Active Provider Bar */}

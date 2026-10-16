@@ -152,6 +152,7 @@ const WORKER_TOKEN_KEYS = [
   "WORKFLOW_WORKER_TOKEN",
   "WHATSAPP_WEBHOOK_TOKEN",
   "TELEGRAM_WEBHOOK_SECRET",
+  "PROACTIVE_WEBHOOK_TOKEN",
 ];
 
 function ensureMissingKeys(targetRel, keys) {

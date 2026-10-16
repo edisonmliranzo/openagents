@@ -33,6 +33,7 @@ import { SuggestionChips } from './SuggestionChips'
 import { PlanChecklist } from './PlanChecklist'
 import { ResponsePresets } from './ResponsePresets'
 import { WebRtcVoiceControls } from './WebRtcVoiceControls'
+import { OpenAgentsPowerToolbar, SPECIALIST_OPTIONS } from './OpenAgentsPowerSuite'
 import { storageGet, storageSet } from '@/lib/storage'
 import clsx from 'clsx'
 import {
@@ -472,6 +473,7 @@ export function ChatWindow({
   const [input, setInput] = useState('')
   const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([])
   const [slashQuery, setSlashQuery] = useState<string | null>(null)
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [runtimeSettings, setRuntimeSettings] = useState<UserSettings | null>(null)
   const [activeSession, setActiveSession] = useState<SessionRow | null>(null)
   const [runtimeLoading, setRuntimeLoading] = useState(false)
@@ -494,6 +496,45 @@ export function ChatWindow({
 
   const [isOffline, setIsOffline] = useState(false)
   const [offlineQueue, setOfflineQueue] = useState<string[]>([])
+  const [personaPickerOpen, setPersonaPickerOpen] = useState(false)
+  const [agentPersona, setAgentPersona] = useState<{
+    name: string
+    aura: string
+    style: string
+  }>({
+    name: 'Veda',
+    aura: 'from-rose-500 to-orange-500',
+    style: 'Warm, proactive & organized',
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const savedPersona = window.localStorage.getItem('oa-muse-persona')
+      if (savedPersona) {
+        const parsed = JSON.parse(savedPersona)
+        if (parsed?.name) {
+          setAgentPersona({
+            name: String(parsed.name),
+            aura: String(parsed.aura || 'from-rose-500 to-orange-500'),
+            style: String(parsed.style || 'Warm, proactive & organized'),
+          })
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  function updateAgentPersona(next: { name: string; aura: string; style: string }) {
+    setAgentPersona(next)
+    try {
+      window.localStorage.setItem('oa-muse-persona', JSON.stringify(next))
+      window.dispatchEvent(new CustomEvent('openagents:persona-changed'))
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1046,9 +1087,20 @@ export function ChatWindow({
     const parsed = displayContent ? parseSlashCommand(displayContent) : null
     if (parsed && isOperatorCommandId(parsed.id)) {
       setSlashQuery(null)
+      setMentionQuery(null)
       setInput('')
       await executeOperatorCommand(displayContent)
       return
+    }
+
+    // @all 4-Agent Roundtable shortcut inline in chat
+    if (displayContent.toLowerCase().startsWith('@all ')) {
+      const topic = displayContent.slice(5).trim()
+      setMentionQuery(null)
+      setInput('')
+      if (topic) {
+        window.dispatchEvent(new CustomEvent('openagents:open-roundtable', { detail: { topic } }))
+      }
     }
 
     if (!navigator.onLine) {
@@ -1062,6 +1114,7 @@ export function ChatWindow({
     if (!gatewayConnected) return
 
     setSlashQuery(null)
+    setMentionQuery(null)
     setInput('')
     setSuggestions([])
 
@@ -1112,8 +1165,15 @@ export function ChatWindow({
     const slashMatch = val.match(/^(\/[a-z]*)$/)
     if (slashMatch) {
       setSlashQuery(slashMatch[1])
+      setMentionQuery(null)
+      return
+    }
+    setSlashQuery(null)
+    const mentionMatch = val.match(/(?:^|\s)@([a-zA-Z]*)$/)
+    if (mentionMatch) {
+      setMentionQuery(mentionMatch[1] ?? '')
     } else {
-      setSlashQuery(null)
+      setMentionQuery(null)
     }
   }
 
@@ -1267,25 +1327,156 @@ export function ChatWindow({
           )}
         </div>
 
-        {/* Center: agent identity */}
-        <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center gap-0.5">
-          <div className="oa-avatar-ring-gradient">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-orange-100 text-[13px]">
-              🤖
+        {/* Center: Muse Personal Agent Identity + Live Status Pill */}
+        <div className="relative z-20 hidden sm:flex flex-col items-center justify-center">
+          <button
+            type="button"
+            onClick={() => setPersonaPickerOpen((o) => !o)}
+            className="group flex items-center gap-2 rounded-full px-2.5 py-1 transition hover:bg-slate-100/80 dark:hover:bg-white/5"
+            title="Customize your personal AI agent"
+          >
+            <div className="oa-avatar-ring-gradient">
+              <div
+                className={`flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br ${agentPersona.aura} text-[11px] font-black text-white shadow-sm`}
+              >
+                {(agentPersona.name[0] || 'V').toUpperCase()}
+              </div>
             </div>
-          </div>
-          <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">OpenAgents</p>
+            <span className="text-[13px] font-bold text-slate-900 dark:text-slate-100">
+              {agentPersona.name}
+            </span>
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+              {assistantModeDefinition.label}
+            </span>
+          </button>
+
+          {/* Live Status Pill (3rd Layer: Shared Computer & Transparency Drawer) */}
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('openagents:show-activity'))
+              window.dispatchEvent(new CustomEvent('openagents:open-computer'))
+            }}
+            className="mt-0.5 inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-0.5 text-[10px] font-medium text-slate-600 shadow-sm transition hover:border-rose-300 hover:text-slate-900 dark:border-[#2d3347] dark:bg-[#141824]/90 dark:text-slate-300"
+            title="Click to open Shared Computer, Live Browser & Time-Travel Undo Drawer"
+          >
+            <span
+              className={clsx(
+                'h-1.5 w-1.5 rounded-full',
+                isStreaming ? 'bg-amber-500 animate-ping' : 'bg-emerald-500',
+              )}
+            />
+            <span>
+              {isStreaming
+                ? assistantStatusText.replace('OpenAgents', agentPersona.name)
+                : `${agentPersona.name} is ready & listening`}
+            </span>
+          </button>
+
+          {personaPickerOpen && (
+            <div className="absolute top-full mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xl dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-rose-500">
+                Personalize Your OpenAgent
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                &ldquo;Your purpose is to make your user&rsquo;s life better.&rdquo;
+              </p>
+              <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+                {[
+                  {
+                    name: 'Veda',
+                    aura: 'from-rose-500 to-orange-500',
+                    style: 'Warm, proactive & organized',
+                  },
+                  {
+                    name: 'Nova',
+                    aura: 'from-amber-500 to-rose-500',
+                    style: 'Calm, thoughtful & creative',
+                  },
+                  {
+                    name: 'Atlas',
+                    aura: 'from-emerald-500 to-teal-600',
+                    style: 'Direct, analytical & fast',
+                  },
+                ].map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => {
+                      updateAgentPersona(preset)
+                      setPersonaPickerOpen(false)
+                    }}
+                    className={clsx(
+                      'flex flex-col items-center rounded-xl border p-2 text-center transition',
+                      agentPersona.name === preset.name
+                        ? 'border-rose-500 bg-rose-50/50 dark:bg-rose-500/10'
+                        : 'border-slate-200 hover:bg-slate-50 dark:border-[#2d3347] dark:hover:bg-white/5',
+                    )}
+                  >
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br ${preset.aura} text-[10px] font-bold text-white`}
+                    >
+                      {preset.name[0]}
+                    </span>
+                    <span className="mt-1 text-[11px] font-semibold text-slate-800 dark:text-slate-100">
+                      {preset.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-[#2d3347]">
+                <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                  Or custom agent name:
+                </label>
+                <input
+                  type="text"
+                  value={agentPersona.name}
+                  onChange={(e) =>
+                    updateAgentPersona({
+                      ...agentPersona,
+                      name: e.target.value || 'Veda',
+                    })
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-rose-500 dark:border-[#2d3347] dark:bg-[#141824] dark:text-white"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Right: invite + mobile menu */}
+        {/* Right: Ideas/Goals + Quick OS jumps + mobile menu */}
         <div className="relative z-10 flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => router.push('/team')}
-            className="hidden rounded-full border border-slate-200/80 bg-white/80 px-3.5 py-1.5 text-[12px] font-medium text-slate-600 shadow-sm backdrop-blur transition hover:bg-white sm:inline-flex dark:border-[#2d3347] dark:bg-[#1a2032]/80 dark:text-slate-300"
-            title="Invite teammates"
+            onClick={() => window.dispatchEvent(new CustomEvent('openagents:show-ideas'))}
+            className="hidden rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-800 transition hover:bg-amber-500/20 sm:inline-flex dark:text-amber-300"
+            title="Proactive Ideas for You"
           >
-            Invite
+            💡 Ideas
+          </button>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('openagents:show-goals'))}
+            className="hidden rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-500/20 sm:inline-flex dark:text-rose-300"
+            title="Track Goals & Milestones"
+          >
+            🎯 Goals
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/tasks')}
+            className="hidden rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/20 md:inline-flex dark:text-emerald-300"
+            title="Autonomous Task Studio"
+          >
+            Tasks
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/team')}
+            className="hidden rounded-full border border-slate-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur transition hover:bg-white md:inline-flex dark:border-[#2d3347] dark:bg-[#1a2032]/80 dark:text-slate-300"
+            title="Manage Specialist Swarm"
+          >
+            Swarm (4)
           </button>
           {onOpenMobileSessions && (
             <button
@@ -1300,18 +1491,73 @@ export function ChatWindow({
         </div>
       </div>
 
+      {/* OpenAgents Power Toolbar (Daily Pulse, Smart Clips, Shared Computer, Janitor, @all Roundtable, 1-Click Skills, Split Canvas, Phone QR) */}
+      <OpenAgentsPowerToolbar
+        agentName={agentPersona.name}
+        onDispatchPrompt={(prompt) => dispatchMessage(prompt)}
+        onAppendSystemMessage={(msg) => appendOperatorMessage(msg)}
+        hasMessages={visibleMessages.length > 0}
+      />
+
       {visibleMessages.length === 0 ? (
-        /* ── Landing / empty state ── */
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-transparent px-4 py-10">
-          <div className="flex flex-col items-center justify-center gap-2 mb-6">
+        /* ── OpenAgents Personal AI Agent Empty State ── */
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-start sm:justify-center overflow-y-auto bg-transparent px-4 py-6 sm:py-8">
+          {/* Live Telemetry & Directive Pill Bar */}
+          <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/10 px-3 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+              <Sparkles size={11} />
+              &ldquo;Your purpose is to make your user&rsquo;s life better.&rdquo;
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Brain: {inUseModel.split('/').pop() || inUseModel}
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center justify-center text-center gap-1.5 mb-5">
             <div className="flex items-center gap-3">
-              <div className="oa-brand-badge flex h-10 w-10 items-center justify-center rounded-xl text-xs font-bold text-white shrink-0">
-                OA
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br ${agentPersona.aura} text-sm font-black text-white shrink-0 shadow-md`}
+              >
+                {(agentPersona.name[0] || 'V').toUpperCase()}
               </div>
-              <h1 className="oa-gradient-text text-3xl font-semibold tracking-tight sm:text-4xl">
-                How can I help?
+              <h1 className="oa-gradient-text text-2xl font-extrabold tracking-tight sm:text-4xl">
+                Hi, I&rsquo;m {agentPersona.name}. What can I get done for you?
               </h1>
             </div>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-xl">
+              {agentPersona.style} • {assistantModeDefinition.description}
+            </p>
+          </div>
+
+          {/* Mode Selector Tabs (Assist / Plan / Execute / Autopilot) */}
+          <div className="mb-4 flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 dark:border-[#2d3347] dark:bg-[#141824]/90">
+            {ASSISTANT_MODE_DEFINITIONS.map((def) => {
+              const active = def.id === assistantMode
+              return (
+                <button
+                  key={def.id}
+                  type="button"
+                  onClick={() => onAssistantModeChange(def.id)}
+                  className={clsx(
+                    'flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition',
+                    active
+                      ? 'bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white',
+                  )}
+                >
+                  <span>{def.label}</span>
+                  <span
+                    className={clsx(
+                      'hidden sm:inline text-[10px] font-normal',
+                      active ? 'text-white/85' : 'text-slate-400 dark:text-slate-500',
+                    )}
+                  >
+                    • {def.caption}
+                  </span>
+                </button>
+              )
+            })}
           </div>
 
           {/* Input card */}
@@ -1322,6 +1568,39 @@ export function ChatWindow({
                 onSelect={(cmd) => { setInput(cmd.template); setSlashQuery(null); focusComposer() }}
                 onClose={() => setSlashQuery(null)}
               />
+            )}
+
+            {mentionQuery !== null && (
+              <div className="mb-2 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+                <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Route to Specialist or @all Roundtable
+                </p>
+                <div className="space-y-1">
+                  {SPECIALIST_OPTIONS.filter((opt) =>
+                    opt.handle.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+                    opt.name.toLowerCase().includes(mentionQuery.toLowerCase()),
+                  ).map((opt) => (
+                    <button
+                      key={opt.handle}
+                      type="button"
+                      onClick={() => {
+                        setInput((prev) => prev.replace(/(?:^|\s)@[a-zA-Z]*$/, ` ${opt.promptPrefix}`).trimStart())
+                        setMentionQuery(null)
+                        focusComposer()
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs transition hover:bg-slate-50 dark:hover:bg-white/5"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-lg bg-gradient-to-r ${opt.badge} px-2 py-0.5 text-[10px] font-black text-white`}>
+                          {opt.handle}
+                        </span>
+                        <span className="font-semibold text-slate-900 dark:text-white">{opt.role}</span>
+                      </div>
+                      <span className="truncate text-[11px] text-slate-400">{opt.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             <div className="oa-composer overflow-hidden">
@@ -1350,11 +1629,11 @@ export function ChatWindow({
                 onKeyDown={handleKey}
                 disabled={isStreaming}
                 rows={3}
-                placeholder="Ask anything"
-                className="max-h-48 min-h-[96px] w-full resize-none bg-transparent px-5 pt-5 text-[15px] text-[#101828] outline-none placeholder:text-[#b0b8cc] disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
+                placeholder={assistantModeDefinition.placeholder}
+                className="max-h-48 min-h-[88px] w-full resize-none bg-transparent px-5 pt-4 text-[15px] text-[#101828] outline-none placeholder:text-[#98a2b3] disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
               />
 
-              <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
+              <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-[#f2f4f7] px-4 py-2.5 dark:border-[#2d3347]">
                 {/* Left: attach + badge pills */}
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="*/*" />
@@ -1423,6 +1702,25 @@ export function ChatWindow({
                       </div>
                     )}
                   </div>
+
+                  {/* Effort selector inline */}
+                  <div className="hidden sm:inline-flex items-center gap-0.5 rounded-full border border-[#e4e7ec] bg-[#f8fafc] p-0.5 text-[11px] dark:border-[#2d3347] dark:bg-[#141824]">
+                    {(['auto', 'instant', 'planned', 'max'] as const).map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setEffort(level)}
+                        className={clsx(
+                          'rounded-full px-2 py-0.5 font-medium transition',
+                          effort === level
+                            ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
+                            : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
+                        )}
+                      >
+                        {level === 'auto' ? 'Auto' : level === 'instant' ? '⚡ Fast' : level === 'planned' ? '🧠 Plan' : '🚀 Max'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Right: mic + green send button */}
@@ -1439,6 +1737,65 @@ export function ChatWindow({
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* 4 Specialist Quick-Dispatch Cards */}
+            <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              {[
+                {
+                  agent: '@Forge',
+                  role: 'Coder & Architect',
+                  badgeClass: 'from-rose-500 to-orange-500',
+                  title: 'Inspect Repo & Architecture',
+                  prompt: 'Delegate to @Forge: Inspect the apps and packages directory structure, summarize key modules, and identify the top 3 engineering improvements.',
+                },
+                {
+                  agent: '@Scout',
+                  role: 'Deep Researcher',
+                  badgeClass: 'from-cyan-500 to-blue-600',
+                  title: 'Run Deep Web & Tech Research',
+                  prompt: 'Delegate to @Scout: Research the current state-of-the-art in autonomous coding agents and MCP tool architectures, and save a structured summary note.',
+                },
+                {
+                  agent: '@Sentinel',
+                  role: 'Windows Ops & Shell',
+                  badgeClass: 'from-emerald-500 to-teal-600',
+                  title: 'System & Process Health Check',
+                  prompt: 'Delegate to @Sentinel: Run a non-destructive Windows shell check on git status, Node version, and active local workspace health.',
+                },
+                {
+                  agent: '@Atlas',
+                  role: 'Chief of Staff',
+                  badgeClass: 'from-amber-500 to-rose-500',
+                  title: 'Decompose Goal into Milestones',
+                  prompt: 'Delegate to @Atlas: Create an actionable 7-day execution playbook to scale OpenAgents with daily milestones and verification criteria.',
+                },
+              ].map((card) => (
+                <button
+                  key={card.agent}
+                  type="button"
+                  onClick={() => {
+                    onAssistantModeChange('autopilot')
+                    void handleQuickPrompt(card.prompt)
+                  }}
+                  className="oa-suggestion group flex flex-col justify-between p-3.5 text-left"
+                >
+                  <div className="flex items-center justify-between gap-2 w-full">
+                    <span className={`inline-flex items-center rounded-lg bg-gradient-to-r ${card.badgeClass} px-2 py-0.5 text-[10px] font-black text-white`}>
+                      {card.agent}
+                    </span>
+                    <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                      {card.role} →
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs font-bold text-slate-800 group-hover:text-rose-600 dark:text-slate-100 dark:group-hover:text-rose-400">
+                    {card.title}
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    {card.prompt}
+                  </p>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -1483,6 +1840,39 @@ export function ChatWindow({
                 onSelect={(cmd) => { setInput(cmd.template); setSlashQuery(null); focusComposer() }}
                 onClose={() => setSlashQuery(null)}
               />
+            )}
+
+            {mentionQuery !== null && (
+              <div className="mb-2 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+                <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Route to Specialist or @all Roundtable
+                </p>
+                <div className="space-y-1">
+                  {SPECIALIST_OPTIONS.filter((opt) =>
+                    opt.handle.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+                    opt.name.toLowerCase().includes(mentionQuery.toLowerCase()),
+                  ).map((opt) => (
+                    <button
+                      key={opt.handle}
+                      type="button"
+                      onClick={() => {
+                        setInput((prev) => prev.replace(/(?:^|\s)@[a-zA-Z]*$/, ` ${opt.promptPrefix}`).trimStart())
+                        setMentionQuery(null)
+                        focusComposer()
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs transition hover:bg-slate-50 dark:hover:bg-white/5"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-lg bg-gradient-to-r ${opt.badge} px-2 py-0.5 text-[10px] font-black text-white`}>
+                          {opt.handle}
+                        </span>
+                        <span className="font-semibold text-slate-900 dark:text-white">{opt.role}</span>
+                      </div>
+                      <span className="truncate text-[11px] text-slate-400">{opt.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             {attachedFiles.length > 0 && (
@@ -1599,33 +1989,53 @@ export function ChatWindow({
               </div>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#98a2b3]">
-              <span>{assistantModeDefinition.label} mode</span>
-              <span className="inline-flex items-center gap-0.5">
-                {(['auto', 'instant', 'planned', 'max'] as const).map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    onClick={() => setEffort(level)}
-                    title={
-                      level === 'auto' ? 'Agent decides effort per message'
-                        : level === 'instant' ? 'Fastest: no tools, short answers'
-                          : level === 'planned' ? 'Plan first, then execute'
-                            : 'Max: plan + more steps + verified answer'
-                    }
-                    className={clsx(
-                      'rounded-full px-2 py-0.5 font-medium transition',
-                      effort === level
-                        ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
-                        : 'hover:bg-slate-100 dark:hover:bg-slate-800',
-                    )}
-                  >
-                    {level === 'auto' ? 'Auto' : level === 'instant' ? '⚡ Fast' : level === 'planned' ? '🧠 Plan' : '🚀 Max'}
-                  </button>
-                ))}
-              </span>
-              <span className="inline-flex items-center gap-1"><Command size={10} />/ commands</span>
-              <span>{assistantStatusText}</span>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-[#98a2b3]">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-0.5 rounded-full border border-slate-200/70 bg-slate-100/70 p-0.5 dark:border-[#2d3347] dark:bg-[#1a1f2e]">
+                  {ASSISTANT_MODE_DEFINITIONS.map((def) => (
+                    <button
+                      key={def.id}
+                      type="button"
+                      onClick={() => onAssistantModeChange(def.id)}
+                      className={clsx(
+                        'rounded-full px-2.5 py-0.5 font-semibold transition',
+                        assistantMode === def.id
+                          ? 'bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-xs'
+                          : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white',
+                      )}
+                    >
+                      {def.label}
+                    </button>
+                  ))}
+                </span>
+                <span className="inline-flex items-center gap-0.5">
+                  {(['auto', 'instant', 'planned', 'max'] as const).map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setEffort(level)}
+                      title={
+                        level === 'auto' ? 'Agent decides effort per message'
+                          : level === 'instant' ? 'Fastest: no tools, short answers'
+                            : level === 'planned' ? 'Plan first, then execute'
+                              : 'Max: plan + more steps + verified answer'
+                      }
+                      className={clsx(
+                        'rounded-full px-2 py-0.5 font-medium transition',
+                        effort === level
+                          ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800',
+                      )}
+                    >
+                      {level === 'auto' ? 'Auto' : level === 'instant' ? '⚡ Fast' : level === 'planned' ? '🧠 Plan' : '🚀 Max'}
+                    </button>
+                  ))}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1"><Command size={10} />/ commands</span>
+                <span>{assistantStatusText}</span>
+              </div>
             </div>
           </div>
         </>

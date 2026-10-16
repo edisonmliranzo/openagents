@@ -12,7 +12,7 @@ export default function LoginPage() {
 
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('admin@openagents.app')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -55,12 +55,6 @@ export default function LoginPage() {
       const safeRegister = typeof register === 'function' ? register : state.register
       if (typeof safeLogin !== 'function' || typeof safeRegister !== 'function') {
         throw new Error('Unable to initialize auth actions. Please refresh the page.')
-      }
-
-      if (email.trim().toLowerCase() !== 'admin@openagents.app') {
-        setError('Access is restricted to platform administrator (admin@openagents.app). Public access is not open yet.')
-        setLoading(false)
-        return
       }
 
       if (mode === 'register') {
@@ -113,19 +107,8 @@ export default function LoginPage() {
             Private Beta • Administrator Sign-In Only
           </p>
           <p className="mt-1 text-[11px] text-rose-300 leading-normal">
-            Platform access is restricted exclusively to <strong>admin@openagents.app</strong>.
+            Platform access is restricted to authorized administrator accounts configured in server environment variables.
           </p>
-          <button
-            type="button"
-            onClick={() => {
-              setEmail('admin@openagents.app')
-              setPassword('REDACTED_PASS_00')
-              setError('')
-            }}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-rose-500 transition cursor-pointer"
-          >
-            🔑 Fill Admin Credentials
-          </button>
         </div>
 
         {/* Tab toggle */}

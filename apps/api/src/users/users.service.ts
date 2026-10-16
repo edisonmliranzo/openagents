@@ -324,11 +324,15 @@ export class UsersService {
 
   async listFallbackLlmKeys(userId: string, provider: string) {
     const normalizedProvider = this.normalizeProvider(provider)
-    return this.prisma.llmApiKeyFallback.findMany({
+    const rows = await this.prisma.llmApiKeyFallback.findMany({
       where: { userId, provider: normalizedProvider },
       orderBy: { priority: 'asc' },
       select: { id: true, label: true, priority: true, isActive: true, createdAt: true, apiKey: true },
     })
+    return rows.map((row) => ({
+      ...row,
+      apiKey: row.apiKey ? `...${row.apiKey.slice(-4)}` : '',
+    }))
   }
 
   async addFallbackLlmKey(userId: string, provider: string, apiKey: string, label?: string) {
@@ -339,9 +343,13 @@ export class UsersService {
       orderBy: { priority: 'desc' },
     })
     const nextPriority = existing.length > 0 ? (existing[0]?.priority ?? 0) + 10 : 10
-    return this.prisma.llmApiKeyFallback.create({
+    const created = await this.prisma.llmApiKeyFallback.create({
       data: { userId, provider: normalizedProvider, apiKey, label: label ?? null, priority: nextPriority },
     })
+    return {
+      ...created,
+      apiKey: created.apiKey ? `...${created.apiKey.slice(-4)}` : '',
+    }
   }
 
   async removeFallbackLlmKey(userId: string, fallbackId: string) {

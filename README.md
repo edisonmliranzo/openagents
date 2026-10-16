@@ -396,7 +396,7 @@ The model picker loads each provider's **live model catalog** automatically (wit
 
 All plans run on **your own server**. You own your data.
 
-Contact: [admin@openagents.app](mailto:admin@openagents.app)
+Contact: [support@openagents.us](mailto:support@openagents.us)
 
 ---
 

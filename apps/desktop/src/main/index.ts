@@ -6,7 +6,8 @@ app.setName('OpenAgents')
 
 export function debugLog(msg: string) {
   try {
-    fs.appendFileSync('C:\\Users\\edinson\\Music\\openagents\\desktop-debug.log', `[${new Date().toISOString()}] ${msg}\n`)
+    const logPath = path.join(app.getPath('userData'), 'desktop-debug.log')
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`)
   } catch {}
 }
 
@@ -138,7 +139,6 @@ function getTrayIcon(): NativeImage {
     path.join(process.resourcesPath, 'icon.png'),
     path.join(__dirname, '../../resources/icon.png'),
     path.join(__dirname, '../resources/icon.png'),
-    'C:\\Users\\edinson\\Music\\openagents\\apps\\desktop\\resources\\icon.png'
   ]
   for (const p of candidateIcons) {
     try {

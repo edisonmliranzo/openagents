@@ -28,10 +28,10 @@ export class LocalDaemonService {
     return conn
   }
 
-  async executeLocalCommand(daemonId: string, command: string): Promise<{ success: boolean; output: string }> {
+  async executeLocalCommand(userId: string, daemonId: string, command: string): Promise<{ success: boolean; output: string }> {
     const conn = this.connections.get(daemonId)
-    if (!conn || conn.status !== 'connected') {
-      throw new Error('Daemon not connected')
+    if (!conn || conn.userId !== userId || conn.status !== 'connected') {
+      throw new Error('Daemon not connected or access denied')
     }
 
     this.logger.log(`Executing command on daemon ${daemonId}: ${command}`)
@@ -39,10 +39,11 @@ export class LocalDaemonService {
     return { success: true, output: `Executed ${command} successfully on ${conn.hostname}` }
   }
 
-  async ping(daemonId: string): Promise<boolean> {
+  async ping(userId: string, daemonId: string): Promise<boolean> {
     const conn = this.connections.get(daemonId)
-    if (!conn) return false
+    if (!conn || conn.userId !== userId) return false
     conn.lastPingAt = new Date().toISOString()
     return true
   }
 }
+

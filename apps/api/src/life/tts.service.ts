@@ -302,30 +302,110 @@ export class TtsService {
 
   private async speakFish(text: string, voiceId: string, apiKey: string): Promise<TtsResult> {
     const key = apiKey
-    if (!key) throw new ServiceUnavailableException('Add your Fish Audio API key in Settings → Voice')
-    if (!voiceId) {
-      throw new ServiceUnavailableException(
-        'Fish Audio needs a voice: set a Reference ID in Settings → Voice (a voice/model id from fish.audio).',
-      )
+    if (!key) throw new ServiceUnavailableException('Add your Fish Audio 2.0 API key in Settings → Voice')
+
+    // Resolve curated American voice preset aliases or empty voiceId to a real English model on Fish Audio,
+    // or fall back to Fish Audio 2.0 default English synthesis if reference_id is omitted.
+    let resolvedRef = (voiceId ?? '').trim()
+    if (resolvedRef.startsWith('us-preset-') || !resolvedRef) {
+      try {
+        const resModels = await fetch(
+          'https://api.fish.audio/model?page_size=10&page_num=1&language=en&sort_by=task_count',
+          {
+            headers: { Authorization: `Bearer ${key}` },
+            signal: AbortSignal.timeout(10_000),
+          },
+        )
+        if (resModels.ok) {
+          const data = (await resModels.json()) as { items?: Array<{ _id: string; title: string }> }
+          const items = data.items ?? []
+          const idxMap: Record<string, number> = {
+            'us-preset-madison': 0,
+            'us-preset-claire': 1,
+            'us-preset-ethan': 2,
+            'us-preset-marcus': 3,
+            'us-preset-sophia': 4,
+          }
+          const pickIdx = idxMap[resolvedRef] ?? 0
+          resolvedRef = items[pickIdx]?._id || items[0]?._id || ''
+        } else {
+          resolvedRef = ''
+        }
+      } catch {
+        resolvedRef = ''
+      }
+    }
+
+    const payload: Record<string, unknown> = {
+      text,
+      format: 'mp3',
+      mp3_bitrate: 128,
+      normalize: true,
+      latency: 'balanced',
+    }
+    if (resolvedRef) {
+      payload.reference_id = resolvedRef
     }
 
     const res = await fetch('https://api.fish.audio/v1/tts', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-      body: JSON.stringify({ text, reference_id: voiceId, format: 'mp3', mp3_bitrate: 128, normalize: true, latency: 'balanced' }),
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Accept: 'audio/mpeg',
+        model: 's1',
+      },
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(120_000),
     })
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
-      throw new ServiceUnavailableException(`Fish Audio TTS failed (${res.status}): ${detail.slice(0, 200)}`)
+      throw new ServiceUnavailableException(`Fish Audio 2.0 TTS failed (${res.status}): ${detail.slice(0, 200)}`)
     }
     const buf = Buffer.from(await res.arrayBuffer())
-    return { audioBase64: buf.toString('base64'), mimeType: 'audio/mpeg', provider: 'fish', voiceId, cached: false }
+    return {
+      audioBase64: buf.toString('base64'),
+      mimeType: 'audio/mpeg',
+      provider: 'fish',
+      voiceId: resolvedRef || voiceId || 'fish-2.0-us',
+      cached: false,
+    }
   }
 
-  /** List voices from the configured providers (best effort). */
+  /** List voices from the configured providers (best effort), including Curated American Fish Audio 2.0 voices. */
   async voices(userId: string): Promise<VoiceOption[]> {
-    const out: VoiceOption[] = []
+    const out: VoiceOption[] = [
+      {
+        id: 'us-preset-madison',
+        name: 'Madison — Warm American Female (Veda Default)',
+        provider: 'fish',
+        labels: { accent: 'American', gender: 'Female', engine: 'Fish Audio 2.0' },
+      },
+      {
+        id: 'us-preset-claire',
+        name: 'Claire — Calm American Female (Nova)',
+        provider: 'fish',
+        labels: { accent: 'American', gender: 'Female', engine: 'Fish Audio 2.0' },
+      },
+      {
+        id: 'us-preset-ethan',
+        name: 'Ethan — Direct American Male (Atlas)',
+        provider: 'fish',
+        labels: { accent: 'American', gender: 'Male', engine: 'Fish Audio 2.0' },
+      },
+      {
+        id: 'us-preset-marcus',
+        name: 'Marcus — Deep American Male (Executive Briefing)',
+        provider: 'fish',
+        labels: { accent: 'American', gender: 'Male', engine: 'Fish Audio 2.0' },
+      },
+      {
+        id: 'us-preset-sophia',
+        name: 'Sophia — Crisp American Female (Daily Assistant)',
+        provider: 'fish',
+        labels: { accent: 'American', gender: 'Female', engine: 'Fish Audio 2.0' },
+      },
+    ]
     const keys = await this.resolveKeys(userId).catch(() => ({ elevenlabsKey: '', fishKey: '' }) as { elevenlabsKey: string; fishKey: string })
     const eleven = keys.elevenlabsKey
     if (eleven) {
@@ -346,12 +426,10 @@ export class TtsService {
     }
     const fish = keys.fishKey
     if (fish) {
-      // Fish Audio lists voices through /model. Prefer the user's own cloned
-      // voices; fall back to the public library when they have none yet.
       const fetchModels = async (selfOnly: boolean): Promise<Array<{ _id: string; title: string }>> => {
         const url = selfOnly
           ? 'https://api.fish.audio/model?self=true&page_size=30&page_num=1'
-          : 'https://api.fish.audio/model?page_size=30&page_num=1&sort_by=task_count'
+          : 'https://api.fish.audio/model?page_size=30&page_num=1&language=en&sort_by=task_count'
         try {
           const res = await fetch(url, {
             headers: { Authorization: `Bearer ${fish}` },
@@ -366,15 +444,17 @@ export class TtsService {
         }
       }
       const own = await fetchModels(true)
-      const seen = new Set(own.map((v) => v._id))
-      for (const v of own) out.push({ id: v._id, name: v.title || 'My voice', provider: 'fish' })
-      if (own.length === 0) {
-        const popular = await fetchModels(false)
-        for (const v of popular) {
-          if (seen.has(v._id)) continue
-          seen.add(v._id)
-          out.push({ id: v._id, name: v.title || 'Voice', provider: 'fish' })
-        }
+      const seen = new Set(out.map((v) => v.id))
+      for (const v of own) {
+        if (seen.has(v._id)) continue
+        seen.add(v._id)
+        out.push({ id: v._id, name: `${v.title || 'My Cloned Voice'} (My Fish Audio)`, provider: 'fish' })
+      }
+      const popularEn = await fetchModels(false)
+      for (const v of popularEn) {
+        if (seen.has(v._id)) continue
+        seen.add(v._id)
+        out.push({ id: v._id, name: `${v.title || 'English Voice'} (Fish Library)`, provider: 'fish' })
       }
     }
     return out

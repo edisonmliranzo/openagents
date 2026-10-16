@@ -35,8 +35,10 @@ const TRACKED_KEYS: Array<{ name: string; envVar: string }> = [
 
 function maskKey(val: string): string {
   if (!val || val.length < 8) return '••••••••'
-  return val.slice(0, 4) + '••••••••' + val.slice(-4)
+  return `••••••••${val.slice(-4)}`
 }
+
+const ALLOWED_ENV_VARS = new Set(TRACKED_KEYS.map((k) => k.envVar))
 
 @Injectable()
 export class ApiKeysService {
@@ -58,29 +60,39 @@ export class ApiKeysService {
   }
 
   async rotateKey(envVar: string, newValue: string): Promise<{ success: boolean; message: string }> {
+    const cleanVar = String(envVar ?? '').trim()
+    if (!ALLOWED_ENV_VARS.has(cleanVar)) {
+      return { success: false, message: `Environment variable "${cleanVar}" is not in the rotatable API key allowlist.` }
+    }
+    const cleanVal = String(newValue ?? '').trim()
+    if (/[\r\n\0]/.test(cleanVal)) {
+      return { success: false, message: 'Invalid characters in API key value.' }
+    }
+
     // On self-hosted installs, write to the .env.prod file if it exists
     // This is a best-effort — env vars in the current process won't change until restart
     const envFilePath = process.env.ENV_FILE_PATH ?? '/app/infra/docker/.env.prod'
     try {
       const fs = await import('node:fs/promises')
       let content = await fs.readFile(envFilePath, 'utf-8')
-      const regex = new RegExp(`^${envVar}=.*$`, 'm')
+      const regex = new RegExp(`^${cleanVar}=.*$`, 'm')
       if (regex.test(content)) {
-        content = content.replace(regex, `${envVar}=${newValue}`)
+        content = content.replace(regex, `${cleanVar}=${cleanVal}`)
       } else {
-        content += `\n${envVar}=${newValue}\n`
+        content += `\n${cleanVar}=${cleanVal}\n`
       }
       await fs.writeFile(envFilePath, content, 'utf-8')
       // Update current process env
-      process.env[envVar] = newValue
-      return { success: true, message: `${envVar} updated in .env.prod. Restart containers to apply.` }
+      process.env[cleanVar] = cleanVal
+      return { success: true, message: `${cleanVar} updated in .env.prod. Restart containers to apply.` }
     } catch (err: any) {
       // Fallback: just update process.env for current session
-      process.env[envVar] = newValue
+      process.env[cleanVar] = cleanVal
       return {
         success: true,
-        message: `${envVar} updated in memory. Could not write to env file: ${err?.message}. Set ENV_FILE_PATH to enable persistence.`,
+        message: `${cleanVar} updated in memory. Could not write to env file: ${err?.message}. Set ENV_FILE_PATH to enable persistence.`,
       }
     }
   }
 }
+

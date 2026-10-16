@@ -59,7 +59,7 @@ export class AuthService {
     this.authRateLimit.assertLoginAllowed(normalizedEmail, clientIp)
 
     if (!this.isCreatorEmail(normalizedEmail)) {
-      throw new UnauthorizedException('Access restricted to platform administrator (admin@openagents.app). Public access is not open yet.')
+      throw new UnauthorizedException('Access restricted to platform administrator. Public access is not open yet.')
     }
 
     let user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
@@ -137,10 +137,11 @@ export class AuthService {
     await this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } })
 
     const token = randomBytes(32).toString('hex')
+    const tokenHash = this.hashRefreshToken(token)
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
 
     await this.prisma.passwordResetToken.create({
-      data: { userId: user.id, token, expiresAt },
+      data: { userId: user.id, token: tokenHash, expiresAt },
     })
 
     const resetUrl = `${baseUrl}/reset-password?token=${token}`
@@ -150,7 +151,11 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string) {
-    const record = await this.prisma.passwordResetToken.findUnique({ where: { token } })
+    const tokenHash = this.hashRefreshToken(token)
+    let record = await this.prisma.passwordResetToken.findUnique({ where: { token: tokenHash } })
+    if (!record) {
+      record = await this.prisma.passwordResetToken.findUnique({ where: { token } })
+    }
     if (!record || record.expiresAt < new Date()) {
       if (record) await this.prisma.passwordResetToken.delete({ where: { id: record.id } })
       throw new BadRequestException('Invalid or expired reset token')

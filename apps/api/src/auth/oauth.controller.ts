@@ -17,8 +17,9 @@ export class OAuthController {
   /**
    * Initiate OAuth flow for a provider
    */
-  @Public()
   @Get('authorize/:provider')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Initiate OAuth authorization' })
   @ApiResponse({ status: 200, description: 'OAuth URL generated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid provider' })
@@ -88,9 +89,9 @@ export class OAuthController {
   async refreshAccessToken(
     @Req() req: any,
     @Param('provider') provider: string,
-  ): Promise<{ accessToken?: string; success: boolean }> {
+  ): Promise<{ success: boolean }> {
     const accessToken = await this.oauthService.refreshAccessToken(req.user.id, provider as any)
-    return { accessToken: accessToken ?? undefined, success: !!accessToken }
+    return { success: !!accessToken }
   }
 
   /**

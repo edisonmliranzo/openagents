@@ -1326,7 +1326,13 @@ export class ConnectorsService {
   }
 
   private resolveEncryptionKey() {
-    const raw = this.optionalText(process.env.ENCRYPTION_KEY) ?? 'openagents-local-dev-key'
+    const configured = this.optionalText(process.env.ENCRYPTION_KEY)
+    const isPlaceholder = !configured || configured === '32-char-hex-key-here' || configured.includes('change-me')
+    const isProd = (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production'
+    if (isPlaceholder && isProd) {
+      throw new Error('ENCRYPTION_KEY must be set to a strong secret in production.')
+    }
+    const raw = (!isPlaceholder ? configured : this.optionalText(process.env.JWT_SECRET)) ?? 'openagents-local-dev-key'
     const normalizedHex = raw.replace(/^0x/i, '')
     if (/^[0-9a-f]{64}$/i.test(normalizedHex)) {
       return Buffer.from(normalizedHex, 'hex')

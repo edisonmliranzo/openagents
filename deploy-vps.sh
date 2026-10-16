@@ -37,7 +37,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 
 echo "=== Step 5: Obtain SSL certificate ==="
-sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email admin@openagents.app
+sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email "${CERTBOT_EMAIL:-admin@${DOMAIN}}"
 
 echo ""
 echo "Done! Your app should be live at https://${DOMAIN}"

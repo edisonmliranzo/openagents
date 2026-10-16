@@ -43,7 +43,7 @@ interface WaitlistEntry {
 }
 
 const DEFAULT_WAITLIST: WaitlistEntry[] = [
-  { id: 'wl-1', email: 'admin@openagents.app', createdAt: '2026-10-10 10:15', source: 'Direct Superadmin', role: 'Platform Owner', status: 'Active' },
+  { id: 'wl-1', email: 'owner@openagents.local', createdAt: '2026-10-10 10:15', source: 'Direct Superadmin', role: 'Platform Owner', status: 'Active' },
   { id: 'wl-2', email: 'alex.v@neuralresearch.org', createdAt: '2026-10-10 09:42', source: 'Homepage Waitlist', role: 'AI Researcher', status: 'Invited' },
   { id: 'wl-3', email: 'marcus.chen@fintechflow.io', createdAt: '2026-10-10 08:30', source: 'Twitter/X Tech', role: 'Principal Architect', status: 'Pending' },
   { id: 'wl-4', email: 'sarah.k@cloudinfra.dev', createdAt: '2026-10-10 07:14', source: 'GitHub Referral', role: 'DevOps Lead', status: 'Invited' },
@@ -162,8 +162,7 @@ export default function AdminAnalyticsPage() {
   const estimatedSavings = Math.round(1350 * rangeMultiplier)
   const hydrated = useAuthStore((state) => state.hydrated)
   const isSuperadmin =
-    user?.email?.trim().toLowerCase() === 'admin@openagents.app' ||
-    user?.role?.trim().toLowerCase() === 'owner'
+    Boolean(user?.role && ['owner', 'admin'].includes(user.role.trim().toLowerCase()))
 
   // If hydrated and not superadmin, render access denied gate
   if (hydrated && !isSuperadmin) {
@@ -175,15 +174,14 @@ export default function AdminAnalyticsPage() {
           </div>
           <h2 className="text-xl font-bold text-slate-900">Admin Access Required</h2>
           <p className="mt-2 text-xs text-slate-500 leading-relaxed">
-            This analytics console and platform telemetry is strictly private and restricted to the platform owner (
-            <strong className="text-slate-800 font-semibold">admin@openagents.app</strong>).
+            This analytics console and platform telemetry is strictly private and restricted to the platform owner.
           </p>
           <div className="mt-6 flex flex-col gap-2.5">
             <Link
               href="/login?next=/admin"
               className="w-full rounded-xl bg-slate-900 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition"
             >
-              Sign In as admin@openagents.app
+              Sign In as Administrator
             </Link>
             <Link
               href="/"
@@ -222,7 +220,7 @@ export default function AdminAnalyticsPage() {
               <ShieldCheck className="h-4 w-4 text-emerald-600" />
               <span>
                 Owner:{' '}
-                <strong className="text-slate-900 font-semibold">admin@openagents.app</strong>
+                <strong className="text-slate-900 font-semibold">{user?.email || 'Authenticated Owner'}</strong>
               </span>
               <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             </div>
@@ -582,7 +580,7 @@ export default function AdminAnalyticsPage() {
                             {lead.email.slice(0, 2).toUpperCase()}
                           </div>
                           <span>{lead.email}</span>
-                          {lead.email === 'admin@openagents.app' && (
+                          {lead.role === 'Platform Owner' && (
                             <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">
                               Admin
                             </span>

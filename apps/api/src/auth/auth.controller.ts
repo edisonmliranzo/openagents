@@ -1,9 +1,10 @@
-﻿import { Controller, Post, Get, Body, UseGuards, Req, HttpCode } from '@nestjs/common'
+import { Controller, Post, Get, Body, UseGuards, Req, HttpCode } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { IsEmail, IsString, MinLength, IsOptional, Matches } from 'class-validator'
 import { AuthService } from './auth.service'
 import { JwtAuthGuard } from './guards/jwt.guard'
 import { Throttle } from '@nestjs/throttler'
+import { Public } from '../common/public.decorator'
 
 // Brute-force protection on unauthenticated credential routes. The auth
 // service also enforces per-identity lockout; this caps request volume per IP.
@@ -47,7 +48,6 @@ class ResetPasswordDto {
   newPassword: string
 }
 
-import { Public } from '../common/public.decorator'
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
@@ -100,10 +100,15 @@ export class AuthController {
   @Throttle(AUTH_LIMITS)
   @Post('forgot-password')
   @HttpCode(200)
-  forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: any) {
-    const proto = req.headers['x-forwarded-proto'] ?? (req.secure ? 'https' : 'http')
-    const host = req.headers['x-forwarded-host'] ?? req.headers.host
-    const baseUrl = `${proto}://${host}`
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    const baseUrl = (
+      process.env.FRONTEND_URL ||
+      process.env.PUBLIC_BASE_URL ||
+      (process.env.FRONTEND_URLS ?? '').split(',')[0] ||
+      'http://localhost:3000'
+    )
+      .trim()
+      .replace(/\/+$/, '')
     return this.auth.forgotPassword(dto.email, baseUrl)
   }
 

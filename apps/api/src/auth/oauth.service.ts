@@ -259,15 +259,7 @@ export class OAuthService {
     input: CreateProviderConnectionInput & { userId?: string },
   ): Promise<ProviderConnection> {
     if (!input.userId) {
-      // Create a new user if not provided
-      const user = await this.prisma.user.create({
-        data: {
-          email: input.email || `${randomUUID()}@oauth.local`,
-          passwordHash: '',
-          name: `OAuth User (${input.provider})`,
-        },
-      })
-      input.userId = user.id
+      throw new UnauthorizedException('Authenticated user session is required to connect an OAuth provider.')
     }
 
     // Upsert the API key record
