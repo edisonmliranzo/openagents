@@ -204,13 +204,17 @@ export const LLM_MODEL_OPTIONS = {
     'grok-2-vision-1212',
   ],
   openrouter: [
-    // Popular routes — any OpenRouter model id works (type it in chat with /model)
+    // Popular routes — any OpenRouter model id works (type it in chat with /model,
+    // or browse the live catalog: GET https://openrouter.ai/api/v1/models)
+    'anthropic/claude-sonnet-4',
+    'anthropic/claude-3.5-haiku',
+    'openai/gpt-4o',
+    'openai/gpt-4o-mini',
+    'google/gemini-2.5-pro',
+    'google/gemini-2.5-flash',
+    'deepseek/deepseek-r1',
     'meta-llama/llama-3.3-70b-instruct',
     'meta-llama/llama-3.1-8b-instruct',
-    'anthropic/claude-sonnet-4',
-    'openai/gpt-4o',
-    'google/gemini-2.5-pro',
-    'deepseek/deepseek-r1',
   ],
   together: [
     'meta-llama/Llama-3.3-70B-Instruct-Turbo',

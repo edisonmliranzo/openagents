@@ -695,6 +695,15 @@ export class LLMService {
     return new OpenAI({
       ...(baseURL ? { baseURL } : {}),
       apiKey,
+      // OpenRouter app attribution (https://openrouter.ai/docs/app-attribution)
+      ...(provider === 'openrouter'
+        ? {
+            defaultHeaders: {
+              'HTTP-Referer': (this.config.get<string>('PUBLIC_BASE_URL') ?? 'https://github.com/edisonmliranzo/openagents').trim(),
+              'X-OpenRouter-Title': 'OpenAgents',
+            },
+          }
+        : {}),
       // Fail fast instead of hanging the chat on "thinking" forever.
       timeout: 300_000,
       maxRetries: 1,
