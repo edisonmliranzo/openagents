@@ -1,7 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import type { LLMProvider } from '@openagents/shared'
+
+const ENC_PREFIX = 'enc:v1:'
 
 const SUPPORTED_LLM_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
 
@@ -27,6 +30,57 @@ export class UsersService {
     private prisma: PrismaService,
     private config: ConfigService,
   ) {}
+
+  private resolveCipherKey(): Buffer {
+    const raw =
+      (this.config.get<string>('ENCRYPTION_KEY') ?? '').trim() ||
+      (this.config.get<string>('JWT_SECRET') ?? '').trim() ||
+      'openagents-local-dev-key'
+    const normalizedHex = raw.replace(/^0x/i, '')
+    if (/^[0-9a-f]{64}$/i.test(normalizedHex)) {
+      return Buffer.from(normalizedHex, 'hex')
+    }
+    return createHash('sha256').update(raw).digest()
+  }
+
+  private encryptSecret(plain: string | null | undefined): string | null {
+    if (!plain) return null
+    if (plain.startsWith(ENC_PREFIX)) return plain
+    const iv = randomBytes(12)
+    const cipher = createCipheriv('aes-256-gcm', this.resolveCipherKey(), iv)
+    const encrypted = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()])
+    const tag = cipher.getAuthTag()
+    return `${ENC_PREFIX}${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`
+  }
+
+  private decryptSecret(stored: string | null | undefined): string | null {
+    if (!stored) return null
+    if (!stored.startsWith(ENC_PREFIX)) return stored
+    try {
+      const rest = stored.slice(ENC_PREFIX.length)
+      const [ivHex, tagHex, dataHex] = rest.split(':')
+      if (!ivHex || !tagHex || !dataHex) return null
+      const decipher = createDecipheriv(
+        'aes-256-gcm',
+        this.resolveCipherKey(),
+        Buffer.from(ivHex, 'hex'),
+      )
+      decipher.setAuthTag(Buffer.from(tagHex, 'hex'))
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(dataHex, 'hex')),
+        decipher.final(),
+      ])
+      return decrypted.toString('utf8')
+    } catch {
+      return null
+    }
+  }
+
+  private maskSecret(stored: string | null | undefined): string | null {
+    const plain = this.decryptSecret(stored)
+    if (!plain) return null
+    return `...${plain.slice(-4)}`
+  }
 
   async getProfile(userId: string) {
     return this.prisma.user.findUnique({
@@ -97,8 +151,8 @@ export class UsersService {
     const keys = await this.prisma.llmApiKey.findMany({ where: { userId } })
     return keys.map((k) => ({
       ...k,
-      apiKey: k.apiKey ? `...${k.apiKey.slice(-4)}` : null,
-      loginPassword: k.loginPassword ? `...${k.loginPassword.slice(-4)}` : null,
+      apiKey: this.maskSecret(k.apiKey),
+      loginPassword: this.maskSecret(k.loginPassword),
     }))
   }
 
@@ -143,7 +197,7 @@ export class UsersService {
       }
       if (data.apiKey !== undefined) {
         const key = data.apiKey.trim()
-        updateData.apiKey = key.length > 0 ? key : null
+        updateData.apiKey = key.length > 0 ? this.encryptSecret(key) : null
       }
       updateData.loginEmail = null
       updateData.loginPassword = null
@@ -159,7 +213,7 @@ export class UsersService {
       }
       if (data.apiKey != null) {
         const key = data.apiKey.trim()
-        updateData.apiKey = key.length > 0 ? key : null
+        updateData.apiKey = key.length > 0 ? this.encryptSecret(key) : null
       }
 
       const hasLoginEmail = data.loginEmail !== undefined
@@ -177,7 +231,7 @@ export class UsersService {
         }
 
         updateData.loginEmail = loginEmail
-        updateData.loginPassword = loginPassword
+        updateData.loginPassword = this.encryptSecret(loginPassword)
       }
 
       if (data.subscriptionPlan !== undefined) {
@@ -209,8 +263,8 @@ export class UsersService {
     })
     return {
       ...result,
-      apiKey: result.apiKey ? `...${result.apiKey.slice(-4)}` : null,
-      loginPassword: result.loginPassword ? `...${result.loginPassword.slice(-4)}` : null,
+      apiKey: this.maskSecret(result.apiKey),
+      loginPassword: this.maskSecret(result.loginPassword),
     }
   }
 
@@ -306,9 +360,15 @@ export class UsersService {
   /** Internal — returns unmasked key. Never expose directly via HTTP. */
   async getRawLlmKey(userId: string, provider: string) {
     const normalizedProvider = this.normalizeProvider(provider)
-    return this.prisma.llmApiKey.findUnique({
+    const row = await this.prisma.llmApiKey.findUnique({
       where: { userId_provider: { userId, provider: normalizedProvider } },
     })
+    if (!row) return null
+    return {
+      ...row,
+      apiKey: this.decryptSecret(row.apiKey),
+      loginPassword: this.decryptSecret(row.loginPassword),
+    }
   }
 
   /** Returns ordered fallback API keys for rotation/failover. Never expose directly via HTTP. */
@@ -319,7 +379,9 @@ export class UsersService {
       orderBy: { priority: 'asc' },
       select: { apiKey: true },
     })
-    return fallbacks.map((f) => f.apiKey).filter(Boolean)
+    return fallbacks
+      .map((f) => this.decryptSecret(f.apiKey) ?? '')
+      .filter(Boolean)
   }
 
   async listFallbackLlmKeys(userId: string, provider: string) {
@@ -331,7 +393,7 @@ export class UsersService {
     })
     return rows.map((row) => ({
       ...row,
-      apiKey: row.apiKey ? `...${row.apiKey.slice(-4)}` : '',
+      apiKey: this.maskSecret(row.apiKey) ?? '',
     }))
   }
 
@@ -343,12 +405,13 @@ export class UsersService {
       orderBy: { priority: 'desc' },
     })
     const nextPriority = existing.length > 0 ? (existing[0]?.priority ?? 0) + 10 : 10
+    const encryptedKey = this.encryptSecret(apiKey.trim()) ?? ''
     const created = await this.prisma.llmApiKeyFallback.create({
-      data: { userId, provider: normalizedProvider, apiKey, label: label ?? null, priority: nextPriority },
+      data: { userId, provider: normalizedProvider, apiKey: encryptedKey, label: label ?? null, priority: nextPriority },
     })
     return {
       ...created,
-      apiKey: created.apiKey ? `...${created.apiKey.slice(-4)}` : '',
+      apiKey: this.maskSecret(created.apiKey) ?? '',
     }
   }
 

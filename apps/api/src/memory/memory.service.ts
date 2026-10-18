@@ -1465,13 +1465,60 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     await fs.writeFile(fullPath, JSON.stringify(store, null, 2), 'utf8')
   }
 
+  private static readonly ALLOWED_KNOWLEDGE_EXTENSIONS = new Set([
+    '.md',
+    '.txt',
+    '.json',
+    '.ts',
+    '.tsx',
+    '.js',
+    '.jsx',
+    '.py',
+    '.yml',
+    '.yaml',
+  ])
+
+  private assertSafeKnowledgePath(targetPath: string) {
+    const normalized = path.resolve(targetPath)
+    const lower = normalized.toLowerCase().replace(/\\/g, '/')
+    const base = path.basename(lower)
+
+    if (
+      base === '.env' ||
+      base.startsWith('.env.') ||
+      base.endsWith('.pem') ||
+      base.endsWith('.key') ||
+      base.endsWith('.pfx') ||
+      base.endsWith('.p12') ||
+      base === 'id_rsa' ||
+      base === 'id_ed25519' ||
+      lower.includes('/.ssh/') ||
+      lower.includes('/.aws/') ||
+      lower.includes('/.gnupg/') ||
+      lower.startsWith('/etc/') ||
+      lower.startsWith('/proc/') ||
+      lower.startsWith('/sys/') ||
+      lower.includes('/windows/system32')
+    ) {
+      throw new BadRequestException('Access to sensitive credential or system paths is prohibited.')
+    }
+  }
+
   private sanitizeLocalKnowledgeSource(userId: string, input: CreateLocalKnowledgeSourceInput): LocalKnowledgeSource {
-    const normalizedPath = path.resolve((input.path ?? '').trim())
-    if (!normalizedPath) {
+    const rawPath = (input.path ?? '').trim()
+    if (!rawPath) {
       throw new BadRequestException('Knowledge source path is required.')
     }
+    const normalizedPath = path.resolve(rawPath)
+    this.assertSafeKnowledgePath(normalizedPath)
 
     const kind = this.normalizeLocalKnowledgeKind(input.kind, normalizedPath)
+    if (kind === 'file') {
+      const ext = path.extname(normalizedPath).toLowerCase()
+      if (!MemoryService.ALLOWED_KNOWLEDGE_EXTENSIONS.has(ext)) {
+        throw new BadRequestException(`Unsupported knowledge file extension "${ext || 'none'}".`)
+      }
+    }
     const now = new Date().toISOString()
     return {
       id: randomUUID(),
@@ -1534,9 +1581,14 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async collectKnowledgeFiles(targetPath: string, kind: LocalKnowledgeSource['kind'], maxFiles: number) {
+    this.assertSafeKnowledgePath(targetPath)
     const stats = await fs.stat(targetPath)
     if (kind === 'file') {
-      return stats.isFile() ? [targetPath] : []
+      const ext = path.extname(targetPath).toLowerCase()
+      if (!stats.isFile() || !MemoryService.ALLOWED_KNOWLEDGE_EXTENSIONS.has(ext)) {
+        return []
+      }
+      return [targetPath]
     }
 
     const files: string[] = []
@@ -1546,7 +1598,11 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
       const entries = await fs.readdir(current, { withFileTypes: true }).catch(() => [])
       for (const entry of entries) {
         if (files.length >= maxFiles) break
-        if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.next' || entry.name === 'dist') {
+        if (
+          entry.name.startsWith('.') ||
+          entry.name === 'node_modules' ||
+          entry.name === 'dist'
+        ) {
           continue
         }
         const fullPath = path.join(current, entry.name)
@@ -1556,7 +1612,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
         }
         if (!entry.isFile()) continue
         const extension = path.extname(entry.name).toLowerCase()
-        if (!['.md', '.txt', '.json', '.ts', '.tsx', '.js', '.jsx', '.py', '.yml', '.yaml'].includes(extension)) {
+        if (!MemoryService.ALLOWED_KNOWLEDGE_EXTENSIONS.has(extension)) {
           continue
         }
         files.push(fullPath)

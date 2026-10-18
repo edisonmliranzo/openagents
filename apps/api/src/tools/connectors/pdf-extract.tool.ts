@@ -42,11 +42,49 @@ export class PdfExtractTool {
       return { success: false, output: null, error: 'url is required.' }
     }
 
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(url)
+    } catch {
+      return { success: false, output: null, error: 'Invalid URL.' }
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return { success: false, output: null, error: 'Only HTTP/HTTPS URLs are supported.' }
+    }
+
+    const host = parsedUrl.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+    if (
+      host === 'localhost' ||
+      host.endsWith('.localhost') ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host === '169.254.169.254' ||
+      host === 'metadata.google.internal' ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+      /^127\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^fc00:/i.test(host) ||
+      /^fe80:/i.test(host)
+    ) {
+      return {
+        success: false,
+        output: null,
+        error: 'Fetching PDFs from private, loopback, or internal network addresses is blocked.',
+      }
+    }
+
     this.logger.log(`pdf_extract: fetching ${url}`)
 
     try {
       const res = await fetch(url, {
         headers: { Accept: 'application/pdf' },
+        redirect: 'error',
       })
 
       if (!res.ok) {
@@ -58,6 +96,13 @@ export class PdfExtractTool {
       }
 
       const arrayBuffer = await res.arrayBuffer()
+      if (arrayBuffer.byteLength > 25 * 1024 * 1024) {
+        return {
+          success: false,
+          output: null,
+          error: 'PDF exceeds maximum allowed size of 25 MB.',
+        }
+      }
       const buffer = Buffer.from(arrayBuffer)
 
       // Try pdf-parse if available

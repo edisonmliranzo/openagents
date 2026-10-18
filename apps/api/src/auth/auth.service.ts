@@ -54,22 +54,23 @@ export class AuthService {
     return { user, tokens }
   }
 
+  // Precomputed bcrypt cost-12 hash used for constant-time comparison when user does not exist
+  private static readonly DUMMY_BCRYPT_HASH =
+    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4oL2.7K9mG'
+
   async login(email: string, password: string, clientIp = 'unknown', userAgent = 'unknown') {
     const normalizedEmail = this.normalizeEmail(email)
     this.authRateLimit.assertLoginAllowed(normalizedEmail, clientIp)
 
-    if (!this.isCreatorEmail(normalizedEmail)) {
-      throw new UnauthorizedException('Access restricted to platform administrator. Public access is not open yet.')
-    }
+    const isCreator = this.isCreatorEmail(normalizedEmail)
+    let user = isCreator
+      ? await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
+      : null
 
-    let user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
-    if (!user) {
-      this.authRateLimit.recordLoginFailure(normalizedEmail, clientIp)
-      throw new UnauthorizedException('Invalid credentials')
-    }
+    const targetHash = user?.passwordHash ?? AuthService.DUMMY_BCRYPT_HASH
+    const valid = await bcrypt.compare(password, targetHash)
 
-    const valid = await bcrypt.compare(password, user.passwordHash)
-    if (!valid) {
+    if (!isCreator || !user || !valid) {
       this.authRateLimit.recordLoginFailure(normalizedEmail, clientIp)
       throw new UnauthorizedException('Invalid credentials')
     }

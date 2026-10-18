@@ -43,12 +43,49 @@ function safeWorkDir(requested: string | undefined): string {
   return path.resolve(allowed[0])
 }
 
+const SENSITIVE_ENV_KEY_PATTERN =
+  /(SECRET|TOKEN|PASSWORD|PASS|PRIVATE|KEY|DATABASE_URL|REDIS_URL|POSTGRES|SMTP|CREATOR_EMAIL|AUTH_|JWT_|ENCRYPTION|WEBHOOK|STRIPE|AWS_|GCP_|AZURE_|OPENAI|ANTHROPIC|GEMINI|GOOGLE|DEEPSEEK|GROQ|MISTRAL|OLLAMA)/i
+
+const BLOCKED_COMMAND_PATTERNS = [
+  /(^|[\s"'/\\])\.env(\.|$|[\s"'])/i,
+  /(^|[\s"'/\\])\.ssh([/\\]|$|[\s"'])/i,
+  /(^|[\s"'/\\])\.aws([/\\]|$|[\s"'])/i,
+  /(^|[\s"'/\\])id_rsa/i,
+  /(^|[\s"'/\\])id_ed25519/i,
+]
+
+function buildSafeChildEnv(extraEnv: Record<string, string> = {}): Record<string, string> {
+  const safeEnv: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value !== 'string') continue
+    if (SENSITIVE_ENV_KEY_PATTERN.test(key)) continue
+    safeEnv[key] = value
+  }
+  for (const [key, value] of Object.entries(extraEnv)) {
+    if (typeof value !== 'string') continue
+    if (SENSITIVE_ENV_KEY_PATTERN.test(key)) continue
+    safeEnv[key] = value
+  }
+  return safeEnv
+}
+
+function isBlockedShellCommand(command: string): boolean {
+  return BLOCKED_COMMAND_PATTERNS.some((pattern) => pattern.test(command))
+}
+
 function runCommand(
   command: string,
   cwd: string,
   env: Record<string, string>,
   timeoutMs: number,
 ): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
+  if (isBlockedShellCommand(command)) {
+    return Promise.resolve({
+      stdout: '',
+      stderr: 'Security policy blocked access to protected credential or environment files.',
+      exitCode: 126,
+    })
+  }
   return new Promise((resolve) => {
     const isWindows = process.platform === 'win32'
     const shell = isWindows ? 'cmd' : '/bin/sh'
@@ -56,7 +93,7 @@ function runCommand(
 
     const child = spawn(shell, shellArgs, {
       cwd,
-      env: { ...process.env, ...env },
+      env: buildSafeChildEnv(env),
       timeout: timeoutMs,
     })
 
@@ -120,7 +157,7 @@ export class ShellTool implements OnModuleDestroy {
       displayName: 'Shell Execute',
       description:
         'Run a shell command and return stdout, stderr, and exit code. Commands run in a sandboxed working directory.',
-      requiresApproval: false,
+      requiresApproval: true,
       inputSchema: {
         type: 'object',
         properties: {
@@ -143,7 +180,7 @@ export class ShellTool implements OnModuleDestroy {
       name: 'shell_session_start',
       displayName: 'Shell Session Start',
       description: 'Start a persistent shell session that retains working directory across commands.',
-      requiresApproval: false,
+      requiresApproval: true,
       inputSchema: {
         type: 'object',
         properties: {
@@ -163,7 +200,7 @@ export class ShellTool implements OnModuleDestroy {
       name: 'shell_session_run',
       displayName: 'Shell Session Run',
       description: 'Run a command inside an existing shell session.',
-      requiresApproval: false,
+      requiresApproval: true,
       inputSchema: {
         type: 'object',
         properties: {

@@ -26,6 +26,19 @@ const LANGUAGE_EXT: Record<CodeLanguage, string> = {
   typescript: '.ts',
 }
 
+const SENSITIVE_EXEC_ENV_PATTERN =
+  /(SECRET|TOKEN|PASSWORD|PASS|PRIVATE|KEY|DATABASE_URL|REDIS_URL|POSTGRES|SMTP|CREATOR_EMAIL|AUTH_|JWT_|ENCRYPTION|WEBHOOK|STRIPE|AWS_|GCP_|AZURE_|OPENAI|ANTHROPIC|GEMINI|GOOGLE|DEEPSEEK|GROQ|MISTRAL|OLLAMA)/i
+
+function buildSafeExecEnv(): Record<string, string> {
+  const safeEnv: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value !== 'string') continue
+    if (SENSITIVE_EXEC_ENV_PATTERN.test(key)) continue
+    safeEnv[key] = value
+  }
+  return safeEnv
+}
+
 function execFile(
   interpreter: string,
   args: string[],
@@ -33,7 +46,8 @@ function execFile(
 ): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
   return new Promise((resolve) => {
     const child = spawn(interpreter, args, {
-      env: process.env as Record<string, string>,
+      cwd: os.tmpdir(),
+      env: buildSafeExecEnv(),
       timeout: timeoutMs,
     })
 
@@ -86,7 +100,7 @@ export class CodeExecutionTool {
       displayName: 'Code Execute',
       description:
         'Execute a code snippet in Python, Node.js, Bash, or TypeScript. Returns stdout, stderr, and exit code.',
-      requiresApproval: false,
+      requiresApproval: true,
       inputSchema: {
         type: 'object',
         properties: {

@@ -31,11 +31,36 @@ function getLanOrigins(port: string) {
   return [...origins]
 }
 
+const BLOCKED_SCANNER_UA = /(sqlmap|nikto|acunetix|nuclei|masscan|zgrab|dirbuster|gobuster|havij|nessus|openvas|wpscan)/i
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+function sanitizeObjectInPlace(value: unknown, depth = 0): void {
+  if (depth > 8 || !value || typeof value !== 'object') return
+  if (Array.isArray(value)) {
+    for (const item of value) sanitizeObjectInPlace(item, depth + 1)
+    return
+  }
+  const obj = value as Record<string, unknown>
+  for (const key of Object.keys(obj)) {
+    if (DANGEROUS_KEYS.has(key)) {
+      delete obj[key]
+      continue
+    }
+    sanitizeObjectInPlace(obj[key], depth + 1)
+  }
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
-  const httpApp = app.getHttpAdapter().getInstance() as { set?: (key: string, value: unknown) => void }
+  const httpApp = app.getHttpAdapter().getInstance() as {
+    set?: (key: string, value: unknown) => void
+    disable?: (key: string) => void
+  }
   if (typeof httpApp?.set === 'function') {
     httpApp.set('trust proxy', 1)
+  }
+  if (typeof httpApp?.disable === 'function') {
+    httpApp.disable('x-powered-by')
   }
 
   app.setGlobalPrefix('api/v1')
@@ -80,14 +105,43 @@ async function bootstrap() {
   }
 
   app.use((req: Request, res: Response, next: NextFunction) => {
+    const rawUrl = String(req.originalUrl || req.url || '')
+    const ua = String(req.headers['user-agent'] ?? '')
+
+    // Block automated exploit/vulnerability scanners
+    if (ua && BLOCKED_SCANNER_UA.test(ua)) {
+      res.status(403).json({ statusCode: 403, message: 'Forbidden' })
+      return
+    }
+
+    // Block null-byte injection and URL path traversal attempts
+    if (
+      rawUrl.includes('\0') ||
+      /%00/i.test(rawUrl) ||
+      /(^|\/)\.\.(\/|\\|%2f|%5c)/i.test(rawUrl) ||
+      /%2e%2e(%2f|%5c|\/|\\)/i.test(rawUrl)
+    ) {
+      res.status(400).json({ statusCode: 400, message: 'Bad Request' })
+      return
+    }
+
+    // Strip prototype-pollution keys from body, query, and params
+    sanitizeObjectInPlace(req.body)
+    sanitizeObjectInPlace(req.query)
+    sanitizeObjectInPlace(req.params)
+
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('X-Frame-Options', 'DENY')
     res.setHeader('Referrer-Policy', 'no-referrer')
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
     res.setHeader('Cross-Origin-Resource-Policy', 'same-site')
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+    res.setHeader('X-Permitted-Cross-Domain-Policies', 'none')
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+    res.setHeader('Pragma', 'no-cache')
     res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
     if (isProduction) {
-      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
     }
     next()
   })

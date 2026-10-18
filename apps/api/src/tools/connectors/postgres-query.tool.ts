@@ -48,8 +48,13 @@ export class PostgresQueryTool {
       return { success: false, output: null, error: 'CUSTOM_POSTGRES_URL not configured.' }
     }
 
-    const trimmed = query.trim()
+    const trimmed = query.trim().replace(/;+\s*$/, '')
     const upperTrimmed = trimmed.toUpperCase()
+
+    // Reject multi-statement stacked queries
+    if (trimmed.includes(';')) {
+      return { success: false, output: null, error: 'Multi-statement queries are not allowed.' }
+    }
 
     // Only allow read-only queries
     if (
@@ -60,22 +65,39 @@ export class PostgresQueryTool {
       return { success: false, output: null, error: 'Only SELECT queries are allowed.' }
     }
 
-    // Append LIMIT if it's a SELECT and no LIMIT already present
-    let finalQuery = trimmed
-    if (upperTrimmed.startsWith('SELECT') && !upperTrimmed.includes('LIMIT')) {
-      finalQuery = `${trimmed} LIMIT ${limit}`
+    // Block writable CTEs, DDL/DML, and dangerous server-side file functions
+    if (
+      /\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|COPY|GRANT|REVOKE|CREATE|CALL|DO|SET|PG_READ_FILE|PG_READ_BINARY_FILE|PG_LS_DIR|PG_STAT_FILE|LO_IMPORT|LO_EXPORT|DBLINK)\b/i.test(
+        trimmed,
+      )
+    ) {
+      return {
+        success: false,
+        output: null,
+        error: 'Write operations and privileged database functions are not permitted.',
+      }
     }
 
-    this.logger.log(`postgres_query: executing query`)
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 1000))
+
+    // Append LIMIT if it's a SELECT and no LIMIT already present
+    let finalQuery = trimmed
+    if (upperTrimmed.startsWith('SELECT') && !/\bLIMIT\b/i.test(upperTrimmed)) {
+      finalQuery = `${trimmed} LIMIT ${safeLimit}`
+    }
+
+    this.logger.log(`postgres_query: executing read-only query`)
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { Client } = require('pg')
-      const client = new Client({ connectionString })
+      const client = new Client({ connectionString, statement_timeout: 15000 })
       await client.connect()
 
       try {
+        await client.query('BEGIN TRANSACTION READ ONLY')
         const result = await client.query(finalQuery)
+        await client.query('ROLLBACK')
         const fields = result.fields?.map((f: any) => f.name) ?? []
         return {
           success: true,
