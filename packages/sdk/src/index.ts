@@ -1,4 +1,4 @@
-﻿export { OpenAgentsClient, APIError } from './client'
+export { OpenAgentsClient, APIError } from './client'
 export type { SDKConfig } from './client'
 export { createAuthApi } from './api/auth'
 export { createConversationsApi } from './api/conversations'
@@ -167,5 +167,27 @@ export function createSDK(config: SDKConfig) {
     life: createLifeApi(client),
     workspaces: createWorkspacesApi(client),
     packs: createPacksApi(client),
+    research: createResearchApi(client),
+    briefing: createBriefingApi(client),
+    costs: createCostsApi(client),
+    orchestration: createOrchestrationApi(client),
+    warRooms: createWarRoomsApi(client),
+    delegation: createDelegationApi(client),
+    scheduler: createSchedulerApi(client),
   }
 }
+
+export { createResearchApi } from './api/research'
+export { createBriefingApi } from './api/briefing'
+export { createCostsApi } from './api/costs'
+export { createOrchestrationApi } from './api/orchestration'
+export { createWarRoomsApi } from './api/war-rooms'
+export { createDelegationApi } from './api/delegation'
+export { createSchedulerApi } from './api/scheduler'
+import { createResearchApi } from './api/research'
+import { createBriefingApi } from './api/briefing'
+import { createCostsApi } from './api/costs'
+import { createOrchestrationApi } from './api/orchestration'
+import { createWarRoomsApi } from './api/war-rooms'
+import { createDelegationApi } from './api/delegation'
+import { createSchedulerApi } from './api/scheduler'

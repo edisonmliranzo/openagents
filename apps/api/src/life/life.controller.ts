@@ -1,4 +1,4 @@
-﻿import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { CurrentUserId } from '../auth/current-user-id.decorator'
 import { JanitorService } from './janitor.service'
@@ -191,6 +191,11 @@ export class LifeController {
     @Body() body: { provider?: string; elevenlabsKey?: string | null; elevenlabsVoice?: string; fishKey?: string | null; fishVoice?: string },
   ) {
     return this.tts.setUserConfig(userId, body)
+  }
+
+  @Get('tts/fish/voices')
+  ttsFishVoices(@CurrentUserId() userId: string) {
+    return this.tts.fishVoices(userId)
   }
 
   @Get('tts/voices')

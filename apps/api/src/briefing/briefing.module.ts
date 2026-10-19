@@ -6,10 +6,11 @@ import { PrismaModule } from '../prisma/prisma.module'
 import { TelegramModule } from '../channels/telegram/telegram.module'
 import { BriefingService } from './briefing.service'
 import { BriefingController } from './briefing.controller'
+import { BriefingStore } from './briefing.store'
 
 @Module({
   imports: [PrismaModule, AgentModule, GoalsModule, NotificationsModule, TelegramModule],
-  providers: [BriefingService],
+  providers: [BriefingService, BriefingStore],
   controllers: [BriefingController],
   exports: [BriefingService],
 })

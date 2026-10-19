@@ -23,6 +23,13 @@ export interface UpdateMemoryFileDto {
   content: string
 }
 
+export interface UpdateMemoryEntryDto {
+  content?: string
+  tags?: string[]
+}
+
+export type PinnableMemoryEntry = MemoryEntry & { pinned?: boolean }
+
 export function createMemoryApi(client: OpenAgentsClient) {
   return {
     list: () => client.get<MemoryEntry[]>('/api/v1/memory'),
@@ -87,6 +94,15 @@ export function createMemoryApi(client: OpenAgentsClient) {
       client.delete<{ ok: true }>(`/api/v1/memory/sources/${encodeURIComponent(id)}`),
 
     delete: (id: string) => client.delete<{ count: number }>(`/api/v1/memory/${id}`),
+
+    update: (id: string, dto: UpdateMemoryEntryDto) =>
+      client.patch<PinnableMemoryEntry>(`/api/v1/memory/${encodeURIComponent(id)}`, dto),
+
+    pin: (id: string) =>
+      client.post<PinnableMemoryEntry>(`/api/v1/memory/${encodeURIComponent(id)}/pin`),
+
+    unpin: (id: string) =>
+      client.delete<PinnableMemoryEntry>(`/api/v1/memory/${encodeURIComponent(id)}/pin`),
 
     semanticSearch: (query: string, limit = 10) =>
       client.post<Array<{ id: string; type: 'fact' | 'event'; text: string; score: number }>>(

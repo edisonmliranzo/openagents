@@ -1,10 +1,49 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common'
 import { ResearchService } from './research.service'
+import { DeepResearchService } from './deep-research.service'
 
 import { CurrentUserId } from '../auth/current-user-id.decorator'
 @Controller('research')
 export class ResearchController {
-  constructor(private readonly research: ResearchService) {}
+  constructor(
+    private readonly research: ResearchService,
+    private readonly deep: DeepResearchService,
+  ) {}
+
+  // ── Deep research with citations ─────────────────────────────────────────────
+
+  /** Start a deep research job (runs in background; poll GET research/deep/:id) */
+  @Post('deep')
+  startDeep(
+    @CurrentUserId() userId: string,
+    @Body() body: { goal: string; maxQueries?: number; includeLibrary?: boolean },
+  ) {
+    return this.deep.start(userId, body)
+  }
+
+  @Get('deep')
+  listDeep(@CurrentUserId() userId: string) {
+    return this.deep.list(userId)
+  }
+
+  @Get('deep/:id')
+  getDeep(@CurrentUserId() userId: string, @Param('id') id: string) {
+    return this.deep.get(userId, id)
+  }
+
+  @Get('deep/:id/report')
+  getDeepReport(@CurrentUserId() userId: string, @Param('id') id: string) {
+    return this.deep.report(userId, id)
+  }
+
+  @Post('deep/:id/export')
+  exportDeep(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Body() body: { title?: string; workspaceId?: string },
+  ) {
+    return this.deep.exportToArtifact(userId, id, body)
+  }
 
   /** Fire-and-forget autonomous goal execution — agent picks its own tools and runs until done */
   @Post('goal')

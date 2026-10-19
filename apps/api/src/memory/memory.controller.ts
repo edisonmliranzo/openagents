@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import {
   IsArray,
@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
@@ -20,6 +21,18 @@ const MEMORY_EVENT_KINDS = ['conversation', 'workflow', 'incident', 'extraction'
 class UpdateMemoryFileDto {
   @IsString()
   content!: string
+}
+
+class UpdateMemoryEntryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  content?: string
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[]
 }
 
 class QueryMemoryDto {
@@ -281,6 +294,21 @@ export class MemoryController {
   @Delete(':id')
   delete(@Param('id') id: string, @Req() req: any) {
     return this.memory.delete(id, req.user.id)
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Req() req: any, @Body() dto: UpdateMemoryEntryDto) {
+    return this.memory.updateEntry(req.user.id, id, dto)
+  }
+
+  @Post(':id/pin')
+  pin(@Param('id') id: string, @Req() req: any) {
+    return this.memory.setPinned(req.user.id, id, true)
+  }
+
+  @Delete(':id/pin')
+  unpin(@Param('id') id: string, @Req() req: any) {
+    return this.memory.setPinned(req.user.id, id, false)
   }
 
   @Get('conflicts')

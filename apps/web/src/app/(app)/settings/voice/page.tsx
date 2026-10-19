@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { sdk } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
-import { Loader2, Mic, Save, Volume2, VolumeX, CheckCircle2, Sparkles } from 'lucide-react'
+import { Loader2, Mic, Play, Save, Volume2, VolumeX, CheckCircle2, Sparkles } from 'lucide-react'
 import { voiceEnabled, setVoiceEnabled } from '@/lib/voice'
 
 const inputCls = 'oa-input-surface h-10 w-full rounded-xl px-3 text-sm outline-none'
@@ -20,64 +20,60 @@ interface TtsConfigView {
   envFish: boolean
 }
 
-const AMERICAN_FISH_PRESETS = [
-  {
-    id: 'us-preset-madison',
-    name: 'Madison',
-    accent: 'American Female • Warm & Natural (Veda)',
-    desc: 'Conversational, warm US English voice ideal for daily assistance.',
-  },
-  {
-    id: 'us-preset-claire',
-    name: 'Claire',
-    accent: 'American Female • Calm & Thoughtful (Nova)',
-    desc: 'Soft, composed US English voice great for reading and planning.',
-  },
-  {
-    id: 'us-preset-ethan',
-    name: 'Ethan',
-    accent: 'American Male • Direct & Analytical (Atlas)',
-    desc: 'Crisp, fast-paced US English voice suited for code & tasks.',
-  },
-  {
-    id: 'us-preset-marcus',
-    name: 'Marcus',
-    accent: 'American Male • Deep Executive Briefing',
-    desc: 'Studio-quality American broadcast tone for morning briefings.',
-  },
-  {
-    id: 'us-preset-sophia',
-    name: 'Sophia',
-    accent: 'American Female • Crisp & Energetic',
-    desc: 'Bright, articulate American voice for quick updates and summaries.',
-  },
+interface FishCatalogEntry {
+  id: string
+  name: string
+  gender: 'female' | 'male' | 'neutral'
+  style: string
+  accent: string
+  source: 'curated' | 'mine' | 'library'
+}
+
+/** Used only until GET life/tts/fish/voices responds. */
+const FALLBACK_CATALOG: FishCatalogEntry[] = [
+  { id: 'us-preset-madison', name: 'Madison', gender: 'female', style: 'Warm, conversational', accent: 'American', source: 'curated' },
+  { id: 'us-preset-claire', name: 'Claire', gender: 'female', style: 'Calm, thoughtful', accent: 'American', source: 'curated' },
+  { id: 'us-preset-ethan', name: 'Ethan', gender: 'male', style: 'Direct, analytical', accent: 'American', source: 'curated' },
+  { id: 'us-preset-marcus', name: 'Marcus', gender: 'male', style: 'Deep, executive briefing', accent: 'American', source: 'curated' },
+  { id: 'us-preset-sophia', name: 'Sophia', gender: 'female', style: 'Crisp, energetic', accent: 'American', source: 'curated' },
 ]
 
 export default function VoiceSettingsPage() {
   const addToast = useUIStore((s) => s.addToast)
   const [cfg, setCfg] = useState<TtsConfigView | null>(null)
-  const [provider, setProvider] = useState('fish')
+  const [provider, setProvider] = useState('')
   const [spokenRepliesOn, setSpokenRepliesOn] = useState(false)
   const [elKey, setElKey] = useState('')
   const [elKeyDirty, setElKeyDirty] = useState(false)
   const [elVoice, setElVoice] = useState('')
   const [fishKey, setFishKey] = useState('')
   const [fishKeyDirty, setFishKeyDirty] = useState(false)
-  const [fishVoice, setFishVoice] = useState('us-preset-madison')
+  const [fishVoice, setFishVoice] = useState('')
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [previewing, setPreviewing] = useState<string | null>(null)
   const [voices, setVoices] = useState<Array<{ id: string; name: string; provider: string }>>([])
+  const [catalog, setCatalog] = useState<FishCatalogEntry[]>(FALLBACK_CATALOG)
+  const [liveFish, setLiveFish] = useState<FishCatalogEntry[]>([])
 
   const load = useCallback(async () => {
     try {
       setSpokenRepliesOn(voiceEnabled())
       const view = await sdk.life.ttsGetConfig()
       setCfg(view)
-      setProvider(view.provider || 'fish')
+      // Stays empty until the user explicitly saves a provider/voice.
+      setProvider(view.provider || '')
       setElVoice(view.elevenlabsVoice)
-      setFishVoice(view.fishVoice || 'us-preset-madison')
-      const list = await sdk.life.ttsVoices().catch(() => [])
+      setFishVoice(view.fishVoice || '')
+      const [list, fish] = await Promise.all([
+        sdk.life.ttsVoices().catch(() => []),
+        sdk.life.ttsFishVoices().catch(() => null),
+      ])
       setVoices(list)
+      if (fish) {
+        if (fish.curated.length) setCatalog(fish.curated)
+        setLiveFish(fish.live)
+      }
     } catch (err: any) {
       addToast('error', String(err?.message ?? 'Failed to load voice settings'))
     }
@@ -102,11 +98,12 @@ export default function VoiceSettingsPage() {
     setBusy(true)
     try {
       const problems: string[] = []
+      const nextProvider = provider || (fishVoice ? 'fish' : elVoice ? 'elevenlabs' : '')
       try {
         await sdk.life.ttsSetConfig({
-          provider: (provider || 'fish') as 'elevenlabs' | 'fish' | '',
+          provider: nextProvider as 'elevenlabs' | 'fish' | '',
           elevenlabsVoice: elVoice,
-          fishVoice: fishVoice || 'us-preset-madison',
+          fishVoice,
         })
       } catch (err: any) {
         problems.push(String(err?.message ?? 'settings save failed').slice(0, 160))
@@ -135,6 +132,7 @@ export default function VoiceSettingsPage() {
         addToast('success', 'Voice settings saved')
       }
       await load()
+      window.dispatchEvent(new CustomEvent('openagents:voice-settings-changed'))
     } finally {
       setBusy(false)
     }
@@ -153,11 +151,28 @@ export default function VoiceSettingsPage() {
     }
   }
 
+  async function previewFish(voiceId: string, name: string) {
+    if (!cfg?.hasFishKey && !cfg?.envFish) {
+      addToast('error', 'Save your Fish Audio API key first to preview voices')
+      return
+    }
+    setPreviewing(voiceId)
+    try {
+      const res = await sdk.life.tts(`Hi, I'm ${name}. This is how I'll sound in OpenAgents.`, { provider: 'fish', voiceId })
+      const audio = new Audio(`data:${res.mimeType};base64,${res.audioBase64}`)
+      await audio.play()
+    } catch (err: any) {
+      addToast('error', String(err?.message ?? 'Preview failed').slice(0, 220))
+    } finally {
+      setPreviewing(null)
+    }
+  }
+
   async function testVoice() {
     setTesting(true)
     try {
       const res = await sdk.life.tts(
-        'Hi! This is your OpenAgents personal assistant speaking with Fish Audio 2.0 natural American voice.',
+        'Hi! This is your OpenAgents personal assistant speaking with your selected voice.',
         {
           provider: provider || 'fish',
           voiceId: (provider || 'fish') === 'fish' ? fishVoice : elVoice,
@@ -312,17 +327,25 @@ export default function VoiceSettingsPage() {
               Pick an American Voice (US English)
             </label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {AMERICAN_FISH_PRESETS.map((preset) => {
+              {[...catalog, ...liveFish.filter((v) => v.source === 'mine')].map((preset) => {
                 const selected = fishVoice === preset.id
                 return (
-                  <button
+                  <div
                     key={preset.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       setProvider('fish')
                       setFishVoice(preset.id)
                     }}
-                    className={`flex flex-col justify-between rounded-xl border p-3 text-left transition ${
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setProvider('fish')
+                        setFishVoice(preset.id)
+                      }
+                    }}
+                    className={`flex cursor-pointer flex-col justify-between rounded-xl border p-3 text-left transition ${
                       selected
                         ? 'border-rose-500 bg-rose-500/10 shadow-sm'
                         : 'border-[var(--border)] bg-[var(--surface)] hover:border-rose-400/50'
@@ -330,20 +353,38 @@ export default function VoiceSettingsPage() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold text-[var(--tone-strong)]">
-                        🇺🇸 {preset.name}
+                        {preset.source === 'mine' ? '🎙️' : '🇺🇸'} {preset.name}
                       </span>
-                      {selected && <CheckCircle2 size={14} className="text-rose-500 shrink-0" />}
+                      <span className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          title={`Preview ${preset.name}`}
+                          aria-label={`Preview ${preset.name}`}
+                          disabled={previewing !== null}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void previewFish(preset.id, preset.name)
+                          }}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border)] text-[var(--tone-strong)] transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
+                        >
+                          {previewing === preset.id ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
+                        </button>
+                        {selected && <CheckCircle2 size={14} className="text-rose-500 shrink-0" />}
+                      </span>
                     </div>
                     <span className="mt-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
-                      {preset.accent}
+                      {preset.accent} {preset.gender === 'neutral' ? '' : preset.gender === 'female' ? 'Female' : 'Male'}
                     </span>
                     <span className="mt-1 text-[10px] text-[var(--muted)] leading-snug">
-                      {preset.desc}
+                      {preset.style}
                     </span>
-                  </button>
+                  </div>
                 )
               })}
             </div>
+            {!fishVoice && (
+              <p className="mt-2 text-[11px] text-[var(--muted)]">No voice selected — voice stays off until you pick one and save.</p>
+            )}
           </div>
 
           {/* Custom Fish Audio Reference ID or Library Dropdown */}

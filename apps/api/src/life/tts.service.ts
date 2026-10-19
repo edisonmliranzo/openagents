@@ -30,6 +30,24 @@ export interface UserTtsConfig {
   fishVoice: string
 }
 
+export interface FishVoiceEntry {
+  id: string
+  name: string
+  gender: 'female' | 'male' | 'neutral'
+  style: string
+  accent: string
+  source: 'curated' | 'mine' | 'library'
+}
+
+/** Curated American English voices. Ids are aliases resolved at speak time. */
+export const FISH_VOICE_CATALOG: FishVoiceEntry[] = [
+  { id: 'us-preset-madison', name: 'Madison', gender: 'female', style: 'Warm, conversational', accent: 'American', source: 'curated' },
+  { id: 'us-preset-claire', name: 'Claire', gender: 'female', style: 'Calm, thoughtful', accent: 'American', source: 'curated' },
+  { id: 'us-preset-ethan', name: 'Ethan', gender: 'male', style: 'Direct, analytical', accent: 'American', source: 'curated' },
+  { id: 'us-preset-marcus', name: 'Marcus', gender: 'male', style: 'Deep, executive briefing', accent: 'American', source: 'curated' },
+  { id: 'us-preset-sophia', name: 'Sophia', gender: 'female', style: 'Crisp, energetic', accent: 'American', source: 'curated' },
+]
+
 const TTS_FLAG_KEY = 'tts_config'
 const EMPTY_CONFIG: UserTtsConfig = { provider: '', elevenlabsKey: '', elevenlabsVoice: '', fishKey: '', fishVoice: '' }
 
@@ -370,6 +388,44 @@ export class TtsService {
       voiceId: resolvedRef || voiceId || 'fish-2.0-us',
       cached: false,
     }
+  }
+
+  /**
+   * Curated American English Fish Audio voices plus (when the user has a key)
+   * a live lookup of their own cloned voices and popular English library voices.
+   * Preset ids (`us-preset-*`) are resolved to real Fish models at speak time.
+   */
+  async fishVoices(userId: string): Promise<{ curated: FishVoiceEntry[]; live: FishVoiceEntry[]; hasKey: boolean }> {
+    const curated = FISH_VOICE_CATALOG.map((v) => ({ ...v }))
+    const keys = await this.resolveKeys(userId).catch(() => ({ fishKey: '' }) as { fishKey: string })
+    if (!keys.fishKey) return { curated, live: [], hasKey: false }
+    const live: FishVoiceEntry[] = []
+    const seen = new Set<string>()
+    const pull = async (url: string, source: 'mine' | 'library') => {
+      try {
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${keys.fishKey}` }, signal: AbortSignal.timeout(15_000) })
+        if (!res.ok) return
+        const body = (await res.json()) as { items?: Array<{ _id: string; title?: string; description?: string; tags?: string[] }> }
+        for (const m of body.items ?? []) {
+          if (!m._id || seen.has(m._id)) continue
+          seen.add(m._id)
+          const tags = (m.tags ?? []).map((t) => String(t).toLowerCase())
+          live.push({
+            id: m._id,
+            name: m.title || (source === 'mine' ? 'My cloned voice' : 'English voice'),
+            gender: tags.includes('female') ? 'female' : tags.includes('male') ? 'male' : 'neutral',
+            style: source === 'mine' ? 'Your Fish Audio voice' : (m.description ?? '').slice(0, 80) || 'Fish library (English)',
+            accent: 'American',
+            source,
+          })
+        }
+      } catch (err) {
+        this.logger.warn(`Fish model lookup failed: ${err instanceof Error ? err.message : err}`)
+      }
+    }
+    await pull('https://api.fish.audio/model?self=true&page_size=30&page_num=1', 'mine')
+    await pull('https://api.fish.audio/model?page_size=30&page_num=1&language=en&sort_by=task_count', 'library')
+    return { curated, live, hasKey: true }
   }
 
   /** List voices from the configured providers (best effort), including Curated American Fish Audio 2.0 voices. */

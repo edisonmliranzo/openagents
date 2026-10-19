@@ -1,31 +1,48 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
+import { randomUUID } from 'crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from '../agent/llm.service'
 import { GoalService } from '../goals/goal.service'
 import { NotificationsService } from '../notifications/notifications.service'
+import { PushService } from '../notifications/push.service'
 import { TelegramService } from '../channels/telegram/telegram.service'
 import type { LLMProvider } from '@openagents/shared'
+import {
+  BriefingCard,
+  BriefingRecord,
+  BriefingSettings,
+  BriefingStore,
+  localClock,
+} from './briefing.store'
 
-const BRIEFING_INTERVAL_MS = 60 * 60 * 1000
+const TICK_MS = 60 * 1000
+/** A scheduled briefing may still fire up to this many minutes after its slot (e.g. after a restart). */
+const CATCH_UP_MINUTES = 60
+
+function toMinutes(hhmm: string) {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
 
 @Injectable()
 export class BriefingService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BriefingService.name)
   private timer?: NodeJS.Timeout
-  private readonly ranByDay = new Set<string>()
+  private ticking = false
+  private readonly inFlight = new Set<string>()
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly llm: LLMService,
     private readonly goals: GoalService,
     private readonly notifications: NotificationsService,
+    private readonly push: PushService,
     private readonly telegram: TelegramService,
-    private readonly config: ConfigService,
+    private readonly store: BriefingStore,
   ) {}
 
   onModuleInit() {
-    this.timer = setInterval(() => void this.runCycle(), BRIEFING_INTERVAL_MS)
+    this.timer = setInterval(() => void this.tick(), TICK_MS)
     this.timer.unref()
   }
 
@@ -33,77 +50,154 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer)
   }
 
-  private get enabled(): boolean {
-    const raw = (this.config.get<string>('BRIEFING_ENABLED') ?? 'false').trim().toLowerCase()
-    return ['1', 'true', 'yes', 'on'].includes(raw)
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  getSettings(userId: string) {
+    return this.store.getSettings(userId)
   }
 
-  private get hourUtc(): number {
-    const parsed = Number(this.config.get<string>('BRIEFING_HOUR_UTC') ?? '13')
-    return Number.isFinite(parsed) ? Math.max(0, Math.min(23, Math.round(parsed))) : 13
+  updateSettings(userId: string, patch: Partial<BriefingSettings>) {
+    return this.store.updateSettings(userId, patch)
   }
 
-  async runCycle(): Promise<number> {
-    if (!this.enabled) return 0
-    const now = new Date()
-    if (now.getUTCHours() !== this.hourUtc) return 0
-    const dayKey = now.toISOString().slice(0, 10)
+  async getLatest(userId: string): Promise<BriefingRecord | null> {
+    const data = await this.store.load(userId)
+    return data.history[0] ?? null
+  }
 
-    const users = await this.prisma.user.findMany({ select: { id: true }, take: 50 })
+  async getHistory(userId: string, limit = 30): Promise<BriefingRecord[]> {
+    const data = await this.store.load(userId)
+    return data.history.slice(0, Math.max(1, Math.min(60, limit)))
+  }
+
+  /** Compose and deliver a briefing now. */
+  async runNow(userId: string): Promise<BriefingRecord> {
+    return this.generateAndDeliver(userId, 'manual')
+  }
+
+  /** Back-compat: compose and deliver today's briefing for one user. */
+  async sendBriefing(userId: string, _opts?: { force?: boolean }): Promise<boolean> {
+    await this.generateAndDeliver(userId, 'manual')
+    return true
+  }
+
+  // ── Scheduler ─────────────────────────────────────────────────────────────
+
+  async tick(): Promise<number> {
+    if (this.ticking) return 0
+    this.ticking = true
     let sent = 0
-    for (const user of users) {
-      const key = `${user.id}:${dayKey}`
-      if (this.ranByDay.has(key)) continue
-      this.ranByDay.add(key)
-      const ok = await this.sendBriefing(user.id).catch((error: any) => {
-        this.logger.warn(`Briefing failed for ${user.id}: ${error?.message ?? error}`)
-        return false
-      })
-      if (ok) sent += 1
+    try {
+      const userIds = await this.store.listUserIds()
+      for (const userId of userIds) {
+        const data = await this.store.load(userId)
+        const { settings } = data
+        if (!settings.enabled) continue
+        const { dateKey, hhmm } = localClock(settings.timezone)
+        if (data.lastScheduledDateKey === dateKey) continue
+        const delta = toMinutes(hhmm) - toMinutes(settings.time)
+        if (delta < 0 || delta > CATCH_UP_MINUTES) continue
+        await this.store.markScheduled(userId, dateKey)
+        try {
+          await this.generateAndDeliver(userId, 'scheduled')
+          sent += 1
+        } catch (error: any) {
+          this.logger.warn(`Scheduled briefing failed for ${userId}: ${error?.message ?? error}`)
+        }
+      }
+    } finally {
+      this.ticking = false
     }
     return sent
   }
 
-  /** Compose and deliver today's briefing for one user. Returns false when there is nothing to say. */
-  async sendBriefing(userId: string, opts?: { force?: boolean }): Promise<boolean> {
+  // ── Generation ────────────────────────────────────────────────────────────
+
+  private async generateAndDeliver(userId: string, trigger: 'scheduled' | 'manual'): Promise<BriefingRecord> {
+    if (this.inFlight.has(userId)) throw new Error('A briefing is already being generated')
+    this.inFlight.add(userId)
+    try {
+      const settings = await this.store.getSettings(userId)
+      const cards = await this.collectCards(userId, settings)
+      const summary = await this.summarize(userId, cards)
+      const record: BriefingRecord = {
+        id: randomUUID(),
+        createdAt: new Date().toISOString(),
+        dateKey: localClock(settings.timezone).dateKey,
+        trigger,
+        summary,
+        cards,
+      }
+      await this.store.addRecord(userId, record, trigger === 'scheduled')
+      await this.deliver(userId, record)
+      return record
+    } finally {
+      this.inFlight.delete(userId)
+    }
+  }
+
+  private async collectCards(userId: string, settings: BriefingSettings): Promise<BriefingCard[]> {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    const [goals, loopFacts, approvals, cronRuns, events] = await Promise.all([
-      this.goals.listForUser(userId, 'active'),
-      this.prisma.memoryFact.findMany({
-        where: { userId, entity: 'open_loop' },
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-      }),
-      this.prisma.approval.count({ where: { userId, status: 'pending' } }),
-      this.prisma.cronRun.findMany({
-        where: { createdAt: { gte: since }, job: { userId } },
-        orderBy: { createdAt: 'desc' },
-        take: 8,
-        select: { status: true, summary: true, error: true },
-      }),
-      this.prisma.memoryEvent.findMany({
-        where: { userId, createdAt: { gte: since } },
-        orderBy: { createdAt: 'desc' },
-        take: 8,
-        select: { summary: true, kind: true },
-      }),
-    ])
+    const s = settings.sections
+    const cards: BriefingCard[] = []
 
-    const hasContent = goals.length > 0 || loopFacts.length > 0 || approvals > 0 || cronRuns.length > 0 || events.length > 0
-    if (!hasContent && !opts?.force) return false
+    if (s.tasks) {
+      const [goals, approvals, cronRuns] = await Promise.all([
+        this.goals.listForUser(userId, 'active').catch(() => [] as any[]),
+        this.prisma.approval.count({ where: { userId, status: 'pending' } }).catch(() => 0),
+        this.prisma.cronRun.findMany({
+          where: { createdAt: { gte: since }, job: { userId } },
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+          select: { status: true, summary: true, error: true },
+        }).catch(() => [] as Array<{ status: string; summary: string | null; error: string | null }>),
+      ])
+      const items = [
+        ...goals.map((g: any) => `${g.title} (${g.progress}%, ${g.priority})`),
+        ...(approvals > 0 ? [`${approvals} pending approval${approvals === 1 ? '' : 's'}`] : []),
+        ...cronRuns.map((r) => `Job ${r.status}: ${r.summary ?? r.error ?? 'no summary'}`),
+      ]
+      cards.push({ section: 'tasks', title: 'Tasks & goals', items })
+    }
 
-    const context = [
-      goals.length ? `Active goals:\n${goals.map((g) => `- ${g.title} (${g.progress}%, ${g.priority})`).join('\n')}` : '',
-      loopFacts.length ? `Open loops / commitments:\n${loopFacts.map((f) => `- ${this.loopText(f.value)}`).join('\n')}` : '',
-      approvals > 0 ? `Pending approvals: ${approvals}` : '',
-      cronRuns.length ? `Background jobs (last 24h):\n${cronRuns.map((r) => `- ${r.status}: ${r.summary ?? r.error ?? 'no summary'}`).join('\n')}` : '',
-      events.length ? `Recent activity:\n${events.map((e) => `- ${e.summary}`).join('\n')}` : '',
-    ].filter(Boolean).join('\n\n')
+    if (s.memory) {
+      const [loops, events] = await Promise.all([
+        this.prisma.memoryFact.findMany({
+          where: { userId, entity: 'open_loop' },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        }).catch(() => [] as any[]),
+        this.prisma.memoryEvent.findMany({
+          where: { userId, createdAt: { gte: since } },
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+          select: { summary: true, kind: true },
+        }).catch(() => [] as Array<{ summary: string; kind: string }>),
+      ])
+      cards.push({
+        section: 'memory',
+        title: 'Memory & open loops',
+        items: [...loops.map((f: any) => this.loopText(f.value)), ...events.map((e) => e.summary)],
+      })
+    }
 
-    const settings = await this.prisma.userSettings.findUnique({ where: { userId } })
+    // Email, calendar and news depend on connectors; surfaced as empty cards until connected.
+    if (s.email) cards.push({ section: 'email', title: 'Email', items: [] })
+    if (s.calendar) cards.push({ section: 'calendar', title: 'Calendar', items: [] })
+    if (s.news) cards.push({ section: 'news', title: 'News', items: [] })
+
+    return cards
+  }
+
+  private async summarize(userId: string, cards: BriefingCard[]): Promise<string> {
+    const context = cards
+      .filter((c) => c.items.length)
+      .map((c) => `${c.title}:\n${c.items.map((i) => `- ${i}`).join('\n')}`)
+      .join('\n\n')
+    if (!context) return 'Nothing urgent today. Enjoy a clear day.'
+
+    const settings = await this.prisma.userSettings.findUnique({ where: { userId } }).catch(() => null)
     const provider = (settings?.preferredProvider ?? 'ollama') as LLMProvider
-
-    let text = ''
     try {
       const response = await this.llm.complete(
         [{ role: 'user', content: `Write my morning briefing from the material below. 3-6 short bullets, most urgent first, end with ONE suggested next action. Plain text, no markdown headers.\n\n${context.slice(0, 8000)}` }],
@@ -114,28 +208,22 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
         undefined,
         settings?.preferredModel ?? undefined,
       )
-      text = (response.content ?? '').trim()
+      const text = (response.content ?? '').trim()
+      if (text) return text
     } catch {
-      text = 'Your daily briefing:\n' + context.slice(0, 1500)
+      // fall through
     }
+    return context.slice(0, 1500)
+  }
 
-    if (!text) return false
-
-    const conversation = await this.prisma.conversation.findFirst({
-      where: { userId, title: 'Briefings' },
-      orderBy: { createdAt: 'desc' },
-    })
-    const conversationId = conversation?.id
-      ?? (await this.prisma.conversation.create({ data: { userId, title: 'Briefings' }, select: { id: true } })).id
-
-    await this.prisma.message.create({
-      data: { conversationId, role: 'agent', content: `☀️ Daily briefing — ${new Date().toDateString()}\n\n${text}`, status: 'done' },
-    })
-    await this.prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date() } })
-    await this.notifications.create(userId, 'Morning briefing', text.slice(0, 300), 'info').catch(() => undefined)
-    await this.telegram.deliver(userId, `☀️ ${text.slice(0, 3500)}`).catch(() => false)
-    this.logger.log(`Briefing delivered for ${userId}.`)
-    return true
+  private async deliver(userId: string, record: BriefingRecord) {
+    const title = 'Daily briefing ready'
+    const body = record.summary.slice(0, 300)
+    await this.notifications.create(userId, title, body, 'info').catch(() => undefined)
+    await this.push.sendToUser(userId, { title: `OpenAgents — ${title}`, body: body.slice(0, 160), url: '/briefing' })
+      .catch(() => undefined)
+    await this.telegram.deliver(userId, `Daily briefing\n\n${record.summary.slice(0, 3500)}`).catch(() => false)
+    this.logger.log(`Briefing ${record.id} delivered for ${userId} (${record.trigger}).`)
   }
 
   private loopText(raw: string): string {

@@ -13,6 +13,7 @@ import type {
   QueryMemoryResult,
 } from '@openagents/shared'
 import { useUIStore } from '@/stores/ui'
+import { MemoryEntriesPanel, type PanelMemoryEntry } from './MemoryEntriesPanel'
 
 const TYPE_COLORS: Record<MemoryType, string> = {
   fact: 'bg-blue-100 text-blue-700',
@@ -21,7 +22,7 @@ const TYPE_COLORS: Record<MemoryType, string> = {
 }
 
 export default function MemoryPage() {
-  const [entries, setEntries] = useState<MemoryEntry[]>([])
+  const [entries, setEntries] = useState<PanelMemoryEntry[]>([])
   const [files, setFiles] = useState<MemoryFileSummary[]>([])
   const [conflicts, setConflicts] = useState<MemoryConflict[]>([])
   const [reviewQueue, setReviewQueue] = useState<MemoryReviewItem[]>([])
@@ -99,18 +100,6 @@ export default function MemoryPage() {
       void openFile(files[0].name)
     }
   }, [files, selectedFile, openFile])
-
-  async function handleDelete(id: string) {
-    try {
-      await sdk.memory.delete(id)
-      setEntries((prev) => prev.filter((e) => e.id !== id))
-      addToast('success', 'Memory entry deleted')
-    } catch (err: any) {
-      const message = err?.message ?? 'Failed to delete entry'
-      setError(message)
-      addToast('error', message)
-    }
-  }
 
   async function handleSyncFiles() {
     setIsSyncingFiles(true)
@@ -566,40 +555,7 @@ export default function MemoryPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {entries.length === 0 ? (
-          <div className="p-10 text-center text-sm text-slate-500">
-            {isLoading ? 'Loading...' : 'No memory entries yet. Start chatting to build context.'}
-          </div>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {entries.map((entry) => (
-              <li key={entry.id} className="flex items-start gap-4 p-4">
-                <span className={`mt-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TYPE_COLORS[entry.type]}`}>
-                  {entry.type}
-                </span>
-                <p className="flex-1 text-sm text-slate-700">{entry.content}</p>
-                {entry.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {entry.tags.map((tag) => (
-                      <span key={tag} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(entry.id)}
-                  className="shrink-0 text-xs text-red-500 hover:text-red-700"
-                >
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <MemoryEntriesPanel entries={entries} setEntries={setEntries} isLoading={isLoading} />
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">

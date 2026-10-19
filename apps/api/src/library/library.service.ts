@@ -17,6 +17,10 @@ export interface LibraryHit {
   text: string
   score: number
   ordinal: number
+  /** Whitespace-normalised excerpt suitable for citation display */
+  snippet?: string
+  /** Stable citation URL (library://<documentId>#chunk-<ordinal>) */
+  url?: string
 }
 
 @Injectable()
@@ -122,10 +126,32 @@ export class LibraryService implements OnModuleInit, OnModuleDestroy {
       if (!vector) continue
       const score = cosineSimilarity(embedded.vector, vector)
       if (score < 0.2) continue
-      scored.push({ documentId: row.documentId, title: row.document.title, text: row.text, score, ordinal: row.ordinal })
+      scored.push({
+        documentId: row.documentId,
+        title: row.document.title,
+        text: row.text,
+        score,
+        ordinal: row.ordinal,
+        snippet: row.text.replace(/\s+/g, ' ').trim().slice(0, 300),
+        url: `library://${row.documentId}#chunk-${row.ordinal}`,
+      })
     }
 
     return scored.sort((a, b) => b.score - a.score).slice(0, Math.max(1, Math.min(topK, 20)))
+  }
+
+  /** Search returning one best hit per document, shaped as citation sources. */
+  async searchCitations(userId: string, query: string, topK = 5) {
+    const hits = await this.search(userId, query, Math.min(20, topK * 3))
+    const seen = new Set<string>()
+    const out: Array<{ documentId: string; title: string; snippet: string; url: string; score: number }> = []
+    for (const h of hits) {
+      if (seen.has(h.documentId)) continue
+      seen.add(h.documentId)
+      out.push({ documentId: h.documentId, title: h.title, snippet: h.snippet ?? h.text.slice(0, 300), url: h.url ?? `library://${h.documentId}`, score: h.score })
+      if (out.length >= topK) break
+    }
+    return out
   }
 
   private async scanWatchFolder() {

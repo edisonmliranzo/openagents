@@ -38,6 +38,43 @@ export function speakable(text: string): string {
 let currentAudio: HTMLAudioElement | null = null
 
 /**
+ * Pull complete sentences off the front of `buffer`. Returns the sentences and
+ * the unconsumed remainder. With `flush`, the remainder is emitted too.
+ * Very short fragments are merged into the next sentence to cut TTS round-trips.
+ */
+export function takeSentences(buffer: string, flush = false): { sentences: string[]; rest: string } {
+  const sentences: string[] = []
+  let rest = buffer
+  const re = /^([\s\S]*?[.!?…](?:["')\]]*)(?=\s)|[\s\S]*?\n{1,})/
+  let pending = ''
+  for (;;) {
+    const m = rest.match(re)
+    if (!m || !m[0].trim()) break
+    rest = rest.slice(m[0].length)
+    pending = `${pending} ${m[0]}`.trim()
+    if (pending.length >= 24) {
+      sentences.push(pending)
+      pending = ''
+    }
+  }
+  rest = pending ? `${pending} ${rest}` : rest
+  if (flush && rest.trim()) {
+    sentences.push(rest.trim())
+    rest = ''
+  }
+  return { sentences, rest }
+}
+
+/** Synthesize one chunk with the user's neural voice; returns a playable data URL. */
+export async function synthesize(text: string): Promise<string | null> {
+  const clean = speakable(text)
+  if (!clean) return null
+  const { sdk } = await import('@/stores/auth')
+  const tts = await sdk.life.tts(clean)
+  return `data:${tts.mimeType};base64,${tts.audioBase64}`
+}
+
+/**
  * Speak exclusively via configured neural TTS (Fish Audio 2.0 / ElevenLabs).
  * Never falls back to robotic browser speechSynthesis.
  */

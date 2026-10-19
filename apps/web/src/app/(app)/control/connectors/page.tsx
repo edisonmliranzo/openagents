@@ -16,6 +16,9 @@ interface ConnectorCatalogEntry {
   icon: string
 }
 
+/** Connectors that support the OpenAgents OAuth flow (GET /connectors/:id/oauth/start). */
+const OAUTH_CONNECTOR_IDS = new Set(['google_gmail', 'google_calendar', 'google_drive', 'github', 'notion', 'slack'])
+
 const CONNECTOR_CATALOG: ConnectorCatalogEntry[] = [
   {
     id: 'google_gmail',
@@ -36,6 +39,16 @@ const CONNECTOR_CATALOG: ConnectorCatalogEntry[] = [
     envVars: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
     tools: ['calendar_get_availability', 'calendar_create_event', 'calendar_update_event', 'calendar_cancel_event'],
     icon: '📅',
+  },
+  {
+    id: 'google_drive',
+    label: 'Google Drive',
+    category: 'Productivity',
+    description: 'List and read files in Google Drive.',
+    docsUrl: 'https://developers.google.com/drive/api',
+    envVars: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+    tools: ['drive_list_files'],
+    icon: '📁',
   },
   {
     id: 'github',
@@ -184,6 +197,15 @@ export default function ConnectorsPage() {
     }
   }
 
+  async function handleOAuthConnect(connectorId: string) {
+    try {
+      const { url } = await sdk.client.get<{ url: string }>(`/api/v1/connectors/${connectorId}/oauth/start`)
+      window.location.href = url
+    } catch (error) {
+      addToast('error', error instanceof Error ? error.message : 'Could not start OAuth flow')
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -319,6 +341,15 @@ export default function ConnectorsPage() {
                   >
                     Test
                   </button>
+                  {OAUTH_CONNECTOR_IDS.has(entry.id) && (
+                    <button
+                      type="button"
+                      onClick={() => void handleOAuthConnect(entry.id)}
+                      className="rounded bg-rose-500 px-2 py-0.5 text-xs font-semibold text-white hover:bg-rose-600"
+                    >
+                      {connection?.connected ? 'Reconnect' : 'Connect'}
+                    </button>
+                  )}
                 </div>
               </div>
 

@@ -1,5 +1,14 @@
 import type { OpenAgentsClient } from '../client'
 
+export interface FishVoiceEntry {
+  id: string
+  name: string
+  gender: 'female' | 'male' | 'neutral'
+  style: string
+  accent: string
+  source: 'curated' | 'mine' | 'library'
+}
+
 export interface JanitorRunRow {
   id: string
   folder: string
@@ -155,6 +164,12 @@ export function createLifeApi(client: OpenAgentsClient) {
       fishVoice?: string
     }) => client.put<{ saved: boolean }>('/api/v1/life/tts/config', patch),
     ttsVoices: () => client.get<Array<{ id: string; name: string; provider: string; labels?: Record<string, string> }>>('/api/v1/life/tts/voices'),
+    ttsFishVoices: () =>
+      client.get<{
+        curated: FishVoiceEntry[]
+        live: FishVoiceEntry[]
+        hasKey: boolean
+      }>('/api/v1/life/tts/fish/voices'),
     tts: (text: string, opts?: { voiceId?: string; provider?: string }) =>
       client.post<{ audioBase64: string; mimeType: string; provider: string; voiceId: string; cached: boolean }>('/api/v1/life/tts', { text, ...opts }),
     ttsClone: (input: { name: string; audioBase64: string; mimeType?: string }) =>

@@ -28,5 +28,26 @@ export function createConnectorsApi(client: OpenAgentsClient) {
       client.put<ConnectorConnectionResult>(`/api/v1/connectors/${connectorId}/connection`, input),
     deleteConnection: (connectorId: string) =>
       client.delete<{ ok: true }>(`/api/v1/connectors/${connectorId}/connection`),
+    oauthDefinitions: () =>
+      client.get<OAuthConnectorDefinitionSummary[]>('/api/v1/connectors/oauth/definitions'),
+    oauthStart: (connectorId: string) =>
+      client.get<{ connectorId: string; url: string; expiresInMs: number }>(
+        `/api/v1/connectors/${connectorId}/oauth/start`,
+      ),
+    oauthStatus: (connectorId: string) =>
+      client.get<{ connectorId: string; connected: boolean; scopes?: string[]; connectedAt?: string | null }>(
+        `/api/v1/connectors/${connectorId}/oauth/status`,
+      ),
+    runAction: <T = unknown>(connectorId: string, action: string) =>
+      client.post<T>(`/api/v1/connectors/${connectorId}/actions/${action}`),
   }
+}
+
+export interface OAuthConnectorDefinitionSummary {
+  id: string
+  displayName: string
+  provider: 'google' | 'github' | 'notion' | 'slack'
+  scopes: string[]
+  configured: boolean
+  actions: Array<{ name: string; displayName: string; description: string }>
 }

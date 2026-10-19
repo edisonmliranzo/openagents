@@ -28,6 +28,14 @@ export class WarRoomService {
     return room
   }
 
+  async listRooms(userId: string): Promise<WarRoom[]> {
+    return [...this.rooms.values()].filter((room) => room.userId === userId).reverse()
+  }
+
+  async getRoom(roomId: string): Promise<WarRoom | null> {
+    return this.rooms.get(roomId) ?? null
+  }
+
   async broadcastMessage(roomId: string, agentName: string, content: string): Promise<WarRoom | null> {
     const room = this.rooms.get(roomId)
     if (!room) return null

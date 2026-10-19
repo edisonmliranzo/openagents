@@ -102,6 +102,8 @@ interface TieredRankedCandidate<T> {
 const DECAY_WORKER_INTERVAL_MS = 6 * 60 * 60 * 1000 // every 6 hours
 const DECAY_PRUNE_THRESHOLD = 0.04 // remove facts with effective confidence below this
 const MAX_AGENT_MEMORY_ITEMS = 36
+/** Reserved tag used to persist the pinned flag inside Memory.tags (no schema change). */
+export const PINNED_TAG = '__pinned'
 
 @Injectable()
 export class MemoryService implements OnModuleInit, OnModuleDestroy {
@@ -188,18 +190,91 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     const rows = await this.prisma.memory.findMany({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
-      take: 30,
+      take: 200,
     })
 
-    return rows.map((row) => ({
+    const mapped = rows.map((row) => this.toPublicMemory(row))
+    // Pinned first, otherwise keep recency order.
+    return [...mapped.filter((m) => m.pinned), ...mapped.filter((m) => !m.pinned)]
+  }
+
+  async updateEntry(userId: string, id: string, input: { content?: string; tags?: string[] }) {
+    const existing = await this.prisma.memory.findFirst({ where: { id, userId } })
+    if (!existing) throw new NotFoundException('Memory not found')
+
+    const data: { content?: string; tags?: string } = {}
+    if (typeof input.content === 'string') {
+      const content = input.content.trim()
+      if (!content) throw new BadRequestException('content cannot be empty.')
+      if (content.length > 8000) throw new BadRequestException('content is too long.')
+      data.content = content
+    }
+    if (Array.isArray(input.tags)) {
+      const pinned = this.isPinnedTags(existing.tags, existing.id)
+      const tags = this.normalizeTags(input.tags).filter((t) => t !== PINNED_TAG)
+      data.tags = JSON.stringify(pinned ? [...tags, PINNED_TAG] : tags)
+    }
+    if (!data.content && !data.tags) return this.toPublicMemory(existing)
+
+    const updated = await this.prisma.memory.update({ where: { id: existing.id }, data })
+    await this.writeMemoryAudit(userId, 'memory_update', existing.id, {
+      reversible: true,
+      previous: { content: existing.content, tags: existing.tags },
+      next: { content: updated.content, tags: updated.tags },
+    })
+    return this.toPublicMemory(updated)
+  }
+
+  async setPinned(userId: string, id: string, pinned: boolean) {
+    const existing = await this.prisma.memory.findFirst({ where: { id, userId } })
+    if (!existing) throw new NotFoundException('Memory not found')
+    const tags = this.parseTags(existing.tags, existing.id).filter((t) => t !== PINNED_TAG)
+    if (pinned) tags.push(PINNED_TAG)
+    const updated = await this.prisma.memory.update({
+      where: { id: existing.id },
+      data: { tags: JSON.stringify(tags) },
+    })
+    await this.writeMemoryAudit(userId, pinned ? 'memory_pin' : 'memory_unpin', existing.id, {
+      reversible: true,
+      previous: { tags: existing.tags },
+    })
+    return this.toPublicMemory(updated)
+  }
+
+  private toPublicMemory(row: { id: string; userId: string; type: string; content: string; tags: string; createdAt: Date; updatedAt: Date }) {
+    const tags = this.parseTags(row.tags, row.id)
+    return {
       ...row,
-      tags: this.parseTags(row.tags, row.id),
-    }))
+      tags: tags.filter((t) => t !== PINNED_TAG),
+      pinned: tags.includes(PINNED_TAG),
+    }
+  }
+
+  private isPinnedTags(raw: string, id: string) {
+    return this.parseTags(raw, id).includes(PINNED_TAG)
+  }
+
+  private async writeMemoryAudit(userId: string, action: string, memoryId: string, metadata: Record<string, unknown>) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          category: 'memory',
+          action,
+          resource: `memory:${memoryId}`,
+          severity: 'low',
+          description: action.replace(/_/g, ' '),
+          metadata: JSON.stringify(metadata),
+        },
+      })
+    } catch (err: any) {
+      this.logger.warn(`Failed to write memory audit log: ${err?.message ?? String(err)}`)
+    }
   }
 
   async getAgentContextEntries(userId: string, limit = MAX_AGENT_MEMORY_ITEMS): Promise<MemoryEntry[]> {
     const safeLimit = Math.max(1, Math.min(limit, 120))
-    const [rows, factsRaw, eventsRaw] = await Promise.all([
+    const [rows, factsRaw, eventsRaw, pinnedRows] = await Promise.all([
       this.prisma.memory.findMany({
         where: { userId },
         orderBy: { updatedAt: 'desc' },
@@ -215,15 +290,23 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
         orderBy: { updatedAt: 'desc' },
         take: safeLimit,
       }),
+      this.prisma.memory.findMany({
+        where: { userId, tags: { contains: `"${PINNED_TAG}"` } },
+        orderBy: { updatedAt: 'desc' },
+        take: safeLimit,
+      }),
     ])
 
-    const entries: MemoryEntry[] = rows.map((row) => ({
+    const toEntry = (row: (typeof rows)[number]): MemoryEntry => ({
       ...row,
       type: (row.type === 'preference' || row.type === 'summary' ? row.type : 'fact') as MemoryType,
-      tags: this.parseTags(row.tags, row.id),
+      tags: this.parseTags(row.tags, row.id).filter((t) => t !== PINNED_TAG),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
-    }))
+    })
+    const pinnedIds = new Set(pinnedRows.map((row) => row.id))
+    const pinnedEntries = pinnedRows.map(toEntry)
+    const entries: MemoryEntry[] = rows.filter((row) => !pinnedIds.has(row.id)).map(toEntry)
 
     for (const fact of factsRaw.map((row) => this.toMemoryFact(row))) {
       if ((fact.effectiveConfidence ?? fact.confidence) < LOW_CONFIDENCE_REVIEW_THRESHOLD) continue
@@ -252,6 +335,10 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     }
 
     const deduped = new Map<string, MemoryEntry>()
+    for (const entry of pinnedEntries) {
+      const key = `${entry.type}:${this.normalizeMemoryKey(entry.content)}`
+      if (!deduped.has(key)) deduped.set(key, entry)
+    }
     for (const entry of entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
       const key = `${entry.type}:${this.normalizeMemoryKey(entry.content)}`
       if (!key || deduped.has(key)) continue
@@ -269,7 +356,21 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
   }
 
   async delete(id: string, userId: string) {
-    return this.prisma.memory.deleteMany({ where: { id, userId } })
+    const existing = await this.prisma.memory.findFirst({ where: { id, userId } })
+    const result = await this.prisma.memory.deleteMany({ where: { id, userId } })
+    if (existing && result.count > 0) {
+      await this.writeMemoryAudit(userId, 'memory_delete', existing.id, {
+        reversible: true,
+        previous: {
+          id: existing.id,
+          type: existing.type,
+          content: existing.content,
+          tags: existing.tags,
+          createdAt: existing.createdAt.toISOString(),
+        },
+      })
+    }
+    return result
   }
 
   async writeEvent(userId: string, input: WriteMemoryEventInput): Promise<MemoryEvent> {
@@ -1115,6 +1216,11 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     const dedupeKeepIds = new Set<string>()
     const dedupeSeen = new Set<string>()
     for (const memory of allMemories) {
+      // Pinned memories are never removed by curation.
+      if (this.isPinnedTags(memory.tags, memory.id)) {
+        dedupeKeepIds.add(memory.id)
+        continue
+      }
       const key = `${memory.type}:${this.normalizeMemoryKey(memory.content)}`
       if (!key || key.endsWith(':')) {
         dedupeKeepIds.add(memory.id)
@@ -1140,6 +1246,7 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
         if (memory.updatedAt >= staleCutoff) return false
         if (memory.type !== 'summary') return false
         const tags = this.parseTags(memory.tags, memory.id)
+        if (tags.includes(PINNED_TAG)) return false
         return tags.some((tag) => /auto|nightly|curat/i.test(tag))
       })
       .map((memory) => memory.id)
