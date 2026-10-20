@@ -10,6 +10,7 @@ import {
 } from '@/components/chat/assistantModes'
 import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
+import CanvasPanel from '@/components/chat/CanvasPanel'
 import { MuseChatLayout } from '@/components/muse/MuseChatLayout'
 import { storageGet, storageSet } from '@/lib/storage'
 import { setVoiceEnabled, voiceEnabled } from '@/lib/voice'
@@ -137,6 +138,7 @@ export default function ChatPage() {
           />
         </div>
       </div>
+      <CanvasPanel />
       <VoiceToggle />
     </div>
     </MuseChatLayout>

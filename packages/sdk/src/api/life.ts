@@ -145,7 +145,7 @@ export function createLifeApi(client: OpenAgentsClient) {
     revokeToken: (id: string) => client.delete<{ ok: boolean }>(`/api/v1/life/tokens/${id}`),
 
     // Realistic TTS (ElevenLabs / Fish Audio)
-    ttsStatus: () => client.get<{ provider: string | null; elevenlabs: boolean; fish: boolean; defaultVoice: string }>('/api/v1/life/tts/status'),
+    ttsStatus: () => client.get<{ provider: string | null; configured: boolean; source: 'user' | 'env' | 'none'; elevenlabs: boolean; fish: boolean; defaultVoice: string }>('/api/v1/life/tts/status'),
     ttsGetConfig: () =>
       client.get<{
         provider: string | null

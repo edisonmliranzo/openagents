@@ -12,6 +12,8 @@ export interface BriefingSettings {
   /** IANA timezone, e.g. America/New_York */
   timezone: string
   sections: Record<BriefingSectionKey, boolean>
+  /** Topics searched for the news card. */
+  newsTopics?: string[]
 }
 
 export interface BriefingCard {
@@ -44,6 +46,7 @@ export function defaultBriefingSettings(): BriefingSettings {
     time: '08:00',
     timezone: 'UTC',
     sections: { email: true, calendar: true, tasks: true, news: false, memory: true },
+    newsTopics: ['AI', 'technology'],
   }
 }
 
@@ -143,7 +146,10 @@ export function normalizeSettings(input?: Partial<BriefingSettings>): BriefingSe
     const v = input?.sections?.[key]
     if (typeof v === 'boolean') sections[key] = v
   }
-  return { enabled: Boolean(input?.enabled ?? base.enabled), time, timezone, sections }
+  const newsTopics = Array.isArray(input?.newsTopics)
+    ? input!.newsTopics.filter((t): t is string => typeof t === 'string').map((t) => t.trim().slice(0, 80)).filter(Boolean).slice(0, 10)
+    : base.newsTopics!
+  return { enabled: Boolean(input?.enabled ?? base.enabled), time, timezone, sections, newsTopics }
 }
 
 /** Returns local { dateKey: YYYY-MM-DD, hhmm: HH:mm } for a timezone. */

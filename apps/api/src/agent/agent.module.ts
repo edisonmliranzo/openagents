@@ -23,6 +23,7 @@ import { AuditModule } from '../audit/audit.module'
 import { NotificationsModule } from '../notifications/notifications.module'
 import { EventsModule } from '../events/events.module'
 import { GoalsModule } from '../goals/goals.module'
+import { CostModule } from '../cost/cost.module'
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { GoalsModule } from '../goals/goals.module'
     LearningModule,
     StudyModule,
     forwardRef(() => FrontierModule),
+    CostModule,
   ],
   controllers: [AgentController],
   providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],

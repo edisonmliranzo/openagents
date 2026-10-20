@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
+import { openArtifact } from '@/stores/canvas'
 import type { DataLineageRecord, Message, MessageArtifact, MessageMeta } from '@openagents/shared'
 import { Brain, ChevronDown, ChevronRight, Columns, Copy, FileText, Film, ImageIcon, Link2, Music4, Pencil, RotateCcw, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { BranchButton } from '@/components/branch-button'
@@ -102,6 +103,41 @@ function ProgressCard({ metadata, isStreaming }: { metadata: MessageMeta | null;
   return null
 }
 
+const ARTIFACT_ID_PATTERNS = [
+  /\/artifacts\/([A-Za-z0-9_-]{8,})/,
+  /[?&]artifact(?:Id)?=([A-Za-z0-9_-]{8,})/,
+  /artifact:\/\/([A-Za-z0-9_-]{8,})/,
+]
+
+/** Extract a Canvas-openable artifact id from a URL/href, if present. */
+function artifactIdFromHref(href?: string | null): string | null {
+  if (!href) return null
+  for (const re of ARTIFACT_ID_PATTERNS) {
+    const m = href.match(re)
+    if (m) return m[1]
+  }
+  return null
+}
+
+/** Find artifact ids referenced in message text (links, `artifactId: x`, tool results). */
+function artifactIdsFromText(text: string): string[] {
+  const ids = new Set<string>()
+  const global = [
+    /\/artifacts\/([A-Za-z0-9_-]{8,})/g,
+    /artifact:\/\/([A-Za-z0-9_-]{8,})/g,
+    /"?artifact_?id"?\s*[:=]\s*"?([A-Za-z0-9_-]{8,})/gi,
+  ]
+  for (const re of global) {
+    for (const m of text.matchAll(re)) ids.add(m[1])
+  }
+  return [...ids]
+}
+
+function artifactIdOf(artifact: MessageArtifact): string | null {
+  const loose = artifact as MessageArtifact & { id?: string; artifactId?: string }
+  return loose.artifactId || loose.id || artifactIdFromHref(artifact.url)
+}
+
 function ArtifactGallery({ artifacts }: { artifacts: MessageArtifact[] }) {
   if (artifacts.length === 0) return null
   return (
@@ -157,6 +193,16 @@ function ArtifactGallery({ artifacts }: { artifacts: MessageArtifact[] }) {
                     <Link2 size={11} />
                     Open file
                   </a>
+                )}
+                {artifactIdOf(artifact) && (
+                  <button
+                    type="button"
+                    onClick={() => openArtifact(artifactIdOf(artifact)!)}
+                    className="ml-2 mt-3 inline-flex items-center gap-1 rounded-full border border-[#e4e7ec] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#344054] transition hover:bg-[#f2f4f7] dark:border-[#2d3347] dark:bg-[#141824] dark:text-[#c9d1e0]"
+                  >
+                    <Columns size={11} />
+                    Open in Canvas
+                  </button>
                 )}
               </div>
             </article>
@@ -240,6 +286,10 @@ export function MessageBubble({
   const codeBlocks = useMemo(() => extractCodeBlocks(visible).map((b) => b.content), [visible])
   const parsedMetadata = useMemo(() => parseMetadata(message.metadata), [message.metadata])
   const artifacts = parsedMetadata?.artifacts ?? []
+  const referencedArtifactIds = useMemo(() => {
+    const galleryIds = new Set(artifacts.map(artifactIdOf).filter(Boolean) as string[])
+    return artifactIdsFromText(message.content ?? '').filter((id) => !galleryIds.has(id))
+  }, [artifacts, message.content])
   const [copiedCodeIndex, setCopiedCodeIndex] = useState<number | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
   const [lineage, setLineage] = useState<DataLineageRecord | null>(null)
@@ -396,6 +446,22 @@ export function MessageBubble({
 
         <ArtifactGallery artifacts={artifacts} />
 
+        {referencedArtifactIds.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {referencedArtifactIds.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => openArtifact(id)}
+                className="inline-flex items-center gap-1 rounded-full border border-[#e4e7ec] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#344054] transition hover:bg-[#f2f4f7] dark:border-[#2d3347] dark:bg-[#141824] dark:text-[#c9d1e0]"
+              >
+                <Columns size={11} />
+                Open artifact in Canvas
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="oa-bubble-agent px-4 py-3 text-[14px] leading-relaxed">
           {visible ? (
             (() => {
@@ -481,6 +547,27 @@ export function MessageBubble({
                       )
                     },
                     pre: ({ children }) => <>{children}</>,
+                    a: ({ children, href }) => {
+                      const artifactId = artifactIdFromHref(href)
+                      if (artifactId) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => openArtifact(artifactId)}
+                            title="Open in Canvas"
+                            className="inline-flex items-center gap-1 font-medium text-[#2563eb] underline underline-offset-2 hover:text-[#1d4ed8] dark:text-[#60a5fa]"
+                          >
+                            <Columns size={12} />
+                            {children}
+                          </button>
+                        )
+                      }
+                      return (
+                        <a href={href} target="_blank" rel="noreferrer" className="font-medium text-[#2563eb] underline underline-offset-2 dark:text-[#60a5fa]">
+                          {children}
+                        </a>
+                      )
+                    },
                   }}
                 >
                   {visible.replace(/\[WAR_ROOM:.*?\]/g, '').replace(/\[BROWSER:.*?\]/g, '')}

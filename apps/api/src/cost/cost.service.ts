@@ -104,6 +104,8 @@ export class CostService {
     outputTokens: number
     conversationId: string
     runId?: string
+    /** Persist an llm_cost MetricLog row (default true). Pass false when tokens are already logged via an agent_run MetricLog row, since loadEntries reads both and would double count. */
+    persist?: boolean
   }): CostEntry {
     const entry: CostEntry = {
       id: `cost-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -119,6 +121,7 @@ export class CostService {
     }
     this.entries.push(entry)
     if (this.entries.length > 5000) this.entries.splice(0, this.entries.length - 5000)
+    if (input.persist === false) return entry
     // Persist to MetricLog so data survives restarts.
     this.prisma.metricLog
       .create({

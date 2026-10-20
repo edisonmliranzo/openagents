@@ -9,6 +9,8 @@ export interface BriefingSettings {
   /** IANA timezone */
   timezone: string
   sections: Record<BriefingSectionKey, boolean>
+  /** Topics searched for the news card (default: ['AI', 'technology']) */
+  newsTopics?: string[]
 }
 
 export interface BriefingCard {

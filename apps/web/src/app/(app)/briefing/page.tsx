@@ -28,6 +28,7 @@ interface BriefingSettings {
   time: string
   timezone: string
   sections: Record<SectionKey, boolean>
+  newsTopics?: string[]
 }
 interface BriefingCard { section: SectionKey; title: string; items: string[] }
 interface BriefingRecord {
@@ -274,6 +275,20 @@ export default function BriefingPage() {
                   </label>
                 ))}
               </div>
+              {settings.sections.news && (
+                <label className="mb-4 block text-sm">
+                  <span className="mb-1 block text-xs text-zinc-500">News topics (comma separated)</span>
+                  <input
+                    type="text"
+                    value={(settings.newsTopics ?? ['AI', 'technology']).join(', ')}
+                    placeholder="AI, technology"
+                    onChange={(e) =>
+                      setSettings({ ...settings, newsTopics: e.target.value.split(',').map((t) => t.replace(/^\s+/, '')) })
+                    }
+                    className="w-full rounded-lg border border-zinc-200 bg-transparent px-2 py-1.5 text-sm dark:border-zinc-700"
+                  />
+                </label>
+              )}
               <button
                 onClick={save}
                 disabled={saving}

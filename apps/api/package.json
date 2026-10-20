@@ -47,6 +47,7 @@
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.0.0",
     "socket.io": "^4.8.3",
+    "web-push": "^3.6.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -58,6 +59,7 @@
     "@types/nodemailer": "^8.0.0",
     "@types/passport-jwt": "^4.0.0",
     "@types/passport-local": "^1.0.0",
+    "@types/web-push": "^3.6.4",
     "ts-node": "^10.0.0",
     "typescript": "^5.4.0"
   }

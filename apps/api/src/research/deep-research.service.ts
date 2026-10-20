@@ -1,4 +1,7 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import * as fsSync from 'fs'
+import { promises as fs } from 'fs'
+import * as path from 'path'
 import { ToolsService } from '../tools/tools.service'
 import { LLMService } from '../agent/llm.service'
 import { LibraryService } from '../library/library.service'
@@ -27,7 +30,7 @@ export interface ResearchJob {
   id: string
   userId: string
   goal: string
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'completed' | 'failed' | 'interrupted'
   steps: ResearchStep[]
   queries: string[]
   sources: ResearchSource[]
@@ -38,13 +41,20 @@ export interface ResearchJob {
   updatedAt: string
 }
 
-const MAX_JOBS_PER_USER = 25
+const MAX_JOBS_PER_USER = 50
+const SAVE_DEBOUNCE_MS = 500
+
+function safeUserId(userId: string) {
+  return String(userId).replace(/[^A-Za-z0-9_-]/g, '_') || '_'
+}
 const MAX_SOURCES = 20
 
 @Injectable()
-export class DeepResearchService {
+export class DeepResearchService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DeepResearchService.name)
   private jobs = new Map<string, ResearchJob>()
+  private readonly dir = path.resolve(process.env.RESEARCH_DATA_DIR ?? path.join(process.cwd(), 'data', 'research'))
+  private readonly saveTimers = new Map<string, NodeJS.Timeout>()
 
   constructor(
     private readonly tools: ToolsService,
@@ -52,6 +62,78 @@ export class DeepResearchService {
     private readonly library: LibraryService,
     private readonly artifacts: ArtifactsService,
   ) {}
+
+  // ── Persistence ──────────────────────────────────────────────────────────
+
+  /** Load persisted jobs; anything still 'running' from a previous process becomes 'interrupted'. */
+  onModuleInit() {
+    let files: string[] = []
+    try {
+      files = fsSync.readdirSync(this.dir).filter((f) => f.endsWith('.json'))
+    } catch {
+      return // no data dir yet
+    }
+    const now = new Date().toISOString()
+    for (const file of files) {
+      try {
+        const parsed = JSON.parse(fsSync.readFileSync(path.join(this.dir, file), 'utf8'))
+        if (!Array.isArray(parsed)) continue
+        const touchedUsers = new Set<string>()
+        for (const job of parsed as ResearchJob[]) {
+          if (!job || typeof job.id !== 'string' || typeof job.userId !== 'string') continue
+          if (`${safeUserId(job.userId)}.json` !== file) continue
+          if (job.status === 'running') {
+            job.status = 'interrupted'
+            job.error = job.error ?? 'Research was interrupted by a server restart.'
+            for (const s of job.steps ?? []) if (s.status === 'running' || s.status === 'pending') s.status = 'failed'
+            job.updatedAt = now
+            touchedUsers.add(job.userId)
+          }
+          job.steps = job.steps ?? []
+          job.queries = job.queries ?? []
+          job.sources = job.sources ?? []
+          job.report = job.report ?? ''
+          this.jobs.set(job.id, job)
+        }
+        for (const userId of touchedUsers) this.scheduleSave(userId)
+      } catch (error: any) {
+        this.logger.warn(`Failed to load research jobs from ${file}: ${error?.message ?? error}`)
+      }
+    }
+  }
+
+  async onModuleDestroy() {
+    const pending = [...this.saveTimers.keys()]
+    for (const t of this.saveTimers.values()) clearTimeout(t)
+    this.saveTimers.clear()
+    await Promise.all(pending.map((u) => this.persist(u)))
+  }
+
+  private scheduleSave(userId: string) {
+    if (this.saveTimers.has(userId)) return
+    const timer = setTimeout(() => {
+      this.saveTimers.delete(userId)
+      void this.persist(userId)
+    }, SAVE_DEBOUNCE_MS)
+    timer.unref?.()
+    this.saveTimers.set(userId, timer)
+  }
+
+  private async persist(userId: string) {
+    const jobs = [...this.jobs.values()]
+      .filter((j) => j.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, MAX_JOBS_PER_USER)
+    try {
+      await fs.mkdir(this.dir, { recursive: true })
+      const file = path.join(this.dir, `${safeUserId(userId)}.json`)
+      const tmp = `${file}.${process.pid}.tmp`
+      await fs.writeFile(tmp, JSON.stringify(jobs, null, 2), 'utf8')
+      await fs.rename(tmp, file)
+    } catch (error: any) {
+      this.logger.warn(`Failed to persist research jobs for ${userId}: ${error?.message ?? error}`)
+    }
+  }
 
   start(userId: string, input: { goal: string; maxQueries?: number; includeLibrary?: boolean }) {
     const goal = String(input?.goal ?? '').trim()
@@ -76,6 +158,7 @@ export class DeepResearchService {
     }
     this.jobs.set(job.id, job)
     this.prune(userId)
+    this.scheduleSave(userId)
     const maxQueries = Math.max(1, Math.min(6, Number(input?.maxQueries ?? 4)))
     void this.run(job, maxQueries, input?.includeLibrary !== false).catch((err: any) => {
       job.status = 'failed'
@@ -120,13 +203,13 @@ export class DeepResearchService {
     return { artifactId: artifact.id, artifact }
   }
 
-  // ── Pipeline ────────────────────────────────────────────────────────────────
+  // â”€â”€ Pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async run(job: ResearchJob, maxQueries: number, includeLibrary: boolean) {
     // 1. Plan
     this.stepStart(job, 'plan')
     job.queries = await this.planQueries(job.goal, maxQueries)
-    this.stepDone(job, 'plan', `${job.queries.length} queries: ${job.queries.join(' · ')}`)
+    this.stepDone(job, 'plan', `${job.queries.length} queries: ${job.queries.join(' Â· ')}`)
 
     // 2. Web search
     this.stepStart(job, 'search')
@@ -204,7 +287,7 @@ export class DeepResearchService {
         [],
         'You are a meticulous research analyst. Write a well-structured markdown report (title, executive summary, key findings with headings, open questions). ' +
           'Every factual claim MUST cite its supporting source(s) inline using bracketed numbers like [1] or [2][3] that match the provided source list. ' +
-          'Only use the provided sources; never invent citations. Do not include a sources list at the end — it is appended automatically.',
+          'Only use the provided sources; never invent citations. Do not include a sources list at the end â€” it is appended automatically.',
       )
       const text = (res.content ?? '').trim()
       if (text) return this.stripInvalidCitations(text, job.sources.length)
@@ -214,7 +297,7 @@ export class DeepResearchService {
     return [`# ${job.goal}`, '', '## Findings', ...job.sources.map((s) => `- ${s.snippet.slice(0, 240)} [${s.n}]`)].join('\n')
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private extractWebHits(output: unknown): Array<{ url: string; title: string; snippet: string }> {
     const out: Array<{ url: string; title: string; snippet: string }> = []
@@ -260,8 +343,8 @@ export class DeepResearchService {
   }
 
   private renderMarkdown(job: ResearchJob) {
-    const lines = [job.report || `# ${job.goal}\n\n_Research in progress…_`, '', '## Sources', '']
-    for (const s of job.sources) lines.push(`${s.n}. [${s.title.replace(/[[\]]/g, '')}](${s.url})${s.snippet ? ` — ${s.snippet.slice(0, 200)}` : ''}`)
+    const lines = [job.report || `# ${job.goal}\n\n_Research in progressâ€¦_`, '', '## Sources', '']
+    for (const s of job.sources) lines.push(`${s.n}. [${s.title.replace(/[[\]]/g, '')}](${s.url})${s.snippet ? ` â€” ${s.snippet.slice(0, 200)}` : ''}`)
     return lines.join('\n')
   }
 
@@ -296,6 +379,7 @@ export class DeepResearchService {
 
   private touch(job: ResearchJob) {
     job.updatedAt = new Date().toISOString()
+    this.scheduleSave(job.userId)
     if (job.status === 'failed') {
       for (const s of job.steps) if (s.status === 'running') s.status = 'failed'
     }

@@ -20,8 +20,9 @@ export function WebRtcVoiceControls() {
 
   const checkNeuralConfig = useCallback(async () => {
     try {
-      const cfg = await sdk.life.ttsGetConfig()
-      const configured = Boolean(cfg.provider) && Boolean(cfg.hasFishKey || cfg.envFish || cfg.hasElevenlabsKey || cfg.envElevenlabs)
+      // Saved provider OR server env provider counts as available; playback stays opt-in via voiceEnabled().
+      const status = await sdk.life.ttsStatus()
+      const configured = Boolean(status.configured)
       setHasNeuralTtsKey(configured)
       setTtsEnabled(configured && voiceEnabled())
       return configured

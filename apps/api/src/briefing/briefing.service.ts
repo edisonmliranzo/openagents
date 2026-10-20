@@ -6,6 +6,8 @@ import { GoalService } from '../goals/goal.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { PushService } from '../notifications/push.service'
 import { TelegramService } from '../channels/telegram/telegram.service'
+import { ConnectorsService } from '../connectors/connectors.service'
+import { WebSearchTool } from '../tools/connectors/web-search.tool'
 import type { LLMProvider } from '@openagents/shared'
 import {
   BriefingCard,
@@ -39,6 +41,8 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
     private readonly push: PushService,
     private readonly telegram: TelegramService,
     private readonly store: BriefingStore,
+    private readonly connectors: ConnectorsService,
+    private readonly webSearch: WebSearchTool,
   ) {}
 
   onModuleInit() {
@@ -181,10 +185,14 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
       })
     }
 
-    // Email, calendar and news depend on connectors; surfaced as empty cards until connected.
-    if (s.email) cards.push({ section: 'email', title: 'Email', items: [] })
-    if (s.calendar) cards.push({ section: 'calendar', title: 'Calendar', items: [] })
-    if (s.news) cards.push({ section: 'news', title: 'News', items: [] })
+    const [email, calendar, news] = await Promise.all([
+      s.email ? this.emailItems(userId) : Promise.resolve(null),
+      s.calendar ? this.calendarItems(userId, settings.timezone) : Promise.resolve(null),
+      s.news ? this.newsItems(userId, settings.newsTopics) : Promise.resolve(null),
+    ])
+    if (email) cards.push({ section: 'email', title: 'Email', items: email })
+    if (calendar) cards.push({ section: 'calendar', title: 'Calendar', items: calendar })
+    if (news) cards.push({ section: 'news', title: 'News', items: news })
 
     return cards
   }
@@ -226,6 +234,104 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Briefing ${record.id} delivered for ${userId} (${record.trigger}).`)
   }
 
+  private async isConnected(userId: string, connectorId: string): Promise<boolean> {
+    try {
+      return (await this.connectors.getConnection(userId, connectorId)).connected
+    } catch {
+      return false
+    }
+  }
+
+  /** Unread/important Gmail messages from the last 24h (fetchGoogle handles token refresh). */
+  private async emailItems(userId: string): Promise<string[]> {
+    if (!(await this.isConnected(userId, 'google_gmail'))) {
+      return ['Connect a source: link Gmail in Connectors to see email here.']
+    }
+    try {
+      const q = encodeURIComponent('newer_than:1d (is:unread OR is:important) -in:chats')
+      const list = await this.connectors.fetchGoogle(
+        userId,
+        'google_gmail',
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=8&q=${q}`,
+      )
+      const data = (await list.json()) as { messages?: Array<{ id: string }> }
+      const ids = (data.messages ?? []).slice(0, 8).map((m) => m.id)
+      const items = await Promise.all(ids.map(async (id) => {
+        try {
+          const res = await this.connectors.fetchGoogle(
+            userId,
+            'google_gmail',
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+          )
+          const msg = (await res.json()) as { snippet?: string; payload?: { headers?: Array<{ name: string; value: string }> } }
+          const header = (n: string) => msg.payload?.headers?.find((h) => h.name.toLowerCase() === n)?.value ?? ''
+          const from = header('from').replace(/\s*<[^>]+>/, '').replace(/"/g, '') || 'Unknown sender'
+          const subject = header('subject') || '(no subject)'
+          const snippet = (msg.snippet ?? '').replace(/\s+/g, ' ').trim().slice(0, 140)
+          return `"${subject}" from ${from}${snippet ? ` - ${snippet}` : ''}`
+        } catch {
+          return null
+        }
+      }))
+      return items.filter((i): i is string => Boolean(i))
+    } catch (error: any) {
+      this.logger.warn(`Briefing email fetch failed for ${userId}: ${error?.message ?? error}`)
+      return ['Could not load email right now.']
+    }
+  }
+
+  /** Today's Google Calendar events in the user's timezone. */
+  private async calendarItems(userId: string, timezone: string): Promise<string[]> {
+    if (!(await this.isConnected(userId, 'google_calendar'))) {
+      return ['Connect a source: link Google Calendar in Connectors to see events here.']
+    }
+    try {
+      const { start, end } = dayBounds(timezone)
+      const params = new URLSearchParams({
+        timeMin: start.toISOString(),
+        timeMax: end.toISOString(),
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '15',
+        timeZone: timezone,
+      })
+      const res = await this.connectors.fetchGoogle(
+        userId,
+        'google_calendar',
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
+      )
+      const data = (await res.json()) as {
+        items?: Array<{ summary?: string; location?: string; start?: { dateTime?: string; date?: string } }>
+      }
+      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false })
+      return (data.items ?? []).map((e) => {
+        const when = e.start?.dateTime ? fmt.format(new Date(e.start.dateTime)) : 'All day'
+        return `${when} ${e.summary ?? '(untitled)'}${e.location ? ` @ ${e.location}` : ''}`
+      })
+    } catch (error: any) {
+      this.logger.warn(`Briefing calendar fetch failed for ${userId}: ${error?.message ?? error}`)
+      return ['Could not load calendar right now.']
+    }
+  }
+
+  /** Headlines via the web_search tool for the user's topics. */
+  private async newsItems(userId: string, topics?: string[]): Promise<string[]> {
+    const list = (topics?.length ? topics : ['AI', 'technology']).slice(0, 5)
+    const results = await Promise.all(list.map(async (topic) => {
+      try {
+        const r = await this.webSearch.search({ query: `${topic} news today`, count: 3 }, userId)
+        if (!r.success) return [] as string[]
+        const out = r.output as { results?: Array<{ title?: string; url?: string }> }
+        return (out.results ?? [])
+          .filter((x) => x.title)
+          .map((x) => `[${topic}] ${x.title}${x.url ? ` (${x.url})` : ''}`)
+      } catch {
+        return [] as string[]
+      }
+    }))
+    return results.flat().slice(0, 12)
+  }
+
   private loopText(raw: string): string {
     try {
       const parsed = JSON.parse(raw) as { text?: string; dueDate?: string }
@@ -235,4 +341,23 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
       return raw
     }
   }
+}
+
+/** Start/end of the current local day in a timezone, as UTC instants. */
+function dayBounds(timezone: string) {
+  const { dateKey } = localClock(timezone)
+  const noonUtc = new Date(`${dateKey}T12:00:00Z`)
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(noonUtc)
+  const h = Number(parts.find((p) => p.type === 'hour')?.value ?? 12) % 24
+  const m = Number(parts.find((p) => p.type === 'minute')?.value ?? 0)
+  let offsetMin = h * 60 + m - 12 * 60
+  if (offsetMin > 14 * 60) offsetMin -= 24 * 60
+  if (offsetMin < -14 * 60) offsetMin += 24 * 60
+  const start = new Date(Date.parse(`${dateKey}T00:00:00Z`) - offsetMin * 60_000)
+  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) }
 }

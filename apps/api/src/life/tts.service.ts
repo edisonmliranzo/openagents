@@ -212,11 +212,20 @@ export class TtsService {
   /** Status for a specific user: their saved keys first, then env. */
   async statusFor(userId: string) {
     const keys = await this.resolveKeys(userId)
+    const cfg = await this.getUserConfig(userId).catch(() => ({ ...EMPTY_CONFIG }))
+    const userHas = Boolean(cfg.provider && (cfg.elevenlabsKey || cfg.fishKey))
+    const configured = Boolean(keys.provider && (keys.provider === 'elevenlabs' ? keys.elevenlabsKey : keys.fishKey))
+    const source: 'user' | 'env' | 'none' = !configured ? 'none' : userHas ? 'user' : 'env'
     return {
       provider: keys.provider,
+      configured,
+      source,
       elevenlabs: Boolean(keys.elevenlabsKey),
       fish: Boolean(keys.fishKey),
-      defaultVoice: keys.defaultVoice,
+      // Env-only setups default to the first curated American voice.
+      defaultVoice: source === 'user'
+        ? (keys.defaultVoice || FISH_VOICE_CATALOG[0].id)
+        : source === 'env' ? FISH_VOICE_CATALOG[0].id : '',
     }
   }
 

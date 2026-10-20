@@ -1,13 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { sdk } from '@/stores/auth'
+import { openArtifact } from '@/stores/canvas'
 import { useUIStore } from '@/stores/ui'
 import type { Artifact, ArtifactDetail, ArtifactTemplate, ArtifactType, Workspace } from '@openagents/shared'
 
 const ARTIFACT_TYPES: ArtifactType[] = ['doc', 'report', 'spreadsheet', 'landing_page', 'dataset_export', 'brief']
 
 export default function ArtifactsPage() {
+  const router = useRouter()
   const addToast = useUIStore((state) => state.addToast)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [templates, setTemplates] = useState<ArtifactTemplate[]>([])
@@ -322,6 +325,16 @@ export default function ArtifactsPage() {
                     className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   >
                     {isExporting ? 'Exporting...' : 'Export latest'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openArtifact(selectedArtifact.id)
+                      router.push('/chat')
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Open in Canvas
                   </button>
                 </div>
                 {selectedArtifact.summary && (

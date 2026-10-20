@@ -12,6 +12,8 @@ import { MissionControlService } from '../mission-control/mission-control.servic
 import { RuntimeEventsService } from '../events/runtime-events.service'
 import { ContextCompressorService } from './context-compressor.service'
 import { ModelRouterService } from './model-router.service'
+import { CostService } from '../cost/cost.service'
+import { ModelRouterService as CostModelRouterService } from '../cost/model-router.service'
 import { SentinelService } from './sentinel.service'
 import { AnswerCacheService } from './answer-cache.service'
 import { CriticService } from './critic.service'
@@ -215,6 +217,8 @@ export class AgentService implements OnModuleInit {
     private effort: EffortService,
     private expertise: ExpertiseService,
     private study: StudyService,
+    private costs: CostService,
+    private costRouter: CostModelRouterService,
     @Optional() private stakes: StakesService | null,
     @Optional() private pii: PiiRouterService | null,
     @Optional() private autopilot: AutopilotService | null,
@@ -632,6 +636,54 @@ export class AgentService implements OnModuleInit {
           manusLiteEnabled: runMetrics.manusLiteEnabled,
         },
       })
+      let activeFallbackApiKeys = fallbackApiKeys
+      let costRouterApplied = false
+      // Cost-aware model router (cost module). Best-effort: never breaks chat.
+      // Only overrides provider/model when the user has a usable config for
+      // the routed provider; otherwise the current selection is kept.
+      const applyCostRouter = async (
+        messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+      ) => {
+        try {
+          const settings = await this.costs.getRouterSettings(userId)
+          if (!settings || settings.mode === 'manual') return
+          const lastUser = [...messages].reverse().find((m) => m.role === 'user')
+          const decision = await this.costRouter.route({
+            userId,
+            prompt: lastUser?.content ?? userMessage,
+            toolCount: availableTools.length,
+            fallbackProvider: activeProvider,
+            fallbackModel: activeModel,
+          })
+          const routedProvider = decision.provider as LLMProvider
+          if (routedProvider === activeProvider && decision.model === activeModel) {
+            this.logger.debug(`Cost router kept ${activeProvider}/${activeModel ?? 'default'} (tier=${decision.tier}, score=${decision.score})`)
+            return
+          }
+          if (routedProvider !== activeProvider) {
+            const key = await this.users.getRawLlmKey(userId, routedProvider).catch(() => null)
+            const routedApiKey = key?.isActive ? (key.apiKey ?? key.loginPassword ?? undefined) : undefined
+            const routedBaseUrl = key?.isActive ? (key.baseUrl ?? undefined) : undefined
+            const usable = routedProvider === 'ollama' ? Boolean(key?.isActive) : Boolean(routedApiKey)
+            if (!usable) {
+              this.logger.debug(`Cost router suggested ${routedProvider}/${decision.model} but user has no usable key; keeping ${activeProvider}/${activeModel ?? 'default'}`)
+              return
+            }
+            activeProvider = routedProvider
+            activeUserApiKey = routedApiKey
+            activeUserBaseUrl = routedBaseUrl
+            activeFallbackApiKeys = routedProvider !== 'ollama'
+              ? await this.users.getFallbackLlmKeys(userId, routedProvider).catch(() => [])
+              : []
+          }
+          activeModel = decision.model || activeModel
+          activeProviderForRun = activeProvider
+          activeModelForRun = activeModel ?? null
+          this.logger.debug(`Cost router -> ${activeProvider}/${activeModel ?? 'default'} (mode=${decision.mode}, tier=${decision.tier}, score=${decision.score}, reasons=${decision.reasons.join('; ')})`)
+        } catch (err) {
+          this.logger.debug(`Cost router skipped: ${String(err)}`)
+        }
+      }
       const completeWithProviderFallback = async (
         messages: Array<{ role: 'user' | 'assistant'; content: string }>,
       ) => {
@@ -642,6 +694,11 @@ export class AgentService implements OnModuleInit {
           0,
         )
 
+        if (!costRouterApplied) {
+          costRouterApplied = true
+          await applyCostRouter(messages)
+        }
+
         try {
           return await this.llm.complete(
             messages,
@@ -651,7 +708,7 @@ export class AgentService implements OnModuleInit {
             activeUserApiKey,
             activeUserBaseUrl,
             activeModel,
-            activeProvider !== 'ollama' ? fallbackApiKeys : undefined,
+            activeProvider !== 'ollama' ? activeFallbackApiKeys : undefined,
           )
         } catch (error: any) {
           const shouldFallbackToOllama =
@@ -1464,6 +1521,23 @@ export class AgentService implements OnModuleInit {
           })),
         },
       })
+
+      // Cost tracking: in-memory only (persist:false) because the agent_run
+      // MetricLog row emitted via runtime events already stores these tokens.
+      try {
+        this.costs.record({
+          userId,
+          provider: activeProvider,
+          model: activeModel ?? 'default',
+          inputTokens: runMetrics.inputTokens,
+          outputTokens: runMetrics.outputTokens,
+          conversationId,
+          runId: run.id,
+          persist: false,
+        })
+      } catch (err) {
+        this.logger.debug(`Cost record skipped: ${String(err)}`)
+      }
 
       emit('tokens', {
         inputTokens: runMetrics.inputTokens,
