@@ -14,6 +14,15 @@ const PROTECTED_PREFIXES = [
   '/tasks',
   '/team',
   '/CommandCenter',
+  '/research',
+  '/briefing',
+  '/costs',
+  '/teams',
+  '/browser',
+  '/scheduler',
+  '/artifacts',
+  '/library',
+  '/workspaces',
 ]
 
 function withSecurityHeaders(res: NextResponse): NextResponse {
