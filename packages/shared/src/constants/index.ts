@@ -35,8 +35,8 @@ export const LLM_MODELS = {
     powerful: 'sonar-reasoning-pro',
   },
   nvidia: {
-    default: 'nvidia/nemotron-3-super-120b-a12b',
-    fast: 'stepfun-ai/step-3.7-flash',
+    default: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
+    fast: 'nvidia/nemotron-3.5-lightning-30b-a3b',
     powerful: 'nvidia/nemotron-3-ultra-550b-a55b',
   },
   atlascloud: {
@@ -166,12 +166,12 @@ export const LLM_MODEL_OPTIONS = {
   ],
   nvidia: [
     // Verified live on NIM (retired Llama 3.x / Nemotron v1 / Mixtral ids removed — they 410)
-    'nvidia/nemotron-3-super-120b-a12b',
+    'nvidia/nemotron-3.5-super-vl-120b-a12b',
     'nvidia/nemotron-3-ultra-550b-a55b',
-    'stepfun-ai/step-3.7-flash',
-    'minimaxai/minimax-m3',
-    'meta/llama-4-maverick-17b-128e-instruct',
-    'qwen/qwen2.5-coder-32b-instruct',
+    'nvidia/nemotron-3.5-lightning-30b-a3b',
+    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+    'google/gemma-4-31b-it',
+    'openai/gpt-oss-20b',
   ],
   atlascloud: [
     'owl',

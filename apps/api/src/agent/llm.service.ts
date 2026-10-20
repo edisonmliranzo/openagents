@@ -191,19 +191,53 @@ export class LLMService {
           return response
         } catch (err: any) {
           if (!this.isGoneError(err)) throw err
-          // 410 Gone = retired model (or, on NVIDIA, a key without the Public
-          // API Endpoints entitlement). Self-heal by switching to the first
-          // model in the provider's live catalog instead of failing the run.
+          // 404/410 = retired or unavailable model on provider.
+          // Self-heal by trying preferred live chat models first, then the provider's live catalog.
           const live = await this.fetchLiveModels(p, key, userBaseUrl).catch(() => [] as string[])
-          const replacement = live.map((id) => id.trim()).filter(Boolean)
-            .find((id) => id !== requestedModel)
-          if (!replacement) throw this.friendlyProviderError(p, err, requestedModel)
-          this.logger.warn(`${PROVIDER_LABELS[p]} model "${requestedModel}" is gone (410) — retrying with live model "${replacement}"`)
-          try {
-            return await this.completeOpenAI(messages, tools, systemPrompt, client, replacement, replacement)
-          } catch (retryErr: any) {
-            throw this.friendlyProviderError(p, retryErr, replacement)
+          const preferredFallbacks = p === 'nvidia'
+            ? [
+                'nvidia/nemotron-3.5-super-vl-120b-a12b',
+                'nvidia/nemotron-3.5-lightning-30b-a3b',
+                'nvidia/nemotron-3-ultra-550b-a55b',
+                'google/gemma-4-31b-it',
+                'openai/gpt-oss-20b',
+              ]
+            : []
+          const candidates = [
+            ...preferredFallbacks,
+            ...live.map((id) => id.trim()).filter((id) =>
+              Boolean(id) &&
+              !/^(01-ai\/|stepfun-ai\/|nvidia\/ai-synthetic|nvidia\/llama-3\.1-nemoguard|baai\/|snowflake\/)/i.test(id),
+            ),
+          ].filter((id, idx, arr) => id !== requestedModel && arr.indexOf(id) === idx)
+
+          let lastRetryErr: any = err
+          for (const replacement of candidates.slice(0, 5)) {
+            this.logger.warn(`${PROVIDER_LABELS[p]} model "${requestedModel}" returned 404/410 — retrying with live model "${replacement}"`)
+            try {
+              const fallbackRes = await this.completeOpenAI(messages, tools, systemPrompt, client, replacement, replacement)
+              if (
+                p === 'nvidia' &&
+                tools.length > 0 &&
+                !fallbackRes.content?.trim() &&
+                !fallbackRes.toolCalls?.length
+              ) {
+                return await this.completeOpenAI(messages, [], systemPrompt, client, replacement, replacement)
+              }
+              return fallbackRes
+            } catch (retryErr: any) {
+              lastRetryErr = retryErr
+              if (!this.isGoneError(retryErr)) {
+                // If tools caused a 400 on the fallback model, retry without tools before giving up
+                if (tools.length > 0) {
+                  try {
+                    return await this.completeOpenAI(messages, [], systemPrompt, client, replacement, replacement)
+                  } catch {}
+                }
+              }
+            }
           }
+          throw this.friendlyProviderError(p, lastRetryErr, requestedModel)
         }
       },
       p,
@@ -255,8 +289,8 @@ export class LLMService {
 
   private isGoneError(err: unknown): boolean {
     const status = (err as any)?.status ?? (err as any)?.statusCode ?? 0
-    if (status === 410) return true
-    return /status code.*410|410 gone/i.test((err as any)?.message ?? '')
+    if (status === 404 || status === 410) return true
+    return /status code.*\b(404|410)\b|410 gone|404 not found/i.test((err as any)?.message ?? '')
   }
 
   // Translates raw provider errors into actionable messages. NVIDIA returns
