@@ -1,6 +1,23 @@
 import type { OpenAgentsClient } from '../client'
 import type { Conversation, ConversationRepairReport, Message } from '@openagents/shared'
 
+export interface ConversationTreeNode {
+  id: string
+  title: string | null
+  parentId: string | null
+  fromMessageId: string | null
+  messageCount: number
+  createdAt: string
+  lastMessageAt: string | null
+  children: ConversationTreeNode[]
+}
+
+export interface ConversationTree {
+  rootId: string
+  currentId: string
+  root: ConversationTreeNode | null
+}
+
 export function createConversationsApi(client: OpenAgentsClient) {
   return {
     list: () => client.get<Conversation[]>('/api/v1/conversations'),
@@ -51,6 +68,9 @@ export function createConversationsApi(client: OpenAgentsClient) {
       client.post<{ ok: boolean; queued: number }>(`/api/v1/conversations/${id}/steer`, { content }),
     truncate: (id: string, fromMessageId: string) =>
       client.post<{ ok: boolean; removed: number }>(`/api/v1/conversations/${id}/truncate`, { fromMessageId }),
+    branch: (id: string, fromMessageId: string) =>
+      client.post<{ conversation: Conversation; parentId: string; fromMessageId: string; copiedMessages: number }>(`/api/v1/conversations/${id}/branch`, { fromMessageId }),
+    tree: (id: string) => client.get<ConversationTree>(`/api/v1/conversations/${id}/tree`),
     delete: (id: string) => client.delete<void>(`/api/v1/conversations/${id}`),
   }
 }

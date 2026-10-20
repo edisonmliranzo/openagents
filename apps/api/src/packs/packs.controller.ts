@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -11,7 +12,9 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import {
   IsArray,
+  IsInt,
   IsObject,
+  Min,
   IsOptional,
   IsString,
   MaxLength,
@@ -20,6 +23,18 @@ import {
 import type { CreatePackInput, PackPolicyTemplate } from '@openagents/shared'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { PacksService } from './packs.service'
+import { MarketplaceService } from '../billing/marketplace.service'
+
+class SetPriceDto {
+  @IsInt()
+  @Min(0)
+  amountCents!: number
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  currency?: string
+}
 
 class PackPolicyDto implements PackPolicyTemplate {
   @IsString()
@@ -112,7 +127,10 @@ class CreatePackDto implements CreatePackInput {
 @UseGuards(JwtAuthGuard)
 @Controller('packs')
 export class PacksController {
-  constructor(private readonly packs: PacksService) {}
+  constructor(
+    private readonly packs: PacksService,
+    private readonly marketplace: MarketplaceService,
+  ) {}
 
   @Get()
   listMine(@Req() req: any) {
@@ -148,8 +166,22 @@ export class PacksController {
     return this.packs.previewInstall(req.user.id, id)
   }
 
+  @Get(':id/access')
+  access(@Req() req: any, @Param('id') id: string) {
+    return this.marketplace.access(req.user.id, 'pack', id)
+  }
+
+  /** Set an optional one-time price (cents; 0 = free). Pack owner only. */
+  @Post(':id/price')
+  async setPrice(@Req() req: any, @Param('id') id: string, @Body() dto: SetPriceDto) {
+    const pack = await this.packs.get(req.user.id, id)
+    if ((pack as any).userId !== req.user.id) throw new ForbiddenException('Only the pack owner can set a price.')
+    return this.marketplace.setPrice(req.user.id, 'pack', id, dto.amountCents, dto.currency, pack.name)
+  }
+
   @Post(':id/install')
-  install(@Req() req: any, @Param('id') id: string) {
+  async install(@Req() req: any, @Param('id') id: string) {
+    await this.marketplace.assertCanInstall(req.user.id, 'pack', id)
     return this.packs.install(req.user.id, id)
   }
 }

@@ -29,6 +29,7 @@ import { AutopilotService } from '../frontier/autopilot.service'
 import { PromptRepairService } from '../frontier/prompt-repair.service'
 import { SkillLearnerService } from '../frontier/skill-learner.service'
 import { GoalService } from '../goals/goal.service'
+import { renderLessonsBlock } from '../reflection/lessons.store'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
   LLM_MODELS,
@@ -472,6 +473,13 @@ export class AgentService implements OnModuleInit {
         if (rules.length) {
           systemPrompt = `${systemPrompt}\n\nLearned rules (from past failures in ${taskClass} tasks):\n${rules.map((r) => `- ${r}`).join('\n')}`
         }
+      }
+      // Self-improvement: lessons extracted from past runs (capped ~800 tokens).
+      try {
+        const lessonsBlock = await renderLessonsBlock(userId)
+        if (lessonsBlock) systemPrompt = `${systemPrompt}\n\n${lessonsBlock}`
+      } catch {
+        // lessons are best-effort
       }
       const freshnessNote = this.needsFreshData(userMessage)
         ? 'This request may depend on current information. Use web_search/web_fetch to verify facts that change over time before answering — do not rely on stale training data.'

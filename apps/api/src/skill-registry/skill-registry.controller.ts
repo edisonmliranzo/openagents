@@ -3,6 +3,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
   IsArray,
+  IsInt,
+  Min,
   IsObject,
   IsOptional,
   IsString,
@@ -18,6 +20,18 @@ import type {
 } from '@openagents/shared'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { SkillRegistryService } from './skill-registry.service'
+import { MarketplaceService } from '../billing/marketplace.service'
+
+class SetSkillPriceDto {
+  @IsInt()
+  @Min(0)
+  amountCents!: number
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  currency?: string
+}
 
 function parseOptionalBoolean(raw: string | undefined) {
   if (typeof raw !== 'string') return undefined
@@ -133,7 +147,10 @@ class PinSkillVersionDto implements PinSkillVersionInput {
 @UseGuards(JwtAuthGuard)
 @Controller('skill-registry')
 export class SkillRegistryController {
-  constructor(private readonly registry: SkillRegistryService) {}
+  constructor(
+    private readonly registry: SkillRegistryService,
+    private readonly marketplace: MarketplaceService,
+  ) {}
 
   @Get()
   list(@Req() req: any) {
@@ -163,18 +180,31 @@ export class SkillRegistryController {
     return this.registry.get(req.user.id, skillId)
   }
 
-  @Post('publish')
-  publish(@Req() req: any, @Body() dto: PublishSkillVersionDto) {
+  @Get(':skillId/access')
+  access(@Req() req: any, @Param('skillId') skillId: string) {
+    return this.marketplace.access(req.user.id, 'skill', skillId)
+  }
+
+  /** Set an optional one-time price (cents; 0 = free) on a skill you published. */
+  @Post(':skillId/price')
+  async setPrice(@Req() req: any, @Param('skillId') skillId: string, @Body() dto: SetSkillPriceDto) {
+    const entry = await this.registry.get(req.user.id, skillId) // throws unless caller owns it
+    return this.marketplace.setPrice(req.user.id, 'skill', skillId, dto.amountCents, dto.currency, (entry as any).title ?? skillId)
+  }
+
+  @Post('publish')  publish(@Req() req: any, @Body() dto: PublishSkillVersionDto) {
     return this.registry.publish(req.user.id, dto)
   }
 
   @Post('public/:catalogId/install')
-  installPublic(@Req() req: any, @Param('catalogId') catalogId: string, @Body() dto: InstallSkillVersionDto) {
+  async installPublic(@Req() req: any, @Param('catalogId') catalogId: string, @Body() dto: InstallSkillVersionDto) {
+    await this.marketplace.assertCanInstall(req.user.id, 'skill', catalogId)
     return this.registry.installPublic(req.user.id, catalogId, dto)
   }
 
   @Post(':skillId/install')
-  install(@Req() req: any, @Param('skillId') skillId: string, @Body() dto: InstallSkillVersionDto) {
+  async install(@Req() req: any, @Param('skillId') skillId: string, @Body() dto: InstallSkillVersionDto) {
+    await this.marketplace.assertCanInstall(req.user.id, 'skill', skillId)
     return this.registry.install(req.user.id, skillId, dto)
   }
 

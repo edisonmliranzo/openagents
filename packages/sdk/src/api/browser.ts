@@ -56,6 +56,36 @@ export interface BrowserStreamFrame {
   at: string
 }
 
+export interface BrowserWorkflowVariable {
+  name: string
+  description?: string
+  defaultValue?: string
+}
+
+export interface BrowserWorkflowVariableSuggestion extends BrowserWorkflowVariable {
+  stepIndex?: number
+}
+
+export interface BrowserWorkflow {
+  id: string
+  name: string
+  description?: string
+  steps: BrowserActionInput[]
+  variables: BrowserWorkflowVariable[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BrowserWorkflowRunResult {
+  workflowId: string
+  sessionId: string
+  status: 'completed' | 'paused_for_approval' | 'failed'
+  completedSteps: number
+  steps: Array<{ index: number; action: BrowserActionInput; result: BrowserActionResult }>
+  pendingActionId?: string
+  nextStep?: number
+}
+
 export function createBrowserApi(client: OpenAgentsClient) {
   const base = (id: string) => `/api/v1/browser/sessions/${encodeURIComponent(id)}`
   return {
@@ -72,5 +102,27 @@ export function createBrowserApi(client: OpenAgentsClient) {
     /** Path of the SSE stream (requires Authorization header; use fetch streaming, not EventSource). */
     streamPath: (id: string) => `${base(id)}/stream`,
     close: (id: string) => client.delete<void>(base(id)),
+
+    // ── Workflow recorder ──
+    startRecording: (id: string) =>
+      client.post<{ recording: true; sessionId: string; startedAt: string }>(`${base(id)}/recording/start`),
+    stopRecording: (id: string) =>
+      client.post<{ recording: false; steps: BrowserActionInput[]; suggestedVariables: BrowserWorkflowVariableSuggestion[] }>(
+        `${base(id)}/recording/stop`,
+      ),
+    recordingStatus: (id: string) =>
+      client.get<{ recording: boolean; steps: BrowserActionInput[] }>(`${base(id)}/recording`),
+    listWorkflows: () => client.get<BrowserWorkflow[]>('/api/v1/browser/workflows'),
+    getWorkflow: (wid: string) => client.get<BrowserWorkflow>(`/api/v1/browser/workflows/${encodeURIComponent(wid)}`),
+    saveWorkflow: (input: {
+      name: string
+      description?: string
+      sessionId?: string
+      steps?: BrowserActionInput[]
+      variables?: BrowserWorkflowVariableSuggestion[]
+    }) => client.post<BrowserWorkflow>('/api/v1/browser/workflows', input),
+    deleteWorkflow: (wid: string) => client.delete<{ ok: true }>(`/api/v1/browser/workflows/${encodeURIComponent(wid)}`),
+    runWorkflow: (wid: string, input: { sessionId?: string; inputs?: Record<string, string>; fromStep?: number } = {}) =>
+      client.post<BrowserWorkflowRunResult>(`/api/v1/browser/workflows/${encodeURIComponent(wid)}/run`, input),
   }
 }

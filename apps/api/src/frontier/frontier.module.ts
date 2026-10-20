@@ -13,6 +13,7 @@ import { ConsolidationService } from './consolidation.service'
 import { TimelineService } from './timeline.service'
 import { ProceduralService } from './procedural.service'
 import { DebateService } from './debate.service'
+import { MultiDebateService } from './multi-debate.service'
 import { WatchService } from './watch.service'
 import { RoundtableService } from './roundtable.service'
 import { AutodocService } from './autodoc.service'
@@ -31,6 +32,7 @@ import { SkillLearnerService } from './skill-learner.service'
     TimelineService,
     ProceduralService,
     DebateService,
+    MultiDebateService,
     WatchService,
     RoundtableService,
     AutodocService,

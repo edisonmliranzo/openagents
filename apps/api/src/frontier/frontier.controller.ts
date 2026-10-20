@@ -5,6 +5,7 @@ import { ConsolidationService } from './consolidation.service'
 import { TimelineService } from './timeline.service'
 import { ProceduralService } from './procedural.service'
 import { DebateService } from './debate.service'
+import { MultiDebateService } from './multi-debate.service'
 import { WatchService } from './watch.service'
 import { RoundtableService } from './roundtable.service'
 import { AutodocService } from './autodoc.service'
@@ -24,6 +25,7 @@ export class FrontierController {
     private readonly timeline: TimelineService,
     private readonly procedural: ProceduralService,
     private readonly debate: DebateService,
+    private readonly multiDebate: MultiDebateService,
     private readonly watch: WatchService,
     private readonly roundtable: RoundtableService,
     private readonly autodoc: AutodocService,
@@ -84,6 +86,16 @@ export class FrontierController {
     const question = String(body?.question ?? '').trim()
     if (!question) return { error: 'question required' }
     return this.debate.debate(req.user.id, question)
+  }
+
+  @Get('debate/providers')
+  debateProviders(@Req() req: any) {
+    return this.multiDebate.availableProviders(req.user.id).then((providers) => ({ providers }))
+  }
+
+  @Post('debate/multi')
+  debateMulti(@Req() req: any, @Body() body: { question: string; models?: string[] }) {
+    return this.multiDebate.run(req.user.id, String(body?.question ?? ''), Array.isArray(body?.models) ? body.models : undefined)
   }
 
   @Post('roundtable')

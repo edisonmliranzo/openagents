@@ -220,6 +220,27 @@ export class GoalService {
     return goal
   }
 
+  async replaceMilestones(userId: string, goalId: string, titles: string[]): Promise<Goal | null> {
+    const existing = await this.prisma.goal.findFirst({ where: { id: goalId, userId } })
+    if (!existing) return null
+    const now = Date.now()
+    const milestones: GoalMilestone[] = titles.map((t, i) => ({
+      id: `ms-${now}-${i}`,
+      title: t,
+      completed: false,
+    }))
+    const row = await this.prisma.goal.update({
+      where: { id: existing.id },
+      data: {
+        milestones: JSON.stringify(milestones),
+        progress: 0,
+      },
+    })
+    const goal = this.toGoal(row)
+    await this.syncGoalToMemory(userId, goal)
+    return goal
+  }
+
   async completeMilestone(userId: string, goalId: string, milestoneId: string): Promise<Goal | null> {
     const existing = await this.prisma.goal.findFirst({ where: { id: goalId, userId } })
     if (!existing) return null

@@ -7,6 +7,7 @@ import clsx from 'clsx'
 import { sdk } from '@/stores/auth'
 import { voiceEnabled, setVoiceEnabled } from '@/lib/voice'
 import { useVoiceConversation } from '@/lib/useVoiceConversation'
+import { LiveAvatar } from './LiveAvatar'
 
 export function WebRtcVoiceControls() {
   const router = useRouter()
@@ -96,7 +97,10 @@ export function WebRtcVoiceControls() {
       : 'Spoken replies muted — click to enable'
 
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex items-center gap-1">
+      {ttsEnabled && hasNeuralTtsKey && (state === 'speaking' || state === 'listening' || handsFree) && (
+        <LiveAvatar speaking={state === 'speaking'} listening={state === 'listening'} size={28} />
+      )}
       <button
         type="button"
         onClick={() => void handleToggleTts()}

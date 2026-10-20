@@ -1,4 +1,5 @@
 import type { OpenAgentsClient } from '../client'
+import type { MarketplaceAccess, MarketplacePrice } from './billing'
 import type {
   InstallSkillVersionInput,
   PinSkillVersionInput,
@@ -47,5 +48,11 @@ export function createSkillRegistryApi(client: OpenAgentsClient) {
 
     pin: (skillId: string, input: PinSkillVersionInput) =>
       client.post<SkillRegistryEntry>(`/api/v1/skill-registry/${encodeURIComponent(skillId)}/pin`, input),
+
+    access: (skillId: string) =>
+      client.get<MarketplaceAccess>(`/api/v1/skill-registry/${encodeURIComponent(skillId)}/access`),
+
+    setPrice: (skillId: string, input: { amountCents: number; currency?: string }) =>
+      client.post<MarketplacePrice | null>(`/api/v1/skill-registry/${encodeURIComponent(skillId)}/price`, input),
   }
 }

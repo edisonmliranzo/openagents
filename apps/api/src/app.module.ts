@@ -80,6 +80,13 @@ import { FrontierModule } from './frontier/frontier.module'
 import { TasksModule } from './tasks/tasks.module'
 import { AutonomyModule } from './autonomy/autonomy.module'
 import { LifeModule } from './life/life.module'
+import { BillingModule } from './billing/billing.module'
+import { EmailAutopilotModule } from './email-autopilot/email-autopilot.module'
+import { GraphModule } from './graph/graph.module'
+import { PhoneModule } from './phone/phone.module'
+import { PrivacyModule } from './privacy/privacy.module'
+import { PublicAgentsModule } from './public-agents/public-agents.module'
+import { ReplayModule } from './replay/replay.module'
 
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { GlobalAuthGuard } from './auth/guards/global-auth.guard'
@@ -174,12 +181,18 @@ import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
     TasksModule,
     AutonomyModule,
     LifeModule,
+    BillingModule,
+    EmailAutopilotModule,
+    GraphModule,
+    PhoneModule,
+    PrivacyModule,
+    PublicAgentsModule,
+    ReplayModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: CustomThrottlerGuard },
     { provide: APP_GUARD, useClass: GlobalAuthGuard },
     { provide: APP_INTERCEPTOR, useClass: UserScopeInterceptor },
   ],
-
 })
 export class AppModule {}

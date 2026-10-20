@@ -6,6 +6,7 @@ import { IsString, IsOptional } from 'class-validator'
 import { Response } from 'express'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { ConversationsService } from './conversations.service'
+import { ConversationTreeService } from './conversation-tree.service'
 import { AgentService } from '../agent/agent.service'
 import { ContextCompressorService } from '../agent/context-compressor.service'
 import { NanobotLoopService } from '../nanobot/agent/nanobot-loop.service'
@@ -42,7 +43,22 @@ export class ConversationsController {
     private wsGateway: WsGateway,
     private streamingService: StreamingService,
     private steering: SteeringService,
+    private tree: ConversationTreeService,
   ) {}
+
+  /** Time-travel: copy history up to (and including) fromMessageId into a new linked conversation. */
+  @Post(':id/branch')
+  @HttpCode(201)
+  branch(@Param('id') id: string, @Req() req: any, @Body() body: { fromMessageId?: string }) {
+    const fromMessageId = String(body?.fromMessageId ?? '').trim()
+    if (!fromMessageId) throw new BadRequestException('fromMessageId is required.')
+    return this.tree.branch(req.user.id, id, fromMessageId)
+  }
+
+  @Get(':id/tree')
+  getTree(@Param('id') id: string, @Req() req: any) {
+    return this.tree.tree(req.user.id, id)
+  }
 
   @Get()
   list(@Req() req: any) {

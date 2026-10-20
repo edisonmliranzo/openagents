@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common'
 import { BrowserAutomationService } from './browser-automation.service'
+import { WorkflowRecorderService } from './workflow-recorder.service'
 import { BrowserAutomationController } from './browser-automation.controller'
 
 @Module({
-  providers: [BrowserAutomationService],
+  providers: [BrowserAutomationService, WorkflowRecorderService],
   controllers: [BrowserAutomationController],
   exports: [BrowserAutomationService],
 })

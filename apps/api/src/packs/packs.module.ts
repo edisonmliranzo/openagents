@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { AgentPresetsModule } from '../agent-presets/agent-presets.module'
 import { ArtifactsModule } from '../artifacts/artifacts.module'
+import { BillingModule } from '../billing/billing.module'
 import { NanobotModule } from '../nanobot/nanobot.module'
 import { PrismaModule } from '../prisma/prisma.module'
 import { ToolsModule } from '../tools/tools.module'
@@ -18,6 +19,7 @@ import { PacksService } from './packs.service'
     WorkspacesModule,
     AgentPresetsModule,
     ArtifactsModule,
+    BillingModule,
   ],
   controllers: [PacksController],
   providers: [PacksService],

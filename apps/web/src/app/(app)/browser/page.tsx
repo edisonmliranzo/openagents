@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
+import { WorkflowPanel } from './WorkflowPanel'
 
 type ActionType = 'navigate' | 'click' | 'type' | 'scroll' | 'extract' | 'press'
 interface ActionInput { type: ActionType; selector?: string; value?: string; url?: string }
@@ -240,6 +241,8 @@ export default function BrowserPage() {
               <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-slate-100 p-2 text-xs dark:bg-slate-900">{extracted}</pre>
             )}
           </section>
+
+          <WorkflowPanel sessionId={sessionId} onSession={(id) => { setSessionId(id); void loadSessions() }} />
 
           <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200 dark:border-slate-800">
             <h2 className="border-b border-slate-200 px-3 py-2 text-sm font-medium dark:border-slate-800">Action log</h2>

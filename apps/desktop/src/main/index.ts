@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, NativeImage, Notification, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, Menu, nativeImage, NativeImage, Notification, shell, Tray } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 
@@ -408,6 +408,28 @@ function registerGlobalShortcuts() {
     } else {
       mainWindow.show()
       mainWindow.focus()
+    }
+  })
+
+  // Quick-Ask Always-On-Top Companion + Screen Capture (Ctrl+Alt+Space)
+  globalShortcut.register('CommandOrControl+Alt+Space', async () => {
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 1280, height: 720 },
+      })
+      if (sources[0]?.thumbnail && !sources[0].thumbnail.isEmpty()) {
+        clipboard.writeImage(sources[0].thumbnail)
+      }
+    } catch {}
+    if (!mainWindow) createWindow()
+    if (mainWindow) {
+      mainWindow.setAlwaysOnTop(true, 'floating')
+      mainWindow.show()
+      mainWindow.focus()
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false)
+      }, 4000)
     }
   })
 }

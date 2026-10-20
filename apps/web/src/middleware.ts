@@ -23,6 +23,18 @@ const PROTECTED_PREFIXES = [
   '/artifacts',
   '/library',
   '/workspaces',
+  '/lessons',
+  '/debate',
+  '/goals',
+  '/graph',
+  '/privacy',
+  '/replay',
+  '/inbox',
+  '/moments',
+  '/share',
+  '/billing',
+  '/phone',
+  '/compare',
 ]
 
 function withSecurityHeaders(res: NextResponse): NextResponse {

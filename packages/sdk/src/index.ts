@@ -174,6 +174,15 @@ export function createSDK(config: SDKConfig) {
     warRooms: createWarRoomsApi(client),
     delegation: createDelegationApi(client),
     scheduler: createSchedulerApi(client),
+    billing: createBillingApi(client),
+    marketplace: createMarketplaceApi(client),
+    emailAutopilot: createEmailAutopilotApi(client),
+    graph: createGraphApi(client),
+    moments: createMomentsApi(client),
+    phone: createPhoneApi(client),
+    privacy: createPrivacyApi(client),
+    publicAgents: createPublicAgentsApi(client),
+    replay: createReplayApi(client),
   }
 }
 
@@ -191,3 +200,20 @@ import { createOrchestrationApi } from './api/orchestration'
 import { createWarRoomsApi } from './api/war-rooms'
 import { createDelegationApi } from './api/delegation'
 import { createSchedulerApi } from './api/scheduler'
+
+export { createBillingApi, createMarketplaceApi } from './api/billing'
+export { createEmailAutopilotApi } from './api/email-autopilot'
+export { createGraphApi } from './api/graph'
+export { createMomentsApi } from './api/moments'
+export { createPhoneApi } from './api/phone'
+export { createPrivacyApi } from './api/privacy'
+export { createPublicAgentsApi } from './api/public-agents'
+export { createReplayApi } from './api/replay'
+import { createBillingApi, createMarketplaceApi } from './api/billing'
+import { createEmailAutopilotApi } from './api/email-autopilot'
+import { createGraphApi } from './api/graph'
+import { createMomentsApi } from './api/moments'
+import { createPhoneApi } from './api/phone'
+import { createPrivacyApi } from './api/privacy'
+import { createPublicAgentsApi } from './api/public-agents'
+import { createReplayApi } from './api/replay'

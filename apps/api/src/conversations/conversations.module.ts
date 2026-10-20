@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { ConversationsController } from './conversations.controller'
 import { ConversationsService } from './conversations.service'
+import { ConversationTreeService } from './conversation-tree.service'
 import { AgentModule } from '../agent/agent.module'
 import { AuthModule } from '../auth/auth.module'
 import { NanobotModule } from '../nanobot/nanobot.module'
@@ -11,7 +12,7 @@ import { StreamingModule } from '../streaming/streaming.module'
 @Module({
   imports: [AgentModule, AuthModule, NanobotModule, ApprovalsModule, EventsModule, StreamingModule],
   controllers: [ConversationsController],
-  providers: [ConversationsService],
+  providers: [ConversationsService, ConversationTreeService],
   exports: [ConversationsService],
 })
 export class ConversationsModule {}

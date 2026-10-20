@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Req, Res, UseGuards } from 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { BrowserAutomationService } from './browser-automation.service'
+import { WorkflowRecorderService } from './workflow-recorder.service'
 
 const FRAME_INTERVAL_MS = 500 // ~2 fps while active
 const IDLE_INTERVAL_MS = 2000
@@ -11,7 +12,56 @@ const IDLE_INTERVAL_MS = 2000
 @UseGuards(JwtAuthGuard)
 @Controller('browser')
 export class BrowserAutomationController {
-  constructor(private readonly service: BrowserAutomationService) {}
+  constructor(
+    private readonly service: BrowserAutomationService,
+    private readonly recorder: WorkflowRecorderService,
+  ) {}
+
+  // -- Workflow recorder ------------------------------------------------------
+
+  @Post('sessions/:id/recording/start')
+  startRecording(@Req() req: any, @Param('id') id: string) {
+    this.service.assertOwner(id, req.user?.id)
+    return this.recorder.startRecording(id, req.user.id)
+  }
+
+  @Post('sessions/:id/recording/stop')
+  stopRecording(@Req() req: any, @Param('id') id: string) {
+    this.service.assertOwner(id, req.user?.id)
+    return this.recorder.stopRecording(id, req.user.id)
+  }
+
+  @Get('sessions/:id/recording')
+  recordingStatus(@Req() req: any, @Param('id') id: string) {
+    this.service.assertOwner(id, req.user?.id)
+    return this.recorder.recordingStatus(id)
+  }
+
+  @Get('workflows')
+  listWorkflows(@Req() req: any) {
+    return this.recorder.list(req.user.id)
+  }
+
+  @Post('workflows')
+  saveWorkflow(@Req() req: any, @Body() body: any) {
+    if (body?.sessionId) this.service.assertOwner(body.sessionId, req.user?.id)
+    return this.recorder.save(req.user.id, body)
+  }
+
+  @Get('workflows/:wid')
+  getWorkflow(@Req() req: any, @Param('wid') wid: string) {
+    return this.recorder.get(req.user.id, wid)
+  }
+
+  @Delete('workflows/:wid')
+  deleteWorkflow(@Req() req: any, @Param('wid') wid: string) {
+    return this.recorder.remove(req.user.id, wid)
+  }
+
+  @Post('workflows/:wid/run')
+  runWorkflow(@Req() req: any, @Param('wid') wid: string, @Body() body: any) {
+    return this.recorder.run(req.user.id, wid, body ?? {})
+  }
 
   @Get('sessions')
   list(@Req() req: any) {
@@ -26,7 +76,10 @@ export class BrowserAutomationController {
   @Post('sessions/:id/action')
   execute(@Req() req: any, @Param('id') id: string, @Body() body: any) {
     this.service.assertOwner(id, req.user?.id)
-    return this.service.executeAction(id, body)
+    return this.service.executeAction(id, body).then((result) => {
+      if (result.status === 'ok') this.recorder.record(id, body)
+      return result
+    })
   }
 
   @Get('sessions/:id/pending')
@@ -44,7 +97,11 @@ export class BrowserAutomationController {
   @Post('sessions/:id/actions/:pendingId/approve')
   approve(@Req() req: any, @Param('id') id: string, @Param('pendingId') pendingId: string) {
     this.service.assertOwner(id, req.user?.id)
-    return this.service.resolvePending(id, pendingId, 'approve')
+    const pendingAction = this.service.listPending(id).find((p) => p.id === pendingId)?.action
+    return this.service.resolvePending(id, pendingId, 'approve').then((result) => {
+      if (pendingAction && result.status === 'ok') this.recorder.record(id, pendingAction)
+      return result
+    })
   }
 
   @Post('sessions/:id/actions/:pendingId/deny')

@@ -56,6 +56,22 @@ export interface DebateResult {
   models: { a: string; b: string; judge: string }
 }
 
+export interface DebateSeat {
+  seat: string
+  provider: string
+  model?: string
+}
+
+export interface MultiDebateResult {
+  question: string
+  seats: DebateSeat[]
+  answers: Array<{ seat: string; text: string; error?: string }>
+  critiques: Array<{ seat: string; text: string; error?: string }>
+  verdict: { winner: string; confidence: number; synthesis: string; rationale: string }
+  judge: DebateSeat
+  durationMs: number
+}
+
 export interface RoundtableResult {
   minutes: string
   artifactId: string | null
@@ -91,6 +107,9 @@ export function createFrontierApi(client: OpenAgentsClient) {
       )}`),
     mine: () => client.post<{ found: number; created: string[] }>('/api/v1/frontier/procedural/mine'),
     debate: (question: string) => client.post<DebateResult>('/api/v1/frontier/debate', { question }),
+    debateProviders: () => client.get<{ providers: string[] }>('/api/v1/frontier/debate/providers'),
+    multiDebate: (question: string, models?: string[]) =>
+      client.post<MultiDebateResult>('/api/v1/frontier/debate/multi', { question, ...(models ? { models } : {}) }),
     roundtable: (topic: string) => client.post<RoundtableResult>('/api/v1/frontier/roundtable', { topic }),
     autodoc: (input: { task: string; steps: string[]; result: string; source?: string }) =>
       client.post<{ title: string } | null>('/api/v1/frontier/autodoc', input),

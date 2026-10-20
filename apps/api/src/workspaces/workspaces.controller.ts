@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -31,6 +32,7 @@ import type {
 } from '@openagents/shared'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { WorkspacesService } from './workspaces.service'
+import { WorkspaceCollabService } from './workspace-collab.service'
 
 class WorkspaceSettingsDto {
   @IsOptional()
@@ -133,7 +135,10 @@ class CreateWorkspaceMemoryEntryDto implements CreateWorkspaceMemoryEntryInput {
 @UseGuards(JwtAuthGuard)
 @Controller('workspaces')
 export class WorkspacesController {
-  constructor(private readonly workspaces: WorkspacesService) {}
+  constructor(
+    private readonly workspaces: WorkspacesService,
+    private readonly collab: WorkspaceCollabService,
+  ) {}
 
   @Get()
   list(@Req() req: any) {
@@ -193,5 +198,69 @@ export class WorkspacesController {
   @Post(':id/share/artifact/:artifactId')
   shareArtifact(@Req() req: any, @Param('id') id: string, @Param('artifactId') artifactId: string) {
     return this.workspaces.shareArtifact(req.user.id, id, artifactId)
+  }
+
+  @Get(':id/role')
+  myRole(@Req() req: any, @Param('id') id: string) {
+    return this.collab.myRole(req.user.id, id)
+  }
+
+  @Patch(':id/members/:memberUserId/role')
+  updateMemberRole(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('memberUserId') memberUserId: string,
+    @Body() body: { role?: string },
+  ) {
+    return this.collab.updateMemberRole(req.user.id, id, memberUserId, body?.role)
+  }
+
+  @Delete(':id/members/:memberUserId')
+  removeMember(@Req() req: any, @Param('id') id: string, @Param('memberUserId') memberUserId: string) {
+    return this.collab.removeMember(req.user.id, id, memberUserId)
+  }
+
+  @Delete(':id/invitations/:invitationId')
+  revokeInvitation(@Req() req: any, @Param('id') id: string, @Param('invitationId') invitationId: string) {
+    return this.collab.revokeInvitation(req.user.id, id, invitationId)
+  }
+
+  @Delete(':id/memory/:entryId')
+  deleteMemory(@Req() req: any, @Param('id') id: string, @Param('entryId') entryId: string) {
+    return this.collab.deleteMemoryEntry(req.user.id, id, entryId)
+  }
+
+  @Get(':id/threads')
+  listThreads(@Req() req: any, @Param('id') id: string) {
+    return this.collab.listThreads(req.user.id, id)
+  }
+
+  @Get(':id/threads/:threadId')
+  getThread(@Req() req: any, @Param('id') id: string, @Param('threadId') threadId: string) {
+    return this.collab.getThread(req.user.id, id, threadId)
+  }
+
+  @Post(':id/threads')
+  createThread(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { title?: string; message?: string },
+  ) {
+    return this.collab.createThread(req.user.id, id, body ?? {})
+  }
+
+  @Delete(':id/threads/:threadId')
+  deleteThread(@Req() req: any, @Param('id') id: string, @Param('threadId') threadId: string) {
+    return this.collab.deleteThread(req.user.id, id, threadId)
+  }
+
+  @Post(':id/threads/:threadId/messages')
+  postThreadMessage(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('threadId') threadId: string,
+    @Body() body: { content?: string },
+  ) {
+    return this.collab.postMessage(req.user.id, id, threadId, body ?? {})
   }
 }

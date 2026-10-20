@@ -3,14 +3,16 @@ import { AgentModule } from '../agent/agent.module'
 import { MemoryModule } from '../memory/memory.module'
 import { NotificationsModule } from '../notifications/notifications.module'
 import { PrismaModule } from '../prisma/prisma.module'
+import { UsersModule } from '../users/users.module'
 import { TelegramModule } from '../channels/telegram/telegram.module'
 import { ReflectionService } from './reflection.service'
+import { LessonsService } from './lessons.service'
 import { ReflectionController } from './reflection.controller'
 
 @Module({
-  imports: [PrismaModule, MemoryModule, AgentModule, NotificationsModule, TelegramModule],
-  providers: [ReflectionService],
+  imports: [PrismaModule, MemoryModule, AgentModule, NotificationsModule, TelegramModule, UsersModule],
+  providers: [ReflectionService, LessonsService],
   controllers: [ReflectionController],
-  exports: [ReflectionService],
+  exports: [ReflectionService, LessonsService],
 })
 export class ReflectionModule {}
