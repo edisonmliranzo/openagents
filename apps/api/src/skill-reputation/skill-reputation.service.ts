@@ -1,3 +1,4 @@
+import { DocumentStore } from '../prisma/document-store.service'
 import { Injectable, Logger } from '@nestjs/common'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
@@ -26,7 +27,7 @@ export class SkillReputationService {
   private readonly loadedUsers = new Set<string>()
   private readonly eventsByUser = new Map<string, SkillReputationEvent[]>()
 
-  constructor(private skills: NanobotSkillsRegistry) {}
+  constructor(private skills: NanobotSkillsRegistry, private readonly documents: DocumentStore) {}
 
   async record(input: RecordSkillReputationInput & { userId: string }) {
     await this.ensureLoaded(input.userId)
@@ -147,7 +148,7 @@ export class SkillReputationService {
 
   private async ensureLoaded(userId: string) {
     if (this.loadedUsers.has(userId)) return
-    const store = await this.readStore(this.storeFilePath(userId))
+    const store = await this.readStore(userId)
     const events = (store.events ?? [])
       .filter((event) => event.userId === userId)
       .map((event) => this.sanitizeStoredEvent(event, userId))
@@ -190,19 +191,16 @@ export class SkillReputationService {
   }
 
   private async persist(userId: string) {
-    const filePath = this.storeFilePath(userId)
     const payload: SkillReputationStoreFile = {
       version: STORE_VERSION,
       events: this.eventsByUser.get(userId) ?? [],
     }
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
-    await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    await this.documents.write(userId, 'skill_reputation', payload)
   }
 
-  private async readStore(filePath: string): Promise<SkillReputationStoreFile> {
+  private async readStore(userId: string): Promise<SkillReputationStoreFile> {
     try {
-      const raw = await fs.readFile(filePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<SkillReputationStoreFile>
+      const parsed = await this.documents.read<Partial<SkillReputationStoreFile>>(userId, 'skill_reputation', () => ({}))
       return {
         version: Number.isFinite(parsed.version) ? Number(parsed.version) : STORE_VERSION,
         events: Array.isArray(parsed.events) ? parsed.events : [],

@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import type { Request, Response, NextFunction } from 'express'
 import { networkInterfaces } from 'node:os'
 import { AppModule } from './app.module'
+import { NormalizeNaNPipe } from './common/normalize-nan.pipe'
 
 function toOrigin(value: string) {
   const normalized = value.trim()
@@ -51,7 +52,10 @@ function sanitizeObjectInPlace(value: unknown, depth = 0): void {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule)
+  // rawBody is required so providers can verify webhook signatures over the exact
+  // bytes we received (Stripe, Slack, Discord). Without it req.rawBody is undefined
+  // and every signature check rejects the request.
+  const app = await NestFactory.create(AppModule, { rawBody: true })
   const httpApp = app.getHttpAdapter().getInstance() as {
     set?: (key: string, value: unknown) => void
     disable?: (key: string) => void
@@ -63,7 +67,11 @@ async function bootstrap() {
     httpApp.disable('x-powered-by')
   }
 
-  app.setGlobalPrefix('api/v1')
+  // The OpenAI-compatible API lives at /v1/chat/completions (outside the
+  // /api/v1 prefix) so stock OpenAI clients can point at Muse unchanged.
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['v1/models', 'v1/chat/completions'],
+  })
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -71,6 +79,9 @@ async function bootstrap() {
       transform: true,
       forbidNonWhitelisted: true,
     }),
+    // Must run after the ValidationPipe: it turns the NaN that Nest produces
+    // for absent numeric query params back into undefined.
+    new NormalizeNaNPipe(),
   )
 
   const isProduction = (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production'

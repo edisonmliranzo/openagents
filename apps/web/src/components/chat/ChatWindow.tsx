@@ -30,6 +30,7 @@ import {
 import { PinnedContext, buildPinnedContextBlock, type PinnedItem } from './PinnedContext'
 import { BrowserActivityCard } from './BrowserActivityCard'
 import { SuggestionChips } from './SuggestionChips'
+import { TemplateLauncher } from './TemplateLauncher'
 import { PlanChecklist } from './PlanChecklist'
 import { ResponsePresets } from './ResponsePresets'
 import { WebRtcVoiceControls } from './WebRtcVoiceControls'
@@ -1832,6 +1833,23 @@ export function ChatWindow({
           <BrowserActivityCard />
 
           <PinnedContext items={pinnedItems} onRemove={handleRemovePin} onAdd={handleAddPin} />
+
+          {!isStreaming && (
+            <div className="px-4 pb-1 sm:px-7">
+              <TemplateLauncher
+                onPick={(template, starter) => {
+                  if (starter) setInput(starter)
+                  if (template.systemPrompt) {
+                    window.dispatchEvent(
+                      new CustomEvent('openagents:apply-system-prompt', {
+                        detail: { prompt: template.systemPrompt },
+                      }),
+                    )
+                  }
+                }}
+              />
+            </div>
+          )}
 
           <div className="border-t border-slate-200/70 bg-white/70 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141824]/70 sm:px-6">
             {slashQuery !== null && (

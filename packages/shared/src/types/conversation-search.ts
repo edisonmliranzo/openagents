@@ -136,3 +136,29 @@ export interface SearchEvent {
   timestamp: Date;
   data?: Record<string, unknown>;
 }
+
+/**
+ * A single conversation-search hit. `snippetParts` marks the matched terms so
+ * the UI can highlight them without ever rendering raw HTML.
+ */
+export interface ConversationSearchSnippetPart {
+  text: string;
+  match: boolean;
+}
+
+export interface ConversationSearchHit {
+  messageId: string;
+  conversationId: string;
+  conversationTitle: string | null;
+  role: string;
+  content: string;
+  snippet: string;
+  snippetParts: ConversationSearchSnippetPart[];
+  matchScore: number;
+  createdAt: string;
+}
+
+export interface ConversationSearchResponse {
+  results: ConversationSearchHit[];
+  total: number;
+}

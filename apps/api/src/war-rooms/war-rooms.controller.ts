@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, NotFoundException } from '@nestjs/common'
+import { Controller, Post, Get, Body, Param, Delete, NotFoundException } from '@nestjs/common'
 import { WarRoomService } from './war-rooms.service'
 
 import { CurrentUserId } from '../auth/current-user-id.decorator'
@@ -13,23 +13,47 @@ export class WarRoomsController {
 
   @Get(':id')
   async get(@CurrentUserId() userId: string, @Param('id') id: string) {
-    const room = await this.service.getRoom(id)
-    if (!room || room.userId !== userId) throw new NotFoundException('War room not found')
+    const room = await this.service.getRoom(userId, id)
+    if (!room) throw new NotFoundException('War room not found')
     return room
   }
 
   @Post()
-  create(@CurrentUserId() userId: string, @Body() body: { name: string, agents: string[] }) {
-    return this.service.createRoom(userId, body.name, body.agents)
+  create(
+    @CurrentUserId() userId: string,
+    @Body() body: { name: string; agents?: string[]; topic?: string },
+  ) {
+    return this.service.createRoom(userId, body.name, body.agents ?? [], body.topic)
+  }
+
+  /** Runs a real multi-model debate in the room and scores the consensus. */
+  @Post(':id/run')
+  run(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Body() body: { question?: string; models?: string[] },
+  ) {
+    return this.service.runDebate(userId, id, body.question ?? '', body.models)
   }
 
   @Post(':id/messages')
-  message(@Param('id') id: string, @Body() body: { agentName: string, content: string }) {
-    return this.service.broadcastMessage(id, body.agentName, body.content)
+  message(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Body() body: { agentName: string; content: string; role?: 'agent' | 'user' | 'system' },
+  ) {
+    return this.service.broadcastMessage(userId, id, body.agentName, body.content, body.role)
   }
 
   @Post(':id/conclude')
-  conclude(@Param('id') id: string) {
-    return this.service.concludeRoom(id)
+  conclude(@CurrentUserId() userId: string, @Param('id') id: string) {
+    return this.service.concludeRoom(userId, id)
+  }
+
+  @Delete(':id')
+  async remove(@CurrentUserId() userId: string, @Param('id') id: string) {
+    const ok = await this.service.deleteRoom(userId, id)
+    if (!ok) throw new NotFoundException('War room not found')
+    return { ok: true }
   }
 }

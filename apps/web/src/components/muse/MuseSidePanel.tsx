@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useChatStore } from '@/stores/chat'
+import { ConversationSearchPanel } from './ConversationSearchPanel'
 
 interface MuseSidePanelProps {
   onNavigate?: (href: string) => void
@@ -45,7 +46,6 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const selectConversation = useChatStore((s) => s.selectConversation)
   const createConversation = useChatStore((s) => s.createConversation)
-  const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [creating, setCreating] = useState(false)
 
@@ -65,10 +65,8 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
       const bt = new Date(b.lastMessageAt ?? b.createdAt).getTime()
       return bt - at
     })
-    const q = query.trim().toLowerCase()
-    if (!q) return list
-    return list.filter((c) => (c.title ?? '').toLowerCase().includes(q))
-  }, [conversations, query])
+    return list
+  }, [conversations])
 
   const mainChat = rows[0] ?? null
   const sideChats = rows.slice(1)
@@ -154,23 +152,17 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
       </div>
 
       {/* Search (expandable) */}
-      {searchOpen && (
-        <div className="px-3 py-1.5">
-          <div className="oa-search flex items-center gap-2 px-3 py-1.5">
-            <Search size={13} className="shrink-0 text-slate-400" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search sessions..."
-              className="w-full bg-transparent text-[12px] text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
-            />
-          </div>
+      {searchOpen ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ConversationSearchPanel
+            onClose={() => setSearchOpen(false)}
+            onOpenConversation={() => setSearchOpen(false)}
+          />
         </div>
-      )}
-
-      {/* Primary Session */}
-      <div className="mt-1 px-3">
+      ) : (
+        <>
+          {/* Primary Session */}
+          <div className="mt-1 px-3">
         <p className="px-2 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
           Active Stream
         </p>
@@ -229,6 +221,8 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
           )}
         </div>
       </div>
+        </>
+      )}
 
       {/* Bottom floating pill: settings · search · compose */}
       <div className="px-3 pb-3 pt-2 border-t border-slate-200/50 dark:border-slate-800/70">

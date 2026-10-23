@@ -65,6 +65,19 @@ model User {
   packs            Pack[]
   packInstalls     PackInstall[]
   passwordResetTokens PasswordResetToken[]
+  warRooms         WarRoom[]
+  pinnedMessages   PinnedMessage[]
+  messageReactions MessageReaction[]
+  generativeComponents GenerativeComponent[]
+  abTests           AbTest[]
+  conversationTemplates ConversationTemplate[]
+  customTools       CustomTool[]
+  userDocuments    UserDocument[]
+  pushSubscriptions PushSubscription[]
+  expoPushTokens   ExpoPushToken[]
+  privacyVault     PrivacyVault?
+  vaultSecrets    VaultSecret[]
+  mcpServers      McpServerConfig[]
   anomalies        Anomaly[]
   anomalyAlerts    AnomalyAlert[]
   anomalyConfigs   AnomalyConfig[]
@@ -310,6 +323,7 @@ model Message {
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   approval     Approval?
+  pins         PinnedMessage[]
 }
 
 model AgentRun {
@@ -613,6 +627,8 @@ model UserSettings {
   preferredProvider  String   @default("anthropic")
   preferredModel     String   @default("claude-sonnet-4-6")
   customSystemPrompt String?
+  // Per-role model choices: { chat, artifact, scheduled, subagent, background }.
+  modelRoles         Json?
   lastActiveConversationId String?
   beginnerMode       Boolean  @default(true)
   onboardingCompletedAt DateTime?
@@ -721,6 +737,370 @@ model CronRun {
   createdAt DateTime @default(now())
 
   job CronJob @relation(fields: [cronJobId], references: [id], onDelete: Cascade)
+}
+
+// ========== War Rooms (multi-agent consensus) ==========
+model WarRoom {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  topic     String?
+  status    String   @default("active") // active | concluded | failed
+  agents    Json     @default("[]")
+  consensus Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages WarRoomMessage[]
+
+  @@index([userId, createdAt])
+}
+
+model WarRoomMessage {
+  id        String   @id @default(cuid())
+  warRoomId String
+  role      String   @default("agent") // agent | user | system
+  agentName String?
+  content   String
+  meta      String?  // JSON string
+  createdAt DateTime @default(now())
+
+  room WarRoom @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
+
+  @@index([warRoomId, createdAt])
+}
+
+// ========== Pins & Reactions ==========
+
+model PinnedMessage {
+  id             String   @id @default(cuid())
+  userId         String
+  messageId      String
+  conversationId String
+  note           String?
+  createdAt      DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+  @@index([userId, createdAt])
+}
+
+model MessageReaction {
+  id             String   @id @default(cuid())
+  userId         String
+  messageId      String
+  conversationId String
+  emoji          String
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId, emoji])
+  @@index([messageId])
+}
+
+// ========== Generative UI ==========
+model GenerativeComponent {
+  id             String   @id @default(cuid())
+  userId         String
+  conversationId String?
+  name           String
+  code           String
+  language       String   @default("react") // react | html
+  props          Json     @default("{}")
+  state          String   @default("ready") // generating | ready | error
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([conversationId, createdAt])
+}
+
+// ========== A/B tests, templates, custom tools ==========
+
+model AbTest {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  variants    Json     @default("[]")
+  results     Json     @default("{}")
+  status      String   @default("running") // running | paused | completed
+  winnerVariantId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model ConversationTemplate {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  description     String
+  category        String
+  systemPrompt    String?
+  starterMessages Json     @default("[]")
+  tools           Json     @default("[]")
+  personality     String?
+  tags            Json     @default("[]")
+  isPublic        Boolean  @default(false)
+  useCount        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model CustomTool {
+  id                 String   @id @default(cuid())
+  userId             String
+  name               String
+  description        String
+  parameters         Json     @default("[]")
+  implementation     Json
+  requiresApproval   Boolean  @default(true)
+  isPublic           Boolean  @default(false)
+  version            Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId, updatedAt])
+}
+
+// ========== Billing & marketplace ==========
+
+model UserBilling {
+  userId               String   @id
+  plan                 String   @default("free")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  subscriptionStatus   String?
+  currentPeriodEnd     String?
+  // dateKey (YYYY-MM-DD UTC) -> metric -> count
+  usage                Json     @default("{}")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([stripeCustomerId])
+}
+
+// Stripe customer id -> user id, so a webhook can find the account.
+model BillingCustomer {
+  customerId String   @id
+  userId     String
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model MarketplacePrice {
+  id          String   @id @default(cuid())
+  kind        String   // skill | pack
+  itemId      String
+  sellerId    String
+  amountCents Int      @default(0)
+  currency    String   @default("usd")
+  title       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([kind, itemId])
+  @@index([sellerId])
+}
+
+model MarketplacePurchase {
+  id              String   @id @default(cuid())
+  kind            String   // skill | pack
+  itemId          String
+  buyerId         String
+  sellerId        String
+  amountCents     Int
+  currency        String   @default("usd")
+  stripeSessionId String?
+  createdAt       DateTime @default(now())
+
+  earnings MarketplaceEarning?
+
+  @@index([buyerId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([stripeSessionId])
+}
+
+model MarketplaceEarning {
+  id               String   @id @default(cuid())
+  purchaseId       String   @unique
+  sellerId         String
+  kind             String
+  itemId           String
+  grossCents       Int
+  platformFeeCents Int
+  netCents         Int
+  currency         String   @default("usd")
+  status           String   @default("pending_payout")
+  createdAt        DateTime @default(now())
+
+  purchase MarketplacePurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, createdAt])
+}
+
+// ========== MCP servers owned by a user ==========
+// Users can connect their own MCP servers (stdio or HTTP). Secret values (env
+// vars, auth headers) are encrypted; only the field names are returned.
+
+model McpServerConfig {
+  id          String   @id @default(cuid())
+  userId      String
+  // Display name, e.g. "My Notion MCP".
+  name        String
+  // stdio | http
+  transport   String   @default("stdio")
+  enabled     Boolean  @default(true)
+
+  // stdio transport
+  command     String?
+  args        Json     @default("[]")
+  cwd         String?
+  // Non-secret env vars, plus encrypted values keyed by var name.
+  env         Json     @default("{}")
+  secretEnv   Json     @default("{}")
+
+  // http transport
+  url         String?
+  headers     Json     @default("{}")
+  secretHeaders Json   @default("{}")
+
+  // How many tools were discovered on the last successful connect.
+  toolCount   Int      @default(0)
+  lastStatus  String   @default("idle")
+  lastError   String?
+  lastUsedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
+}
+
+// ========== Secure Vault ==========// Credentials the agent can *use* but never *read*. The value is encrypted at
+// rest and is only ever handed to a connector/tool that needs it.
+
+model VaultSecret {
+  id     String @id @default(cuid())
+  userId String
+  // Short label, e.g. "meta-ads-token".
+  name   String
+  // Which connector or tool may use it.
+  scope  String @default("generic")
+  // Encrypted value — never returned to the model.
+  value    String
+  iv       String
+  authTag  String
+  // Non-secret metadata the agent may see (e.g. which account it belongs to).
+  hint       String?
+  // When the secret was last used.
+  lastUsedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scope, name])
+  @@index([userId, scope])
+}
+
+// ========== Push subscriptions & privacy vault ==========
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
+}
+
+model ExpoPushToken {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String
+  platform   String?
+  deviceName String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, token])
+  @@index([userId])
+}
+
+model PrivacyVault {
+  userId             String   @id
+  localOnly          Boolean  @default(false)
+  localModel         String?
+  sensitiveMemoryIds Json     @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ========== Generic user documents ==========
+// Backs the features that used to keep their state in a JSON file on disk
+// (graph, briefing, moments, email autopilot, goal plans, cost router,
+// lessons, research jobs, recorded workflows, phone calls, conversation trees).
+// One row per (user, kind, key).
+
+model UserDocument {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String
+  key       String   @default("")
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind, key])
+  @@index([kind])
+  @@index([userId, kind])
+}
+
+// Global (not user-owned) key/value documents: the public-agent slug index,
+// the phone call index, and anything else that maps an id to an owner.
+
+model GlobalDocument {
+  id        String   @id @default(cuid())
+  kind      String
+  key       String   @default("")
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([kind, key])
+  @@index([kind])
 }
 
 model LlmApiKey {

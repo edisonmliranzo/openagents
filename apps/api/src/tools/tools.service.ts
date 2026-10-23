@@ -42,6 +42,8 @@ import { LibrarySearchTool } from './connectors/library-search.tool'
 import { LibrarySaveTool } from './connectors/library-save.tool'
 import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
 import { SkillSaveTool } from './connectors/skill-save.tool'
+import { UiComponentTool } from './connectors/ui-component.tool'
+import { CliAgentTool } from './connectors/cli-agent.tool'
 import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
 import { ConnectorsService } from '../connectors/connectors.service'
 import { McpService } from './mcp.service'
@@ -63,6 +65,10 @@ export interface ToolDefinition {
 @Injectable()
 export class ToolsService {
   private registry: Map<string, { def: ToolDefinition; execute: (input: any, userId: string) => Promise<ToolResult> }>
+  /** Names of tools registered at runtime (tool builder) so they can be removed safely. */
+  private dynamicToolNames = new Set<string>()
+  /** Owner + visibility of every runtime-registered tool. */
+  private dynamicToolOwners = new Map<string, { ownerId: string; isPublic: boolean }>()
 
   constructor(
     private prisma: PrismaService,
@@ -110,6 +116,8 @@ export class ToolsService {
     private librarySave: LibrarySaveTool,
     private mixtureOfAgents: MixtureOfAgentsTool,
     private skillSave: SkillSaveTool,
+    private uiComponent: UiComponentTool,
+    private cliAgent: CliAgentTool,
     private mcp: McpService,
     ) {
     this.registry = new Map([
@@ -221,7 +229,42 @@ export class ToolsService {
       ['mixture_of_agents', { def: this.withBuiltinSource(this.mixtureOfAgents.def), execute: this.mixtureOfAgents.run.bind(this.mixtureOfAgents) }],
       // Skill save
       ['skill_save', { def: this.withBuiltinSource(this.skillSave.def), execute: this.skillSave.run.bind(this.skillSave) }],
+      // Generative UI
+      ['ui_component', { def: this.withBuiltinSource(this.uiComponent.def), execute: this.uiComponent.execute.bind(this.uiComponent) }],
+      // External CLI agent fleet (Orca pattern)
+      ['run_cli_agent', { def: this.withBuiltinSource(this.cliAgent.def), execute: this.cliAgent.execute.bind(this.cliAgent) }],
     ])
+  }
+
+  /**
+   * Registers a tool built at runtime (e.g. by the tool builder) so the agent
+   * can call it like any built-in tool. The owner is tracked so the tool is
+   * only offered to — and only runnable by — that user.
+   */
+  registerDynamicTool(
+    name: string,
+    def: ToolDefinition,
+    execute: (input: any, userId: string) => Promise<ToolResult>,
+    ownerId: string,
+    isPublic = false,
+  ) {
+    this.registry.set(name, { def, execute })
+    this.dynamicToolNames.add(name)
+    this.dynamicToolOwners.set(name, { ownerId, isPublic })
+  }
+
+  /** Removes a runtime-registered tool. Built-in tools are never removed. */
+  unregisterDynamicTool(name: string) {
+    if (!this.dynamicToolNames.has(name)) return
+    this.registry.delete(name)
+    this.dynamicToolNames.delete(name)
+    this.dynamicToolOwners.delete(name)
+  }
+
+  private isDynamicToolVisible(name: string, userId: string) {
+    const owner = this.dynamicToolOwners.get(name)
+    if (!owner) return true
+    return owner.ownerId === userId || owner.isPublic
   }
 
   async getAvailableForUser(userId: string): Promise<ToolDefinition[]> {
@@ -238,6 +281,11 @@ export class ToolsService {
     const filteredBuiltinTools: ToolDefinition[] = []
     for (const [name, entry] of this.registry.entries()) {
       const toolDef = entry.def
+
+      // Runtime-registered tools (tool builder) belong to one user.
+      if (!this.isDynamicToolVisible(name, userId)) {
+        continue
+      }
 
       // Exclude env-var based tools if their keys are missing
       if (name.startsWith('notion_') && !process.env.NOTION_TOKEN) {
@@ -274,6 +322,12 @@ export class ToolsService {
 
   async execute(toolName: string, input: Record<string, unknown>, userId: string): Promise<ToolResult> {
     const tool = this.registry.get(toolName)
+
+    // A runtime-registered tool must not be runnable by another user.
+    if (this.dynamicToolNames.has(toolName) && !this.isDynamicToolVisible(toolName, userId)) {
+      return { success: false, output: null, error: 'You do not have access to this tool.' }
+    }
+
     const startedAt = Date.now()
     try {
       const result = tool

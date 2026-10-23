@@ -1,10 +1,12 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
+import { describeSchedule, isValidCron, nextRunAt, parseEveryInterval } from './cron-expression'
 import type {
   CreateCronJobInput,
   CronHealthSummary,
   CronJobHealth,
   CronRunStatus,
+  CronScheduleKind,
   CronSelfHealInput,
   CronSelfHealReport,
   UpdateCronJobInput,
@@ -15,7 +17,7 @@ export class CronService {
   constructor(private prisma: PrismaService) {}
 
   async listJobs(userId: string) {
-    return this.prisma.cronJob.findMany({
+    const jobs = await this.prisma.cronJob.findMany({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
       include: {
@@ -25,10 +27,41 @@ export class CronService {
         },
       },
     })
+
+    return jobs.map((job) => this.decorateJob(job))
+  }
+
+  /** Adds the derived fields the UI needs (next run, human-readable schedule). */
+  private decorateJob<
+    T extends {
+      id: string
+      name: string
+      enabled: boolean
+      scheduleKind: string
+      scheduleValue: string
+      createdAt: Date
+      runs?: Array<{ status: string; createdAt: Date }>
+    },
+  >(job: T) {
+    const kind = (job.scheduleKind === 'at' || job.scheduleKind === 'cron'
+      ? job.scheduleKind
+      : 'every') as CronScheduleKind
+
+    const next = job.enabled ? nextRunAt(kind, job.scheduleValue, new Date()) : null
+
+    return {
+      ...job,
+      nextRunAt: next ? next.toISOString() : null,
+      scheduleLabel: describeSchedule(kind, job.scheduleValue),
+      lastRunAt: job.runs?.[0]?.createdAt ? job.runs[0].createdAt.toISOString() : null,
+      lastRunStatus: job.runs?.[0]?.status ?? null,
+    }
   }
 
   async createJob(userId: string, input: CreateCronJobInput) {
-    return this.prisma.cronJob.create({
+    this.assertValidSchedule(input.scheduleKind, input.scheduleValue)
+
+    const job = await this.prisma.cronJob.create({
       data: {
         userId,
         name: input.name,
@@ -43,11 +76,33 @@ export class CronService {
         deliveryTarget: input.deliveryTarget ?? null,
       },
     })
+
+    return this.decorateJob(job)
+  }
+
+  async getJob(userId: string, id: string) {
+    await this.assertOwnership(id, userId)
+    const job = await this.prisma.cronJob.findUnique({
+      where: { id },
+      include: {
+        runs: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    })
+    if (!job) throw new NotFoundException('Cron job not found')
+    return this.decorateJob(job)
   }
 
   async updateJob(userId: string, id: string, input: UpdateCronJobInput) {
     await this.assertOwnership(id, userId)
-    return this.prisma.cronJob.update({
+
+    if (input.scheduleKind !== undefined && input.scheduleValue !== undefined) {
+      this.assertValidSchedule(input.scheduleKind, input.scheduleValue)
+    }
+
+    const job = await this.prisma.cronJob.update({
       where: { id },
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
@@ -62,6 +117,30 @@ export class CronService {
         ...(input.deliveryTarget !== undefined ? { deliveryTarget: input.deliveryTarget } : {}),
       },
     })
+
+    return this.decorateJob(job)
+  }
+
+  /** Rejects schedules the engine could never act on. */
+  private assertValidSchedule(kind: string, value: string) {
+    const trimmed = String(value ?? '').trim()
+    if (!trimmed) {
+      throw new BadRequestException('scheduleValue is required.')
+    }
+
+    if (kind === 'cron' && !isValidCron(trimmed)) {
+      throw new BadRequestException(
+        `"${trimmed}" is not a valid cron expression. Use 5 fields: minute hour day-of-month month day-of-week.`,
+      )
+    }
+    if (kind === 'every' && !parseEveryInterval(trimmed)) {
+      throw new BadRequestException(
+        `"${trimmed}" is not a valid interval. Use 30s, 5m, 2h or 1d.`,
+      )
+    }
+    if (kind === 'at' && Number.isNaN(new Date(trimmed).getTime())) {
+      throw new BadRequestException(`"${trimmed}" is not a valid date.`)
+    }
   }
 
   async deleteJob(userId: string, id: string) {
@@ -78,6 +157,7 @@ export class CronService {
       summaryPrefix?: string
       status?: 'ok' | 'error' | 'skipped'
       error?: string | null
+      durationMs?: number
     },
   ) {
     const job = await this.assertOwnership(id, userId)
@@ -94,7 +174,7 @@ export class CronService {
         status,
         summary: summaryPrefix,
         error: options?.error ?? null,
-        durationMs: Math.max(1, Date.now() - startedAt),
+        durationMs: Math.max(1, options?.durationMs ?? Date.now() - startedAt),
       },
     })
 

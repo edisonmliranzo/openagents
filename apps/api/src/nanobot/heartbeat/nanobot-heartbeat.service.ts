@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { NotificationsService } from '../../notifications/notifications.service'
 import { MemoryService } from '../../memory/memory.service'
+import { DeepDreamService } from '../../memory/deep-dream.service'
 import { NanobotBusService } from '../bus/nanobot-bus.service'
 import { NanobotAliveStateService } from '../agent/nanobot-alive-state.service'
 import { NanobotSessionService } from '../session/nanobot-session.service'
@@ -20,6 +21,7 @@ export class NanobotHeartbeatService {
     private alive: NanobotAliveStateService,
     private notifications: NotificationsService,
     private memory: MemoryService,
+    private deepDream: DeepDreamService,
   ) {}
 
   getStatus(userId: string): NanobotHeartbeatStatus {
@@ -48,6 +50,23 @@ export class NanobotHeartbeatService {
     }
 
     const nightlyCuration = await this.memory.maybeRunNightlyCuration(userId)
+
+    // Deep Dream runs once per day too: after curation, distil the day's
+    // memories/lessons/debriefs into the journal and durable facts.
+    const deepDream = await this.deepDream
+      .maybeRun(userId, 'nightly')
+      .catch((error: any) => {
+        this.logger.warn(`Deep Dream failed for ${userId}: ${error?.message ?? error}`)
+        return null
+      })
+    if (deepDream?.ran) {
+      this.bus.publish('run.event', {
+        source: 'nanobot.deep-dream',
+        userId,
+        event: 'deep_dream.completed',
+        payload: { theme: deepDream.theme, keepCount: deepDream.keepCount },
+      })
+    }
 
     const tickedAt = new Date(now).toISOString()
     this.lastTickByUser.set(userId, now)

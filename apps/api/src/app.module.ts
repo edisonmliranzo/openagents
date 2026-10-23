@@ -61,8 +61,10 @@ import { TemplatesModule } from './templates/templates.module'
 import { PinsModule } from './pins/pins.module'
 import { ReactionsModule } from './reactions/reactions.module'
 import { CostModule } from './cost/cost.module'
-import { SchedulerModule } from './scheduler/scheduler.module'
 import { ToolBuilderModule } from './tool-builder/tool-builder.module'
+import { HooksModule } from './hooks/hooks.module'
+import { OpenAiCompatModule } from './openai-compat/openai-compat.module'
+import { VaultModule } from './vault/vault.module'
 import { GenerativeUIModule } from './generative-ui/generative-ui.module'
 import { BrowserAutomationModule } from './browser-automation/browser-automation.module'
 import { ProactiveAgentsModule } from './proactive-agents/proactive-agents.module'
@@ -162,8 +164,10 @@ import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
     PinsModule,
     ReactionsModule,
     CostModule,
-    SchedulerModule,
     ToolBuilderModule,
+    HooksModule,
+    OpenAiCompatModule,
+    VaultModule,
     GenerativeUIModule,
     BrowserAutomationModule,
     ProactiveAgentsModule,

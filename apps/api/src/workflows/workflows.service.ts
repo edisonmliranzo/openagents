@@ -1,3 +1,4 @@
+import { DocumentStore } from '../prisma/document-store.service'
 import {
   BadRequestException,
   Injectable,
@@ -75,6 +76,7 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
     private prisma: PrismaService,
     private mission: MissionControlService,
     private runtimeEvents: RuntimeEventsService,
+    private documents: DocumentStore,
   ) {
     const configuredMode = (process.env.WORKFLOW_PROCESSING_MODE ?? 'inline').toLowerCase()
     this.processingMode = configuredMode === 'queue' ? 'queue' : 'inline'
@@ -1728,8 +1730,7 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
   private async ensureLoaded(userId: string, forceReload = false) {
     if (!forceReload && this.loadedUsers.has(userId)) return
 
-    const filePath = this.storeFilePath(userId)
-    const store = await this.readStore(filePath)
+    const store = await this.readStore(userId)
     const workflows = (store.workflows ?? [])
       .filter((workflow) => workflow.userId === userId)
       .map((workflow) => this.sanitizeStoredWorkflow(workflow, userId))
@@ -1894,14 +1895,12 @@ export class WorkflowsService implements OnModuleInit, OnModuleDestroy {
       workflows: this.workflowsByUser.get(userId) ?? [],
       runs: this.runsByUser.get(userId) ?? [],
     }
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
-    await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    await this.documents.write(userId, 'workflows', payload)
   }
 
-  private async readStore(filePath: string): Promise<WorkflowStoreFile> {
+  private async readStore(userId: string): Promise<WorkflowStoreFile> {
     try {
-      const raw = await fs.readFile(filePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<WorkflowStoreFile>
+      const parsed = await this.documents.read<Partial<WorkflowStoreFile>>(userId, 'workflows', () => ({}))
       return {
         version: Number.isFinite(parsed.version) ? Number(parsed.version) : STORE_VERSION,
         workflows: Array.isArray(parsed.workflows) ? parsed.workflows : [],

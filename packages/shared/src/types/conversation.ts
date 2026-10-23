@@ -36,12 +36,30 @@ export interface MessageWorkflowState {
   steps: MessageWorkflowStep[]
 }
 
+export interface MessageUiComponent {
+  id: string
+  name: string
+  language: 'react' | 'html'
+  code: string
+  props?: Record<string, unknown>
+}
+
+export interface MessagePendingTool {
+  tool: string
+  /** The tool arguments as they have streamed in so far. */
+  args: string
+}
+
 export interface MessageMeta {
   tokens?: Record<string, unknown>
   thinking?: string[]
   progress?: MessageProgressState
   workflow?: MessageWorkflowState
   artifacts?: MessageArtifact[]
+  /** Interactive components the agent generated with the `ui_component` tool. */
+  uiComponents?: MessageUiComponent[]
+  /** The tool call the agent is currently streaming, before it executes. */
+  pendingTool?: MessagePendingTool
   statusLabel?: string
   [key: string]: unknown
 }

@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { ConfigService } from '@nestjs/config'
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
+import { promises as fs } from 'node:fs'
+import * as path from 'node:path'
 
 export type BrowserActionType = 'navigate' | 'click' | 'type' | 'scroll' | 'extract' | 'upload' | 'press'
 
@@ -60,6 +62,15 @@ interface LiveSession {
   pending: Map<string, PendingBrowserAction>
 }
 
+/** A user's own browser: its own profile directory, cookies and sign-ins. */
+interface UserBrowser {
+  userId: string
+  context: any
+  /** Serialises work so two sessions do not fight over the same profile. */
+  queue: Promise<unknown>
+  userDataDir: string
+}
+
 const RISKY_KEYWORDS = /\b(buy|purchase|checkout|check out|pay|payment|place order|order now|subscribe|confirm order|submit)\b/i
 const MAX_LOG = 200
 
@@ -67,11 +78,16 @@ const MAX_LOG = 200
  * Real headless-browser sessions backed by Playwright. Sessions keep a live
  * page so the UI can stream frames and watch the agent work. Risky actions
  * are parked as pending until a human approves them.
+ *
+ * Each user gets their own **persistent browser profile** (cookies, sign-ins and
+ * local storage survive restarts), which is what lets the agent act inside
+ * sites the user has already logged into instead of only reading public pages.
  */
 @Injectable()
 export class BrowserAutomationService implements OnModuleDestroy {
   private readonly logger = new Logger(BrowserAutomationService.name)
   private readonly sessions = new Map<string, LiveSession>()
+  private readonly userBrowsers = new Map<string, UserBrowser>()
   private browserPromise: Promise<any> | null = null
 
   constructor(private readonly config: ConfigService) {}
@@ -94,6 +110,123 @@ export class BrowserAutomationService implements OnModuleDestroy {
       })()
     }
     return this.browserPromise
+  }
+
+  // ── Per-user browser profiles ─────────────────────────────────────────────
+
+  private get profileRoot(): string {
+    const raw = (this.config.get<string>('BROWSER_PROFILE_ROOT') ?? '').trim()
+    if (raw) return raw
+    return path.join(process.cwd(), 'data', 'browser-profiles')
+  }
+
+  /** Where a user's browser profile lives on disk. */
+  profileDirFor(userId: string): string {
+    const safe = String(userId || 'anonymous').replace(/[^A-Za-z0-9_-]/g, '_')
+    return path.join(this.profileRoot, safe)
+  }
+
+  /** Describes the user's browser profile so they can manage their sign-ins. */
+  async profileInfo(userId: string) {
+    const dir = this.profileDirFor(userId)
+    let exists = false
+    let sizeBytes = 0
+    try {
+      const stat = await fs.stat(dir)
+      exists = stat.isDirectory()
+      if (exists) {
+        const files = await fs.readdir(dir, { recursive: true } as any).catch(() => [] as string[])
+        sizeBytes = files.length
+      }
+    } catch {
+      exists = false
+    }
+
+    return {
+      userId,
+      path: dir,
+      exists,
+      fileCount: sizeBytes,
+      active: this.userBrowsers.has(userId),
+      // Chromium and Chrome share the profile format, so the user can open the
+      // same profile in their own browser to sign in interactively.
+      note: 'Cookies and sign-ins in this profile persist between sessions and restarts.',
+    }
+  }
+
+  /** Deletes the user's browser profile — they are signed out everywhere. */
+  async clearProfile(userId: string): Promise<{ ok: boolean }> {
+    const entry = this.userBrowsers.get(userId)
+    if (entry) {
+      await entry.context?.close?.().catch(() => undefined)
+      this.userBrowsers.delete(userId)
+    }
+    const dir = this.profileDirFor(userId)
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined)
+    this.logger.log(`Cleared browser profile for user ${userId}`)
+    return { ok: true }
+  }
+
+  /**
+   * Returns the user's own browser context, launching a persistent profile on
+   * first use. Without a user id the shared, anonymous browser is used.
+   */
+  private async ensureUserBrowser(userId: string): Promise<any | null> {
+    if (!userId) return this.ensureBrowser()
+
+    const existing = this.userBrowsers.get(userId)
+    if (existing) return existing.context
+
+    const userDataDir = this.profileDirFor(userId)
+    try {
+      await fs.mkdir(userDataDir, { recursive: true })
+    } catch (error: any) {
+      this.logger.warn(`Could not create browser profile for ${userId}: ${error?.message ?? error}`)
+      return null
+    }
+
+    try {
+      // A persistent context keeps cookies, local storage and sign-ins between
+      // sessions and restarts. Playwright requires a dedicated launch for it.
+      const { chromium } = await import('playwright')
+      const context = await chromium.launchPersistentContext(userDataDir, {
+        headless: this.headless,
+        viewport: { width: 1366, height: 768 },
+      })
+
+      const entry: UserBrowser = { userId, context, queue: Promise.resolve(), userDataDir }
+      this.userBrowsers.set(userId, entry)
+      this.logger.log(`Persistent browser profile ready for user ${userId} (${userDataDir})`)
+      return context
+    } catch (error: any) {
+      this.logger.warn(`Could not launch a persistent browser for ${userId}: ${error?.message ?? error}`)
+      return null
+    }
+  }
+
+  /** Serialises work on a user's profile so concurrent sessions do not clash. */
+  private async withUserBrowser<T>(userId: string, fn: (context: any) => Promise<T>): Promise<T> {
+    if (!userId) {
+      const browser = await this.ensureBrowser()
+      if (!browser) throw new Error('Playwright is not installed on this server. Run: npx playwright install chromium')
+      const context = await browser.newContext({ viewport: { width: 1366, height: 768 } })
+      try {
+        return await fn(context)
+      } finally {
+        await context.close().catch(() => undefined)
+      }
+    }
+
+    const entry = this.userBrowsers.get(userId)
+    if (!entry) {
+      const context = await this.ensureUserBrowser(userId)
+      if (!context) throw new Error('Could not start a browser for this user.')
+      return fn(context)
+    }
+
+    const run = entry.queue.then(fn, fn)
+    entry.queue = run.catch(() => undefined)
+    return run
   }
 
   // ── SSRF protection ────────────────────────────────────────────────────
@@ -176,14 +309,15 @@ export class BrowserAutomationService implements OnModuleDestroy {
     const live: LiveSession = { state: session, context: null, page: null, log: [], pending: new Map() }
     this.sessions.set(session.id, live)
 
-    const browser = await this.ensureBrowser()
-    if (!browser) {
-      session.status = 'error'
-      throw new Error('Playwright is not installed on this server. Run: npx playwright install chromium')
-    }
-
     try {
-      live.context = await browser.newContext({ viewport: { width: 1366, height: 768 } })
+      // The user's own browser (persistent profile) when we know who they are,
+      // so sign-ins and cookies survive between sessions.
+      live.context = await this.ensureUserBrowser(userId)
+      if (!live.context) {
+        session.status = 'error'
+        throw new Error('Playwright is not installed on this server. Run: npx playwright install chromium')
+      }
+
       await this.installRequestGuard(live.context)
       live.page = await live.context.newPage()
       await live.page.goto(safeUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
@@ -393,6 +527,10 @@ export class BrowserAutomationService implements OnModuleDestroy {
 
   async onModuleDestroy() {
     await Promise.allSettled([...this.sessions.keys()].map((id) => this.closeSession(id)))
+    for (const entry of this.userBrowsers.values()) {
+      await entry.context?.close?.().catch(() => undefined)
+    }
+    this.userBrowsers.clear()
     const browser = await this.browserPromise?.catch(() => null)
     await browser?.close().catch(() => undefined)
   }

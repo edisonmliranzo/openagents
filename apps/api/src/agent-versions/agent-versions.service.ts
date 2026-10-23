@@ -9,51 +9,132 @@ import {
   NanobotSkillState
 } from '@openagents/shared'
 import { PrismaService } from '../prisma/prisma.service'
+import { NanobotConfigService } from '../nanobot/config/nanobot-config.service'
+import { NanobotSkillsRegistry } from '../nanobot/agent/nanobot-skills.registry'
 
-function deepDiff(obj1: any, obj2: any) {
+export const DEFAULT_AGENT_ID = 'default'
+
+function toDisplayValue(value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value === 'string') return value
+  if (value === null) return 'null'
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+/**
+ * Produces a flat, human-readable diff. Nested objects are walked so the diff
+ * points at `settings.preferredModel` rather than the whole `settings` blob.
+ * Values are always rendered as strings — the UI renders them inside <pre>.
+ */
+function deepDiff(obj1: any, obj2: any, prefix = '') {
   const changes: { path: string; before?: string; after?: string }[] = []
-  for (const key in obj1) {
-    if (JSON.stringify(obj1[key]) !== JSON.stringify(obj2[key])) {
-      changes.push({ path: key, before: obj1[key], after: obj2[key] })
+  const left = obj1 ?? {}
+  const right = obj2 ?? {}
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+
+  for (const key of keys) {
+    const path = prefix ? `${prefix}.${key}` : key
+    const before = left[key]
+    const after = right[key]
+    const hadBefore = key in left
+    const hadAfter = key in right
+
+    if (!hadBefore) {
+      changes.push({ path, after: toDisplayValue(after) })
+      continue
     }
-  }
-  for (const key in obj2) {
-    if (!(key in obj1)) {
-      changes.push({ path: key, after: obj2[key] })
+    if (!hadAfter) {
+      changes.push({ path, before: toDisplayValue(before) })
+      continue
     }
+    if (JSON.stringify(before) === JSON.stringify(after)) continue
+
+    const bothPlainObjects =
+      before &&
+      after &&
+      typeof before === 'object' &&
+      typeof after === 'object' &&
+      !Array.isArray(before) &&
+      !Array.isArray(after)
+
+    if (bothPlainObjects) {
+      changes.push(...deepDiff(before, after, path))
+      continue
+    }
+
+    changes.push({ path, before: toDisplayValue(before), after: toDisplayValue(after) })
   }
+
   return changes
 }
 
 @Injectable()
 export class AgentVersionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private nanobotConfig: NanobotConfigService,
+    private nanobotSkills: NanobotSkillsRegistry,
+  ) {}
+
+  /**
+   * Builds the snapshot of the user's *current* agent configuration so a version
+   * records the live settings, runtime config and skill toggles at capture time.
+   */
+  private async captureCurrentState(userId: string): Promise<{
+    settings: AgentVersionSettingsSnapshot
+    runtimeConfig: NanobotRuntimeConfig
+    skills: NanobotSkillState[]
+  }> {
+    const userSettings = await this.prisma.userSettings
+      .findUnique({ where: { userId } })
+      .catch(() => null)
+
+    const settings: AgentVersionSettingsSnapshot = {
+      ...(userSettings?.preferredProvider ? { preferredProvider: userSettings.preferredProvider } : {}),
+      ...(userSettings?.preferredModel ? { preferredModel: userSettings.preferredModel } : {}),
+      ...(userSettings?.customSystemPrompt ? { customSystemPrompt: userSettings.customSystemPrompt } : {}),
+    }
+
+    const runtimeConfig = this.nanobotConfig.toJSON()
+    const skills = await this.nanobotSkills.listForUser(userId).catch(() => [] as NanobotSkillState[])
+
+    return { settings, runtimeConfig, skills }
+  }
 
   async createVersion(
     userId: string,
     agentId: string,
     input: CreateAgentVersionInput,
-    snapshot: AgentVersionSettingsSnapshot
+    snapshot?: AgentVersionSettingsSnapshot,
   ): Promise<AgentVersionSnapshot> {
-    const latest = await this.getLatestVersion(userId, agentId)
+    const resolvedAgentId = agentId?.trim() || input.agentId?.trim() || DEFAULT_AGENT_ID
+    const latest = await this.getLatestVersion(userId, resolvedAgentId)
     const nextVersion = latest ? latest.version + 1 : 1
+
+    const captured = await this.captureCurrentState(userId)
+    const settings = snapshot && Object.keys(snapshot).length > 0 ? snapshot : captured.settings
 
     const version: AgentVersionSnapshot = {
       id: crypto.randomUUID(),
       userId,
+      agentId: resolvedAgentId,
       version: nextVersion,
       createdAt: new Date().toISOString(),
       note: input.note,
-      settings: snapshot,
-      runtimeConfig: {} as NanobotRuntimeConfig,
-      skills: [],
+      settings,
+      runtimeConfig: captured.runtimeConfig,
+      skills: captured.skills,
     }
 
     await this.prisma.agentVersion.create({
       data: {
         id: version.id,
         userId,
-        agentId,
+        agentId: resolvedAgentId,
         version: version.version,
         note: version.note,
         settings: JSON.parse(JSON.stringify(version.settings)),
@@ -66,23 +147,38 @@ export class AgentVersionsService {
     return version
   }
 
-  async getVersions(userId: string, agentId: string, limit = 20): Promise<AgentVersionSnapshot[]> {
+  async getVersions(userId: string, agentId: string, limit?: number): Promise<AgentVersionSnapshot[]> {
     const versions = await this.prisma.agentVersion.findMany({
       where: { userId, agentId },
       orderBy: { version: 'desc' },
-      take: limit,
+      take: this.normalizeLimit(limit, 20),
     })
 
-    return versions.map(v => ({
-      id: v.id,
-      userId: v.userId,
-      version: v.version,
-      createdAt: v.createdAt.toISOString(),
-      note: v.note ?? undefined,
-      settings: v.settings as AgentVersionSettingsSnapshot,
-      runtimeConfig: v.runtimeConfig as unknown as NanobotRuntimeConfig,
-      skills: v.skills as unknown as NanobotSkillState[],
-    }))
+    return versions.map(v => this.toSnapshot(v))
+  }
+
+  /**
+   * Lists every version the user owns. When `agentId` is provided the list is
+   * narrowed to that agent; otherwise every agent's versions are returned.
+   */
+  async listForUser(userId: string, agentId?: string, limit?: number): Promise<AgentVersionSnapshot[]> {
+    const versions = await this.prisma.agentVersion.findMany({
+      where: {
+        userId,
+        ...(agentId?.trim() ? { agentId: agentId.trim() } : {}),
+      },
+      orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+      take: this.normalizeLimit(limit, 50),
+    })
+
+    return versions.map(v => this.toSnapshot(v))
+  }
+
+  /** Guards against NaN/undefined/invalid limits reaching Prisma. */
+  private normalizeLimit(value: number | undefined, fallback: number): number {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+    return Math.min(Math.floor(parsed), 200)
   }
 
   async getLatestVersion(userId: string, agentId: string): Promise<AgentVersionSnapshot | null> {
@@ -99,16 +195,7 @@ export class AgentVersionsService {
       throw new BadRequestException('Agent version not found')
     }
 
-    return {
-      id: version.id,
-      userId: version.userId,
-      version: version.version,
-      createdAt: version.createdAt.toISOString(),
-      note: version.note ?? undefined,
-      settings: version.settings as AgentVersionSettingsSnapshot,
-      runtimeConfig: version.runtimeConfig as unknown as NanobotRuntimeConfig,
-      skills: version.skills as unknown as NanobotSkillState[],
-    }
+    return this.toSnapshot(version)
   }
 
   async compareVersions(fromId: string, toId: string): Promise<AgentVersionDiffResult> {
@@ -121,7 +208,11 @@ export class AgentVersionsService {
       throw new BadRequestException('One or both versions not found')
     }
 
-    const changes = deepDiff(from.settings, to.settings)
+    const changes = [
+      ...deepDiff(from.settings, to.settings, 'settings'),
+      ...deepDiff(from.runtimeConfig, to.runtimeConfig, 'runtimeConfig'),
+      ...deepDiff(from.skills, to.skills, 'skills'),
+    ]
 
     return {
       fromId,
@@ -130,17 +221,47 @@ export class AgentVersionsService {
     }
   }
 
-  async rollbackToVersion(userId: string, agentId: string, versionId: string): Promise<AgentVersionRollbackResult> {
+  async rollbackToVersion(userId: string, versionId: string): Promise<AgentVersionRollbackResult> {
     const version = await this.getVersion(userId, versionId)
+    const stored = await this.prisma.agentVersion.findUnique({
+      where: { id: versionId, userId },
+    })
 
-    const newVersion = await this.createVersion(userId, agentId, {
-      note: `Rolled back to version ${version.version}`,
-    }, version.settings)
+    const newVersion = await this.createVersion(
+      userId,
+      stored?.agentId ?? DEFAULT_AGENT_ID,
+      { note: `Rolled back to version ${version.version}` },
+      version.settings,
+    )
 
     return {
       ok: true,
       restoredVersionId: versionId,
       currentSnapshot: newVersion,
+    }
+  }
+
+  private toSnapshot(version: {
+    id: string
+    userId: string
+    agentId: string
+    version: number
+    note: string | null
+    settings: unknown
+    runtimeConfig: unknown
+    skills: unknown
+    createdAt: Date
+  }): AgentVersionSnapshot {
+    return {
+      id: version.id,
+      userId: version.userId,
+      agentId: version.agentId,
+      version: version.version,
+      createdAt: version.createdAt.toISOString(),
+      note: version.note ?? undefined,
+      settings: (version.settings ?? {}) as AgentVersionSettingsSnapshot,
+      runtimeConfig: (version.runtimeConfig ?? {}) as unknown as NanobotRuntimeConfig,
+      skills: (version.skills ?? []) as unknown as NanobotSkillState[],
     }
   }
 }

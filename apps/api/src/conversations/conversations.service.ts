@@ -98,41 +98,6 @@ export class ConversationsService {
     return { ok: true, removed: result.count }
   }
 
-  async search(userId: string, query: string) {
-    if (!query.trim()) return []
-    const term = `%${query.trim().replace(/[%_]/g, '\\$&')}%`
-    const messages = await this.prisma.message.findMany({
-      where: {
-        conversation: { userId },
-        content: { contains: query.trim(), mode: 'insensitive' },
-        role: { in: ['user', 'agent'] },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 40,
-      select: {
-        id: true,
-        conversationId: true,
-        role: true,
-        content: true,
-        createdAt: true,
-        conversation: { select: { id: true, title: true } },
-      },
-    })
-    // Group by conversation, pick the best matching snippet per conversation
-    const seen = new Map<string, typeof messages[0]>()
-    for (const m of messages) {
-      if (!seen.has(m.conversationId)) seen.set(m.conversationId, m)
-    }
-    return [...seen.values()].map((m) => ({
-      conversationId: m.conversationId,
-      conversationTitle: m.conversation?.title ?? null,
-      messageId: m.id,
-      role: m.role,
-      snippet: this.snippet(m.content, query.trim()),
-      createdAt: m.createdAt,
-    }))
-  }
-
   async exportJsonl(conversationId: string, userId: string): Promise<string[]> {
     await this.get(conversationId, userId)
     const messages = await this.prisma.message.findMany({
@@ -158,14 +123,6 @@ export class ConversationsService {
       }
     }
     return pairs
-  }
-
-  private snippet(content: string, query: string, radius = 120): string {
-    const idx = content.toLowerCase().indexOf(query.toLowerCase())
-    if (idx === -1) return content.slice(0, radius * 2)
-    const start = Math.max(0, idx - radius)
-    const end = Math.min(content.length, idx + query.length + radius)
-    return (start > 0 ? '…' : '') + content.slice(start, end) + (end < content.length ? '…' : '')
   }
 
   async touchLastMessage(conversationId: string) {

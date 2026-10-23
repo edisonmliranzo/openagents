@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { promises as fs } from 'fs'
-import * as path from 'path'
+import { DocumentStore } from '../prisma/document-store.service'
 
 export type MomentKind = 'meeting_soon' | 'unanswered_email' | 'calendar_conflict' | 'goal_stalled' | 'watch_hit'
 export const MOMENT_KINDS: MomentKind[] = ['meeting_soon', 'unanswered_email', 'calendar_conflict', 'goal_stalled', 'watch_hit']
@@ -58,6 +57,7 @@ export function defaultMomentSettings(): MomentSettings {
 }
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+const KIND = 'moments'
 
 function validTz(tz: string) {
   try {
@@ -90,54 +90,31 @@ export function normalizeMomentSettings(input?: Partial<MomentSettings>): Moment
 @Injectable()
 export class MomentsStore {
   private readonly logger = new Logger(MomentsStore.name)
-  private readonly dir = path.resolve(process.env.MOMENTS_DATA_DIR ?? path.join(process.cwd(), 'data', 'moments'))
-  private readonly cache = new Map<string, MomentsFile>()
 
-  private safe(userId: string) {
-    return userId.replace(/[^a-zA-Z0-9_-]/g, '_')
-  }
+  constructor(private documents: DocumentStore) {}
 
   async load(userId: string): Promise<MomentsFile> {
-    const cached = this.cache.get(userId)
-    if (cached) return cached
-    let data: MomentsFile = { settings: defaultMomentSettings(), moments: [], seenKeys: [] }
-    let exists = false
-    try {
-      const parsed = JSON.parse(await fs.readFile(path.join(this.dir, `${this.safe(userId)}.json`), 'utf8')) as Partial<MomentsFile>
-      exists = true
-      data = {
-        settings: normalizeMomentSettings(parsed.settings),
-        moments: Array.isArray(parsed.moments) ? parsed.moments : [],
-        seenKeys: Array.isArray(parsed.seenKeys) ? parsed.seenKeys : [],
-        lastRunAt: parsed.lastRunAt,
-      }
-    } catch {
-      // defaults
+    const data = await this.documents.read<MomentsFile>(userId, KIND, () => ({
+      settings: defaultMomentSettings(),
+      moments: [],
+      seenKeys: [],
+    }))
+    return {
+      settings: normalizeMomentSettings(data.settings),
+      moments: Array.isArray(data.moments) ? data.moments : [],
+      seenKeys: Array.isArray(data.seenKeys) ? data.seenKeys : [],
+      lastRunAt: data.lastRunAt,
     }
-    this.cache.set(userId, data)
-    // Persist on first access so the worker picks this user up.
-    if (!exists) await this.save(userId, data)
-    return data
   }
 
   async save(userId: string, data: MomentsFile) {
     data.moments = data.moments.slice(0, 300)
     data.seenKeys = data.seenKeys.slice(-2000)
-    this.cache.set(userId, data)
-    try {
-      await fs.mkdir(this.dir, { recursive: true })
-      await fs.writeFile(path.join(this.dir, `${this.safe(userId)}.json`), JSON.stringify(data, null, 2), 'utf8')
-    } catch (error: any) {
-      this.logger.warn(`Failed to persist moments for ${userId}: ${error?.message ?? error}`)
-    }
+    await this.documents.write(userId, KIND, data)
   }
 
-  /** Files are named by sanitized id; real ids are cuid-like so this round-trips. */
+  /** Every user that has moments configured. */
   async listUserIds(): Promise<string[]> {
-    try {
-      return (await fs.readdir(this.dir)).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5))
-    } catch {
-      return []
-    }
+    return this.documents.listUserIds(KIND)
   }
 }

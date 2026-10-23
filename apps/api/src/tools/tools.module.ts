@@ -9,6 +9,8 @@ import { LibrarySearchTool } from './connectors/library-search.tool'
 import { LibrarySaveTool } from './connectors/library-save.tool'
 import { MixtureOfAgentsTool } from './connectors/mixture-of-agents.tool'
 import { SkillSaveTool } from './connectors/skill-save.tool'
+import { UiComponentTool } from './connectors/ui-component.tool'
+import { CliAgentTool } from './connectors/cli-agent.tool'
 import { GmailTool } from './connectors/gmail.tool'
 import { CalendarTool } from './connectors/calendar.tool'
 import { WebFetchTool } from './connectors/web-fetch.tool'
@@ -54,9 +56,13 @@ import { PolicyModule } from '../policy/policy.module'
 import { ToolsInternalController } from './tools.internal.controller'
 import { LLMService } from '../agent/llm.service'
 import { UsersModule } from '../users/users.module'
+import { GenerativeUIModule } from '../generative-ui/generative-ui.module'
+import { UserMcpService } from '../mcp/user-mcp.service'
+import { UserMcpController } from '../mcp/user-mcp.controller'
+import { SecurityModule } from '../security/security.module'
 
 @Module({
-  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule, LibraryModule, UsersModule],
+  imports: [forwardRef(() => CronModule), ConnectorsModule, PolicyModule, MemoryModule, LibraryModule, UsersModule, GenerativeUIModule, SecurityModule],
   providers: [
     ToolsService,
     GmailTool,
@@ -101,12 +107,15 @@ import { UsersModule } from '../users/users.module'
     LibrarySaveTool,
     MixtureOfAgentsTool,
     SkillSaveTool,
+    UiComponentTool,
+    CliAgentTool,
     LLMService,
     McpService,
+    UserMcpService,
     PromptGuardService,
     OutboundGuardService,
   ],
-  controllers: [ToolsController, ToolsInternalController],
-  exports: [ToolsService, PromptGuardService, OutboundGuardService, McpService],
+  controllers: [ToolsController, ToolsInternalController, UserMcpController],
+  exports: [ToolsService, PromptGuardService, OutboundGuardService, McpService, UserMcpService, CodeExecutionTool],
 })
 export class ToolsModule {}

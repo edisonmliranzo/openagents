@@ -8,6 +8,7 @@ import { DebateService } from './debate.service'
 import { MultiDebateService } from './multi-debate.service'
 import { WatchService } from './watch.service'
 import { RoundtableService } from './roundtable.service'
+import { normalizeTermination } from '../war-rooms/termination'
 import { AutodocService } from './autodoc.service'
 import { PromptRepairService } from './prompt-repair.service'
 import { AutopilotService } from './autopilot.service'
@@ -94,15 +95,24 @@ export class FrontierController {
   }
 
   @Post('debate/multi')
-  debateMulti(@Req() req: any, @Body() body: { question: string; models?: string[] }) {
-    return this.multiDebate.run(req.user.id, String(body?.question ?? ''), Array.isArray(body?.models) ? body.models : undefined)
+  debateMulti(@Req() req: any, @Body() body: { question: string; models?: string[]; termination?: unknown }) {
+    return this.multiDebate.run(
+      req.user.id,
+      String(body?.question ?? ''),
+      Array.isArray(body?.models) ? body.models : undefined,
+      body?.termination ? { termination: normalizeTermination(body.termination) } : {},
+    )
   }
 
   @Post('roundtable')
-  roundtableRun(@Req() req: any, @Body() body: { topic: string }) {
+  roundtableRun(@Req() req: any, @Body() body: { topic: string; termination?: unknown }) {
     const topic = String(body?.topic ?? '').trim()
     if (!topic) return { error: 'topic required' }
-    return this.roundtable.convene(req.user.id, topic)
+    return this.roundtable.convene(
+      req.user.id,
+      topic,
+      body?.termination ? { termination: normalizeTermination(body.termination) } : {},
+    )
   }
 
   @Post('autodoc')

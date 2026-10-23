@@ -68,6 +68,22 @@ export class BrowserAutomationController {
     return this.service.listSessions(req.user.id)
   }
 
+  /**
+   * The user's own browser profile: its own cookies, sign-ins and local storage,
+   * kept on disk between sessions and restarts.
+   */
+  @Get('profile')
+  async profile(@Req() req: any) {
+    return this.service.profileInfo(req.user.id)
+  }
+
+  /** Wipes the user's browser profile (signs them out everywhere). */
+  @Delete('profile')
+  async clearProfile(@Req() req: any) {
+    return this.service.clearProfile(req.user.id)
+  }
+
+
   @Post('sessions')
   start(@Req() req: any, @Body('url') url: string) {
     return this.service.startSession(url, req.user.id)

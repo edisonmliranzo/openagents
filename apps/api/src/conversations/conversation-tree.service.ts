@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
-import { promises as fs } from 'fs'
-import * as path from 'path'
 import { PrismaService } from '../prisma/prisma.service'
+import { DocumentStore } from '../prisma/document-store.service'
 import { ConversationsService } from './conversations.service'
 
 interface BranchLink {
@@ -25,34 +24,28 @@ export interface ConversationTreeNode {
  * Time-travel branching. Branch links live in a JSON store
  * (data/conversation-tree/<safeUserId>.json) so no schema migration is needed.
  */
+const KIND = 'conversation_tree'
+
 @Injectable()
 export class ConversationTreeService {
-  private readonly dir = path.resolve(process.env.CONVERSATION_TREE_DATA_DIR ?? path.join(process.cwd(), 'data', 'conversation-tree'))
   private queue: Promise<unknown> = Promise.resolve()
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly conversations: ConversationsService,
+    private readonly documents: DocumentStore,
   ) {}
 
-  private fileFor(userId: string) {
-    return path.join(this.dir, `${userId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`)
-  }
-
   private async readLinks(userId: string): Promise<Record<string, BranchLink>> {
-    try {
-      return JSON.parse(await fs.readFile(this.fileFor(userId), 'utf8'))?.links ?? {}
-    } catch {
-      return {}
-    }
+    const parsed = await this.documents.read<{ links?: Record<string, BranchLink> }>(userId, KIND, () => ({}))
+    return parsed.links ?? {}
   }
 
   private writeLink(userId: string, childId: string, link: BranchLink) {
     const run = async () => {
       const links = await this.readLinks(userId)
       links[childId] = link
-      await fs.mkdir(this.dir, { recursive: true })
-      await fs.writeFile(this.fileFor(userId), JSON.stringify({ links }, null, 2), 'utf8')
+      await this.documents.write(userId, KIND, { links })
     }
     const next = this.queue.then(run, run)
     this.queue = next.catch(() => undefined)

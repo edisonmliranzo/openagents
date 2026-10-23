@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { randomUUID } from 'crypto'
-import * as path from 'path'
-import { JsonFile } from './billing.store'
+import { PrismaService } from '../prisma/prisma.service'
 
 export type MarketplaceItemKind = 'skill' | 'pack'
 
@@ -42,12 +41,6 @@ export interface EarningsEntry {
   createdAt: string
 }
 
-interface MarketplaceFile {
-  prices: Record<string, MarketplacePrice>
-  purchases: MarketplacePurchase[]
-  ledger: EarningsEntry[]
-}
-
 export const priceKey = (kind: MarketplaceItemKind, itemId: string) => `${kind}:${itemId}`
 
 export function platformFeePct() {
@@ -55,85 +48,200 @@ export function platformFeePct() {
   return Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : 20
 }
 
-/** Single JSON file for marketplace prices, purchases and the creator earnings ledger. */
+/**
+ * Marketplace prices, purchases and the creator earnings ledger.
+ *
+ * These were a single JSON file — money on disk, no transactions, and a lost
+ * file meant lost revenue records. They are relational now.
+ */
 @Injectable()
 export class MarketplaceStore {
-  private readonly dir = path.resolve(
-    process.env.MARKETPLACE_DATA_DIR ?? path.join(process.cwd(), 'data', 'marketplace'),
-  )
-  private readonly file = new JsonFile<MarketplaceFile>(path.join(this.dir, 'marketplace.json'), () => ({
-    prices: {},
-    purchases: [],
-    ledger: [],
-  }))
+  constructor(private prisma: PrismaService) {}
 
   async getPrice(kind: MarketplaceItemKind, itemId: string) {
-    return (await this.file.read()).prices[priceKey(kind, itemId)] ?? null
+    const row = await this.prisma.marketplacePrice.findUnique({
+      where: { kind_itemId: { kind, itemId } },
+    })
+    if (!row) return null
+    return {
+      kind: row.kind as MarketplaceItemKind,
+      itemId: row.itemId,
+      sellerId: row.sellerId,
+      amountCents: row.amountCents,
+      currency: row.currency,
+      title: row.title ?? undefined,
+      updatedAt: row.updatedAt.toISOString(),
+    } satisfies MarketplacePrice
   }
 
   async listPrices(kind?: MarketplaceItemKind) {
-    const all = Object.values((await this.file.read()).prices)
-    return kind ? all.filter((p) => p.kind === kind) : all
+    const rows = await this.prisma.marketplacePrice.findMany({
+      where: kind ? { kind } : undefined,
+      orderBy: { updatedAt: 'desc' },
+    })
+    return rows.map((row) => ({
+      kind: row.kind as MarketplaceItemKind,
+      itemId: row.itemId,
+      sellerId: row.sellerId,
+      amountCents: row.amountCents,
+      currency: row.currency,
+      title: row.title ?? undefined,
+      updatedAt: row.updatedAt.toISOString(),
+    } satisfies MarketplacePrice))
   }
 
   async setPrice(input: Omit<MarketplacePrice, 'updatedAt'>) {
-    const data = await this.file.read()
-    const key = priceKey(input.kind, input.itemId)
-    if (input.amountCents <= 0) delete data.prices[key]
-    else data.prices[key] = { ...input, updatedAt: new Date().toISOString() }
-    await this.file.write(data)
-    return data.prices[key] ?? null
+    if (input.amountCents <= 0) {
+      await this.prisma.marketplacePrice
+        .deleteMany({ where: { kind: input.kind, itemId: input.itemId } })
+        .catch(() => undefined)
+      return null
+    }
+
+    const row = await this.prisma.marketplacePrice.upsert({
+      where: { kind_itemId: { kind: input.kind, itemId: input.itemId } },
+      create: {
+        kind: input.kind,
+        itemId: input.itemId,
+        sellerId: input.sellerId,
+        amountCents: input.amountCents,
+        currency: input.currency,
+        title: input.title ?? null,
+      },
+      update: {
+        sellerId: input.sellerId,
+        amountCents: input.amountCents,
+        currency: input.currency,
+        title: input.title ?? null,
+      },
+    })
+
+    return {
+      kind: row.kind as MarketplaceItemKind,
+      itemId: row.itemId,
+      sellerId: row.sellerId,
+      amountCents: row.amountCents,
+      currency: row.currency,
+      title: row.title ?? undefined,
+      updatedAt: row.updatedAt.toISOString(),
+    } satisfies MarketplacePrice
   }
 
   async hasPurchased(buyerId: string, kind: MarketplaceItemKind, itemId: string) {
-    return (await this.file.read()).purchases.some(
-      (p) => p.buyerId === buyerId && p.kind === kind && p.itemId === itemId,
-    )
+    const row = await this.prisma.marketplacePurchase.findFirst({
+      where: { buyerId, kind, itemId },
+      select: { id: true },
+    })
+    return Boolean(row)
   }
 
   async listPurchases(buyerId: string) {
-    return (await this.file.read()).purchases.filter((p) => p.buyerId === buyerId)
+    const rows = await this.prisma.marketplacePurchase.findMany({
+      where: { buyerId },
+      orderBy: { createdAt: 'desc' },
+    })
+    return rows.map((row) => this.toPurchase(row))
   }
 
   /** Idempotent on stripeSessionId. Records purchase + ledger entry with the platform fee split. */
   async recordPurchase(input: Omit<MarketplacePurchase, 'id' | 'createdAt'>) {
-    const data = await this.file.read()
     if (input.stripeSessionId) {
-      const existing = data.purchases.find((p) => p.stripeSessionId === input.stripeSessionId)
-      if (existing) return existing
+      const existing = await this.prisma.marketplacePurchase.findFirst({
+        where: { stripeSessionId: input.stripeSessionId },
+      })
+      if (existing) return this.toPurchase(existing)
     }
-    const purchase: MarketplacePurchase = { ...input, id: randomUUID(), createdAt: new Date().toISOString() }
+
     const fee = Math.round((input.amountCents * platformFeePct()) / 100)
-    data.purchases.push(purchase)
-    data.ledger.push({
-      id: randomUUID(),
-      purchaseId: purchase.id,
-      sellerId: input.sellerId,
-      kind: input.kind,
-      itemId: input.itemId,
-      grossCents: input.amountCents,
-      platformFeeCents: fee,
-      netCents: input.amountCents - fee,
-      currency: input.currency,
-      status: 'pending_payout',
-      createdAt: purchase.createdAt,
+    const id = randomUUID()
+
+    const purchase = await this.prisma.marketplacePurchase.create({
+      data: {
+        id,
+        kind: input.kind,
+        itemId: input.itemId,
+        buyerId: input.buyerId,
+        sellerId: input.sellerId,
+        amountCents: input.amountCents,
+        currency: input.currency,
+        stripeSessionId: input.stripeSessionId ?? null,
+        earnings: {
+          create: {
+            id: randomUUID(),
+            sellerId: input.sellerId,
+            kind: input.kind,
+            itemId: input.itemId,
+            grossCents: input.amountCents,
+            platformFeeCents: fee,
+            netCents: input.amountCents - fee,
+            currency: input.currency,
+            status: 'pending_payout',
+          },
+        },
+      },
     })
-    await this.file.write(data)
-    return purchase
+
+    return this.toPurchase(purchase)
   }
 
   async earnings(sellerId: string) {
-    const entries = (await this.file.read()).ledger.filter((e) => e.sellerId === sellerId)
-    const sum = (k: 'grossCents' | 'platformFeeCents' | 'netCents') => entries.reduce((a, e) => a + e[k], 0)
+    const entries = await this.prisma.marketplaceEarning.findMany({
+      where: { sellerId },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const mapped = entries.map((row) => ({
+      id: row.id,
+      purchaseId: row.purchaseId,
+      sellerId: row.sellerId,
+      kind: row.kind as MarketplaceItemKind,
+      itemId: row.itemId,
+      grossCents: row.grossCents,
+      platformFeeCents: row.platformFeeCents,
+      netCents: row.netCents,
+      currency: row.currency,
+      status: row.status as EarningsEntry['status'],
+      createdAt: row.createdAt.toISOString(),
+    } satisfies EarningsEntry))
+
+    const sum = (k: 'grossCents' | 'platformFeeCents' | 'netCents') =>
+      mapped.reduce((a, e) => a + e[k], 0)
+
     return {
       platformFeePct: platformFeePct(),
       totals: {
         grossCents: sum('grossCents'),
         platformFeeCents: sum('platformFeeCents'),
         netCents: sum('netCents'),
-        pendingPayoutCents: entries.filter((e) => e.status === 'pending_payout').reduce((a, e) => a + e.netCents, 0),
+        pendingPayoutCents: mapped
+          .filter((e) => e.status === 'pending_payout')
+          .reduce((a, e) => a + e.netCents, 0),
       },
-      entries: entries.slice().reverse(),
+      entries: mapped,
+    }
+  }
+
+  private toPurchase(row: {
+    id: string
+    kind: string
+    itemId: string
+    buyerId: string
+    sellerId: string
+    amountCents: number
+    currency: string
+    stripeSessionId: string | null
+    createdAt: Date
+  }): MarketplacePurchase {
+    return {
+      id: row.id,
+      kind: row.kind as MarketplaceItemKind,
+      itemId: row.itemId,
+      buyerId: row.buyerId,
+      sellerId: row.sellerId,
+      amountCents: row.amountCents,
+      currency: row.currency,
+      stripeSessionId: row.stripeSessionId ?? undefined,
+      createdAt: row.createdAt.toISOString(),
     }
   }
 }

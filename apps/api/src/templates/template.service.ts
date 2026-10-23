@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { PrismaService } from '../prisma/prisma.service'
 
 export interface ConversationTemplate {
   id: string
@@ -95,13 +96,15 @@ const BUILT_IN_TEMPLATES: Omit<ConversationTemplate, 'id' | 'createdAt'>[] = [
 @Injectable()
 export class TemplateService {
   private readonly logger = new Logger(TemplateService.name)
-  private templates = new Map<string, ConversationTemplate>()
+  /** The built-in kits are code, not user data — they stay in memory. */
+  private builtins = new Map<string, ConversationTemplate>()
 
-  constructor() {
-    // Load built-in templates
+  constructor(private prisma: PrismaService) {
+    // Built-in templates are code, not data — they stay in memory and are
+    // merged with the user's own persisted templates on every read.
     for (const template of BUILT_IN_TEMPLATES) {
       const id = `tmpl-${template.name.toLowerCase().replace(/\s+/g, '-')}`
-      this.templates.set(id, {
+      this.builtins.set(id, {
         ...template,
         id,
         createdAt: new Date().toISOString(),
@@ -109,16 +112,60 @@ export class TemplateService {
     }
   }
 
+  private async loadUserTemplates(userId?: string): Promise<ConversationTemplate[]> {
+    if (!userId) return []
+    const rows = await this.prisma.conversationTemplate.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+    })
+    return rows.map((row) => ({
+      id: row.id,
+      userId: row.userId,
+      name: row.name,
+      description: row.description,
+      category: row.category,
+      systemPrompt: row.systemPrompt ?? undefined,
+      starterMessages: (row.starterMessages as string[]) ?? [],
+      tools: (row.tools as string[]) ?? [],
+      personality: row.personality ?? undefined,
+      tags: (row.tags as string[]) ?? [],
+      isPublic: row.isPublic,
+      useCount: row.useCount,
+      createdAt: row.createdAt.toISOString(),
+    }))
+  }
+
   async list(userId?: string, category?: string): Promise<ConversationTemplate[]> {
-    const templates = Array.from(this.templates.values())
+    const userTemplates = await this.loadUserTemplates(userId)
+    const all = [...this.builtins.values(), ...userTemplates]
+    return all
       .filter((t) => t.isPublic || t.userId === userId)
       .filter((t) => !category || t.category === category)
       .sort((a, b) => b.useCount - a.useCount)
-    return templates
   }
 
-  async get(templateId: string): Promise<ConversationTemplate | null> {
-    return this.templates.get(templateId) ?? null
+  async get(templateId: string, userId?: string): Promise<ConversationTemplate | null> {
+    const builtin = this.builtins.get(templateId)
+    if (builtin) return builtin
+
+    const row = await this.prisma.conversationTemplate.findUnique({ where: { id: templateId } })
+    if (!row) return null
+    if (!row.isPublic && row.userId !== userId) return null
+    return {
+      id: row.id,
+      userId: row.userId,
+      name: row.name,
+      description: row.description,
+      category: row.category,
+      systemPrompt: row.systemPrompt ?? undefined,
+      starterMessages: (row.starterMessages as string[]) ?? [],
+      tools: (row.tools as string[]) ?? [],
+      personality: row.personality ?? undefined,
+      tags: (row.tags as string[]) ?? [],
+      isPublic: row.isPublic,
+      useCount: row.useCount,
+      createdAt: row.createdAt.toISOString(),
+    }
   }
 
   async create(input: {
@@ -133,37 +180,59 @@ export class TemplateService {
     tags?: string[]
     isPublic?: boolean
   }): Promise<ConversationTemplate> {
-    const template: ConversationTemplate = {
-      id: `tmpl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      userId: input.userId,
-      name: input.name,
-      description: input.description,
-      category: input.category,
-      systemPrompt: input.systemPrompt,
-      starterMessages: input.starterMessages ?? [],
-      tools: input.tools ?? [],
-      personality: input.personality,
-      tags: input.tags ?? [],
-      isPublic: input.isPublic ?? false,
-      useCount: 0,
-      createdAt: new Date().toISOString(),
+    const row = await this.prisma.conversationTemplate.create({
+      data: {
+        userId: input.userId,
+        name: input.name,
+        description: input.description,
+        category: input.category,
+        systemPrompt: input.systemPrompt ?? null,
+        starterMessages: JSON.parse(JSON.stringify(input.starterMessages ?? [])),
+        tools: JSON.parse(JSON.stringify(input.tools ?? [])),
+        personality: input.personality ?? null,
+        tags: JSON.parse(JSON.stringify(input.tags ?? [])),
+        isPublic: input.isPublic ?? false,
+      },
+    })
+
+    return {
+      id: row.id,
+      userId: row.userId,
+      name: row.name,
+      description: row.description,
+      category: row.category,
+      systemPrompt: row.systemPrompt ?? undefined,
+      starterMessages: (row.starterMessages as string[]) ?? [],
+      tools: (row.tools as string[]) ?? [],
+      personality: row.personality ?? undefined,
+      tags: (row.tags as string[]) ?? [],
+      isPublic: row.isPublic,
+      useCount: row.useCount,
+      createdAt: row.createdAt.toISOString(),
     }
-    this.templates.set(template.id, template)
-    return template
   }
 
   async recordUse(templateId: string): Promise<void> {
-    const template = this.templates.get(templateId)
-    if (template) {
-      template.useCount += 1
+    const builtin = this.builtins.get(templateId)
+    if (builtin) {
+      builtin.useCount += 1
+      return
     }
+    await this.prisma.conversationTemplate
+      .update({ where: { id: templateId }, data: { useCount: { increment: 1 } } })
+      .catch(() => undefined)
   }
 
-  async delete(templateId: string): Promise<boolean> {
-    return this.templates.delete(templateId)
+  async delete(templateId: string, userId: string): Promise<boolean> {
+    if (this.builtins.has(templateId)) return false
+    const row = await this.prisma.conversationTemplate.findFirst({ where: { id: templateId, userId } })
+    if (!row) return false
+    await this.prisma.conversationTemplate.delete({ where: { id: templateId } })
+    return true
   }
 
-  getCategories(): string[] {
-    return [...new Set(Array.from(this.templates.values()).map((t) => t.category))]
+  async getCategories(userId?: string): Promise<string[]> {
+    const all = [...this.builtins.values(), ...(await this.loadUserTemplates(userId))]
+    return [...new Set(all.map((t) => t.category))]
   }
 }

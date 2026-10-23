@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
-import { promises as fs } from 'fs'
-import * as path from 'path'
+import { PrismaService } from '../prisma/prisma.service'
 
 export interface ExpoTokenRecord {
   token: string
@@ -12,51 +11,72 @@ export interface ExpoTokenRecord {
 
 const EXPO_TOKEN_RE = /^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
+const MAX_TOKENS = 20
 
-/** Stores Expo push tokens per user in data/expo-push/<safeUserId>.json and sends pushes via Expo. */
+/** Stores Expo push tokens per user in Postgres and sends pushes via Expo. */
 @Injectable()
 export class ExpoPushService {
   private readonly logger = new Logger(ExpoPushService.name)
-  private readonly dir = path.resolve(process.env.EXPO_PUSH_DATA_DIR ?? path.join(process.cwd(), 'data', 'expo-push'))
 
-  private file(userId: string) {
-    return path.join(this.dir, `${userId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`)
-  }
+  constructor(private prisma: PrismaService) {}
 
   async list(userId: string): Promise<ExpoTokenRecord[]> {
-    try {
-      const parsed = JSON.parse(await fs.readFile(this.file(userId), 'utf8'))
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-
-  private async write(userId: string, items: ExpoTokenRecord[]) {
-    await fs.mkdir(this.dir, { recursive: true })
-    await fs.writeFile(this.file(userId), JSON.stringify(items, null, 2), 'utf8')
+    const rows = await this.prisma.expoPushToken.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+    })
+    return rows.map((row) => ({
+      token: row.token,
+      platform: row.platform ?? undefined,
+      deviceName: row.deviceName ?? undefined,
+      createdAt: row.createdAt.toISOString(),
+      lastSeenAt: row.lastSeenAt.toISOString(),
+    }))
   }
 
   async register(userId: string, body: { token: string; platform?: string; deviceName?: string }) {
     const token = (body?.token ?? '').trim()
     if (!EXPO_TOKEN_RE.test(token)) throw new BadRequestException('Invalid Expo push token')
-    const now = new Date().toISOString()
-    const items = await this.list(userId)
-    const existing = items.find((t) => t.token === token)
+    const now = new Date()
+
+    const existing = await this.prisma.expoPushToken.findUnique({
+      where: { userId_token: { userId, token } },
+    })
+
     if (existing) {
-      existing.lastSeenAt = now
-      existing.platform = body.platform ?? existing.platform
-      existing.deviceName = body.deviceName?.slice(0, 100) ?? existing.deviceName
+      await this.prisma.expoPushToken.update({
+        where: { id: existing.id },
+        data: {
+          lastSeenAt: now,
+          platform: body.platform ?? existing.platform,
+          deviceName: body.deviceName?.slice(0, 100) ?? existing.deviceName,
+        },
+      })
     } else {
-      items.push({ token, platform: body.platform, deviceName: body.deviceName?.slice(0, 100), createdAt: now, lastSeenAt: now })
+      const count = await this.prisma.expoPushToken.count({ where: { userId } })
+      if (count >= MAX_TOKENS) {
+        const oldest = await this.prisma.expoPushToken.findFirst({
+          where: { userId },
+          orderBy: { createdAt: 'asc' },
+        })
+        if (oldest) await this.prisma.expoPushToken.delete({ where: { id: oldest.id } })
+      }
+      await this.prisma.expoPushToken.create({
+        data: {
+          userId,
+          token,
+          platform: body.platform ?? null,
+          deviceName: body.deviceName?.slice(0, 100) ?? null,
+        },
+      })
     }
-    await this.write(userId, items.slice(-20))
-    return { ok: true, count: Math.min(items.length, 20) }
+
+    const total = await this.prisma.expoPushToken.count({ where: { userId } })
+    return { ok: true, count: total }
   }
 
   async unregister(userId: string, token: string) {
-    const items = await this.list(userId)
-    await this.write(userId, items.filter((t) => t.token !== token))
+    await this.prisma.expoPushToken.deleteMany({ where: { userId, token } })
     return { ok: true }
   }
 
@@ -75,7 +95,11 @@ export class ExpoPushService {
       ;(json?.data ?? []).forEach((r: any, i: number) => {
         if (r?.details?.error === 'DeviceNotRegistered' && tokens[i]) dead.add(tokens[i].token)
       })
-      if (dead.size) await this.write(userId, tokens.filter((t) => !dead.has(t.token)))
+      if (dead.size) {
+        await this.prisma.expoPushToken.deleteMany({
+          where: { userId, token: { in: [...dead] } },
+        })
+      }
       return { sent: tokens.length - dead.size }
     } catch (err: any) {
       this.logger.warn(`Expo push failed: ${err?.message ?? err}`)

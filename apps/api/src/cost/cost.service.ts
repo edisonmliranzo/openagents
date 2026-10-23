@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { promises as fs } from 'fs'
-import * as path from 'path'
 import { PrismaService } from '../prisma/prisma.service'
+import { DocumentStore } from '../prisma/document-store.service'
 
 export interface CostEntry {
   id: string
@@ -86,9 +85,8 @@ const DAY = 24 * 60 * 60 * 1000
 export class CostService {
   private readonly logger = new Logger(CostService.name)
   private entries: CostEntry[] = []
-  private readonly settingsDir = path.join(process.cwd(), 'data', 'cost-router')
 
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private documents: DocumentStore) {}
 
   static estimate(model: string, inputTokens: number, outputTokens: number): number {
     const pricing = PRICING[model] ?? PRICING['default']
@@ -263,19 +261,11 @@ export class CostService {
     return this.buildBudget(await this.getRouterSettings(userId), spent)
   }
 
-  // ── Router settings (per-user JSON file, no migrations) ──────────────────
-
-  private settingsFile(userId: string) {
-    return path.join(this.settingsDir, `${userId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`)
-  }
+  // ── Router settings (per-user, stored in the database) ──────────────────
 
   async getRouterSettings(userId: string): Promise<RouterSettings> {
-    try {
-      const raw = await fs.readFile(this.settingsFile(userId), 'utf8')
-      return this.normalize(JSON.parse(raw))
-    } catch {
-      return structuredClone(DEFAULT_ROUTER_SETTINGS)
-    }
+    const raw = await this.documents.read<RouterSettings>(userId, 'cost_router', () => ({} as RouterSettings))
+    return this.normalize(raw && Object.keys(raw).length ? raw : structuredClone(DEFAULT_ROUTER_SETTINGS))
   }
 
   async updateRouterSettings(userId: string, patch: Partial<RouterSettings>): Promise<RouterSettings> {
@@ -286,8 +276,7 @@ export class CostService {
       tiers: { ...current.tiers, ...(patch?.tiers ?? {}) } as RouterSettings['tiers'],
     })
     next.updatedAt = new Date().toISOString()
-    await fs.mkdir(this.settingsDir, { recursive: true })
-    await fs.writeFile(this.settingsFile(userId), JSON.stringify(next, null, 2), 'utf8')
+    await this.documents.write(userId, 'cost_router', next)
     // Mirror the cap into BudgetLimit when possible (best effort).
     try {
       const now = new Date()

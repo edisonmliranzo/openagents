@@ -1,59 +1,18 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import { Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import { createHmac } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import { AgentService } from '../agent/agent.service'
 import { CronService } from './cron.service'
-
-// ─── Schedule helpers ─────────────────────────────────────────────────────────
-
-/** Parse "10m", "2h", "30s", "1d" → milliseconds */
-function parseEveryInterval(value: string): number | null {
-  const m = value.trim().match(/^(\d+(?:\.\d+)?)\s*(s|sec|m|min|h|hr|d|day)s?$/i)
-  if (!m) return null
-  const n = parseFloat(m[1])
-  switch (m[2].toLowerCase()) {
-    case 's': case 'sec': return n * 1_000
-    case 'm': case 'min': return n * 60_000
-    case 'h': case 'hr':  return n * 3_600_000
-    case 'd': case 'day': return n * 86_400_000
-    default: return null
-  }
-}
-
-/** Evaluate a 5-field cron expression against a given Date. */
-function matchesCron(expr: string, date: Date): boolean {
-  const parts = expr.trim().split(/\s+/)
-  if (parts.length < 5) return false
-  const [minE, hourE, domE, monE, dowE] = parts
-
-  const check = (field: string, value: number, min: number, max: number): boolean => {
-    if (field === '*') return true
-    if (field.includes('/')) {
-      const [range, step] = field.split('/')
-      const stepN = parseInt(step, 10)
-      const start = range === '*' ? min : parseInt(range, 10)
-      return value >= start && (value - start) % stepN === 0
-    }
-    if (field.includes(',')) return field.split(',').some((f) => check(f.trim(), value, min, max))
-    if (field.includes('-')) {
-      const [lo, hi] = field.split('-').map(Number)
-      return value >= lo && value <= hi
-    }
-    return parseInt(field, 10) === value
-  }
-
-  return (
-    check(minE,  date.getUTCMinutes(),  0, 59) &&
-    check(hourE, date.getUTCHours(),    0, 23) &&
-    check(domE,  date.getUTCDate(),     1, 31) &&
-    check(monE,  date.getUTCMonth() + 1, 1, 12) &&
-    check(dowE,  date.getUTCDay(),      0,  6)
-  )
-}
+import { NotificationsService } from '../notifications/notifications.service'
+import { matchesCron, parseEveryInterval } from './cron-expression'
+import { assertPublicHttpUrl } from '../frontier/safe-fetch'
+import type { ModelRole } from '@openagents/shared'
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 const TICK_INTERVAL_MS = 60_000   // check every minute
 const MAX_CONCURRENT_JOBS = 5     // run at most N jobs per tick
+const DELIVERY_TIMEOUT_MS = 15_000
 
 @Injectable()
 export class CronSchedulerService implements OnModuleInit, OnModuleDestroy {
@@ -65,6 +24,7 @@ export class CronSchedulerService implements OnModuleInit, OnModuleDestroy {
     private prisma: PrismaService,
     private cronService: CronService,
     private agent: AgentService,
+    private notifications: NotificationsService,
   ) {}
 
   onModuleInit() {
@@ -80,6 +40,26 @@ export class CronSchedulerService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ── Tick ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Runs a job immediately, regardless of its schedule. Returns once the run
+   * has completed (or failed) and the run record has been written.
+   */
+  async runNow(userId: string, jobId: string): Promise<{ ok: true; jobId: string }> {
+    const job = await this.prisma.cronJob.findFirst({
+      where: { id: jobId, userId },
+      include: { runs: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    })
+
+    if (!job) {
+      throw new NotFoundException('Cron job not found')
+    }
+
+    this.logger.log(`CronScheduler: manual run of "${job.name}" (${job.id}) for user ${userId}`)
+    await this.executeJob(job, new Date())
+
+    return { ok: true, jobId }
+  }
 
   async tick() {
     if (this.running) return
@@ -161,6 +141,9 @@ export class CronSchedulerService implements OnModuleInit, OnModuleDestroy {
 
       this.logger.log(`CronScheduler: running job "${job.name}" (${job.id}) for user ${userId}`)
 
+      // Scheduled work can use a heavier model than the live conversation.
+      const scheduledModel = await this.modelForRole(userId, 'scheduled')
+
       // No-op emit for background runs — messages are saved to DB by agent.run()
       const emitted: Array<[string, unknown]> = []
       const emit = (event: string, data: unknown) => { emitted.push([event, data]) }
@@ -170,15 +153,21 @@ export class CronSchedulerService implements OnModuleInit, OnModuleDestroy {
         userId,
         userMessage: job.payloadText,
         emit,
+        ...(scheduledModel ? { modelOverride: scheduledModel } : {}),
         systemPromptAppendix: `[Background cron task: "${job.name}". Run at ${now.toISOString()}. Complete the task silently and save any relevant findings to memory.]`,
       })
+
+      const reply = this.extractAgentReply(emitted)
 
       const durationMs = Date.now() - startedAt
       await this.cronService.runJob(userId, job.id, {
         source: 'manual',
         status: 'ok',
+        durationMs,
         summaryPrefix: `Completed "${job.name}" in ${durationMs}ms`,
       })
+
+      await this.deliver(job, reply, durationMs)
 
       this.logger.log(`CronScheduler: job "${job.name}" done in ${durationMs}ms`)
     } catch (err: any) {
@@ -188,14 +177,136 @@ export class CronSchedulerService implements OnModuleInit, OnModuleDestroy {
         source: 'manual',
         status: 'error',
         error: msg,
+        durationMs: Date.now() - startedAt,
         summaryPrefix: `Error in "${job.name}": ${msg.slice(0, 120)}`,
       }).catch(() => {})
+    }
+  }
+
+  /** The model the user pinned for this kind of work, if any. */
+  private async modelForRole(userId: string, role: ModelRole): Promise<string | undefined> {
+    try {
+      const settings = await this.prisma.userSettings.findUnique({ where: { userId } })
+      const roles = (settings as any)?.modelRoles as Partial<Record<ModelRole, string>> | undefined
+      const model = roles?.[role]?.trim()
+      return model || undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /** Pulls the agent's final reply out of the emitted events. */
+  private extractAgentReply(emitted: Array<[string, unknown]>): string {
+    for (let i = emitted.length - 1; i >= 0; i -= 1) {
+      const [event, data] = emitted[i]
+      if (event !== 'message') continue
+      const payload = data as { role?: string; content?: string } | null
+      if (payload?.role === 'agent' && typeof payload.content === 'string' && payload.content.trim()) {
+        return payload.content
+      }
+    }
+    return ''
+  }
+
+  // ── Delivery ──────────────────────────────────────────────────────────────
+
+  /**
+   * Delivers the run result according to the job's `deliveryMode`:
+   *  - `none`     → nothing is sent
+   *  - `announce` → an in-app notification for the user
+   *  - `webhook`  → a signed POST to `deliveryTarget`
+   */
+  private async deliver(job: any, reply: string, durationMs: number) {
+    const mode = String(job.deliveryMode ?? 'none')
+    if (mode === 'none') return
+
+    const body = reply?.trim()
+      ? reply.trim()
+      : `Job "${job.name}" finished in ${durationMs}ms without producing a reply.`
+
+    if (mode === 'announce') {
+      await this.notifications
+        .create(job.userId, `Scheduled: ${job.name}`, body, 'info')
+        .catch((err: any) => this.logger.warn(`Cron announce failed: ${err?.message ?? err}`))
+      return
+    }
+
+    if (mode === 'webhook') {
+      await this.deliverWebhook(job, body, durationMs)
+    }
+  }
+
+  private async deliverWebhook(job: any, body: string, durationMs: number) {
+    const target = String(job.deliveryTarget ?? '').trim()
+    if (!target) {
+      this.logger.warn(`Cron job "${job.name}" has deliveryMode=webhook but no deliveryTarget`)
+      return
+    }
+
+    let url: URL
+    try {
+      url = await assertPublicHttpUrl(target)
+    } catch (error: any) {
+      this.logger.warn(`Cron job "${job.name}" webhook target rejected: ${error?.message ?? error}`)
+      return
+    }
+
+    const payload = {
+      event: 'cron.job.completed',
+      jobId: job.id,
+      name: job.name,
+      userId: job.userId,
+      durationMs,
+      output: body,
+      finishedAt: new Date().toISOString(),
+    }
+    const serialized = JSON.stringify(payload)
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-OpenAgents-Event': 'cron.job.completed',
+      'X-OpenAgents-Job-Id': job.id,
+    }
+
+    const secret = process.env.CRON_WEBHOOK_SECRET?.trim()
+    if (secret) {
+      headers['X-OpenAgents-Signature'] = createHmac('sha256', secret).update(serialized).digest('hex')
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: serialized,
+        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
+      })
+      if (!response.ok) {
+        this.logger.warn(`Cron job "${job.name}" webhook returned ${response.status}`)
+      }
+    } catch (error: any) {
+      this.logger.warn(`Cron job "${job.name}" webhook failed: ${error?.message ?? error}`)
     }
   }
 
   // ── Conversation resolution ───────────────────────────────────────────────
 
   private async resolveConversationId(userId: string, job: any): Promise<string | null> {
+    // "isolated" jobs get their own conversation, so their output never mixes
+    // with the user's live chat.
+    if (job.sessionTarget === 'isolated') {
+      const title = `Cron: ${job.name}`
+      const existing = await this.prisma.conversation.findFirst({
+        where: { userId, title },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (existing) return existing.id
+
+      const created = await this.prisma.conversation.create({
+        data: { userId, title },
+      })
+      return created.id
+    }
+
     // Use last active conversation from user settings
     const settings = await this.prisma.userSettings.findUnique({ where: { userId } })
     if (settings?.lastActiveConversationId) {

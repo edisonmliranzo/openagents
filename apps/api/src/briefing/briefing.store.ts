@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { promises as fs } from 'fs'
-import * as path from 'path'
+import { DocumentStore } from '../prisma/document-store.service'
 
 export type BriefingSectionKey = 'email' | 'calendar' | 'tasks' | 'news' | 'memory'
 export const BRIEFING_SECTIONS: BriefingSectionKey[] = ['email', 'calendar', 'tasks', 'news', 'memory']
@@ -39,6 +38,7 @@ interface UserBriefingFile {
 }
 
 const MAX_HISTORY = 60
+const KIND = 'briefing'
 
 export function defaultBriefingSettings(): BriefingSettings {
   return {
@@ -53,40 +53,24 @@ export function defaultBriefingSettings(): BriefingSettings {
 @Injectable()
 export class BriefingStore {
   private readonly logger = new Logger(BriefingStore.name)
-  private readonly dir = path.resolve(process.env.BRIEFING_DATA_DIR ?? path.join(process.cwd(), 'data', 'briefings'))
-  private readonly cache = new Map<string, UserBriefingFile>()
 
-  private fileFor(userId: string) {
-    return path.join(this.dir, `${userId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`)
-  }
+  constructor(private documents: DocumentStore) {}
 
   async load(userId: string): Promise<UserBriefingFile> {
-    const cached = this.cache.get(userId)
-    if (cached) return cached
-    let data: UserBriefingFile = { settings: defaultBriefingSettings(), history: [] }
-    try {
-      const raw = await fs.readFile(this.fileFor(userId), 'utf8')
-      const parsed = JSON.parse(raw) as Partial<UserBriefingFile>
-      data = {
-        settings: normalizeSettings(parsed.settings),
-        history: Array.isArray(parsed.history) ? parsed.history : [],
-        lastScheduledDateKey: parsed.lastScheduledDateKey,
-      }
-    } catch {
-      // missing file -> defaults
+    const data = await this.documents.read<UserBriefingFile>(userId, KIND, () => ({
+      settings: defaultBriefingSettings(),
+      history: [],
+    }))
+    // Sanitise on read — the stored blob may predate a settings change.
+    return {
+      settings: normalizeSettings(data.settings),
+      history: Array.isArray(data.history) ? data.history : [],
+      lastScheduledDateKey: data.lastScheduledDateKey,
     }
-    this.cache.set(userId, data)
-    return data
   }
 
   async save(userId: string, data: UserBriefingFile) {
-    this.cache.set(userId, data)
-    try {
-      await fs.mkdir(this.dir, { recursive: true })
-      await fs.writeFile(this.fileFor(userId), JSON.stringify(data, null, 2), 'utf8')
-    } catch (error: any) {
-      this.logger.warn(`Failed to persist briefing data for ${userId}: ${error?.message ?? error}`)
-    }
+    await this.documents.write(userId, KIND, data)
   }
 
   async getSettings(userId: string) {
@@ -117,14 +101,9 @@ export class BriefingStore {
     await this.save(userId, data)
   }
 
-  /** Users with persisted briefing files (only these can have scheduling enabled). */
+  /** Users with persisted briefing data (only these can have scheduling enabled). */
   async listUserIds(): Promise<string[]> {
-    try {
-      const files = await fs.readdir(this.dir)
-      return files.filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5))
-    } catch {
-      return []
-    }
+    return this.documents.listUserIds(KIND)
   }
 }
 

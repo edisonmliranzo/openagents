@@ -1,11 +1,9 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
-import * as fsSync from 'fs'
-import { promises as fs } from 'fs'
-import * as path from 'path'
 import { ToolsService } from '../tools/tools.service'
 import { LLMService } from '../agent/llm.service'
 import { LibraryService } from '../library/library.service'
 import { ArtifactsService } from '../artifacts/artifacts.service'
+import { DocumentStore } from '../prisma/document-store.service'
 
 export interface ResearchSource {
   /** 1-based citation number used in [n] markers */
@@ -43,17 +41,13 @@ export interface ResearchJob {
 
 const MAX_JOBS_PER_USER = 50
 const SAVE_DEBOUNCE_MS = 500
-
-function safeUserId(userId: string) {
-  return String(userId).replace(/[^A-Za-z0-9_-]/g, '_') || '_'
-}
+const KIND = 'research_jobs'
 const MAX_SOURCES = 20
 
 @Injectable()
 export class DeepResearchService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DeepResearchService.name)
   private jobs = new Map<string, ResearchJob>()
-  private readonly dir = path.resolve(process.env.RESEARCH_DATA_DIR ?? path.join(process.cwd(), 'data', 'research'))
   private readonly saveTimers = new Map<string, NodeJS.Timeout>()
 
   constructor(
@@ -61,44 +55,51 @@ export class DeepResearchService implements OnModuleInit, OnModuleDestroy {
     private readonly llm: LLMService,
     private readonly library: LibraryService,
     private readonly artifacts: ArtifactsService,
+    private readonly documents: DocumentStore,
   ) {}
 
   // ── Persistence ──────────────────────────────────────────────────────────
 
-  /** Load persisted jobs; anything still 'running' from a previous process becomes 'interrupted'. */
-  onModuleInit() {
-    let files: string[] = []
-    try {
-      files = fsSync.readdirSync(this.dir).filter((f) => f.endsWith('.json'))
-    } catch {
-      return // no data dir yet
-    }
+  /**
+   * Load persisted jobs; anything still 'running' from a previous process
+   * becomes 'interrupted'.
+   */
+  async onModuleInit() {
     const now = new Date().toISOString()
-    for (const file of files) {
+    let userIds: string[] = []
+    try {
+      userIds = await this.documents.listUserIds(KIND)
+    } catch {
+      return
+    }
+
+    for (const userId of userIds) {
+      let parsed: unknown = []
       try {
-        const parsed = JSON.parse(fsSync.readFileSync(path.join(this.dir, file), 'utf8'))
-        if (!Array.isArray(parsed)) continue
-        const touchedUsers = new Set<string>()
-        for (const job of parsed as ResearchJob[]) {
-          if (!job || typeof job.id !== 'string' || typeof job.userId !== 'string') continue
-          if (`${safeUserId(job.userId)}.json` !== file) continue
-          if (job.status === 'running') {
-            job.status = 'interrupted'
-            job.error = job.error ?? 'Research was interrupted by a server restart.'
-            for (const s of job.steps ?? []) if (s.status === 'running' || s.status === 'pending') s.status = 'failed'
-            job.updatedAt = now
-            touchedUsers.add(job.userId)
-          }
-          job.steps = job.steps ?? []
-          job.queries = job.queries ?? []
-          job.sources = job.sources ?? []
-          job.report = job.report ?? ''
-          this.jobs.set(job.id, job)
-        }
-        for (const userId of touchedUsers) this.scheduleSave(userId)
+        parsed = await this.documents.read(userId, KIND, () => [])
       } catch (error: any) {
-        this.logger.warn(`Failed to load research jobs from ${file}: ${error?.message ?? error}`)
+        this.logger.warn(`Failed to load research jobs for ${userId}: ${error?.message ?? error}`)
+        continue
       }
+      if (!Array.isArray(parsed)) continue
+
+      const touched = new Set<string>()
+      for (const job of parsed as ResearchJob[]) {
+        if (!job || typeof job.id !== 'string' || typeof job.userId !== 'string') continue
+        if (job.status === 'running') {
+          job.status = 'interrupted'
+          job.error = job.error ?? 'Research was interrupted by a server restart.'
+          for (const s of job.steps ?? []) if (s.status === 'running' || s.status === 'pending') s.status = 'failed'
+          job.updatedAt = now
+          touched.add(job.userId)
+        }
+        job.steps = job.steps ?? []
+        job.queries = job.queries ?? []
+        job.sources = job.sources ?? []
+        job.report = job.report ?? ''
+        this.jobs.set(job.id, job)
+      }
+      for (const uid of touched) this.scheduleSave(uid)
     }
   }
 
@@ -125,11 +126,7 @@ export class DeepResearchService implements OnModuleInit, OnModuleDestroy {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, MAX_JOBS_PER_USER)
     try {
-      await fs.mkdir(this.dir, { recursive: true })
-      const file = path.join(this.dir, `${safeUserId(userId)}.json`)
-      const tmp = `${file}.${process.pid}.tmp`
-      await fs.writeFile(tmp, JSON.stringify(jobs, null, 2), 'utf8')
-      await fs.rename(tmp, file)
+      await this.documents.write(userId, KIND, jobs)
     } catch (error: any) {
       this.logger.warn(`Failed to persist research jobs for ${userId}: ${error?.message ?? error}`)
     }

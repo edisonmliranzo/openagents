@@ -1,3 +1,4 @@
+import { DocumentStore } from '../prisma/document-store.service'
 import {
   BadRequestException,
   Injectable,
@@ -41,6 +42,7 @@ export class HandoffsService {
     private mission: MissionControlService,
     private notifications: NotificationsService,
     private audit: AuditService,
+    private documents: DocumentStore,
   ) {}
 
   async list(userId: string, status?: HandoffStatus) {
@@ -374,7 +376,7 @@ export class HandoffsService {
 
   private async ensureLoaded(userId: string) {
     if (this.loadedUsers.has(userId)) return
-    const store = await this.readStore(this.storeFilePath(userId))
+    const store = await this.readStore(userId)
     const tickets = (store.tickets ?? [])
       .filter((ticket) => ticket.userId === userId)
       .map((ticket) => this.sanitizeStoredTicket(ticket, userId))
@@ -513,19 +515,16 @@ export class HandoffsService {
   }
 
   private async persist(userId: string) {
-    const filePath = this.storeFilePath(userId)
     const payload: HandoffStoreFile = {
       version: STORE_VERSION,
       tickets: this.ticketsByUser.get(userId) ?? [],
     }
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
-    await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    await this.documents.write(userId, 'handoffs', payload)
   }
 
-  private async readStore(filePath: string): Promise<HandoffStoreFile> {
+  private async readStore(userId: string): Promise<HandoffStoreFile> {
     try {
-      const raw = await fs.readFile(filePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<HandoffStoreFile>
+      const parsed = await this.documents.read<Partial<HandoffStoreFile>>(userId, 'handoffs', () => ({}))
       return {
         version: Number.isFinite(parsed.version) ? Number(parsed.version) : STORE_VERSION,
         tickets: Array.isArray(parsed.tickets) ? parsed.tickets : [],

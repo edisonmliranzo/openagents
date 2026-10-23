@@ -1,5 +1,10 @@
 import type { OpenAgentsClient } from '../client'
-import type { Conversation, ConversationRepairReport, Message } from '@openagents/shared'
+import type {
+  Conversation,
+  ConversationRepairReport,
+  ConversationSearchResponse,
+  Message,
+} from '@openagents/shared'
 
 export interface ConversationTreeNode {
   id: string
@@ -57,8 +62,14 @@ export function createConversationsApi(client: OpenAgentsClient) {
     repair: (id: string) =>
       client.post<ConversationRepairReport>(`/api/v1/conversations/${id}/repair`),
 
-    search: (q: string) =>
-      client.get<Array<{ conversationId: string; conversationTitle: string | null; messageId: string; role: string; snippet: string; createdAt: string }>>(`/api/v1/conversations/search?q=${encodeURIComponent(q)}`),
+    search: (q: string, options?: { conversationId?: string; role?: string; limit?: number; offset?: number }) => {
+      const params = new URLSearchParams({ q })
+      if (options?.conversationId) params.set('conversationId', options.conversationId)
+      if (options?.role) params.set('role', options.role)
+      if (options?.limit) params.set('limit', String(options.limit))
+      if (options?.offset) params.set('offset', String(options.offset))
+      return client.get<ConversationSearchResponse>(`/api/v1/conversations/search?${params.toString()}`)
+    },
 
     exportJsonl: (id: string) =>
       client.get<string[]>(`/api/v1/conversations/${id}/export/jsonl`),

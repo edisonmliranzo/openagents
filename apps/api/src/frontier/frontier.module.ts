@@ -38,6 +38,6 @@ import { SkillLearnerService } from './skill-learner.service'
     AutodocService,
     SkillLearnerService,
   ],
-  exports: [StakesService, PiiRouterService, AutopilotService, PromptRepairService, AutodocService, SkillLearnerService],
+  exports: [StakesService, PiiRouterService, AutopilotService, PromptRepairService, AutodocService, SkillLearnerService, MultiDebateService, RoundtableService],
 })
 export class FrontierModule {}

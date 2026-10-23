@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from '../agent/llm.service'
 import { UsersService } from '../users/users.service'
 import type { LLMProvider } from '@openagents/shared'
-import { Lesson, readLessons, writeLessons, renderLessonsBlock } from './lessons.store'
+import { Lesson, LessonsStore } from './lessons.store'
 
 const SCAN_INTERVAL_MS = 20 * 60 * 1000
 const MAX_CONVERSATIONS_PER_CYCLE = 15
@@ -27,6 +27,7 @@ export class LessonsService implements OnModuleInit, OnModuleDestroy {
     private readonly llm: LLMService,
     private readonly users: UsersService,
     private readonly config: ConfigService,
+    private readonly lessons: LessonsStore,
   ) {}
 
   get enabled(): boolean {
@@ -81,7 +82,7 @@ export class LessonsService implements OnModuleInit, OnModuleDestroy {
     })
     const last = messages[0]
     if (!last || last.role !== 'agent' || last.status !== 'done') return null
-    const store = await readLessons(userId)
+    const store = await this.lessons.read(userId)
     const stamp = last.createdAt.toISOString()
     if (store.processed[conv.id] === stamp) return null
 
@@ -104,7 +105,7 @@ export class LessonsService implements OnModuleInit, OnModuleDestroy {
     const parsed = extractJson(res.content)
     store.processed[conv.id] = stamp
     if (!parsed) {
-      await writeLessons(userId, store)
+      await this.lessons.write(userId, store)
       return null
     }
     const score = Math.max(0, Math.min(100, Number(parsed.score) || 0))
@@ -126,35 +127,35 @@ export class LessonsService implements OnModuleInit, OnModuleDestroy {
     }
     store.lessons = [...added, ...store.lessons]
     store.runs.unshift({ conversationId: conv.id, score, summary: String(parsed.summary ?? '').slice(0, 300), at: new Date().toISOString() })
-    await writeLessons(userId, store)
+    await this.lessons.write(userId, store)
     return { score, summary: parsed.summary ?? '', added }
   }
 
   async list(userId: string) {
-    const s = await readLessons(userId)
+    const s = await this.lessons.read(userId)
     const avg = s.runs.length ? Math.round(s.runs.reduce((a, r) => a + r.score, 0) / s.runs.length) : null
     return { lessons: s.lessons, runs: s.runs.slice(0, 20), averageScore: avg }
   }
 
   async remove(userId: string, id: string) {
-    const s = await readLessons(userId)
+    const s = await this.lessons.read(userId)
     const before = s.lessons.length
     s.lessons = s.lessons.filter((l) => l.id !== id)
-    await writeLessons(userId, s)
+    await this.lessons.write(userId, s)
     return { deleted: s.lessons.length < before }
   }
 
   async toggle(userId: string, id: string, enabled?: boolean) {
-    const s = await readLessons(userId)
+    const s = await this.lessons.read(userId)
     const lesson = s.lessons.find((l) => l.id === id)
     if (!lesson) return null
     lesson.enabled = typeof enabled === 'boolean' ? enabled : !lesson.enabled
-    await writeLessons(userId, s)
+    await this.lessons.write(userId, s)
     return lesson
   }
 
   preview(userId: string) {
-    return renderLessonsBlock(userId).then((block) => ({ block }))
+    return this.lessons.renderBlock(userId).then((block) => ({ block }))
   }
 }
 

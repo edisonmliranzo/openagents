@@ -15,6 +15,7 @@ import {
 } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { MemoryService } from './memory.service'
+import { DeepDreamService } from './deep-dream.service'
 
 const MEMORY_EVENT_KINDS = ['conversation', 'workflow', 'incident', 'extraction', 'note'] as const
 
@@ -211,7 +212,10 @@ class CreateLocalKnowledgeSourceDto {
 @UseGuards(JwtAuthGuard)
 @Controller('memory')
 export class MemoryController {
-  constructor(private memory: MemoryService) {}
+  constructor(
+    private memory: MemoryService,
+    private deepDream: DeepDreamService,
+  ) {}
 
   @Get()
   list(@Req() req: any) {
@@ -269,6 +273,17 @@ export class MemoryController {
   @Post('curate')
   curate(@Req() req: any) {
     return this.memory.curateNightly(req.user.id, 'manual')
+  }
+
+  /** Deep Dream: LLM nightly distillation into JOURNAL.md + durable facts. */
+  @Post('deep-dream/run')
+  runDeepDream(@Req() req: any) {
+    return this.deepDream.run(req.user.id, 'manual')
+  }
+
+  @Get('deep-dream/status')
+  deepDreamStatus(@Req() req: any) {
+    return this.deepDream.status(req.user.id)
   }
 
   @Get('sources')

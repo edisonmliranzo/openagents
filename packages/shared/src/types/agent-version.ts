@@ -9,6 +9,7 @@ export interface AgentVersionSettingsSnapshot {
 export interface AgentVersionSnapshot {
   id: string
   userId: string
+  agentId: string
   version: number
   createdAt: string
   note?: string
@@ -19,6 +20,7 @@ export interface AgentVersionSnapshot {
 
 export interface CreateAgentVersionInput {
   note?: string
+  agentId?: string
 }
 
 export interface AgentVersionDiffEntry {

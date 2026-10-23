@@ -24,7 +24,7 @@ export function createCronApi(client: OpenAgentsClient) {
 
     deleteJob: (id: string) => client.delete<{ ok: true }>(`/api/v1/cron/jobs/${id}`),
 
-    runJob: (id: string) => client.post<CronRun>(`/api/v1/cron/jobs/${id}/run`),
+    runJob: (id: string) => client.post<{ ok: true; jobId: string }>(`/api/v1/cron/jobs/${id}/run`),
 
     listRuns: (id: string, limit = 25) =>
       client.get<CronRun[]>(`/api/v1/cron/jobs/${id}/runs?limit=${limit}`),

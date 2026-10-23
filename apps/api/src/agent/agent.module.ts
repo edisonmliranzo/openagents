@@ -24,6 +24,10 @@ import { NotificationsModule } from '../notifications/notifications.module'
 import { EventsModule } from '../events/events.module'
 import { GoalsModule } from '../goals/goals.module'
 import { CostModule } from '../cost/cost.module'
+import { LessonsStoreModule } from '../reflection/lessons-store.module'
+import { HooksModule } from '../hooks/hooks.module'
+import { ModelRoleService } from './model-role.service'
+import { ModelRoleController } from './model-role.controller'
 
 @Module({
   imports: [
@@ -39,9 +43,11 @@ import { CostModule } from '../cost/cost.module'
     StudyModule,
     forwardRef(() => FrontierModule),
     CostModule,
+    LessonsStoreModule,
+    HooksModule,
   ],
-  controllers: [AgentController],
-  providers: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],
-  exports: [AgentService, LLMService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],
+  controllers: [AgentController, ModelRoleController],
+  providers: [AgentService, LLMService, ModelRoleService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],
+  exports: [AgentService, LLMService, ModelRoleService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],
 })
 export class AgentModule {}

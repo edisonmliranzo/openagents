@@ -1,10 +1,9 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { ModuleRef } from '@nestjs/core'
-import { promises as fs } from 'fs'
-import * as path from 'path'
 import { randomUUID } from 'crypto'
 import type { BrowserAction, BrowserActionResult } from './browser-automation.service'
 import { BrowserAutomationService } from './browser-automation.service'
+import { DocumentStore } from '../prisma/document-store.service'
 
 export interface WorkflowVariable {
   name: string
@@ -53,18 +52,18 @@ interface ActiveRecording {
 
 const VAR_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g
 
+const KIND = 'browser_workflows'
+
 @Injectable()
 export class WorkflowRecorderService {
   private readonly logger = new Logger(WorkflowRecorderService.name)
   private readonly recordings = new Map<string, ActiveRecording>()
   private readonly lastStopped = new Map<string, RecordedStep[]>()
-  private readonly dir = path.resolve(
-    process.env.BROWSER_WORKFLOWS_DATA_DIR ?? path.join(process.cwd(), 'data', 'browser-workflows'),
-  )
 
   constructor(
     private readonly browser: BrowserAutomationService,
     private readonly moduleRef: ModuleRef,
+    private readonly documents: DocumentStore,
   ) {}
 
   // ── recording ──────────────────────────────────────────────────────────────
@@ -152,23 +151,13 @@ export class WorkflowRecorderService {
 
   // ── workflow store ─────────────────────────────────────────────────────────
 
-  private file(userId: string) {
-    return path.join(this.dir, `${userId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`)
-  }
-
   private async readAll(userId: string): Promise<BrowserWorkflow[]> {
-    try {
-      const raw = await fs.readFile(this.file(userId), 'utf8')
-      const parsed = JSON.parse(raw)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
+    const parsed = await this.documents.read<unknown>(userId, KIND, () => [])
+    return Array.isArray(parsed) ? (parsed as BrowserWorkflow[]) : []
   }
 
   private async writeAll(userId: string, items: BrowserWorkflow[]) {
-    await fs.mkdir(this.dir, { recursive: true })
-    await fs.writeFile(this.file(userId), JSON.stringify(items, null, 2), 'utf8')
+    await this.documents.write(userId, KIND, items)
   }
 
   list(userId: string) {

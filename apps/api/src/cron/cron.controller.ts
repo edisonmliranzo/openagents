@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { CronService } from './cron.service'
+import { CronSchedulerService } from './cron-scheduler.service'
 import type {
   CreateCronJobInput,
   CronDeliveryMode,
@@ -118,7 +119,10 @@ class SelfHealCronDto {
 @UseGuards(JwtAuthGuard)
 @Controller('cron/jobs')
 export class CronController {
-  constructor(private cron: CronService) {}
+  constructor(
+    private cron: CronService,
+    private cronScheduler: CronSchedulerService,
+  ) {}
 
   @Get()
   list(@Req() req: any) {
@@ -142,7 +146,7 @@ export class CronController {
 
   @Post(':id/run')
   run(@Req() req: any, @Param('id') id: string) {
-    return this.cron.runJob(req.user.id, id)
+    return this.cronScheduler.runNow(req.user.id, id)
   }
 
   @Get(':id/runs')
@@ -150,6 +154,11 @@ export class CronController {
     const parsedLimit = Number.parseInt(limit ?? '25', 10)
     const safeLimit = Number.isFinite(parsedLimit) ? parsedLimit : 25
     return this.cron.listRuns(req.user.id, id, safeLimit)
+  }
+
+  @Get(':id')
+  get(@Req() req: any, @Param('id') id: string) {
+    return this.cron.getJob(req.user.id, id)
   }
 
   @Get('health/summary')

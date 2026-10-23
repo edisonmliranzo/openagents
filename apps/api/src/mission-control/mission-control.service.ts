@@ -1,3 +1,4 @@
+import { DocumentStore } from '../prisma/document-store.service'
 import { Injectable, Logger } from '@nestjs/common'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
@@ -28,6 +29,8 @@ export class MissionControlService {
   private readonly loadedUsers = new Set<string>()
   private readonly eventsByUser = new Map<string, MissionControlEvent[]>()
   private readonly listenersByUser = new Map<string, Set<MissionControlListener>>()
+
+  constructor(private readonly documents: DocumentStore) {}
 
   async listEvents(userId: string, input: MissionControlListInput = {}): Promise<MissionControlListResult> {
     await this.ensureLoaded(userId)
@@ -131,8 +134,7 @@ export class MissionControlService {
 
   private async ensureLoaded(userId: string) {
     if (this.loadedUsers.has(userId)) return
-    const filePath = this.storeFilePath(userId)
-    const store = await this.readStore(filePath)
+    const store = await this.readStore(userId)
     const events = (store.events ?? [])
       .filter((event) => event.userId === userId)
       .map((event) => this.sanitizeStoredEvent(event, userId))
@@ -212,14 +214,12 @@ export class MissionControlService {
       version: STORE_VERSION,
       events: this.eventsByUser.get(userId) ?? [],
     }
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
-    await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    await this.documents.write(userId, 'mission_control', payload)
   }
 
-  private async readStore(filePath: string): Promise<MissionEventStoreFile> {
+  private async readStore(userId: string): Promise<MissionEventStoreFile> {
     try {
-      const raw = await fs.readFile(filePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<MissionEventStoreFile>
+      const parsed = await this.documents.read<Partial<MissionEventStoreFile>>(userId, 'mission_control', () => ({}))
       return {
         version: Number.isFinite(parsed.version) ? Number(parsed.version) : STORE_VERSION,
         events: Array.isArray(parsed.events) ? parsed.events : [],

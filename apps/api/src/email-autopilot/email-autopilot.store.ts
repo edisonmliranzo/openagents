@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { promises as fs } from 'fs'
-import * as path from 'path'
+import { DocumentStore } from '../prisma/document-store.service'
 
 export type TriageCategory = 'urgent' | 'reply_needed' | 'fyi' | 'newsletter' | 'invoice'
 export const TRIAGE_CATEGORIES: TriageCategory[] = ['urgent', 'reply_needed', 'fyi', 'newsletter', 'invoice']
@@ -94,45 +93,27 @@ const empty = (): EmailAutopilotFile => ({
   processedIds: [],
 })
 
+const KIND = 'email_autopilot'
+
 @Injectable()
 export class EmailAutopilotStore {
   private readonly logger = new Logger(EmailAutopilotStore.name)
-  private readonly dir = path.resolve(
-    process.env.EMAIL_AUTOPILOT_DATA_DIR ?? path.join(process.cwd(), 'data', 'email-autopilot'),
-  )
-  private readonly cache = new Map<string, EmailAutopilotFile>()
 
-  private fileFor(userId: string) {
-    return path.join(this.dir, `${userId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`)
-  }
+  constructor(private documents: DocumentStore) {}
 
   async load(userId: string): Promise<EmailAutopilotFile> {
-    const cached = this.cache.get(userId)
-    if (cached) return cached
-    let data = empty()
-    try {
-      const parsed = JSON.parse(await fs.readFile(this.fileFor(userId), 'utf8')) as Partial<EmailAutopilotFile>
-      data = { ...data, ...parsed }
-      for (const k of ['rules', 'triage', 'drafts', 'pendingActions', 'processedIds'] as const) {
-        if (!Array.isArray(data[k])) (data as any)[k] = []
-      }
-    } catch {
-      // defaults
+    const data = await this.documents.read<EmailAutopilotFile>(userId, KIND, empty)
+    const normalized: EmailAutopilotFile = { ...empty(), ...data }
+    for (const k of ['rules', 'triage', 'drafts', 'pendingActions', 'processedIds'] as const) {
+      if (!Array.isArray(normalized[k])) (normalized as any)[k] = []
     }
-    this.cache.set(userId, data)
-    return data
+    return normalized
   }
 
   async save(userId: string, data: EmailAutopilotFile) {
     data.drafts = data.drafts.slice(0, 200)
     data.pendingActions = data.pendingActions.slice(0, 200)
     data.processedIds = data.processedIds.slice(-1000)
-    this.cache.set(userId, data)
-    try {
-      await fs.mkdir(this.dir, { recursive: true })
-      await fs.writeFile(this.fileFor(userId), JSON.stringify(data, null, 2), 'utf8')
-    } catch (error: any) {
-      this.logger.warn(`Failed to persist email autopilot data for ${userId}: ${error?.message ?? error}`)
-    }
+    await this.documents.write(userId, KIND, data)
   }
 }

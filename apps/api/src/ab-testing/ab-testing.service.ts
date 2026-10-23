@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { randomUUID } from 'node:crypto'
 
@@ -8,6 +8,13 @@ export interface AbTestVariant {
   systemPrompt: string
   model?: string
   temperature?: number
+}
+
+export interface AbTestResult {
+  runs: number
+  avgLatencyMs: number
+  avgTokens: number
+  satisfactionScore: number
 }
 
 export interface AbTest {
@@ -20,91 +27,138 @@ export interface AbTest {
   status: 'running' | 'paused' | 'completed'
   createdAt: string
   updatedAt: string
-  results: Record<string, { runs: number; avgLatencyMs: number; avgTokens: number; satisfactionScore: number }>
+  results: Record<string, AbTestResult>
 }
 
-// In-memory store for A/B tests (persists until restart; for full persistence, add Prisma model)
-const store = new Map<string, AbTest>()
+const EMPTY_RESULT: AbTestResult = { runs: 0, avgLatencyMs: 0, avgTokens: 0, satisfactionScore: 0 }
 
 @Injectable()
 export class AbTestingService {
+  private readonly logger = new Logger(AbTestingService.name)
+
   constructor(private prisma: PrismaService) {}
 
-  create(userId: string, input: { name: string; description?: string; variants: AbTestVariant[] }): AbTest {
-    const id = randomUUID()
+  async create(
+    userId: string,
+    input: { name: string; description?: string; variants: AbTestVariant[] },
+  ): Promise<AbTest> {
     const now = new Date().toISOString()
-    const test: AbTest = {
-      id,
-      userId,
-      name: input.name,
-      description: input.description,
-      variants: input.variants.map(v => ({ ...v, id: v.id ?? randomUUID() })),
-      status: 'running',
-      createdAt: now,
-      updatedAt: now,
-      results: {},
+    const variants = (input.variants ?? []).map((v) => ({ ...v, id: v.id ?? randomUUID() }))
+    const results: Record<string, AbTestResult> = {}
+    for (const variant of variants) {
+      results[variant.id] = { ...EMPTY_RESULT }
     }
-    for (const v of test.variants) {
-      test.results[v.id] = { runs: 0, avgLatencyMs: 0, avgTokens: 0, satisfactionScore: 0 }
-    }
-    store.set(id, test)
-    return test
-  }
 
-  list(userId: string): AbTest[] {
-    return Array.from(store.values()).filter(t => t.userId === userId)
-  }
-
-  get(userId: string, testId: string): AbTest | null {
-    const t = store.get(testId)
-    return t?.userId === userId ? t : null
-  }
-
-  pickVariant(userId: string, testId: string): AbTestVariant | null {
-    const test = this.get(userId, testId)
-    if (!test || test.variants.length === 0) return null
-    // Round-robin: pick variant with fewest runs
-    const sorted = [...test.variants].sort((a, b) => {
-      return (test.results[a.id]?.runs ?? 0) - (test.results[b.id]?.runs ?? 0)
+    const test = await this.prisma.abTest.create({
+      data: {
+        userId,
+        name: input.name,
+        description: input.description ?? null,
+        variants: JSON.parse(JSON.stringify(variants)),
+        results: JSON.parse(JSON.stringify(results)),
+        status: 'running',
+      },
     })
+
+    this.logger.log(`Created A/B test "${test.name}" for user ${userId}`)
+    return this.toAbTest(test)
+  }
+
+  async list(userId: string): Promise<AbTest[]> {
+    const tests = await this.prisma.abTest.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    })
+    return tests.map((t) => this.toAbTest(t))
+  }
+
+  async get(userId: string, testId: string): Promise<AbTest | null> {
+    const test = await this.prisma.abTest.findFirst({ where: { id: testId, userId } })
+    return test ? this.toAbTest(test) : null
+  }
+
+  async pickVariant(userId: string, testId: string): Promise<AbTestVariant | null> {
+    const test = await this.get(userId, testId)
+    if (!test || test.variants.length === 0) return null
+    // Round-robin: pick the variant with the fewest runs.
+    const sorted = [...test.variants].sort(
+      (a, b) => (test.results[a.id]?.runs ?? 0) - (test.results[b.id]?.runs ?? 0),
+    )
     return sorted[0]
   }
 
-  recordResult(
+  async recordResult(
     userId: string,
     testId: string,
     variantId: string,
     result: { latencyMs: number; tokens: number; satisfaction?: number },
-  ): void {
-    const test = this.get(userId, testId)
+  ): Promise<void> {
+    const test = await this.get(userId, testId)
     if (!test) return
-    const r = test.results[variantId]
-    if (!r) return
-    const prev = r.runs
-    r.runs += 1
-    r.avgLatencyMs = (r.avgLatencyMs * prev + result.latencyMs) / r.runs
-    r.avgTokens = (r.avgTokens * prev + result.tokens) / r.runs
-    if (result.satisfaction != null) {
-      r.satisfactionScore = (r.satisfactionScore * prev + result.satisfaction) / r.runs
+    const current = test.results[variantId]
+    if (!current) return
+
+    const runs = current.runs + 1
+    const next: AbTestResult = {
+      runs,
+      avgLatencyMs: (current.avgLatencyMs * current.runs + result.latencyMs) / runs,
+      avgTokens: (current.avgTokens * current.runs + result.tokens) / runs,
+      satisfactionScore:
+        result.satisfaction != null
+          ? (current.satisfactionScore * current.runs + result.satisfaction) / runs
+          : current.satisfactionScore,
     }
-    test.updatedAt = new Date().toISOString()
-    store.set(testId, test)
+
+    await this.prisma.abTest.update({
+      where: { id: testId },
+      data: {
+        results: JSON.parse(JSON.stringify({ ...test.results, [variantId]: next })),
+      },
+    })
   }
 
-  setWinner(userId: string, testId: string, variantId: string): AbTest | null {
-    const test = this.get(userId, testId)
+  async setWinner(userId: string, testId: string, variantId: string): Promise<AbTest | null> {
+    const test = await this.get(userId, testId)
     if (!test) return null
-    test.winnerVariantId = variantId
-    test.status = 'completed'
-    test.updatedAt = new Date().toISOString()
-    store.set(testId, test)
-    return test
+    if (!test.variants.some((v) => v.id === variantId)) return null
+
+    const updated = await this.prisma.abTest.update({
+      where: { id: testId },
+      data: { winnerVariantId: variantId, status: 'completed' },
+    })
+    return this.toAbTest(updated)
   }
 
-  delete(userId: string, testId: string): boolean {
-    const test = this.get(userId, testId)
+  async delete(userId: string, testId: string): Promise<boolean> {
+    const test = await this.prisma.abTest.findFirst({ where: { id: testId, userId } })
     if (!test) return false
-    store.delete(testId)
+    await this.prisma.abTest.delete({ where: { id: testId } })
     return true
+  }
+
+  private toAbTest(test: {
+    id: string
+    userId: string
+    name: string
+    description: string | null
+    variants: unknown
+    results: unknown
+    status: string
+    winnerVariantId: string | null
+    createdAt: Date
+    updatedAt: Date
+  }): AbTest {
+    return {
+      id: test.id,
+      userId: test.userId,
+      name: test.name,
+      description: test.description ?? undefined,
+      variants: (test.variants as AbTestVariant[]) ?? [],
+      winnerVariantId: test.winnerVariantId ?? undefined,
+      status: (test.status as AbTest['status']) ?? 'running',
+      createdAt: test.createdAt.toISOString(),
+      updatedAt: test.updatedAt.toISOString(),
+      results: (test.results as Record<string, AbTestResult>) ?? {},
+    }
   }
 }

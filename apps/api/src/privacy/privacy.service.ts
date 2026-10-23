@@ -1,8 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common'
 import * as bcrypt from 'bcrypt'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto'
-import { promises as fs } from 'fs'
-import * as path from 'path'
 import { PrismaService } from '../prisma/prisma.service'
 
 /** Prefix for memory content encrypted by the privacy vault (distinct from users.service `enc:v1:`). */
@@ -20,44 +18,43 @@ interface PrivacyFile {
   sensitiveMemoryIds: string[]
 }
 
-const safeId = (userId: string) => userId.replace(/[^a-zA-Z0-9_-]/g, '_')
-
 @Injectable()
 export class PrivacyService {
   private readonly logger = new Logger(PrivacyService.name)
-  private readonly dataRoot = path.resolve(process.env.OPENAGENTS_DATA_DIR ?? path.join(process.cwd(), 'data'))
-  private readonly dir = path.join(this.dataRoot, 'privacy')
-  private readonly cache = new Map<string, PrivacyFile>()
 
   constructor(private readonly prisma: PrismaService) {}
 
   // ── Settings / local-only ─────────────────────────────────────────────────
 
   private async load(userId: string): Promise<PrivacyFile> {
-    const cached = this.cache.get(userId)
-    if (cached) return cached
-    let data: PrivacyFile = { settings: { localOnly: false }, sensitiveMemoryIds: [] }
-    try {
-      const parsed = JSON.parse(await fs.readFile(path.join(this.dir, `${safeId(userId)}.json`), 'utf8'))
-      data = {
-        settings: { localOnly: !!parsed?.settings?.localOnly, localModel: parsed?.settings?.localModel || undefined },
-        sensitiveMemoryIds: Array.isArray(parsed?.sensitiveMemoryIds) ? parsed.sensitiveMemoryIds : [],
-      }
-    } catch {
-      // defaults
+    const row = await this.prisma.privacyVault.findUnique({ where: { userId } })
+    if (!row) return { settings: { localOnly: false }, sensitiveMemoryIds: [] }
+    return {
+      settings: {
+        localOnly: !!row.localOnly,
+        localModel: row.localModel || undefined,
+      },
+      sensitiveMemoryIds: Array.isArray(row.sensitiveMemoryIds)
+        ? (row.sensitiveMemoryIds as string[])
+        : [],
     }
-    this.cache.set(userId, data)
-    return data
   }
 
   private async save(userId: string, data: PrivacyFile) {
-    this.cache.set(userId, data)
-    try {
-      await fs.mkdir(this.dir, { recursive: true })
-      await fs.writeFile(path.join(this.dir, `${safeId(userId)}.json`), JSON.stringify(data, null, 2), 'utf8')
-    } catch (error: any) {
-      this.logger.warn(`Failed to persist privacy settings for ${userId}: ${error?.message ?? error}`)
-    }
+    await this.prisma.privacyVault.upsert({
+      where: { userId },
+      create: {
+        userId,
+        localOnly: data.settings.localOnly,
+        localModel: data.settings.localModel ?? null,
+        sensitiveMemoryIds: JSON.parse(JSON.stringify(data.sensitiveMemoryIds)),
+      },
+      update: {
+        localOnly: data.settings.localOnly,
+        localModel: data.settings.localModel ?? null,
+        sensitiveMemoryIds: JSON.parse(JSON.stringify(data.sensitiveMemoryIds)),
+      },
+    })
   }
 
   async getSettings(userId: string): Promise<PrivacySettings & { sensitiveMemoryCount: number }> {
@@ -192,32 +189,25 @@ export class PrivacyService {
     }
   }
 
-  /** Reads every data/<feature>/<safeUserId>.json file belonging to this user. */
+  /**
+   * Collects the user's feature documents straight from the database.
+   * They used to be JSON files under data/<feature>/<userId>.json — reading them
+   * from Postgres means the export is complete and can never miss a file that
+   * was written but not flushed.
+   */
   private async collectFeatureFiles(userId: string): Promise<Record<string, unknown>> {
+    const rows = await this.prisma.userDocument.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+    })
+
     const out: Record<string, unknown> = {}
-    for (const file of await this.featureFiles(userId)) {
-      try {
-        out[path.basename(path.dirname(file))] = JSON.parse(await fs.readFile(file, 'utf8'))
-      } catch {
-        // skip unreadable
-      }
+    for (const row of rows) {
+      const bucket = (out[row.kind] ??= {}) as Record<string, unknown>
+      if (row.key) bucket[row.key] = row.data
+      else out[`${row.kind}.value`] = row.data
     }
     return out
-  }
-
-  private async featureFiles(userId: string): Promise<string[]> {
-    const name = `${safeId(userId)}.json`
-    const files: string[] = []
-    try {
-      for (const entry of await fs.readdir(this.dataRoot, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue
-        const candidate = path.join(this.dataRoot, entry.name, name)
-        if (await fs.stat(candidate).then((s) => s.isFile()).catch(() => false)) files.push(candidate)
-      }
-    } catch {
-      // no data dir
-    }
-    return files
   }
 
   // ── Delete all ────────────────────────────────────────────────────────────
@@ -254,14 +244,30 @@ export class PrivacyService {
       'goal',
       'learningInteraction',
       'learnedPattern',
+      'userDocument',
+      'pushSubscription',
+      'expoPushToken',
+      'warRoom',
+      'warRoomMessage',
+      'pinnedMessage',
+      'messageReaction',
+      'generativeComponent',
+      'abTest',
+      'conversationTemplate',
+      'customTool',
     ]) {
       await wipe(model)
     }
-    let files = 0
-    for (const file of await this.featureFiles(userId)) {
-      await fs.rm(file, { force: true }).then(() => files++).catch(() => undefined)
+
+    let documents = 0
+    try {
+      const res = await this.prisma.userDocument.deleteMany({ where: { userId } })
+      documents = res.count
+    } catch (error: any) {
+      this.logger.warn(`privacy wipe: userDocument failed: ${error?.message ?? error}`)
     }
-    this.cache.delete(userId)
-    return { ok: true, deleted, featureFilesRemoved: files }
+    await this.prisma.privacyVault.deleteMany({ where: { userId } }).catch(() => undefined)
+
+    return { ok: true, deleted, featureFilesRemoved: documents }
   }
 }

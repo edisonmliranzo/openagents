@@ -10,7 +10,7 @@ export class AnomalyController {
   @Post('detect')
   async detect(
     @CurrentUserId() userId: string,
-    @Body() body: { type: AnomalyType; value: number },
+    @Body() body: { type: AnomalyType; value?: number },
   ) {
     return this.anomalyService.detect(userId, body.type, body.value)
   }

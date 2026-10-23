@@ -103,7 +103,7 @@ export class ConversationsController {
 
     const emit = (event: string, data: unknown) => {
       // 1. Log chunk and tool progress in StreamingService
-      if (event === 'message' || event === 'tokens' || event === 'thinking') {
+      if (event === 'message' || event === 'tokens' || event === 'thinking' || event === 'delta') {
         const textContent = typeof data === 'string'
           ? data
           : (data as any)?.content ?? (data as any)?.message ?? JSON.stringify(data)
@@ -195,11 +195,6 @@ export class ConversationsController {
   async compress(@Param('id') id: string, @Req() req: any) {
     const summary = await this.compressor.forceCompress(id, req.user.id)
     return { ok: true, summary }
-  }
-
-  @Get('search')
-  search(@Query('q') q: string, @Req() req: any) {
-    return this.conversations.search(req.user.id, q ?? '')
   }
 
   @Get(':id/export/jsonl')

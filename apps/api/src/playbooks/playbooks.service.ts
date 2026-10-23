@@ -1,3 +1,4 @@
+import { DocumentStore } from '../prisma/document-store.service'
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
@@ -40,6 +41,7 @@ export class PlaybooksService {
     private workflows: WorkflowsService,
     private prisma: PrismaService,
     private mission: MissionControlService,
+    private documents: DocumentStore,
   ) {}
 
   async list(userId: string) {
@@ -466,7 +468,7 @@ export class PlaybooksService {
 
   private async ensureLoaded(userId: string) {
     if (this.loadedUsers.has(userId)) return
-    const store = await this.readStore(this.storeFilePath(userId))
+    const store = await this.readStore(userId)
     const playbooks = (store.playbooks ?? [])
       .filter((playbook) => playbook.userId === userId)
       .map((playbook) => this.sanitizeStoredPlaybook(playbook, userId))
@@ -539,20 +541,17 @@ export class PlaybooksService {
   }
 
   private async persist(userId: string) {
-    const filePath = this.storeFilePath(userId)
     const payload: PlaybookStoreFile = {
       version: STORE_VERSION,
       playbooks: this.playbooksByUser.get(userId) ?? [],
       runs: this.runsByUser.get(userId) ?? [],
     }
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
-    await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    await this.documents.write(userId, 'playbooks', payload)
   }
 
-  private async readStore(filePath: string): Promise<PlaybookStoreFile> {
+  private async readStore(userId: string): Promise<PlaybookStoreFile> {
     try {
-      const raw = await fs.readFile(filePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<PlaybookStoreFile>
+      const parsed = await this.documents.read<Partial<PlaybookStoreFile>>(userId, 'playbooks', () => ({}))
       return {
         version: Number.isFinite(parsed.version) ? Number(parsed.version) : STORE_VERSION,
         playbooks: Array.isArray(parsed.playbooks) ? parsed.playbooks : [],

@@ -71,3 +71,32 @@ export async function safeFetchText(raw: string, timeoutMs = 15000): Promise<str
   }
   throw new Error('Too many redirects')
 }
+
+/** Binary counterpart of safeFetchText — used for remote images. */
+export async function safeFetchBuffer(
+  raw: string,
+  timeoutMs = 15000,
+  maxBytes = 10 * 1024 * 1024,
+): Promise<{ buffer: Buffer; contentType: string }> {
+  let current = raw
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const url = await assertPublicHttpUrl(current)
+    const res = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: { 'User-Agent': 'OpenAgents-Watch/1.0' },
+    })
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location')
+      if (!location) throw new Error('Redirect without location')
+      current = new URL(location, url).toString()
+      continue
+    }
+    if (!res.ok) throw new Error(`Image request failed with status ${res.status}`)
+    const contentType = (res.headers.get('content-type') ?? 'application/octet-stream').split(';')[0].trim()
+    const buffer = Buffer.from(await res.arrayBuffer())
+    if (buffer.byteLength > maxBytes) throw new Error('Image is too large')
+    return { buffer, contentType }
+  }
+  throw new Error('Too many redirects')
+}

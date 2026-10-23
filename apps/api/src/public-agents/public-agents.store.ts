@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { promises as fs } from 'fs'
-import * as path from 'path'
+import { DocumentStore } from '../prisma/document-store.service'
+
+const KIND = 'public_agents'
 
 /** Only these tools may ever be exposed on a public agent. */
 export const SAFE_PUBLIC_TOOLS = ['web_search', 'library_search'] as const
@@ -64,68 +65,28 @@ export function emptyUsage(): PublicAgentUsage {
 @Injectable()
 export class PublicAgentsStore {
   private readonly logger = new Logger(PublicAgentsStore.name)
-  private readonly dir = path.resolve(
-    process.env.PUBLIC_AGENTS_DATA_DIR ?? path.join(process.cwd(), 'data', 'public-agents'),
-  )
-  private readonly cache = new Map<string, OwnerFile>()
-  private slugIndex: Record<string, string> | null = null
 
-  private safe(userId: string) {
-    return userId.replace(/[^a-zA-Z0-9_-]/g, '_')
-  }
-
-  private fileFor(userId: string) {
-    return path.join(this.dir, `${this.safe(userId)}.json`)
-  }
-
-  private get indexFile() {
-    return path.join(this.dir, '_slugs.json')
-  }
+  constructor(private documents: DocumentStore) {}
 
   async load(userId: string): Promise<OwnerFile> {
-    const cached = this.cache.get(userId)
-    if (cached) return cached
-    let data: OwnerFile = { agents: [] }
-    try {
-      const parsed = JSON.parse(await fs.readFile(this.fileFor(userId), 'utf8')) as Partial<OwnerFile>
-      data = { agents: Array.isArray(parsed.agents) ? parsed.agents : [] }
-    } catch {
-      // missing -> empty
-    }
-    this.cache.set(userId, data)
-    return data
+    const parsed = await this.documents.read<Partial<OwnerFile>>(userId, KIND, () => ({}))
+    return { agents: Array.isArray(parsed.agents) ? parsed.agents : [] }
   }
 
   async save(userId: string, data: OwnerFile) {
-    this.cache.set(userId, data)
-    try {
-      await fs.mkdir(this.dir, { recursive: true })
-      await fs.writeFile(this.fileFor(userId), JSON.stringify(data, null, 2), 'utf8')
-    } catch (err) {
-      this.logger.warn(`Failed to persist public agents: ${(err as Error).message}`)
-    }
+    await this.documents.write(userId, KIND, data)
   }
 
+  /** slug -> ownerId */
   async getIndex(): Promise<Record<string, string>> {
-    if (this.slugIndex) return this.slugIndex
-    try {
-      this.slugIndex = JSON.parse(await fs.readFile(this.indexFile, 'utf8')) as Record<string, string>
-    } catch {
-      this.slugIndex = {}
-    }
-    return this.slugIndex
+    return this.documents.readGlobal<Record<string, string>>('slug_index', () => ({}))
   }
 
   async setSlug(slug: string, ownerId: string | null) {
     const index = await this.getIndex()
     if (ownerId) index[slug] = ownerId
     else delete index[slug]
-    try {
-      await fs.mkdir(this.dir, { recursive: true })
-      await fs.writeFile(this.indexFile, JSON.stringify(index, null, 2), 'utf8')
-    } catch (err) {
-      this.logger.warn(`Failed to persist slug index: ${(err as Error).message}`)
-    }
+    await this.documents.writeGlobal('slug_index', index)
   }
 
   async findBySlug(slug: string): Promise<PublicAgent | null> {

@@ -3,9 +3,10 @@ import { CronController } from './cron.controller'
 import { CronService } from './cron.service'
 import { CronSchedulerService } from './cron-scheduler.service'
 import { AgentModule } from '../agent/agent.module'
+import { NotificationsModule } from '../notifications/notifications.module'
 
 @Module({
-  imports: [forwardRef(() => AgentModule)],
+  imports: [forwardRef(() => AgentModule), NotificationsModule],
   controllers: [CronController],
   providers: [CronService, CronSchedulerService],
   exports: [CronService],

@@ -22,7 +22,7 @@ export function BranchButton({ sessionId, messageIndex, onBranched }: BranchButt
     if (!prompt) return
     setLoading(true)
     try {
-      const res = await fetch('/api/agent/branch', {
+      const res = await fetch('/api/v1/agent/branch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, fromMessageIndex: messageIndex, prompt }),

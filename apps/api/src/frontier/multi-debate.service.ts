@@ -4,6 +4,14 @@ import { LLMService } from '../agent/llm.service'
 import { UsersService } from '../users/users.service'
 import type { LLMProvider } from '@openagents/shared'
 import { clamp } from './frontier.util'
+import { scoreConsensus } from '../war-rooms/consensus'
+import {
+  DEFAULT_DEBATE_TERMINATION,
+  estimateTokens,
+  evaluateTermination,
+  type TerminationCondition,
+  type TerminationState,
+} from '../war-rooms/termination'
 
 export interface DebateSeat {
   seat: string
@@ -19,6 +27,8 @@ export interface MultiDebateResult {
   verdict: { winner: string; confidence: number; synthesis: string; rationale: string }
   judge: DebateSeat
   durationMs: number
+  /** Set when a termination condition fired before the critique round. */
+  stoppedEarly?: string
 }
 
 const SEAT_NAMES = ['A', 'B', 'C']
@@ -85,8 +95,14 @@ export class MultiDebateService {
     return String(res.content ?? '').trim()
   }
 
-  async run(userId: string, question: string, models?: string[]): Promise<MultiDebateResult> {
+  async run(
+    userId: string,
+    question: string,
+    models?: string[],
+    options: { termination?: TerminationCondition } = {},
+  ): Promise<MultiDebateResult> {
     const started = Date.now()
+    const termination = options.termination ?? DEFAULT_DEBATE_TERMINATION
     const q = clamp(question.trim(), 4000)
     if (!q) throw new BadRequestException('question required')
     const seats = await this.resolveSeats(userId, models)
@@ -110,27 +126,45 @@ export class MultiDebateService {
     const valid = answers.filter((a) => a.text)
     if (valid.length < 1) throw new BadRequestException('All debaters failed to answer.')
 
-    // Round 2: each seat critiques the others.
-    const critiques = await Promise.all(
-      seats.map(async (s) => {
-        const own = answers.find((a) => a.seat === s.seat)
-        const others = valid.filter((a) => a.seat !== s.seat)
-        if (!own?.text || !others.length) return { seat: s.seat, text: '', error: 'skipped' }
-        try {
-          const text = await this.ask(
-            userId,
-            s,
-            `You are debater ${s.seat}. Critique the other answers: point out factual errors, gaps, and strengths. Then say if you revise your own position. <=200 words.`,
-            `Question: ${q}\n\nYour answer:\n${clamp(own.text, 1500)}\n\n${others
-              .map((o) => `Answer ${o.seat}:\n${clamp(o.text, 1500)}`)
-              .join('\n\n')}`,
-          )
-          return { seat: s.seat, text }
-        } catch (e: any) {
-          return { seat: s.seat, text: '', error: String(e?.message ?? e).slice(0, 200) }
-        }
-      }),
-    )
+    // Termination check (AutoGen-style): when the seats already agree, the
+    // critique round is pure cost — skip it and go straight to the judge.
+    const termState: TerminationState = {
+      round: 1,
+      messageCount: valid.length,
+      tokensUsed: estimateTokens(valid.map((a) => a.text)),
+      elapsedMs: Date.now() - started,
+      contributions: valid.map((a) => ({ name: a.seat, text: a.text })),
+    }
+    const verdict1 = evaluateTermination(termination, termState, { scoreConsensus })
+    const stoppedEarly = verdict1.stop ? (verdict1.reason ?? 'Termination condition met.') : null
+    if (stoppedEarly) {
+      this.logger.log(`Debate stopped early: ${stoppedEarly}`)
+    }
+
+    let critiques: Array<{ seat: string; text: string; error?: string }> = []
+    if (!verdict1.stop) {
+      // Round 2: each seat critiques the others.
+      critiques = await Promise.all(
+        seats.map(async (s) => {
+          const own = answers.find((a) => a.seat === s.seat)
+          const others = valid.filter((a) => a.seat !== s.seat)
+          if (!own?.text || !others.length) return { seat: s.seat, text: '', error: 'skipped' }
+          try {
+            const text = await this.ask(
+              userId,
+              s,
+              `You are debater ${s.seat}. Critique the other answers: point out factual errors, gaps, and strengths. Then say if you revise your own position. <=200 words.`,
+              `Question: ${q}\n\nYour answer:\n${clamp(own.text, 1500)}\n\n${others
+                .map((o) => `Answer ${o.seat}:\n${clamp(o.text, 1500)}`)
+                .join('\n\n')}`,
+            )
+            return { seat: s.seat, text }
+          } catch (e: any) {
+            return { seat: s.seat, text: '', error: String(e?.message ?? e).slice(0, 200) }
+          }
+        }),
+      )
+    }
 
     // Judge: the first seat (user's preferred provider) synthesizes.
     const judge = seats[0]
@@ -148,7 +182,7 @@ export class MultiDebateService {
         `Question: ${q}\n\n${valid.map((a) => `Answer ${a.seat}:\n${clamp(a.text, 1500)}`).join('\n\n')}\n\n${critiques
           .filter((c) => c.text)
           .map((c) => `Critique by ${c.seat}:\n${clamp(c.text, 1000)}`)
-          .join('\n\n')}\n\nReply JSON only: {"winner":"A"|"B"|"C"|"tie","confidence":0-100,"rationale":"<=60 words","synthesis":"best final answer <=300 words"}`,
+          .join('\n\n')}${stoppedEarly ? `\n\n(The debate stopped after the opening round: ${stoppedEarly})` : ''}\n\nReply JSON only: {"winner":"A"|"B"|"C"|"tie","confidence":0-100,"rationale":"<=60 words","synthesis":"best final answer <=300 words"}`,
       )
       const m = judgeText.match(/\{[\s\S]*\}/)
       const parsed = m ? JSON.parse(m[0]) : null
@@ -166,6 +200,15 @@ export class MultiDebateService {
       this.logger.debug(`Judge failed: ${e?.message ?? e}`)
     }
 
-    return { question: q, seats, answers, critiques, verdict, judge, durationMs: Date.now() - started }
+    return {
+      question: q,
+      seats,
+      answers,
+      critiques,
+      verdict,
+      judge,
+      durationMs: Date.now() - started,
+      ...(stoppedEarly ? { stoppedEarly } : {}),
+    }
   }
 }

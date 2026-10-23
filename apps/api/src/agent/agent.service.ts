@@ -29,7 +29,9 @@ import { AutopilotService } from '../frontier/autopilot.service'
 import { PromptRepairService } from '../frontier/prompt-repair.service'
 import { SkillLearnerService } from '../frontier/skill-learner.service'
 import { GoalService } from '../goals/goal.service'
-import { renderLessonsBlock } from '../reflection/lessons.store'
+import { LessonsStore } from '../reflection/lessons.store'
+import { HooksService } from '../hooks/hooks.service'
+import { ModelRoleService } from './model-role.service'
 import {
   OPENAGENTS_IDENTITY_APPENDIX,
   LLM_MODELS,
@@ -47,6 +49,12 @@ export interface AgentRunParams {
   systemPromptAppendix?: string
   mode?: string
   effort?: string
+  /**
+   * Forces a specific model for this run. Used by unattended work (scheduled
+   * runs, background jobs) so it can use the heavier model instead of the one
+   * driving the live conversation.
+   */
+  modelOverride?: string
 }
 
 const DEFAULT_SYSTEM_PROMPT = `${OPENAGENTS_SUPPORT_IDENTITY_PROMPT}
@@ -220,11 +228,14 @@ export class AgentService implements OnModuleInit {
     private study: StudyService,
     private costs: CostService,
     private costRouter: CostModelRouterService,
+    private lessons: LessonsStore,
     @Optional() private stakes: StakesService | null,
     @Optional() private pii: PiiRouterService | null,
     @Optional() private autopilot: AutopilotService | null,
     @Optional() private promptPatches: PromptRepairService | null,
     @Optional() private skillLearner: SkillLearnerService | null,
+    @Optional() private hooks?: HooksService | null,
+    @Optional() private modelRoles?: ModelRoleService | null,
   ) {}
 
   async onModuleInit() {
@@ -243,7 +254,7 @@ export class AgentService implements OnModuleInit {
     }
   }
 
-  async run({ conversationId, userId, userMessage, emit, systemPromptAppendix, effort: effortOverride }: AgentRunParams) {
+  async run({ conversationId, userId, userMessage, emit, systemPromptAppendix, effort: effortOverride, modelOverride }: AgentRunParams) {
     // 1. Save user message
     const userMsg = await this.prisma.message.create({
       data: { conversationId, role: 'user', content: userMessage, status: 'done' },
@@ -301,6 +312,38 @@ export class AgentService implements OnModuleInit {
     const stakes = this.stakes?.enabled ? await this.stakes.assess(userMessage) : 'medium'
     let planTotal = 0
     void this.expertise.observe(userId, userMessage).catch(() => undefined)
+
+    // Run-start hooks: a hook can block the run outright or add context.
+    const runHookNotes: string[] = []
+    if (this.hooks) {
+      try {
+        const hookResult = await this.hooks.run(userId, {
+          event: 'run_start',
+          userMessage,
+          conversationId,
+        })
+        if (hookResult.blocked) {
+          this.logger.log(`Hook blocked the run: ${hookResult.blockMessage}`)
+          await this.prisma.agentRun.update({
+            where: { id: run.id },
+            data: { status: 'error', finishedAt: new Date(), error: hookResult.blockMessage },
+          })
+          const blocked = await this.prisma.message.create({
+            data: { conversationId, role: 'agent', content: hookResult.blockMessage ?? 'Run blocked by a user hook.', status: 'error' },
+          })
+          emit('message', blocked)
+          return
+        }
+        runHookNotes.push(...hookResult.annotations)
+        for (const notification of hookResult.notifications) {
+          void this.notifications
+            .create(userId, notification.title, notification.body, 'info')
+            .catch(() => undefined)
+        }
+      } catch (error: any) {
+        this.logger.warn(`run_start hook failed: ${this.safeError(error)}`)
+      }
+    }
 
     // Instant path for greetings/small-talk: a single no-tools LLM call.
     // Skips memory pulls, tool catalogs, planning loops, and delegation so a
@@ -476,7 +519,7 @@ export class AgentService implements OnModuleInit {
       }
       // Self-improvement: lessons extracted from past runs (capped ~800 tokens).
       try {
-        const lessonsBlock = await renderLessonsBlock(userId)
+        const lessonsBlock = await this.lessons.renderBlock(userId)
         if (lessonsBlock) systemPrompt = `${systemPrompt}\n\n${lessonsBlock}`
       } catch {
         // lessons are best-effort
@@ -484,16 +527,19 @@ export class AgentService implements OnModuleInit {
       const freshnessNote = this.needsFreshData(userMessage)
         ? 'This request may depend on current information. Use web_search/web_fetch to verify facts that change over time before answering — do not rely on stale training data.'
         : ''
-      const promptAppendices = [
-        OPENAGENTS_IDENTITY_APPENDIX,
-        MEMORY_PROMPT_APPENDIX,
-        manusModeEnabled ? MANUS_MODE_PROMPT_APPENDIX : '',
-        systemPromptAppendix?.trim() ?? '',
-        openAgentsInstallAppendix,
-        this.persona.enabled ? this.persona.appendixFor(taskClass) : '',
-        freshnessNote,
-        await this.expertise.summaryForPrompt(userId).catch(() => ''),
-      ].filter(Boolean)
+    const promptAppendices = [
+      OPENAGENTS_IDENTITY_APPENDIX,
+      MEMORY_PROMPT_APPENDIX,
+      manusModeEnabled ? MANUS_MODE_PROMPT_APPENDIX : '',
+      systemPromptAppendix?.trim() ?? '',
+      openAgentsInstallAppendix,
+      this.persona.enabled ? this.persona.appendixFor(taskClass) : '',
+      freshnessNote,
+      await this.expertise.summaryForPrompt(userId).catch(() => ''),
+      runHookNotes.length
+        ? `HOOK CONTEXT (from the user's own hooks — follow it):\n${runHookNotes.map((n) => `- ${n}`).join('\n')}`
+        : '',
+    ].filter(Boolean)
       let effectiveSystemPrompt = promptAppendices.length
         ? `${systemPrompt}\n\n${promptAppendices.join('\n\n')}`
         : systemPrompt
@@ -585,6 +631,15 @@ export class AgentService implements OnModuleInit {
       let activeUserApiKey = userApiKey
       let activeUserBaseUrl = userBaseUrl
       let activeModel = preferredModel
+      // The user can pin a specific model to the `chat` role (Muse Spark, for
+      // the conversation they are in right now) independently of the default.
+      if (this.modelRoles) {
+        const chatOverride = (await this.modelRoles.userOverrides(userId)).chat
+        if (chatOverride?.trim()) activeModel = chatOverride.trim()
+      }
+      // Unattended work (scheduled runs, background jobs) can force the heavier
+      // model for that kind of work.
+      if (modelOverride?.trim()) activeModel = modelOverride.trim()
       let budgetDowngraded = false
       activeProviderForRun = activeProvider
       activeModelForRun = activeModel ?? null
@@ -717,6 +772,11 @@ export class AgentService implements OnModuleInit {
             activeUserBaseUrl,
             activeModel,
             activeProvider !== 'ollama' ? activeFallbackApiKeys : undefined,
+            // Stream the text as it arrives so the UI can render token by token.
+            (text) => emit('delta', { content: text }),
+            // Stream the tool call's arguments so the UI can show what is about
+            // to run before it runs.
+            (toolName, argsSoFar) => emit('tool_call_delta', { tool: toolName, args: argsSoFar }),
           )
         } catch (error: any) {
           const shouldFallbackToOllama =
@@ -747,6 +807,9 @@ export class AgentService implements OnModuleInit {
             activeUserApiKey,
             activeUserBaseUrl,
             activeModel,
+            undefined,
+            (text) => emit('delta', { content: text }),
+            (toolName, argsSoFar) => emit('tool_call_delta', { tool: toolName, args: argsSoFar }),
           )
         }
       }
@@ -852,6 +915,10 @@ export class AgentService implements OnModuleInit {
           break
         }
 
+        // The streamed text belonged to a tool-calling round, not the answer.
+        // Tell the UI to drop the partial preview.
+        emit('delta_reset', {})
+
         if (manusModeEnabled) {
           emit('status', { status: 'executing', round: toolRound + 1 })
         }
@@ -868,6 +935,47 @@ export class AgentService implements OnModuleInit {
               content: `Tool ${toolCall.name} is unavailable in this environment.`,
             })
             continue
+          }
+
+          // Pre-tool hooks run *before* the approval gate, so a user hook can
+          // pre-empt an approval (e.g. "never run this tool") and can rewrite
+          // the tool input.
+          let toolInput = toolCall.input
+          const hookNotes: string[] = []
+          if (this.hooks) {
+            try {
+              const hookResult = await this.hooks.run(userId, {
+                event: 'pre_tool',
+                toolName: toolCall.name,
+                toolInput,
+                userMessage,
+                conversationId,
+              })
+              if (hookResult.blocked) {
+                this.logger.log(`Hook blocked tool "${toolCall.name}": ${hookResult.blockMessage}`)
+                runMetrics.toolCalls.push({
+                  name: toolCall.name,
+                  requiresApproval: false,
+                  status: 'failed',
+                })
+                llmWorkingMessages.push({
+                  role: 'assistant',
+                  content: `The tool "${toolCall.name}" was blocked by a user hook and was not run. ${hookResult.blockMessage ?? ''}`.trim(),
+                })
+                continue
+              }
+              if (hookResult.modifiedInput) {
+                toolInput = hookResult.modifiedInput
+              }
+              hookNotes.push(...hookResult.annotations)
+              for (const notification of hookResult.notifications) {
+                void this.notifications
+                  .create(userId, notification.title, notification.body, 'info')
+                  .catch(() => undefined)
+              }
+            } catch (error: any) {
+              this.logger.warn(`pre_tool hook failed: ${this.safeError(error)}`)
+            }
           }
 
           autonomyStatus = await this.memory.getAutonomyStatus(userId)
@@ -1040,13 +1148,36 @@ export class AgentService implements OnModuleInit {
 
       const toolExecution = await this.executeToolWithRetry({
         toolName: toolCall.name,
-        toolInput: toolCall.input,
+        toolInput,
         userId,
         maxRetries: toolRetryAttempts,
         emit,
       })
 
       let result = toolExecution.result
+
+      // Post-tool hooks: observe the outcome, annotate it, or notify.
+      if (this.hooks) {
+        try {
+          const hookResult = await this.hooks.run(userId, {
+            event: 'post_tool',
+            toolName: toolCall.name,
+            toolInput,
+            toolOutput: result.output,
+            toolSuccess: result.success,
+            userMessage,
+            conversationId,
+          })
+          hookNotes.push(...hookResult.annotations)
+          for (const notification of hookResult.notifications) {
+            void this.notifications
+              .create(userId, notification.title, notification.body, result.success ? 'info' : 'warning')
+              .catch(() => undefined)
+          }
+        } catch (error: any) {
+          this.logger.warn(`post_tool hook failed: ${this.safeError(error)}`)
+        }
+      }
 
       // Self-debugging: failed code gets one automated fix-and-retry cycle —
       // the single biggest quality lever for coding agents.
@@ -1069,10 +1200,34 @@ export class AgentService implements OnModuleInit {
         if (repaired) result = repaired
       }
 
+      // Self-improvement: a tool that kept failing becomes an 'avoid' lesson so
+      // the next run tries something different first. Transient rate-limit
+      // errors are skipped so we do not learn the wrong lesson.
+      if (this.lessons && !result.success && !this.isRetryableToolError(result.error)) {
+        void this.lessons
+          .learnFromFailure(userId, {
+            toolName: toolCall.name,
+            error: result.error ?? undefined,
+            conversationId,
+          })
+          .catch(() => undefined)
+      }
+
           // Extract artifacts from tool output (images, audio, video, files)
           const toolOutput = result.output as Record<string, unknown> | null
           if (toolOutput) {
             const toolName = toolCall.name.toLowerCase()
+
+            // Generative UI: the agent produced an interactive component.
+            if (toolName === 'ui_component' && toolOutput.code) {
+              emit('ui_component', {
+                id: String(toolOutput.id ?? ''),
+                name: String(toolOutput.name ?? 'Generated component'),
+                language: toolOutput.language === 'html' ? 'html' : 'react',
+                code: String(toolOutput.code),
+                props: (toolOutput.props as Record<string, unknown>) ?? {},
+              })
+            }
             
             // Image generation tools
             if ((toolName === 'image_generate' || toolName === 'atlascloud_image_generate') && toolOutput.images) {
@@ -1217,9 +1372,10 @@ export class AgentService implements OnModuleInit {
             },
           })
           const externalContentPrefix = this.promptGuard.buildUntrustedContentPrefix(toolCall.name)
+          const hookSuffix = hookNotes.length ? `\n\n[hook notes]\n${hookNotes.map((n) => `- ${n}`).join('\n')}` : ''
           const successResultContent = externalContentPrefix
-            ? `${externalContentPrefix}\n\nTool result for ${toolCall.name}:\n${resultContent}`
-            : `Tool result for ${toolCall.name}:\n${resultContent}`
+            ? `${externalContentPrefix}\n\nTool result for ${toolCall.name}:\n${resultContent}${hookSuffix}`
+            : `Tool result for ${toolCall.name}:\n${resultContent}${hookSuffix}`
           llmWorkingMessages.push({
             role: 'assistant',
             content: result.success
@@ -1555,6 +1711,37 @@ export class AgentService implements OnModuleInit {
         model: activeModel ?? null,
         durationMs: Date.now() - runStartedAtMs,
       })
+
+      // Run-end hooks: observe the finished run (notify, annotate, follow up).
+      if (this.hooks) {
+        try {
+          const hookResult = await this.hooks.run(userId, {
+            event: 'run_end',
+            userMessage,
+            conversationId,
+            toolOutput: finalResponseContent,
+            toolSuccess: true,
+          })
+          for (const notification of hookResult.notifications) {
+            void this.notifications
+              .create(userId, notification.title, notification.body, 'info')
+              .catch(() => undefined)
+          }
+        } catch (error: any) {
+          this.logger.warn(`run_end hook failed: ${this.safeError(error)}`)
+        }
+      }
+
+      // Run debrief: a compact one-line record of what the run did, feeding the
+      // weekly self-summary. Best-effort — never blocks delivery.
+      if (this.lessons) {
+        const summary = `${userMessage.slice(0, 60).trim()} → ${finalResponseContent.slice(0, 80).trim() || 'no answer'}` +
+          ` (${runMetrics.toolCalls.length} tool${runMetrics.toolCalls.length === 1 ? '' : 's'}, ${Math.round((Date.now() - runStartedAtMs) / 1000)}s)`
+        void this.lessons
+          .recordDebrief(userId, { conversationId, summary, score: finalResponseContent ? 100 : 0 })
+          .catch(() => undefined)
+      }
+
       emit('status', { status: 'done' })
     } catch (err: any) {
       this.logger.error('Agent run failed', err)

@@ -21,7 +21,7 @@ export default function ApiKeysPage() {
   async function loadHealth() {
     setLoading(true)
     try {
-      const res = await fetch('/api/apikeys/health', { credentials: 'include' })
+      const res = await fetch('/api/v1/apikeys/health', { credentials: 'include' })
       if (res.ok) setKeys(await res.json())
     } finally {
       setLoading(false)
@@ -36,7 +36,7 @@ export default function ApiKeysPage() {
     setRotating(envVar)
     setMessage('')
     try {
-      const res = await fetch('/api/apikeys/rotate', {
+      const res = await fetch('/api/v1/apikeys/rotate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ envVar, newValue }),

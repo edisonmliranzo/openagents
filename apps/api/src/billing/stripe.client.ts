@@ -1,8 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
-import { createHmac, timingSafeEqual } from 'crypto'
+import { verifyStripeSignature } from './stripe-signature'
 
 const STRIPE_API = 'https://api.stripe.com/v1'
-const SIGNATURE_TOLERANCE_SEC = 300
 
 /** Flatten nested objects to Stripe's form encoding: a[b][0][c]=v */
 function encodeForm(data: Record<string, unknown>, prefix = '', out: string[] = []) {
@@ -57,20 +56,6 @@ export class StripeClient {
    * Returns the parsed event or throws.
    */
   verifyWebhook(rawBody: Buffer | string, header: string | undefined, secret: string, nowSec = Date.now() / 1000) {
-    if (!header) throw new Error('Missing Stripe-Signature header')
-    const parts = header.split(',').map((p) => p.trim().split('='))
-    const timestamp = Number(parts.find(([k]) => k === 't')?.[1])
-    const signatures = parts.filter(([k]) => k === 'v1').map(([, v]) => v)
-    if (!Number.isFinite(timestamp) || signatures.length === 0) throw new Error('Malformed Stripe-Signature header')
-    if (Math.abs(nowSec - timestamp) > SIGNATURE_TOLERANCE_SEC) throw new Error('Stripe signature timestamp outside tolerance')
-
-    const payload = typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8')
-    const expected = createHmac('sha256', secret).update(`${timestamp}.${payload}`, 'utf8').digest()
-    const ok = signatures.some((sig) => {
-      const given = Buffer.from(sig, 'hex')
-      return given.length === expected.length && timingSafeEqual(given, expected)
-    })
-    if (!ok) throw new Error('Invalid Stripe signature')
-    return JSON.parse(payload)
+    return verifyStripeSignature(rawBody, header, secret, nowSec)
   }
 }

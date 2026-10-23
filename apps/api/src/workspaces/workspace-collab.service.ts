@@ -7,10 +7,9 @@ import {
 } from '@nestjs/common'
 import { ModuleRef } from '@nestjs/core'
 import { randomUUID } from 'crypto'
-import { promises as fs } from 'fs'
-import * as path from 'path'
 import type { LLMProvider, WorkspaceRole } from '@openagents/shared'
 import { PrismaService } from '../prisma/prisma.service'
+import { DocumentStore } from '../prisma/document-store.service'
 import { buildWorkspacePermissions, hasWorkspaceRole, normalizeWorkspaceRole } from '../common/workspace-role'
 import { safeJsonStringify } from '../common/json'
 import { WorkspacesService } from './workspaces.service'
@@ -52,15 +51,12 @@ const MAX_MESSAGES = 500
 @Injectable()
 export class WorkspaceCollabService {
   private readonly logger = new Logger(WorkspaceCollabService.name)
-  private readonly dir = path.resolve(
-    process.env.WORKSPACE_THREADS_DATA_DIR ?? path.join(process.cwd(), 'data', 'workspace-threads'),
-  )
-  private readonly cache = new Map<string, ThreadsFile>()
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly workspaces: WorkspacesService,
     private readonly moduleRef: ModuleRef,
+    private readonly documents: DocumentStore,
   ) {}
 
   // ── Members & invites ──────────────────────────────────────────────────────
@@ -138,7 +134,7 @@ export class WorkspaceCollabService {
 
   async listThreads(userId: string, workspaceId: string) {
     await this.workspaces.requireWorkspace(userId, workspaceId, 'viewer')
-    const data = await this.load(workspaceId)
+    const data = await this.load(userId, workspaceId)
     return data.threads
       .map((t) => ({ ...t, messageCount: t.messages.length, messages: t.messages.slice(-1) }))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -146,14 +142,14 @@ export class WorkspaceCollabService {
 
   async getThread(userId: string, workspaceId: string, threadId: string) {
     await this.workspaces.requireWorkspace(userId, workspaceId, 'viewer')
-    const thread = (await this.load(workspaceId)).threads.find((t) => t.id === threadId)
+    const thread = (await this.load(userId, workspaceId)).threads.find((t) => t.id === threadId)
     if (!thread) throw new NotFoundException('Thread not found.')
     return thread
   }
 
   async createThread(userId: string, workspaceId: string, input: { title?: string; message?: string }) {
     await this.workspaces.requireWorkspace(userId, workspaceId, 'editor')
-    const data = await this.load(workspaceId)
+    const data = await this.load(userId, workspaceId)
     if (data.threads.length >= MAX_THREADS) throw new BadRequestException('Thread limit reached.')
     const now = new Date().toISOString()
     const thread: WorkspaceThread = {
@@ -166,14 +162,14 @@ export class WorkspaceCollabService {
       messages: [],
     }
     data.threads.push(thread)
-    await this.save(workspaceId, data)
+    await this.save(userId, workspaceId, data)
     if (input?.message?.trim()) return this.postMessage(userId, workspaceId, thread.id, { content: input.message })
     return thread
   }
 
   async deleteThread(userId: string, workspaceId: string, threadId: string) {
     const row = await this.workspaces.requireWorkspace(userId, workspaceId, 'editor')
-    const data = await this.load(workspaceId)
+    const data = await this.load(userId, workspaceId)
     const thread = data.threads.find((t) => t.id === threadId)
     if (!thread) throw new NotFoundException('Thread not found.')
     const role: WorkspaceRole = row.ownerId === userId
@@ -183,7 +179,7 @@ export class WorkspaceCollabService {
       throw new ForbiddenException('Only admins can delete other members\' threads.')
     }
     data.threads = data.threads.filter((t) => t.id !== threadId)
-    await this.save(workspaceId, data)
+    await this.save(userId, workspaceId, data)
     return { ok: true }
   }
 
@@ -191,7 +187,7 @@ export class WorkspaceCollabService {
     const row = await this.workspaces.requireWorkspace(userId, workspaceId, 'editor')
     const content = String(input?.content ?? '').trim().slice(0, 8000)
     if (!content) throw new BadRequestException('content is required.')
-    const data = await this.load(workspaceId)
+    const data = await this.load(userId, workspaceId)
     const thread = data.threads.find((t) => t.id === threadId)
     if (!thread) throw new NotFoundException('Thread not found.')
 
@@ -221,7 +217,7 @@ export class WorkspaceCollabService {
     }
 
     thread.messages = thread.messages.slice(-MAX_MESSAGES)
-    await this.save(workspaceId, data)
+    await this.save(userId, workspaceId, data)
     return thread
   }
 
@@ -261,31 +257,17 @@ export class WorkspaceCollabService {
 
   // ── Storage ────────────────────────────────────────────────────────────────
 
-  private fileFor(workspaceId: string) {
-    return path.join(this.dir, `${workspaceId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`)
+  private async load(userId: string, workspaceId: string): Promise<ThreadsFile> {
+    const parsed = await this.documents.read<Partial<ThreadsFile>>(
+      userId,
+      'workspace_threads',
+      () => ({}),
+      workspaceId,
+    )
+    return { threads: Array.isArray(parsed.threads) ? parsed.threads : [] }
   }
 
-  private async load(workspaceId: string): Promise<ThreadsFile> {
-    const cached = this.cache.get(workspaceId)
-    if (cached) return cached
-    let data: ThreadsFile = { threads: [] }
-    try {
-      const parsed = JSON.parse(await fs.readFile(this.fileFor(workspaceId), 'utf8')) as Partial<ThreadsFile>
-      data = { threads: Array.isArray(parsed.threads) ? parsed.threads : [] }
-    } catch {
-      // missing -> empty
-    }
-    this.cache.set(workspaceId, data)
-    return data
-  }
-
-  private async save(workspaceId: string, data: ThreadsFile) {
-    this.cache.set(workspaceId, data)
-    try {
-      await fs.mkdir(this.dir, { recursive: true })
-      await fs.writeFile(this.fileFor(workspaceId), JSON.stringify(data, null, 2), 'utf8')
-    } catch (err) {
-      this.logger.warn(`Failed to persist workspace threads: ${(err as Error).message}`)
-    }
+  private async save(userId: string, workspaceId: string, data: ThreadsFile) {
+    await this.documents.write(userId, 'workspace_threads', data, workspaceId)
   }
 }

@@ -80,11 +80,25 @@ export const LLM_MODELS = {
     powerful: 'default',
   },
   meta: {
+    // Muse Spark runs the interactive conversation; Muse Wonder is the bigger
+    // sibling used for artifact builds, scheduled runs, subagents and
+    // background work. The API can override both ids via MUSE_SPARK_MODEL /
+    // MUSE_WONDER_MODEL (the shared package must stay environment-free,
+    // because the browser imports it).
     default: 'muse-spark-1.3',
     fast: 'muse-spark-1.3',
-    powerful: 'muse-spark-1.3',
+    powerful: 'muse-wonder-1.0',
   },
 } as const
+
+/**
+ * Which model should run which kind of work.
+ *
+ * `chat` is the conversation the user is in right now. The rest are the
+ * heavier, unattended jobs — those are the ones worth spending a bigger model
+ * on.
+ */
+export type ModelRole = 'chat' | 'artifact' | 'scheduled' | 'subagent' | 'background'
 
 export const LLM_MODEL_OPTIONS = {
   anthropic: [

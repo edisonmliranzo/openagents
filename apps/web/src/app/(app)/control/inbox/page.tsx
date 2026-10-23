@@ -120,7 +120,7 @@ export default function InboxPage() {
             {threads.map((thread) => (
               <Link
                 key={thread.conversationId}
-                href={`/chat?conversationId=${thread.conversationId}`}
+                href={`/chat?conversation=${thread.conversationId}`}
                 className="block rounded-lg border border-slate-200 bg-slate-50 p-3 hover:bg-slate-100"
               >
                 <div className="flex items-start justify-between gap-3">

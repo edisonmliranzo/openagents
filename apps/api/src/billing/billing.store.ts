@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { promises as fs } from 'fs'
-import * as path from 'path'
+import { PrismaService } from '../prisma/prisma.service'
 import type { PlanId, UsageMetric } from './billing.plans'
 
 export interface UserBillingFile {
@@ -20,80 +19,93 @@ export function safeId(id: string) {
   return id.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
-/** Small JSON-file helper shared by billing + marketplace stores. */
-export class JsonFile<T> {
-  private cache?: T
-  private writing: Promise<void> = Promise.resolve()
-
-  constructor(private readonly file: string, private readonly fallback: () => T) {}
-
-  async read(): Promise<T> {
-    if (this.cache) return this.cache
-    try {
-      this.cache = JSON.parse(await fs.readFile(this.file, 'utf8')) as T
-    } catch {
-      this.cache = this.fallback()
-    }
-    return this.cache
-  }
-
-  async write(value: T) {
-    this.cache = value
-    this.writing = this.writing.then(async () => {
-      await fs.mkdir(path.dirname(this.file), { recursive: true })
-      const tmp = `${this.file}.tmp`
-      await fs.writeFile(tmp, JSON.stringify(value, null, 2), 'utf8')
-      await fs.rename(tmp, this.file)
-    })
-    await this.writing
-  }
-}
-
+/**
+ * Billing state (plan, Stripe ids, usage counters) now lives in Postgres
+ * instead of a JSON file per user.
+ */
 @Injectable()
 export class BillingStore {
   private readonly logger = new Logger(BillingStore.name)
-  private readonly dir = path.resolve(process.env.BILLING_DATA_DIR ?? path.join(process.cwd(), 'data', 'billing'))
-  private readonly files = new Map<string, JsonFile<UserBillingFile>>()
-  private readonly index = new JsonFile<Record<string, string>>(
-    path.join(this.dir, '_customers.json'),
-    () => ({}),
-  )
 
-  private fileFor(userId: string) {
-    let f = this.files.get(userId)
-    if (!f) {
-      f = new JsonFile<UserBillingFile>(path.join(this.dir, `${safeId(userId)}.json`), () => ({
+  constructor(private prisma: PrismaService) {}
+
+  private toFile(row: {
+    plan: string
+    stripeCustomerId: string | null
+    stripeSubscriptionId: string | null
+    subscriptionStatus: string | null
+    currentPeriodEnd: string | null
+    usage: unknown
+    updatedAt: Date
+  }): UserBillingFile {
+    return {
+      plan: (row.plan as PlanId) ?? 'free',
+      stripeCustomerId: row.stripeCustomerId ?? undefined,
+      stripeSubscriptionId: row.stripeSubscriptionId ?? undefined,
+      subscriptionStatus: row.subscriptionStatus ?? undefined,
+      currentPeriodEnd: row.currentPeriodEnd ?? undefined,
+      usage: (row.usage as UserBillingFile['usage']) ?? {},
+      updatedAt: row.updatedAt.toISOString(),
+    }
+  }
+
+  async get(userId: string): Promise<UserBillingFile> {
+    const row = await this.prisma.userBilling.findUnique({ where: { userId } })
+    if (!row) {
+      return {
         plan: 'free',
         usage: {},
         updatedAt: new Date().toISOString(),
-      }))
-      this.files.set(userId, f)
+      }
     }
-    return f
+    return this.toFile(row)
   }
 
-  get(userId: string) {
-    return this.fileFor(userId).read()
-  }
-
-  async update(userId: string, mutate: (rec: UserBillingFile) => void) {
-    const f = this.fileFor(userId)
-    const rec = await f.read()
+  async update(
+    userId: string,
+    mutate: (rec: UserBillingFile) => void,
+  ): Promise<UserBillingFile> {
+    const rec = await this.get(userId)
     mutate(rec)
+
     const keys = Object.keys(rec.usage).sort()
     while (keys.length > MAX_USAGE_KEYS) delete rec.usage[keys.shift()!]
     rec.updatedAt = new Date().toISOString()
-    await f.write(rec)
-    return rec
+
+    const row = await this.prisma.userBilling.upsert({
+      where: { userId },
+      create: {
+        userId,
+        plan: rec.plan,
+        stripeCustomerId: rec.stripeCustomerId ?? null,
+        stripeSubscriptionId: rec.stripeSubscriptionId ?? null,
+        subscriptionStatus: rec.subscriptionStatus ?? null,
+        currentPeriodEnd: rec.currentPeriodEnd ?? null,
+        usage: JSON.parse(JSON.stringify(rec.usage)),
+      },
+      update: {
+        plan: rec.plan,
+        stripeCustomerId: rec.stripeCustomerId ?? null,
+        stripeSubscriptionId: rec.stripeSubscriptionId ?? null,
+        subscriptionStatus: rec.subscriptionStatus ?? null,
+        currentPeriodEnd: rec.currentPeriodEnd ?? null,
+        usage: JSON.parse(JSON.stringify(rec.usage)),
+      },
+    })
+
+    return this.toFile(row)
   }
 
   async linkCustomer(customerId: string, userId: string) {
-    const idx = await this.index.read()
-    idx[customerId] = userId
-    await this.index.write(idx)
+    await this.prisma.billingCustomer.upsert({
+      where: { customerId },
+      create: { customerId, userId },
+      update: { userId },
+    })
   }
 
   async userForCustomer(customerId: string) {
-    return (await this.index.read())[customerId]
+    const row = await this.prisma.billingCustomer.findUnique({ where: { customerId } })
+    return row?.userId ?? null
   }
 }

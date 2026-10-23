@@ -18,8 +18,8 @@ const EXPORT_OPTIONS: ExportOption[] = [
     description: 'All your chat sessions and message history',
     icon: MessageSquare,
     formats: [
-      { label: 'JSON', url: '/api/export/conversations?format=json', ext: 'json' },
-      { label: 'Markdown', url: '/api/export/conversations?format=markdown', ext: 'md' },
+      { label: 'JSON', url: '/api/v1/export/conversations?format=json', ext: 'json' },
+      { label: 'Markdown', url: '/api/v1/export/conversations?format=markdown', ext: 'md' },
     ],
   },
   {
@@ -28,7 +28,7 @@ const EXPORT_OPTIONS: ExportOption[] = [
     description: 'All stored facts and personal context',
     icon: Brain,
     formats: [
-      { label: 'JSON', url: '/api/export/memory', ext: 'json' },
+      { label: 'JSON', url: '/api/v1/export/memory', ext: 'json' },
     ],
   },
   {
@@ -37,7 +37,7 @@ const EXPORT_OPTIONS: ExportOption[] = [
     description: 'All automated workflows and pipelines',
     icon: Workflow,
     formats: [
-      { label: 'YAML', url: '/api/export/workflows', ext: 'yaml' },
+      { label: 'YAML', url: '/api/v1/export/workflows', ext: 'yaml' },
     ],
   },
 ]

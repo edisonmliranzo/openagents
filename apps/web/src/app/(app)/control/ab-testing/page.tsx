@@ -42,7 +42,7 @@ export default function AbTestingPage() {
   async function loadTests() {
     setLoading(true)
     try {
-      const res = await fetch('/api/ab-tests', { credentials: 'include' })
+      const res = await fetch('/api/v1/ab-tests', { credentials: 'include' })
       if (res.ok) setTests(await res.json())
     } finally {
       setLoading(false)
@@ -55,7 +55,7 @@ export default function AbTestingPage() {
     if (!newName.trim()) return
     setCreating(true)
     try {
-      const res = await fetch('/api/ab-tests', {
+      const res = await fetch('/api/v1/ab-tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName, description: newDesc, variants }),
@@ -72,7 +72,7 @@ export default function AbTestingPage() {
   }
 
   async function handleSetWinner(testId: string, variantId: string) {
-    await fetch(`/api/ab-tests/${testId}/winner`, {
+    await fetch(`/api/v1/ab-tests/${testId}/winner`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ variantId }),
@@ -82,7 +82,7 @@ export default function AbTestingPage() {
   }
 
   async function handleDelete(testId: string) {
-    await fetch(`/api/ab-tests/${testId}`, { method: 'DELETE', credentials: 'include' })
+    await fetch(`/api/v1/ab-tests/${testId}`, { method: 'DELETE', credentials: 'include' })
     await loadTests()
   }
 

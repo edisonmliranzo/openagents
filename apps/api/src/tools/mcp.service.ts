@@ -15,6 +15,15 @@ import type { ToolDefinition } from './tools.service'
 
 type McpStdioMode = 'inherit' | 'ignore' | 'pipe'
 
+export interface McpStatusEvent {
+  serverId: string
+  serverName: string
+  status: 'connecting' | 'connected' | 'error' | 'removed'
+  toolCount?: number
+  error?: string
+  at: string
+}
+
 interface McpServerConfig {
   id: string
   displayName: string
@@ -25,6 +34,10 @@ interface McpServerConfig {
   enabled: boolean
   stderr: McpStdioMode
   timeoutMs: number
+  /** HTTP transport endpoint. */
+  url?: string
+  /** HTTP transport headers (can be set by user-owned servers). */
+  headers?: Record<string, string>
 }
 
 interface McpRegisteredTool {
@@ -49,6 +62,10 @@ export class McpService implements OnModuleDestroy {
   private readonly serverConfigs: McpServerConfig[]
   private readonly serverStates = new Map<string, McpServerState>()
   private readonly toolIndex = new Map<string, McpRegisteredTool>()
+  /** serverId -> owning userId, so user-defined servers stay private to their owner. */
+  private readonly userServerOwners = new Map<string, string>()
+  /** userId -> subscriber callback, for the real-time status stream. */
+  private readonly statusSubscribers = new Map<string, Set<(event: McpStatusEvent) => void>>()
 
   constructor(private readonly config: ConfigService) {
     this.defaultTimeoutMs = this.readTimeoutMs(
@@ -83,6 +100,167 @@ export class McpService implements OnModuleDestroy {
 
   isEnabled() {
     return this.serverConfigs.length > 0
+  }
+
+  // ── Per-user (user-owned) servers ──────────────────────────────────────────
+
+  /**
+   * Registers a server *owned by a user*. The server's tools are only visible
+   * to — and only runnable by — that user.
+   */
+  registerUserServer(
+    userId: string,
+    input: {
+      id: string
+      displayName: string
+      command?: string
+      args?: string[]
+      env?: Record<string, string>
+      url?: string
+      headers?: Record<string, string>
+      timeoutMs?: number
+    },
+  ) {
+    const namespacedId = this.buildUserServerId(userId, input.id)
+    const existing = this.serverStates.get(namespacedId)
+    if (existing) {
+      this.userServerOwners.set(namespacedId, userId)
+      return namespacedId
+    }
+
+    const config: McpServerConfig = {
+      id: namespacedId,
+      displayName: input.displayName,
+      command: input.command ?? '',
+      args: input.args ?? [],
+      env: input.env,
+      enabled: true,
+      stderr: 'pipe',
+      timeoutMs: this.readTimeoutMs(input.timeoutMs, this.defaultTimeoutMs),
+    }
+    if (input.url) {
+      // HTTP transport carries the endpoint + headers.
+      config.url = input.url
+      config.headers = input.headers
+    }
+    this.serverConfigs.push(config)
+    this.serverStates.set(config.id, {
+      config,
+      client: null,
+      transport: null,
+      tools: null,
+      connectPromise: null,
+      listPromise: null,
+    })
+    this.userServerOwners.set(namespacedId, userId)
+    return namespacedId
+  }
+
+  /** Removes a user-owned server (only its owner may do this). */
+  async removeUserServer(userId: string, serverId: string) {
+    const owner = this.userServerOwners.get(serverId)
+    if (owner && owner !== userId) return false
+    await this.removeDynamicServer(serverId)
+    this.userServerOwners.delete(serverId)
+    return true
+  }
+
+  /** The tools exposed by a single server (used to build health/status views). */
+  async listServerTools(serverId: string): Promise<McpRegisteredTool[]> {
+    try {
+      return await this.listToolsForServer(serverId)
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * Fetches a server's fresh tool list (refreshes the cached index) and returns
+   * it — used by "test connection".
+   */
+  async refreshServerTools(serverId: string): Promise<McpRegisteredTool[]> {
+    const state = this.requireState(serverId)
+    state.tools = null
+    const tools = await this.listToolsForServer(serverId)
+    return tools
+  }
+
+  /**
+   * Registers a server from a persisted user config and connects it, returning
+   * the discovered tools plus status. Used by the user MCP service.
+   */
+  async connectUserServer(userId: string, input: {
+    serverId: string
+    name: string
+    command?: string
+    args?: string[]
+    env?: Record<string, string>
+    url?: string
+    headers?: Record<string, string>
+    timeoutMs?: number
+  }) {
+    const namespaced = this.buildUserServerId(userId, input.serverId)
+    this.registerUserServer(userId, {
+      id: input.serverId,
+      displayName: input.name,
+      command: input.command,
+      args: input.args,
+      env: input.env,
+      url: input.url,
+      headers: input.headers,
+      timeoutMs: input.timeoutMs,
+    })
+    try {
+      const tools = await this.refreshServerTools(namespaced)
+      return { ok: true, serverId: namespaced, toolCount: tools.length, tools: tools.map((t) => t.def) }
+    } catch (error: any) {
+      return { ok: false, serverId: namespaced, error: this.safeError(error), tools: [] }
+    }
+  }
+
+  /** Unregisters + disconnects a user's server. */
+  async disconnectUserServer(userId: string, serverId: string) {
+    return this.removeUserServer(userId, serverId)
+  }
+
+  /** Builds a namespaced, collision-safe server id for a user. */
+  buildUserServerId(userId: string, id: string) {
+    // Hash both sides so the per-tool names (mcp_<server>_<tool>) stay readable.
+    const user = createHash('sha1').update(String(userId || 'u')).digest('hex').slice(0, 6)
+    const server = createHash('sha1').update(String(id || 's')).digest('hex').slice(0, 6)
+    return `u${user}_${server}`
+  }
+
+  private emitStatus(userId: string, event: Omit<McpStatusEvent, 'at'>) {
+    const subscribers = this.statusSubscribers.get(userId)
+    if (!subscribers || subscribers.size === 0) return
+    const payload: McpStatusEvent = { ...event, at: new Date().toISOString() }
+    for (const cb of subscribers) {
+      try {
+        cb(payload)
+      } catch (error) {
+        this.logger.warn(`MCP status subscriber failed: ${this.safeError(error)}`)
+      }
+    }
+  }
+
+  /** Subscribes to a user's MCP status events; returns an unsubscribe fn. */
+  subscribeStatus(userId: string, cb: (event: McpStatusEvent) => void): () => void {
+    let set = this.statusSubscribers.get(userId)
+    if (!set) {
+      set = new Set()
+      this.statusSubscribers.set(userId, set)
+    }
+    set.add(cb)
+    return () => {
+      set!.delete(cb)
+      if (set!.size === 0) this.statusSubscribers.delete(userId)
+    }
+  }
+
+  /** Publish a status change for a user's server (used by the user MCP service). */
+  publishUserStatus(userId: string, event: { serverId: string; serverName: string; status: 'connecting' | 'connected' | 'error' | 'removed'; toolCount?: number; error?: string }) {
+    this.emitStatus(userId, event)
   }
 
   /** Register an MCP server at runtime (plugin install). */
@@ -134,11 +312,16 @@ export class McpService implements OnModuleDestroy {
     this.logger.log(`Removed MCP server: ${id}`)
   }
 
-  async listToolDefinitions(): Promise<ToolDefinition[]> {
-    if (!this.isEnabled()) return []
+  async listToolDefinitions(userId?: string): Promise<ToolDefinition[]> {
+    if (this.serverConfigs.length === 0) return []
 
     const settled = await Promise.allSettled(
       this.serverConfigs.map(async (serverConfig) => {
+        // A user-owned server is only visible to its owner.
+        if (userId) {
+          const owner = this.userServerOwners.get(serverConfig.id)
+          if (owner && owner !== userId) return []
+        }
         const tools = await this.listToolsForServer(serverConfig.id)
         return tools.map((tool) => tool.def)
       }),
@@ -157,10 +340,16 @@ export class McpService implements OnModuleDestroy {
     return Boolean(await this.findTool(toolName))
   }
 
-  async execute(toolName: string, input: Record<string, unknown>, _userId: string): Promise<ToolResult> {
+  async execute(toolName: string, input: Record<string, unknown>, userId: string): Promise<ToolResult> {
     const tool = await this.findTool(toolName)
     if (!tool) {
       return { success: false, output: null, error: `Unknown MCP tool: ${toolName}` }
+    }
+
+    // A user-owned server must not be runnable by another user.
+    const owner = this.userServerOwners.get(tool.serverId)
+    if (owner && owner !== userId) {
+      return { success: false, output: null, error: 'You do not have access to this MCP tool.' }
     }
 
     const state = this.requireState(tool.serverId)
@@ -241,19 +430,36 @@ export class McpService implements OnModuleDestroy {
   }
 
   private async connectState(state: McpServerState) {
-    const transport = new StdioClientTransport({
-      command: state.config.command,
-      args: state.config.args,
-      ...(state.config.cwd ? { cwd: state.config.cwd } : {}),
-      ...(state.config.env ? { env: state.config.env } : {}),
-      stderr: state.config.stderr,
-    })
+    let transport: any
+
+    if (state.config.url) {
+      // HTTP transport: a remote MCP server over streamable HTTP.
+      const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js')
+      const httpHeaders = state.config.headers ?? {}
+      transport = new StreamableHTTPClientTransport(
+        new URL(state.config.url),
+        {
+          requestInit: {
+            headers: httpHeaders,
+          },
+        },
+      )
+    } else {
+      transport = new StdioClientTransport({
+        command: state.config.command,
+        args: state.config.args,
+        ...(state.config.cwd ? { cwd: state.config.cwd } : {}),
+        ...(state.config.env ? { env: state.config.env } : {}),
+        stderr: state.config.stderr,
+      })
+    }
+
     const client = new Client(
       { name: 'openagents-mcp-client', version: API_VERSION },
       { capabilities: {} },
     )
 
-    if (transport.stderr && 'on' in transport.stderr) {
+    if (transport?.stderr && typeof transport.stderr.on === 'function') {
       transport.stderr.on('data', (chunk: Buffer | string) => {
         const text = String(chunk ?? '').trim()
         if (!text) return

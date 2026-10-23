@@ -7,9 +7,10 @@ import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { openArtifact } from '@/stores/canvas'
 import type { DataLineageRecord, Message, MessageArtifact, MessageMeta } from '@openagents/shared'
-import { Brain, ChevronDown, ChevronRight, Columns, Copy, FileText, Film, ImageIcon, Link2, Music4, Pencil, RotateCcw, ThumbsDown, ThumbsUp, X } from 'lucide-react'
+import { Brain, ChevronDown, ChevronRight, Columns, Copy, FileText, Film, ImageIcon, Link2, Music4, Pencil, RotateCcw, ThumbsDown, ThumbsUp, Wrench, X } from 'lucide-react'
 import { BranchButton } from '@/components/branch-button'
 import { GenerativeUIWidget } from './GenerativeUIWidget'
+import { MessageFeedbackRow } from './MessageFeedbackRow'
 import { BrowserPreview } from './BrowserPreview'
 import { WarRoomPanel } from './WarRoomPanel'
 
@@ -286,6 +287,23 @@ export function MessageBubble({
   const codeBlocks = useMemo(() => extractCodeBlocks(visible).map((b) => b.content), [visible])
   const parsedMetadata = useMemo(() => parseMetadata(message.metadata), [message.metadata])
   const artifacts = parsedMetadata?.artifacts ?? []
+  const uiComponents = parsedMetadata?.uiComponents ?? []
+  const pendingTool = parsedMetadata?.pendingTool
+
+  /** Best-effort pretty-print of the tool arguments as they stream in. */
+  const pendingToolArgs = useMemo(() => {
+    if (!pendingTool?.args) return ''
+    try {
+      const parsed = JSON.parse(pendingTool.args)
+      return Object.entries(parsed)
+        .slice(0, 3)
+        .map(([key, value]) => `${key}=${typeof value === 'string' ? value.slice(0, 40) : JSON.stringify(value)?.slice(0, 40)}`)
+        .join(', ')
+    } catch {
+      // The JSON is incomplete while it streams — show the raw prefix.
+      return pendingTool.args.slice(0, 60)
+    }
+  }, [pendingTool?.args])
   const referencedArtifactIds = useMemo(() => {
     const galleryIds = new Set(artifacts.map(artifactIdOf).filter(Boolean) as string[])
     return artifactIdsFromText(message.content ?? '').filter((id) => !galleryIds.has(id))
@@ -702,6 +720,33 @@ export function MessageBubble({
           </div>
         )}
       </div>
+
+      {pendingTool?.tool && (
+        <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-2.5 py-1 text-[11px] text-indigo-200">
+          <Wrench size={11} className="shrink-0" />
+          <span className="font-medium">{pendingTool.tool}</span>
+          {pendingToolArgs && (
+            <span className="truncate font-mono text-[10px] opacity-80">{pendingToolArgs}</span>
+          )}
+        </div>
+      )}
+
+      {conversationId && message.status !== 'streaming' && (
+        <MessageFeedbackRow
+          messageId={message.id}
+          conversationId={conversationId}
+          role={message.role}
+        />
+      )}
+
+      {uiComponents.map((component) => (
+        <GenerativeUIWidget
+          key={component.id || component.name}
+          componentId={component.id || component.name}
+          code={component.code}
+          language={component.language}
+        />
+      ))}
 
       <span className="oa-meta-row flex items-center gap-1.5 pl-0.5">
         <span className="oa-brand-badge inline-flex h-3.5 w-3.5 items-center justify-center rounded-[5px] text-[7px] font-bold text-white">OA</span>

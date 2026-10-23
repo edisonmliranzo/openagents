@@ -145,6 +145,17 @@ export class LLMService {
     userBaseUrl?: string,
     model?: string,
     fallbackApiKeys?: string[],
+    /**
+     * When provided, the provider's response is streamed and every text
+     * fragment is handed to this callback as it arrives. The returned
+     * `LLMResponse` is identical to the non-streaming result.
+     */
+    onDelta?: (text: string) => void,
+    /**
+     * Called as a tool call's arguments stream in, so the UI can show what the
+     * agent is about to run before it runs.
+     */
+    onToolDelta?: (toolName: string, argsSoFar: string) => void,
   ): Promise<LLMResponse> {
     const requestedProvider = String(provider ?? this.defaultProvider).trim().toLowerCase()
     const p = this.isSupportedProvider(requestedProvider)
@@ -155,7 +166,14 @@ export class LLMService {
       return this.completeWithKeyRotation(
         (key) => {
           const client = new Anthropic({ apiKey: this.resolveApiKey('anthropic', key), timeout: 120_000, maxRetries: 1 })
-          return this.completeAnthropic(messages, tools, systemPrompt, client, model)
+          if (!onDelta) {
+            return this.completeAnthropic(messages, tools, systemPrompt, client, model)
+          }
+          return this.streamWithFallback(
+            () => this.completeAnthropicStream(messages, tools, systemPrompt, client, model, onDelta, onToolDelta),
+            () => this.completeAnthropic(messages, tools, systemPrompt, client, model),
+            p,
+          )
         },
         p,
         userApiKey,
@@ -165,6 +183,22 @@ export class LLMService {
 
     if (p === 'ollama') {
       const ollamaClient = this.createOllamaClient(userBaseUrl)
+      if (onDelta) {
+        return this.streamWithFallback(
+          () => this.completeOpenAIStream(
+            messages,
+            tools,
+            systemPrompt,
+            ollamaClient,
+            model,
+            LLM_MODELS.ollama.default,
+            onDelta,
+            onToolDelta,
+          ),
+          () => this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient, model, userBaseUrl),
+          p,
+        )
+      }
       return this.completeWithOllamaFallback(messages, tools, systemPrompt, ollamaClient, model, userBaseUrl)
     }
 
@@ -174,7 +208,13 @@ export class LLMService {
         const client = this.createOpenAICompatibleClient(p, key, userBaseUrl)
         const requestedModel = model ?? LLM_MODELS[p].default
         try {
-          const response = await this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default)
+          const response = onDelta
+            ? await this.streamWithFallback(
+                () => this.completeOpenAIStream(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default, onDelta, onToolDelta),
+                () => this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default),
+                p,
+              )
+            : await this.completeOpenAI(messages, tools, systemPrompt, client, model, LLM_MODELS[p].default)
 
           // Some NVIDIA NIM models return empty content with no tool calls when tools are passed
           // (e.g. nemotron, mixtral, qwen-coder). Retry without tools to get a usable response.
@@ -185,7 +225,9 @@ export class LLMService {
             !response.toolCalls?.length
           ) {
             this.logger.warn(`NVIDIA model "${requestedModel}" returned empty content with tools — retrying without tools`)
-            return this.completeOpenAI(messages, [], systemPrompt, client, model, LLM_MODELS[p].default)
+            return onDelta
+              ? this.completeOpenAIStream(messages, [], systemPrompt, client, model, LLM_MODELS[p].default, onDelta, onToolDelta)
+              : this.completeOpenAI(messages, [], systemPrompt, client, model, LLM_MODELS[p].default)
           }
 
           return response
@@ -703,6 +745,210 @@ export class LLMService {
     }
   }
 
+  /**
+   * Runs the streaming variant and, if the provider refuses it, falls back to
+   * the non-streaming call.
+   *
+   * Some providers (notably NVIDIA NIM) return a 500 when a streamed request
+   * asks for tool calls. Streaming is an enhancement — it must never be the
+   * reason a request fails — so a failed stream is retried without streaming.
+   * The LLM call has no side effects, so the retry is safe.
+   */
+  private async streamWithFallback(
+    stream: () => Promise<LLMResponse>,
+    fallback: () => Promise<LLMResponse>,
+    provider: string,
+  ): Promise<LLMResponse> {
+    try {
+      return await stream()
+    } catch (error: any) {
+      const message = String(error?.message ?? error)
+      this.logger.warn(
+        `${provider} streaming failed (${message}) — retrying without streaming.`,
+      )
+      return fallback()
+    }
+  }
+
+  /**
+   * Anthropic streaming variant. Text fragments are handed to `onDelta` as they
+   * arrive; tool calls are reassembled from the partial JSON Anthropic streams.
+   */
+  private async completeAnthropicStream(
+    messages: LLMMessage[],
+    tools: LLMTool[],
+    systemPrompt: string,
+    client: Anthropic,
+    modelOverride: string | undefined,
+    onDelta: (text: string) => void,
+    onToolDelta?: (toolName: string, argsSoFar: string) => void,
+  ): Promise<LLMResponse> {
+    const parsedMessages = messages.map((m) => ({
+      role: m.role,
+      content: m.role === 'user' && typeof m.content === 'string'
+        ? this.parseMultimodalContent(m.content, 'anthropic')
+        : m.content,
+    }))
+    const anthropicMessages = this.normalizeAnthropicMessages(parsedMessages)
+
+    const stream: any = await client.messages.create({
+      model: modelOverride ?? LLM_MODELS.anthropic.default,
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: anthropicMessages as any,
+      tools: tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.inputSchema as Anthropic.Tool['input_schema'],
+      })),
+      stream: true,
+    })
+
+    let text = ''
+    let stopReason: 'tool_use' | 'end_turn' = 'end_turn'
+    const blocks = new Map<number, { type: string; id?: string; name?: string; json: string }>()
+
+    for await (const event of stream) {
+      const type = (event as any)?.type
+
+      if (type === 'content_block_start') {
+        const index = Number((event as any).index ?? 0)
+        const block = (event as any).content_block ?? {}
+        blocks.set(index, {
+          type: String(block.type ?? 'text'),
+          id: block.id,
+          name: block.name,
+          json: '',
+        })
+        continue
+      }
+
+      if (type === 'content_block_delta') {
+        const index = Number((event as any).index ?? 0)
+        const delta = (event as any).delta ?? {}
+        if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+          text += delta.text
+          onDelta(delta.text)
+        } else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+          const block = blocks.get(index)
+          if (block) {
+            block.json += delta.partial_json
+            // Let the UI show the tool call being written, argument by argument.
+            onToolDelta?.(block.name ?? '', block.json)
+          }
+        }
+        continue
+      }
+
+      if (type === 'message_delta') {
+        const reason = (event as any)?.delta?.stop_reason
+        if (reason === 'tool_use') stopReason = 'tool_use'
+        continue
+      }
+    }
+
+    const toolCalls: LLMResponse['toolCalls'] = []
+    for (const block of blocks.values()) {
+      if (block.type !== 'tool_use') continue
+      let input: Record<string, unknown> = {}
+      if (block.json.trim()) {
+        try {
+          input = JSON.parse(block.json) as Record<string, unknown>
+        } catch {
+          input = {}
+        }
+      }
+      toolCalls.push({ id: block.id ?? '', name: block.name ?? '', input })
+    }
+
+    return {
+      content: text,
+      toolCalls: toolCalls.length ? toolCalls : undefined,
+      stopReason: toolCalls.length ? 'tool_use' : stopReason,
+    }
+  }
+
+  /**
+   * OpenAI-compatible streaming variant (OpenAI, Gemini, Ollama, NVIDIA, ...).
+   */
+  private async completeOpenAIStream(
+    messages: LLMMessage[],
+    tools: LLMTool[],
+    systemPrompt: string,
+    client: OpenAI,
+    modelOverride: string | undefined,
+    defaultModel: string | undefined,
+    onDelta: (text: string) => void,
+    onToolDelta?: (toolName: string, argsSoFar: string) => void,
+  ): Promise<LLMResponse> {
+    const parsedMessages = messages.map((m) => ({
+      role: m.role,
+      content: m.role === 'user' && typeof m.content === 'string'
+        ? this.parseMultimodalContent(m.content, 'openai')
+        : m.content,
+    }))
+
+    const stream: any = await client.chat.completions.create({
+      model: modelOverride ?? defaultModel ?? LLM_MODELS.openai.default,
+      messages: [{ role: 'system', content: systemPrompt }, ...parsedMessages] as any,
+      ...(tools.length > 0 ? {
+        tools: tools.map((t) => ({
+          type: 'function' as const,
+          function: { name: t.name, description: t.description, parameters: t.inputSchema },
+        })),
+      } : {}),
+      stream: true,
+    })
+
+    let text = ''
+    let finishReason: string | null = null
+    const toolAccumulators = new Map<number, { id: string; name: string; args: string }>()
+
+    for await (const chunk of stream) {
+      const choice = (chunk as any)?.choices?.[0]
+      if (!choice) continue
+
+      const delta = choice.delta ?? {}
+      const content = delta.content
+      if (typeof content === 'string' && content.length > 0) {
+        text += content
+        onDelta(content)
+      }
+
+      for (const call of delta.tool_calls ?? []) {
+        const index = Number(call.index ?? 0)
+        const acc = toolAccumulators.get(index) ?? { id: '', name: '', args: '' }
+        if (call.id) acc.id = call.id
+        if (call.function?.name) acc.name = call.function.name
+        if (typeof call.function?.arguments === 'string') acc.args += call.function.arguments
+        toolAccumulators.set(index, acc)
+        // Let the UI show the tool call being written, argument by argument.
+        onToolDelta?.(acc.name, acc.args)
+      }
+
+      if (choice.finish_reason) finishReason = String(choice.finish_reason)
+    }
+
+    const toolCalls: LLMResponse['toolCalls'] = []
+    for (const acc of toolAccumulators.values()) {
+      let input: Record<string, unknown> = {}
+      if (acc.args.trim()) {
+        try {
+          input = JSON.parse(acc.args) as Record<string, unknown>
+        } catch {
+          input = {}
+        }
+      }
+      toolCalls.push({ id: acc.id, name: acc.name, input })
+    }
+
+    return {
+      content: text,
+      toolCalls: toolCalls.length ? toolCalls : undefined,
+      stopReason: toolCalls.length || finishReason === 'tool_calls' ? 'tool_use' : 'end_turn',
+    }
+  }
+
   private createOllamaClient(baseUrl?: string) {
     return new OpenAI({
       baseURL: this.resolveOllamaBaseUrl(baseUrl),
@@ -740,7 +986,10 @@ export class LLMService {
         : {}),
       // Fail fast instead of hanging the chat on "thinking" forever.
       timeout: 300_000,
-      maxRetries: 1,
+      // Providers occasionally return a transient 5xx (NVIDIA NIM does this
+      // often enough to be noticeable); retrying turns a failed turn into a
+      // slightly slower one.
+      maxRetries: 3,
     })
   }
 

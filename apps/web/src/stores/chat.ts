@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { sdk } from './auth'
 import { speak, stopSpeaking, voiceEnabled } from '@/lib/voice'
-import type { Conversation, Message, Approval, HumanHandoffTicket, MessageArtifact, MessageMeta, MessageProgressState, MessageWorkflowState, MessageWorkflowStep } from '@openagents/shared'
+import type { Conversation, Message, Approval, HumanHandoffTicket, MessageArtifact, MessageMeta, MessageProgressState, MessageUiComponent, MessageWorkflowState, MessageWorkflowStep } from '@openagents/shared'
 
 type GatewayStatus = 'connecting' | 'connected' | 'disconnected'
 
@@ -122,6 +122,25 @@ function normalizeArtifacts(value: unknown): MessageArtifact[] {
       } satisfies MessageArtifact
     })
     .filter((item): item is MessageArtifact => Boolean(item))
+}
+
+function normalizeUiComponents(value: unknown): MessageUiComponent[] {
+  if (!Array.isArray(value)) return []
+  const out: MessageUiComponent[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const row = entry as Record<string, unknown>
+    const code = typeof row.code === 'string' ? row.code : ''
+    if (!code) continue
+    out.push({
+      id: typeof row.id === 'string' ? row.id : '',
+      name: typeof row.name === 'string' ? row.name : 'Generated component',
+      language: row.language === 'html' ? 'html' : 'react',
+      code,
+      props: (row.props as Record<string, unknown>) ?? {},
+    })
+  }
+  return out
 }
 
 function detectWorkflowKindFromArtifacts(artifacts: MessageArtifact[]): MessageWorkflowState['kind'] {
@@ -590,6 +609,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     let streamError: string | null = null
     let sawAgentMessage = false
     let sawApprovalRequest = false
+    // Tracks whether the first streamed delta has replaced the status placeholder.
+    let deltaStarted = false
 
     try {
       await sdk.conversations.sendMessage(
@@ -617,6 +638,80 @@ export const useChatStore = create<ChatState>((set, get) => ({
             return
           }
 
+          if (data.event === 'delta') {
+            const chunk = typeof data.data?.content === 'string' ? data.data.content : ''
+            if (chunk) {
+              // The first delta replaces the "🧠 thinking…" placeholder.
+              const base = deltaStarted ? '' : ''
+              deltaStarted = true
+              set((s) => ({
+                messages: s.messages.map((m) =>
+                  m.id === agentTempId ? { ...m, content: base + chunk } : m,
+                ),
+              }))
+            }
+          }
+
+          if (data.event === 'delta_reset') {
+            // The streamed text belonged to a tool-calling round — drop it.
+            deltaStarted = false
+            set((s) => ({
+              messages: s.messages.map((m) =>
+                m.id === agentTempId
+                  ? {
+                      ...m,
+                      content: '',
+                      metadata: mergeMessageMeta(m.metadata, { pendingTool: undefined }),
+                    }
+                  : m,
+              ),
+            }))
+          }
+
+          if (data.event === 'ui_component') {
+            const component = {
+              id: typeof data.data?.id === 'string' ? data.data.id : '',
+              name: typeof data.data?.name === 'string' ? data.data.name : 'Generated component',
+              language: data.data?.language === 'html' ? ('html' as const) : ('react' as const),
+              code: typeof data.data?.code === 'string' ? data.data.code : '',
+              props: (data.data?.props as Record<string, unknown>) ?? {},
+            }
+            if (component.code) {
+              set((s) => ({
+                messages: s.messages.map((m) => {
+                  if (m.id !== agentTempId) return m
+                  const existing = normalizeUiComponents(
+                    mergeMessageMeta(m.metadata, {}).uiComponents,
+                  )
+                  if (existing.some((c) => c.id === component.id)) return m
+                  return {
+                    ...m,
+                    metadata: mergeMessageMeta(m.metadata, { uiComponents: [...existing, component] }),
+                  }
+                }),
+              }))
+            }
+          }
+
+          if (data.event === 'tool_call_delta') {
+            const tool = typeof data.data?.tool === 'string' ? data.data.tool : ''
+            const args = typeof data.data?.args === 'string' ? data.data.args : ''
+            if (tool) {
+              set((s) => ({
+                messages: s.messages.map((m) =>
+                  m.id === agentTempId
+                    ? {
+                        ...m,
+                        metadata: mergeMessageMeta(m.metadata, {
+                          pendingTool: { tool, args },
+                        }),
+                      }
+                    : m,
+                ),
+              }))
+            }
+          }
+
           if (data.event === 'thinking') {
             const step = typeof data.data?.step === 'string' ? data.data.step : ''
             const message = typeof data.data?.message === 'string' ? data.data.message : ''
@@ -628,14 +723,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 ],
               }))
             }
-            // Also update the agent message content to show thinking progress
-            set((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === agentTempId && m.status === 'streaming'
-                  ? { ...m, content: `🧠 ${message}` }
-                  : m,
-              ),
-            }))
+            // Also update the agent message content to show thinking progress.
+            // Never clobber text that is already streaming in.
+            if (!deltaStarted) {
+              set((s) => ({
+                messages: s.messages.map((m) =>
+                  m.id === agentTempId && m.status === 'streaming'
+                    ? { ...m, content: `🧠 ${message}` }
+                    : m,
+                ),
+              }))
+            }
           }
 
           if (data.event === 'plan') {
@@ -688,7 +786,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               set((s) => ({
                 runStatus: nextStatus,
                 messages: s.messages.map((m) =>
-                  m.id === agentTempId && !sawAgentMessage && m.status === 'streaming'
+                  m.id === agentTempId && !sawAgentMessage && !deltaStarted && m.status === 'streaming'
                     ? {
                         ...m,
                         content: statusText || m.content,

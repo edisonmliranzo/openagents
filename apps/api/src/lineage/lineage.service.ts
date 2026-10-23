@@ -1,3 +1,4 @@
+import { DocumentStore } from '../prisma/document-store.service'
 import { AuditSeverity, AuditCategory } from '@openagents/shared'
 import { Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { promises as fs } from 'node:fs'
@@ -37,6 +38,8 @@ export class DataLineageService {
   private readonly logger = new Logger(DataLineageService.name)
   private readonly loadedUsers = new Set<string>()
   private readonly recordsByUser = new Map<string, DataLineageRecord[]>()
+
+  constructor(private readonly documents: DocumentStore) {}
 
   async recordMessage(input: CreateDataLineageInput): Promise<DataLineageRecord> {
     await this.ensureLoaded(input.userId)
@@ -332,7 +335,7 @@ export class DataLineageService {
 
   private async ensureLoaded(userId: string) {
     if (this.loadedUsers.has(userId)) return
-    const store = await this.readStore(this.storeFilePath(userId))
+    const store = await this.readStore(userId)
     const records = (store.records ?? [])
       .filter((record) => record.userId === userId)
       .map((record) => this.sanitizeStoredRecord(record, userId))
@@ -393,19 +396,16 @@ export class DataLineageService {
   }
 
   private async persist(userId: string) {
-    const filePath = this.storeFilePath(userId)
     const payload: LineageStoreFile = {
       version: STORE_VERSION,
       records: this.recordsByUser.get(userId) ?? [],
     }
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
-    await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    await this.documents.write(userId, 'lineage', payload)
   }
 
-  private async readStore(filePath: string): Promise<LineageStoreFile> {
+  private async readStore(userId: string): Promise<LineageStoreFile> {
     try {
-      const raw = await fs.readFile(filePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<LineageStoreFile>
+      const parsed = await this.documents.read<Partial<LineageStoreFile>>(userId, 'lineage', () => ({}))
       return {
         version: Number.isFinite(parsed.version) ? Number(parsed.version) : STORE_VERSION,
         records: Array.isArray(parsed.records) ? parsed.records : [],

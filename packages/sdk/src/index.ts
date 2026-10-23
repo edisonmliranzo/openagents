@@ -172,6 +172,14 @@ export function createSDK(config: SDKConfig) {
     costs: createCostsApi(client),
     orchestration: createOrchestrationApi(client),
     warRooms: createWarRoomsApi(client),
+    pins: createPinsApi(client),
+    reactions: createReactionsApi(client),
+    templates: createTemplatesApi(client),
+    hooks: createHooksApi(client),
+    vault: createVaultApi(client),
+    modelRoles: createModelRolesApi(client),
+    mcp: createMcpApi(client),
+    generativeUi: createGenerativeUiApi(client),
     delegation: createDelegationApi(client),
     scheduler: createSchedulerApi(client),
     billing: createBillingApi(client),
@@ -191,13 +199,36 @@ export { createBriefingApi } from './api/briefing'
 export { createCostsApi } from './api/costs'
 export { createOrchestrationApi } from './api/orchestration'
 export { createWarRoomsApi } from './api/war-rooms'
+export { createPinsApi } from './api/pins'
+export { createReactionsApi } from './api/reactions'
+export { createTemplatesApi } from './api/templates'
+export { createHooksApi } from './api/hooks'
+export { createVaultApi } from './api/vault'
+export { createModelRolesApi } from './api/model-roles'
+export { createMcpApi } from './api/mcp'
+export type { McpServerView, CreateMcpServerInput, McpConnectResult } from './api/mcp'
+export { createGenerativeUiApi } from './api/generative-ui'
+export type { GenerativeComponent } from './api/generative-ui'
+export type { PinnedMessage } from './api/pins'
+export type { MessageReaction, ReactionCounts } from './api/reactions'
+export type { ConversationTemplate, CreateTemplateInput } from './api/templates'
 export { createDelegationApi } from './api/delegation'
 export { createSchedulerApi } from './api/scheduler'
+export type { ScheduledTask, CreateScheduledTaskInput } from './api/scheduler'
+export { toCronSchedule } from './api/scheduler'
 import { createResearchApi } from './api/research'
 import { createBriefingApi } from './api/briefing'
 import { createCostsApi } from './api/costs'
 import { createOrchestrationApi } from './api/orchestration'
 import { createWarRoomsApi } from './api/war-rooms'
+import { createPinsApi } from './api/pins'
+import { createReactionsApi } from './api/reactions'
+import { createTemplatesApi } from './api/templates'
+import { createHooksApi } from './api/hooks'
+import { createVaultApi } from './api/vault'
+import { createModelRolesApi } from './api/model-roles'
+import { createMcpApi } from './api/mcp'
+import { createGenerativeUiApi } from './api/generative-ui'
 import { createDelegationApi } from './api/delegation'
 import { createSchedulerApi } from './api/scheduler'
 
