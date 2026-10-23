@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useUIStore } from '@/stores/ui'
-import type { SpecialistAgentRow } from '@openagents/sdk'
+import type { RosterEntryRow, SpecialistAgentRow } from '@openagents/sdk'
 import {
   ArrowRight,
   Bot,
@@ -76,33 +76,6 @@ const ROLE_META: Record<
   },
 }
 
-const SWARM_PRESET_BLUEPRINTS = [
-  {
-    name: 'Cipher',
-    role: 'ops',
-    budget: 50,
-    tagline: 'Security & Vulnerability Auditor',
-    personaPrompt:
-      'You are Cipher, an application security and infrastructure auditor. You inspect dependencies, environment variables, auth guards, and shell permissions to harden the system against vulnerabilities.',
-  },
-  {
-    name: 'Pulse',
-    role: 'writer',
-    budget: 35,
-    tagline: 'Growth & X (@openagentsus) Strategist',
-    personaPrompt:
-      'You are Pulse, a high-converting technical marketer and X growth strategist. You craft punchy, high-engagement posts, launch threads, and product positioning for OpenAgents.',
-  },
-  {
-    name: 'Quant',
-    role: 'analyst',
-    budget: 50,
-    tagline: 'Data, SQL & Telemetry Analyst',
-    personaPrompt:
-      'You are Quant, a data scientist and SQL analyst. You query PostgreSQL metrics, analyze token latency and cost benchmarks, and produce structured quantitative insights.',
-  },
-]
-
 export default function SpecialistSwarmStudioPage() {
   const router = useRouter()
   const addToast = useUIStore((s) => s.addToast)
@@ -110,6 +83,8 @@ export default function SpecialistSwarmStudioPage() {
   const sendMessage = useChatStore((s) => s.sendMessage)
 
   const [agents, setAgents] = useState<SpecialistAgentRow[]>([])
+  const [roster, setRoster] = useState<RosterEntryRow[]>([])
+  const [installingSlug, setInstallingSlug] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('')
   const [role, setRole] = useState<string>('researcher')
@@ -125,8 +100,9 @@ export default function SpecialistSwarmStudioPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const list = await sdk.specialists.list()
+      const [list, catalog] = await Promise.all([sdk.specialists.list(), sdk.specialists.roster()])
       setAgents(Array.isArray(list) ? list : [])
+      setRoster(Array.isArray(catalog) ? catalog : [])
     } catch (err: any) {
       addToast('error', err?.message ?? 'Failed to load specialists')
     } finally {
@@ -177,6 +153,19 @@ export default function SpecialistSwarmStudioPage() {
     }
   }
 
+  async function install(entry: RosterEntryRow) {
+    setInstallingSlug(entry.slug)
+    try {
+      await sdk.specialists.installFromRoster(entry.slug)
+      addToast('success', `@${entry.name} joined your Specialist Swarm.`)
+      await load()
+    } catch (err: any) {
+      addToast('error', err?.message ?? 'Failed to install specialist')
+    } finally {
+      setInstallingSlug(null)
+    }
+  }
+
   async function toggle(agent: SpecialistAgentRow) {
     await sdk.specialists
       .update(agent.id, { enabled: !agent.enabled })
@@ -216,11 +205,6 @@ export default function SpecialistSwarmStudioPage() {
       setDispatching(false)
     }
   }
-
-  const existingNames = useMemo(
-    () => new Set(agents.map((a) => a.name.toLowerCase())),
-    [agents],
-  )
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-20">
@@ -453,58 +437,78 @@ export default function SpecialistSwarmStudioPage() {
         )}
       </div>
 
-      {/* 1-Click Specialist Blueprint Presets */}
+      {/* Built-in Agency Roster Catalog */}
       <div>
-        <p className="mb-2.5 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-          1-Click Specialist Expansion Blueprints
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {SWARM_PRESET_BLUEPRINTS.map((bp) => {
-            const alreadyAdded = existingNames.has(bp.name.toLowerCase())
+        <div className="mb-2.5 flex items-center justify-between">
+          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+            Agency Roster Catalog ({roster.filter((r) => !r.installed).length} available)
+          </p>
+          <p className="hidden font-mono text-[10px] text-[var(--muted)] sm:block">
+            Curated personas: identity, workflows, deliverables, success metrics
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {roster.map((entry) => {
+            const meta = ROLE_META[entry.role] ?? ROLE_META.custom
             return (
               <div
-                key={bp.name}
-                className="manus-panel flex flex-col justify-between p-4"
+                key={entry.slug}
+                className={clsx(
+                  'manus-panel flex flex-col justify-between p-4',
+                  entry.installed && 'opacity-70',
+                )}
               >
                 <div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-extrabold text-[var(--tone-strong)]">
-                      @{bp.name}
+                      @{entry.name}
                     </span>
-                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 font-mono text-[10px] uppercase text-[var(--muted)]">
-                      {bp.role}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span
+                        className={clsx(
+                          'rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                          meta.badgeCls,
+                        )}
+                      >
+                        {entry.role}
+                      </span>
+                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 font-mono text-[10px] uppercase text-[var(--muted)]">
+                        {entry.division}
+                      </span>
+                    </div>
                   </div>
-                  <p className="mt-0.5 text-xs font-semibold text-rose-500">{bp.tagline}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-rose-500">{entry.tagline}</p>
                   <p className="mt-2 text-xs text-[var(--muted)] line-clamp-3">
-                    {bp.personaPrompt}
+                    {entry.personaPrompt.replace(/##[^\n]*\n/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180)}
+                    ...
+                  </p>
+                  <p className="mt-2 font-mono text-[10px] text-[var(--muted)]">
+                    default budget: ${entry.defaultMonthlyBudgetUsd}/mo
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  disabled={alreadyAdded || creating}
-                  onClick={() =>
-                    void handleCreate({
-                      name: bp.name,
-                      role: bp.role,
-                      personaPrompt: bp.personaPrompt,
-                      monthlyBudgetUsd: bp.budget,
-                    })
-                  }
+                  disabled={entry.installed || installingSlug === entry.slug}
+                  onClick={() => void install(entry)}
                   className={clsx(
                     'mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition',
-                    alreadyAdded
+                    entry.installed
                       ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 cursor-default'
                       : 'oa-soft-button hover:border-rose-500/40',
                   )}
                 >
-                  {alreadyAdded ? (
+                  {entry.installed ? (
                     <span>✓ Active in Swarm</span>
+                  ) : installingSlug === entry.slug ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Recruiting...</span>
+                    </>
                   ) : (
                     <>
                       <Plus size={13} />
-                      <span>Recruit @{bp.name} to Swarm</span>
+                      <span>Recruit @{entry.name}</span>
                     </>
                   )}
                 </button>

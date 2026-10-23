@@ -28,11 +28,10 @@ import { TtsService } from './tts.service'
     CrmService,
     ClipsService,
     PodcastService,
-    ReplayService,
-    AnticipationService,
-    TokensService,
-    TtsService,
-  ],
-  exports: [TokensService, AnticipationService],
+      ReplayService,
+      AnticipationService,
+      TokensService,
+    ],
+    exports: [TokensService, AnticipationService],
 })
 export class LifeModule {}

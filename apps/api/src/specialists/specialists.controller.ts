@@ -15,6 +15,16 @@ export class SpecialistsController {
     return this.specialists.list(req.user.id)
   }
 
+  @Get('roster')
+  listRoster(@Req() req: any) {
+    return this.specialists.listRoster(req.user.id)
+  }
+
+  @Post('roster/:slug/install')
+  installFromRoster(@Req() req: any, @Param('slug') slug: string) {
+    return this.specialists.installFromRoster(req.user.id, slug)
+  }
+
   @Post()
   create(@Req() req: any, @Body() body: CreateSpecialistInput) {
     return this.specialists.create(req.user.id, body)

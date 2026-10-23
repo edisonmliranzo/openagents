@@ -1,8 +1,11 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Inject, forwardRef } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { GmailTool } from './connectors/gmail.tool'
 import { CalendarTool } from './connectors/calendar.tool'
 import { WebFetchTool } from './connectors/web-fetch.tool'
+import { CrawlSiteTool } from './connectors/crawl-site.tool'
+import { ContentPipelineTool } from './connectors/content-pipeline.tool'
+import { SelfLearnTool } from './connectors/self-learn.tool'
 import { NotesTool } from './connectors/notes.tool'
 import { WebSearchTool } from './connectors/web-search.tool'
 import { TimeTool } from './connectors/time.tool'
@@ -77,6 +80,10 @@ export class ToolsService {
     private gmail: GmailTool,
     private calendar: CalendarTool,
     private webFetch: WebFetchTool,
+    private crawlSite: CrawlSiteTool,
+    @Inject(forwardRef(() => ContentPipelineTool))
+    private contentPipeline: ContentPipelineTool,
+    private selfLearn: SelfLearnTool,
     private notes: NotesTool,
     private webSearch: WebSearchTool,
     private time: TimeTool,
@@ -130,7 +137,12 @@ export class ToolsService {
       ['calendar_create_event', { def: this.withBuiltinSource(this.calendar.createEventDef), execute: this.calendar.createEvent.bind(this.calendar) }],
       ['calendar_update_event', { def: this.withBuiltinSource(this.calendar.updateEventDef), execute: this.calendar.updateEvent.bind(this.calendar) }],
       ['calendar_cancel_event', { def: this.withBuiltinSource(this.calendar.cancelEventDef), execute: this.calendar.cancelEvent.bind(this.calendar) }],
-      ['web_fetch', { def: this.withBuiltinSource(this.webFetch.def), execute: this.webFetch.fetch.bind(this.webFetch) }],
+        ['web_fetch', { def: this.withBuiltinSource(this.webFetch.def), execute: this.webFetch.fetch.bind(this.webFetch) }],
+        ['web_crawl', { def: this.withBuiltinSource(this.crawlSite.def), execute: this.crawlSite.run.bind(this.crawlSite) }],
+        ['content_pipeline_configure', { def: this.withBuiltinSource(this.contentPipeline.configureDef), execute: this.contentPipeline.configure.bind(this.contentPipeline) }],
+        ['content_pipeline_run', { def: this.withBuiltinSource(this.contentPipeline.runDef), execute: this.contentPipeline.run.bind(this.contentPipeline) }],
+        ['buffer_list_profiles', { def: this.withBuiltinSource(this.contentPipeline.bufferProfilesDef), execute: this.contentPipeline.listProfiles.bind(this.contentPipeline) }],
+        ['self_learn', { def: this.withBuiltinSource(this.selfLearn.def), execute: this.selfLearn.run.bind(this.selfLearn) }],
       ['web_search', { def: this.withBuiltinSource(this.webSearch.def), execute: this.webSearch.search.bind(this.webSearch) }],
       ['get_current_time', { def: this.withBuiltinSource(this.time.def), execute: this.time.getCurrentTime.bind(this.time) }],
       ['cron_add', { def: this.withBuiltinSource(this.cron.addDef), execute: this.cron.add.bind(this.cron) }],
@@ -445,7 +457,7 @@ export class ToolsService {
   private inferScope(toolName: string) {
     const value = toolName.trim().toLowerCase()
     if (/(create|draft|send|remove|delete|update|cancel|place_demo_order)/i.test(value)) return 'external_write' as const
-    if (/(web_|gmail_|calendar_|bybit_get_|deep_research|computer_)/i.test(value)) return 'external_read' as const
+    if (/(web_|gmail_|calendar_|bybit_get_|deep_research|computer_|self_learn)/i.test(value)) return 'external_read' as const
     if (/(cron_add|cron_remove)/i.test(value)) return 'system_mutation' as const
     if (/(shell_execute|shell_session_run|code_execute)/i.test(value)) return 'system_mutation' as const
     if (/(image_generate|audio_generate|atlascloud_image_generate)/i.test(value)) return 'external_write' as const
@@ -471,6 +483,7 @@ export class ToolsService {
     if (value === 'slack_send') effects.push('Sends a message to a Slack channel or user')
     if (value === 'airtable_query') effects.push('Reads records from an Airtable base')
     if (value === 'hubspot_search') effects.push('Searches HubSpot CRM contacts/companies/deals')
+    if (value === 'self_learn') effects.push('Fetches external web content; writes to the user\'s knowledge library, memory facts, and skill library')
     if (value === 'browser_screenshot') effects.push('Takes a screenshot of a URL using external screenshot API')
     if (value === 'whatsapp_send') effects.push('Sends outbound WhatsApp message via Meta Cloud API')
     if (value === 'telegram_send') effects.push('Sends outbound Telegram message via Bot API')
@@ -481,6 +494,7 @@ export class ToolsService {
   private estimateCost(toolName: string, input: Record<string, unknown>) {
     const value = toolName.trim().toLowerCase()
     if (value === 'deep_research') return 0.25
+    if (value === 'self_learn') return 0.03
     if (value.startsWith('computer_')) return 0.1
     if (value.startsWith('web_')) return 0.01
     if (value.includes('bybit')) return 0.02

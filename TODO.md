@@ -707,6 +707,169 @@ into "interrupted = paused".
 
 ---
 
+## 🏢 agency-agents (msitarzewski) parity — the roster as content
+
+Audited against the 163k-star library of ~200 curated agent personas. Unlike the previous
+seven audits (frameworks), this one's product is **content**: meticulously crafted
+specialist definitions — identity, personality, mission & workflows, deliverables, success
+metrics & communication style — organized into divisions (Engineering, Design, Marketing,
+Research, Strategy, ...), installable into any agent tool.
+
+| agency-agents concept | Muse today | Verdict |
+|---|---|---|
+| **Curated persona library** — the roster IS the product | Zero built-in personas. Every specialist started from a blank textarea (`POST /specialists` with a freeform `personaPrompt`); the /team page had 3 hardcoded preset strings. | **The gap — shipped as the built-in Agency roster.** |
+| **Five-part persona contract** (identity · personality · workflows · deliverables · success metrics) | Persona prompts were unconstrained freeform text. | ✅ Adopted: every roster persona follows the five-section contract, enforced by `agency-roster.test.ts`. |
+| **Divisions** (organizational groupings) | Only the 6 runtime roles (researcher/coder/writer/analyst/ops/custom). | ✅ Added as roster metadata (`division`) displayed in the UI; roles stay orthogonal to divisions. |
+| **One-click installers** (per-tool install scripts) | Create-via-POST only, manual persona typing. | ✅ `POST /specialists/roster/:slug/install` — idempotent by name, budget preset per entry. |
+| **Roster browser app** | /team page blueprint section (static). | ✅ Replaced with the live catalog: 14 entries, division/role badges, install state from the API. |
+
+**What was added (verified live: 14-entry catalog, install → 201, idempotent re-install,
+installed flag flips, unknown slug → 400, cleanup):**
+- `apps/api/src/specialists/agency-roster.ts` — pure module: `AGENCY_ROSTER` (14 curated
+  personas across Engineering/Security/Design/Marketing/Community/Strategy/Research/
+  Operations/Product), `SPECIALIST_ROLES` (moved here so tests stay dependency-free),
+  `PERSONA_SECTIONS` contract.
+- `agency-roster.test.ts` — 4 tests: structural validity (slug/name/role/budget limits),
+  slug+name uniqueness, five-section persona contract per entry, full role-spectrum coverage.
+- `SpecialistsService.listRoster/installFromRoster` + `GET /specialists/roster`,
+  `POST /specialists/roster/:slug/install`.
+- SDK: `specialists.roster()` / `specialists.installFromRoster(slug)` + `RosterEntryRow`.
+- Web /team: "Agency Roster Catalog" replaces the 3 hardcoded blueprints.
+
+**Worth taking next:** grow the roster toward the ~200-entry scale of the source repo;
+per-entry default tool bindings; roster packs (install a whole division at once);
+import/export of user-authored roster entries (community roster).
+
+---
+
+## 🗺️ GitHub `ai-agents` topic survey — the landscape vs Muse (Oct 2026)
+
+Audited the top of the 125k-repo `ai-agents` topic directory plus three user-flagged repos
+(coreyhaines31/marketingskills 56k, sickn33/agentic-awesome-skills 48k,
+ashishpatel26/500-AI-Agents-Projects 39k). Muse already holds parity with 8 of the top
+repos via earlier sections (OpenClaw, nanobot, CowAgent, Orca, AutoGen, CrewAI,
+LangGraph/LangChain, agency-agents). Two genuinely-missing ideas found; both shipped.
+
+| Top-of-topic repo | Muse today | Verdict |
+|---|---|---|
+| rea (370k) — reverse-engineering agents | Niche (binary analysis); Muse has `computer_use` + shell/code tools. | Not a fit |
+| ECC (287k), ponytail (174k), taste-skill (101k) — harness rules/skills content | Skills registry + agency roster cover the pattern; content scale is the gap (see below). | Content gap — shipped |
+| deepseek-harness (259k) — "everything is a plugin" | Tools + MCP + skills are Muse's plugin analog. | ✅ |
+| hermes-agent (256k) — "the agent that grows with you" | Muse's mission statement; memory + Deep Dream + lessons ship this. | ✅ |
+| **firecrawl (194k) / crawl4ai (86k)** — site crawling → LLM-ready text | Only single-page `web_fetch`; no whole-site ingestion. | **Gap — shipped as `web_crawl`.** |
+| browser-use (119k) | Browser tools + persistent per-user profiles. | ✅ |
+| gemini-cli (108k), orca (103k) | CLI agent fleet via `run_cli_agent` (Orca parity). | ✅ |
+| paperclip (106k) — agent management/governance at work | Personal-use Muse; governance is out of scope. | Not a fit |
+| claude-mem (102k) — session capture → compress → inject | Session summaries, facts, Deep Dream, run debriefs. | ✅ |
+| graphify (134k) — codebase → knowledge graph | Conversation-fact knowledge graph only; codebase-AST graph is a candidate (below). | Worth taking next |
+| ragflow (93k), OmniRoute (80k) — RAG engine / model gateway | Postgres FTS + library chunking; multi-provider fallback exists per-run. | Partial |
+| deer-flow (84k) — long-horizon SuperAgent | Reinforces the **durable execution** gap flagged in LangGraph section. | Worth taking next |
+| Prompt-Engineering-Guide (79k) | Educational content. | Not a fit |
+
+**Shipped #1 — `web_crawl` tool (firecrawl/crawl4ai pattern):** bounded same-origin BFS
+(≤20 pages, ≤3 depth, 45s deadline, 350ms politeness delay), SSRF-guarded, prompt-guard
+sanitized, saves the whole crawl as one retrievable library document (chunked for
+`library_search`). Pure routing module `crawl-links.ts` + 5 tests (same-origin filter,
+fragment stripping, binary skipping, dedupe, caps). Verified live: crawled
+books.toscrape.com 3 pages → 9 library chunks → cleaned up. Named `web_crawl` to inherit
+the `web_` routing (external_read, fetch side-effect, 0.01 cost).
+
+**Shipped #2 — Marketing division in the public skill catalog (marketingskills pattern):**
+the three flagged repos all sell the same lesson — curated SKILL.md-style content is the
+product. Muse's `PUBLIC_SKILL_CATALOG` had 6 entries, zero marketing. Added 8 curated
+entries adapted from coreyhaines31/marketingskills (MIT, attributed via `sourceUrl`):
+`cro`, `copywriting`, `seo-audit`, `cold-email`, `ab-testing`, `launch-plan`,
+`pricing-review`, `churn-prevention` — each with methodology-rich `promptAppendix` content.
+Verified live: catalog search returns 14 (8 marketing), `POST /skill-registry/public/cro/install`
+→ 201 → cleaned up via SQL.
+
+**From 500-AI-Agents-Projects (39k):** reference directory of use cases — no code to take;
+useful as a checklist when expanding the roster/catalog divisions.
+
+**Worth taking next:** graphify-style codebase→knowledge-graph skill (AST parse of a repo
+into the existing graph store); AAS-style `skills_index.json` machine-readable catalog
+export so external agents can consume Muse's catalog; grow the marketing division toward
+the 40-skill scale of the source repo.
+
+---
+
+## 🎬 Content-creator pipeline — script → narration video → Buffer → notify (shipped)
+
+The platform's first end-to-end user vertical, driven by the product direction: a content
+creator who posts daily videos and wants Muse to do everything — write the script, generate
+the narration video, post via Buffer, and push-notify — for ANY user, with the agent
+understanding intent and configuring it from conversation.
+
+| Pipeline step | Piece used | State |
+|---|---|---|
+| Understand the user + configure | `content_pipeline_configure` agent tool (natural language → config) | ✅ new |
+| Daily autonomy | Config `scheduleCron` → `CronService.createJob` (payloadKind `agentTurn`) → CronScheduler fires an agent run → `content_pipeline_run` | ✅ new wiring |
+| Topic + script + caption + hashtags | `LLMService.complete` (JSON contract + truncation-salvage regex for small local models) | ✅ new |
+| Narration | Per-user voice (TtsService: Fish → ElevenLabs fallover) → env TTS fallback (OpenAI → ElevenLabs) | ✅ new wiring |
+| Final video | `video_render` path: ffmpeg still-image/background + narration → MP4 (orientation presets 9:16/1:1/16:9, title overlay with retry-without-overlay) | ✅ new |
+| Post | `buffer_post` path: Buffer API v1 (`buffer_list_profiles`, multipart `updates/create.json`), per-user PAT or env | ✅ new |
+| Notify | `PushService.sendToUser` (graceful no-op without subscriptions) | ✅ existing |
+
+**Verified live end-to-end** (real LLM script, real ElevenLabs narration after Fish 402
+fallover, real 0.43 MB ffmpeg MP4, Buffer correctly dry-run-skipped, tools registered,
+graceful no-token errors).
+
+Pieces: `apps/api/src/content-pipeline/` (service, controller, module, buffer, video-render
++ pure `video-render-args` w/ 6 tests), `tools/connectors/content-pipeline.tool.ts` (3 agent
+tools, backend-token injection to break the module import cycle), `ContentPipelineController`
+(`GET/PUT /api/v1/content-pipeline`, `POST /content-pipeline/run`).
+
+**Hardening notes from the build:** Boolean-literal union narrowing (`{ok:true}|{ok:false}`)
+does not work under this project's `strict:false` tsconfig — single-shape `success:boolean`
+objects are the codebase convention (ToolResult); the new module's import edges reach
+AgentModule mid-construction, so cross-module edges need `forwardRef` + the `LifeCoreModule`
+leaf pattern (TtsService moved there from LifeModule).
+
+**Worth taking next:** UI page for the pipeline (config + run + video preview); background
+image from `image_generate` per run; Buffer OAuth flow instead of PAT; posting to multiple
+profiles; Wav/Lossless narration for YouTube; scheduled_at support from the config.
+
+---
+
+## 🧠 Self-learning loop — teach yourself, auto-add skills (shipped)
+
+The agent now closes its own knowledge gaps: when it doesn't know something or the user
+wants a capability it lacks, it teaches itself in one call — research → durable knowledge
+→ auto-captured skill — and the system prompt makes it do this reflexively instead of
+ever saying "I don't know".
+
+| Step | Piece | State |
+|---|---|---|
+| Detect the gap | New `## Self-Learning (CRITICAL)` directive in the agent system prompt: "Never say I don't know — call self_learn"; `self_learn` listed first in Tool Strategy | ✅ new |
+| Research | `WebSearchTool` (Brave/SearXNG/DDG fallback) → `WebFetchTool` top-3 sources, prompt-guarded, graceful degrade to model knowledge when search fails | ✅ new wiring |
+| Synthesize | `LLMService.complete` → JSON contract (summary, keyFacts, studyNotes, procedure) + truncation-salvage regex for small local models | ✅ new |
+| Remember (knowledge) | Study notes + sources → `LibraryService.addText` (chunked, retrievable forever) | ✅ new wiring |
+| Remember (facts) | 3-6 key facts → `MemoryService.upsertFact` (entity/key/value, sourceRef, confidence, conflictGroup `self-learned`) | ✅ new wiring |
+| **Auto-add skill** | Learned procedure → `UserSkill` row (name/description/steps/tools/tags/trigger) — upserted so relearning updates in place | ✅ new |
+| Learning journal | `GET /learning/self-taught` — what the agent taught itself, most recent first (bounded 50-entry log in DocumentStore) | ✅ new |
+
+Pieces: `apps/api/src/learning/self-learn.service.ts` (the loop),
+`tools/connectors/self-learn.tool.ts` (agent tool, backend-token injection),
+merged into the pre-existing `LearningModule` (interaction tracking + skill suggester),
+routed as `external_read` with a 0.03 cost estimate.
+
+**Verified live** (real topics via the agent tool path): "GitHub CLI pull requests" →
+3 web sources, 6 facts, 1338-char study notes saved as a 2-chunk library doc;
+"deploy Next.js to Vercel" → auto-skill `deploy-nextjs-app-on-vercel` created itself,
+learning log shows both runs. Test artifacts cleaned up.
+
+**Build note:** the pre-existing `learning/` module (LearningService +
+SkillSuggesterService consumed by AgentService) was accidentally clobbered and then
+restored + merged — reminder that this repo has many inhabited corners; check for
+existing files before writing new modules.
+
+**Worth taking next:** schedule self_learn runs from Deep Dream topic backlog; feed
+`GET /learning/self-taught` into the weekly self-summary; suggest skills when a
+repeated task pattern matches a learned trigger phrase; rate learned facts by later
+verification.
+
+---
+
 ## ✅ Phases Shipped & Verified (kept for history)
 
 ### Phase 1 — Advanced AI Capabilities ✅

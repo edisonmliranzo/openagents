@@ -15,9 +15,23 @@ export interface SpecialistAgentRow {
   updatedAt: string
 }
 
+export interface RosterEntryRow {
+  slug: string
+  name: string
+  role: string
+  division: string
+  tagline: string
+  defaultMonthlyBudgetUsd: number
+  personaPrompt: string
+  installed: boolean
+}
+
 export function createSpecialistsApi(client: OpenAgentsClient) {
   return {
     list: () => client.get<SpecialistAgentRow[]>('/api/v1/specialists'),
+    roster: () => client.get<RosterEntryRow[]>('/api/v1/specialists/roster'),
+    installFromRoster: (slug: string) =>
+      client.post<SpecialistAgentRow>(`/api/v1/specialists/roster/${slug}/install`, {}),
     create: (input: { name: string; role?: string; personaPrompt?: string; emailAlias?: string; telegramToken?: string; monthlyBudgetUsd?: number }) =>
       client.post<SpecialistAgentRow>('/api/v1/specialists', input),
     update: (id: string, input: Partial<{ name: string; role: string; personaPrompt: string; emailAlias: string; telegramToken: string; monthlyBudgetUsd: number; enabled: boolean }>) =>

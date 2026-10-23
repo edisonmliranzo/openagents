@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import type { SpecialistAgent } from '@prisma/client'
+import { AGENCY_ROSTER, SPECIALIST_ROLES, type RosterEntry } from './agency-roster'
 
 export interface CreateSpecialistInput {
   name: string
@@ -11,7 +12,9 @@ export interface CreateSpecialistInput {
   monthlyBudgetUsd?: number
 }
 
-const ROLES = ['researcher', 'coder', 'writer', 'analyst', 'ops', 'custom']
+export interface RosterEntryView extends RosterEntry {
+  installed: boolean
+}
 
 @Injectable()
 export class SpecialistsService {
@@ -22,7 +25,9 @@ export class SpecialistsService {
   async create(userId: string, input: CreateSpecialistInput): Promise<SpecialistAgent> {
     const name = String(input.name ?? '').trim().slice(0, 60)
     if (!name) throw new BadRequestException('Agent name is required.')
-    const role = ROLES.includes(String(input.role ?? '').toLowerCase()) ? String(input.role).toLowerCase() : 'custom'
+    const role = SPECIALIST_ROLES.includes(String(input.role ?? '').toLowerCase() as never)
+      ? (String(input.role).toLowerCase() as (typeof SPECIALIST_ROLES)[number])
+      : 'custom'
     const budget = Number(input.monthlyBudgetUsd)
     const monthlyBudgetUsd = Number.isFinite(budget) && budget > 0 ? Math.min(budget, 1000) : 1
 
@@ -51,12 +56,42 @@ export class SpecialistsService {
     })
   }
 
+  /** Built-in curated roster, annotated with per-user install state. */
+  async listRoster(userId: string): Promise<RosterEntryView[]> {
+    const agents = await this.prisma.specialistAgent.findMany({
+      where: { userId },
+      select: { name: true },
+    })
+    const names = new Set(agents.map((a) => a.name.toLowerCase()))
+    return AGENCY_ROSTER.map((entry) => ({ ...entry, installed: names.has(entry.name.toLowerCase()) }))
+  }
+
+  /** One-click install of a roster persona as a live specialist. Idempotent by name. */
+  async installFromRoster(userId: string, slug: string): Promise<SpecialistAgent> {
+    const entry = AGENCY_ROSTER.find((e) => e.slug === slug)
+    if (!entry) throw new BadRequestException(`Unknown roster entry "${slug}".`)
+    const existing = await this.prisma.specialistAgent.findFirst({ where: { userId, name: entry.name } })
+    if (existing) {
+      this.logger.log(`Roster install of "${entry.name}" for user ${userId}: already present`)
+      return existing
+    }
+    const agent = await this.create(userId, {
+      name: entry.name,
+      role: entry.role,
+      personaPrompt: entry.personaPrompt,
+      monthlyBudgetUsd: entry.defaultMonthlyBudgetUsd,
+    })
+    this.logger.log(`Installed roster specialist "${entry.name}" (${entry.division}) for user ${userId}`)
+    return agent
+  }
+
   async update(userId: string, id: string, patch: Partial<CreateSpecialistInput> & { enabled?: boolean }) {
     const existing = await this.prisma.specialistAgent.findFirst({ where: { id, userId } })
     if (!existing) throw new BadRequestException('Agent not found.')
     const data: Record<string, unknown> = {}
     if (patch.name !== undefined) data.name = String(patch.name).trim().slice(0, 60)
-    if (patch.role !== undefined && ROLES.includes(String(patch.role).toLowerCase())) data.role = String(patch.role).toLowerCase()
+    if (patch.role !== undefined && SPECIALIST_ROLES.includes(String(patch.role).toLowerCase() as never))
+      data.role = String(patch.role).toLowerCase()
     if (patch.personaPrompt !== undefined) data.personaPrompt = String(patch.personaPrompt).trim().slice(0, 4000)
     if (patch.emailAlias !== undefined) data.emailAlias = String(patch.emailAlias).trim().slice(0, 120) || null
     if (patch.telegramToken !== undefined) data.telegramToken = String(patch.telegramToken).trim().slice(0, 200) || null

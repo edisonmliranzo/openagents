@@ -487,7 +487,7 @@ export class EmailAutopilotService {
 
   /** Supports from:, to:, subject:, category: tokens with * wildcards; bare words match subject/snippet. */
   matches(match: string, email: TriagedEmail): boolean {
-    const tokens = match.match(/(\w+:"[^"]*"|\w+:\S+|"[^"]*"|\S+)/g) ?? []
+    const tokens = (match.match(/(\w+:"[^"]*"|\w+:\S+|"[^"]*"|\S+)/g) ?? []) as string[]
     return tokens.every((tok) => {
       const m = tok.match(/^(\w+):(.*)$/)
       const field = m?.[1]?.toLowerCase()

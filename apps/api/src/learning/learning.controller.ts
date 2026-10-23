@@ -2,6 +2,7 @@ import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Req, Http
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { LearningService, InteractionEntry } from './learning.service';
 import { SkillSuggesterService } from './skill-suggester.service';
+import { SelfLearnService } from './self-learn.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @ApiTags('learning')
@@ -12,6 +13,7 @@ export class LearningController {
   constructor(
     private learning: LearningService,
     private suggester: SkillSuggesterService,
+    private selfLearn: SelfLearnService,
   ) {}
 
   @Post('track')
@@ -85,5 +87,12 @@ export class LearningController {
     const basePrompt = body.basePrompt || 'You are a helpful AI assistant.';
     const enhancedPrompt = await this.learning.getEnhancedSystemPrompt(req.user.id, basePrompt);
     return { enhancedPrompt };
+  }
+
+  @Get('self-taught')
+  @ApiOperation({ summary: 'List what the agent has taught itself (self_learn history)' })
+  @ApiResponse({ status: 200, description: 'Self-taught topics, most recent first' })
+  async getSelfTaught(@Req() req: any, @Query('limit') limit?: string) {
+    return this.selfLearn.log(req.user.id, Number(limit) || 25);
   }
 }

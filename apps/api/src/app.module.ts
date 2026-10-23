@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module'
 import { ConversationsModule } from './conversations/conversations.module'
 import { AgentModule } from './agent/agent.module'
 import { ToolsModule } from './tools/tools.module'
+import { ContentPipelineModule } from './content-pipeline/content-pipeline.module'
 import { ApprovalsModule } from './approvals/approvals.module'
 import { MemoryModule } from './memory/memory.module'
 import { SessionsModule } from './sessions/sessions.module'
@@ -192,6 +193,7 @@ import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
     PrivacyModule,
     PublicAgentsModule,
     ReplayModule,
+    ContentPipelineModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: CustomThrottlerGuard },
