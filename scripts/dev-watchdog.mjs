@@ -59,13 +59,31 @@ function stamp() {
   return new Date().toISOString().slice(11, 19)
 }
 
+function turboOrNestWatchRunning(serviceName) {
+  if (process.platform !== 'win32') return false
+  try {
+    const out = spawnSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.ProcessId -ne ${process.pid} -and ($_.CommandLine -like '*turbo*run dev*' -or ($_.CommandLine -like '*nest*start --watch*' -and '${serviceName}' -eq 'api') -or ($_.CommandLine -like '*next*dev*' -and '${serviceName}' -eq 'web')) } | Select-Object -First 1 -ExpandProperty ProcessId`,
+      ],
+      { timeout: 3000 },
+    ).stdout?.toString().trim()
+    return Boolean(out)
+  } catch {
+    return false
+  }
+}
+
 function supervise(target) {
   let restarts = 0
   let running = false
   const start = async () => {
     // Each service is supervised independently: never spawn over an instance
-    // that is already serving the port (manual starts, prod stacks, etc.).
-    if (running || (await portOpen(target.port))) return
+    // that is already serving the port (manual starts, prod stacks, turbo dev, etc.).
+    if (running || (await portOpen(target.port)) || turboOrNestWatchRunning(target.name)) return
     running = true
     const child = spawn(PNPX, target.args, {
       cwd: rootDir,
