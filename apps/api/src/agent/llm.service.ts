@@ -391,7 +391,7 @@ export class LLMService {
       if (live.length === 0) return { models: curated, source: 'curated' }
       const seen = new Set(curated)
       const extras = live.map((id) => id.trim()).filter((id) => id && !seen.has(id))
-      return { models: [...curated, ...extras].slice(0, 200), source: 'live' }
+      return { models: [...curated, ...extras].slice(0, 500), source: 'live' }
     } catch (err: any) {
       return { models: curated, source: 'curated', error: this.friendlyCatalogError(requested, err) }
     }

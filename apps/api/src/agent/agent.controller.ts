@@ -302,16 +302,50 @@ export class AgentController {
   }
 
   @Get('models/:provider')
-  async listProviderModels(@Req() req: any, @Param('provider') provider: string, @Query('baseUrl') baseUrl?: string) {
+  async listProviderModels(
+    @Req() req: any,
+    @Param('provider') provider: string,
+    @Query('baseUrl') baseUrl?: string,
+    @Query('apiKey') queryApiKey?: string,
+  ) {
     const trimmedBase = baseUrl?.trim() || undefined
-    let apiKey: string | undefined
+    let apiKey: string | undefined = queryApiKey?.trim() || undefined
     let resolvedBase = trimmedBase
 
-    if (!trimmedBase) {
+    if (!apiKey || !resolvedBase) {
       const stored = await this.users.getRawLlmKey(req.user.id, provider).catch(() => null)
-      if (stored?.isActive) {
-        apiKey = stored.apiKey ?? stored.loginPassword ?? undefined
-        resolvedBase = stored.baseUrl ?? undefined
+      if (stored) {
+        if (!apiKey) {
+          apiKey = stored.apiKey ?? stored.loginPassword ?? undefined
+        }
+        if (!resolvedBase) {
+          resolvedBase = stored.baseUrl ?? undefined
+        }
+      }
+    }
+
+    return this.llm.listProviderModels(provider as LLMProvider, apiKey, resolvedBase)
+  }
+
+  @Post('models/:provider')
+  @HttpCode(200)
+  async listProviderModelsPost(
+    @Req() req: any,
+    @Param('provider') provider: string,
+    @Body() body?: { apiKey?: string; baseUrl?: string },
+  ) {
+    let apiKey = body?.apiKey?.trim() || undefined
+    let resolvedBase = body?.baseUrl?.trim() || undefined
+
+    if (!apiKey || !resolvedBase) {
+      const stored = await this.users.getRawLlmKey(req.user.id, provider).catch(() => null)
+      if (stored) {
+        if (!apiKey) {
+          apiKey = stored.apiKey ?? stored.loginPassword ?? undefined
+        }
+        if (!resolvedBase) {
+          resolvedBase = stored.baseUrl ?? undefined
+        }
       }
     }
 

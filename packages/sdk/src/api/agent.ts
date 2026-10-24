@@ -34,7 +34,13 @@ export function createAgentApi(client: OpenAgentsClient) {
       return client.get<OllamaModelsResult>(`/api/v1/agent/ollama-models${qs}`)
     },
 
-    listProviderModels: (provider: string, baseUrl?: string) => {
+    listProviderModels: (provider: string, baseUrl?: string, apiKey?: string) => {
+      if (apiKey?.trim()) {
+        return client.post<ProviderModelsResult>(`/api/v1/agent/models/${encodeURIComponent(provider)}`, {
+          apiKey: apiKey.trim(),
+          baseUrl: baseUrl?.trim() || undefined,
+        })
+      }
       const qs = baseUrl?.trim() ? `?baseUrl=${encodeURIComponent(baseUrl.trim())}` : ''
       return client.get<ProviderModelsResult>(`/api/v1/agent/models/${encodeURIComponent(provider)}${qs}`)
     },

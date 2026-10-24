@@ -131,7 +131,7 @@ export function ModelPicker({ models, value, onChange, placeholder }: ModelPicke
                   />
                 </div>
               </div>
-              <div className="max-h-64 overflow-y-auto p-1.5">
+              <div className="max-h-96 overflow-y-auto p-1.5">
                 {filtered.length === 0 && (
                   <p className="px-3 py-4 text-center text-[13px] text-slate-400">
                     No models match &ldquo;{query.trim()}&rdquo;.

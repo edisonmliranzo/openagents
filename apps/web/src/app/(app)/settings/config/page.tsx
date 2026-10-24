@@ -460,17 +460,27 @@ export default function ConfigPage() {
     }
   }, [])
 
-  const loadLiveModels = useCallback(async (provider: Provider, baseUrl?: string) => {
+  const loadLiveModels = useCallback(async (provider: Provider, baseUrl?: string, apiKeyOverride?: string) => {
     if (provider === 'ollama') return
     setLiveModelsStatus('loading')
+    const fetchOnce = async () => {
+      return sdk.agent.listProviderModels(provider, baseUrl || undefined, apiKeyOverride || undefined)
+    }
     try {
-      const result = await sdk.agent.listProviderModels(provider, baseUrl || undefined)
+      let result: Awaited<ReturnType<typeof fetchOnce>>
+      try {
+        result = await fetchOnce()
+      } catch {
+        // Retry once after 2.5s in case the API dev server is still booting or restarting
+        await new Promise((r) => setTimeout(r, 2500))
+        result = await fetchOnce()
+      }
       setLiveModels(result.models ?? [])
       setLiveModelsSource(result.source ?? 'curated')
       setLiveModelsProvider(provider)
       setLiveModelsStatus('loaded')
       if (result.source === 'live') {
-        setStatus(`${PROVIDER_META[provider].label}: loaded ${result.models?.length ?? 0} live models. Pick the one you want.`)
+        setStatus(`${PROVIDER_META[provider].label}: loaded ${result.models?.length ?? 0} live models from API key. Pick the one you want.`)
       } else if (result.error) {
         setError(result.error)
       }
@@ -552,13 +562,15 @@ export default function ConfigPage() {
 
       if (preferredProvider === 'ollama') {
         await loadOllamaModels(ollamaBaseUrl)
+      } else {
+        await loadLiveModels(preferredProvider, nextCards[preferredProvider]?.baseUrl || undefined)
       }
     } catch (err: any) {
       setError(err?.message ?? 'Failed to load config')
     } finally {
       setIsLoading(false)
     }
-  }, [loadOllamaModels])
+  }, [loadOllamaModels, loadLiveModels])
 
   useEffect(() => { void load() }, [load])
 
@@ -1121,7 +1133,11 @@ export default function ConfigPage() {
                 {activeProvider !== 'ollama' && (
                   <button
                     type="button"
-                    onClick={() => void loadLiveModels(activeProvider, cards[activeProvider]?.baseUrl || undefined)}
+                    onClick={() => void loadLiveModels(
+                      activeProvider,
+                      cards[activeProvider]?.baseUrl || undefined,
+                      cards[activeProvider]?.apiKey.trim() || cards[activeProvider]?.loginPassword.trim() || undefined,
+                    )}
                     disabled={liveModelsStatus === 'loading'}
                     className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 sm:w-auto"
                   >
@@ -1458,6 +1474,24 @@ export default function ConfigPage() {
                   >
                     {card.testStatus === 'testing' ? 'Testing...' : 'Test'}
                   </button>
+
+                  {provider !== 'ollama' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveProvider(provider)
+                        void loadLiveModels(
+                          provider,
+                          card.baseUrl.trim() || undefined,
+                          card.apiKey.trim() || card.loginPassword.trim() || undefined,
+                        )
+                      }}
+                      disabled={liveModelsStatus === 'loading' && activeProvider === provider}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Load Models
+                    </button>
+                  )}
 
                   <button
                     type="button"
