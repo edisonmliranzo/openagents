@@ -1059,6 +1059,11 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
 
     await this.writeCoreFileIfMissing(userDir, 'SOUL.md', soul)
     await this.writeCoreFileIfMissing(userDir, 'USER.md', userDoc)
+    await this.syncUserCoreFilePreferences(
+      userDir,
+      settings.preferredProvider ?? '',
+      settings.preferredModel ?? '',
+    )
     await this.writeCoreFileIfMissing(userDir, 'MEMORY.md', memoryDoc)
     await this.writeCoreFileIfMissing(userDir, 'HEARTBEAT.md', heartbeatDoc)
 
@@ -1752,6 +1757,25 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async syncUserCoreFilePreferences(
+    userDir: string,
+    preferredProvider: string,
+    preferredModel: string,
+  ) {
+    const fullPath = path.join(userDir, 'USER.md')
+    try {
+      const existing = await fs.readFile(fullPath, 'utf8')
+      const updated = existing
+        .replace(/^preferred_provider:.*$/m, `preferred_provider: ${preferredProvider}`)
+        .replace(/^preferred_model:.*$/m, `preferred_model: ${preferredModel}`)
+      if (updated !== existing) {
+        await fs.writeFile(fullPath, updated, 'utf8')
+      }
+    } catch {
+      // Ignore if USER.md cannot be read or written
+    }
+  }
+
   private async ensureCoreMemoryFiles(userId: string) {
     const userDir = await this.ensureUserDir(userId)
 
@@ -1826,6 +1850,11 @@ export class MemoryService implements OnModuleInit, OnModuleDestroy {
       this.writeCoreFileIfMissing(userDir, 'MEMORY.md', memoryDoc),
       this.writeCoreFileIfMissing(userDir, 'HEARTBEAT.md', heartbeatDoc),
     ])
+    await this.syncUserCoreFilePreferences(
+      userDir,
+      settings?.preferredProvider ?? '',
+      settings?.preferredModel ?? '',
+    )
 
     return userDir
   }

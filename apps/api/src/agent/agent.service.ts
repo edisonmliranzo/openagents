@@ -388,7 +388,9 @@ export class AgentService implements OnModuleInit {
     // Semantic answer cache: near-identical recent stable questions return
     // the previous answer instantly — no LLM call at all.
     try {
-      const cached = await this.answerCache.lookup(userId, userMessage, taskClass)
+      const cached = this.isIdentityQuestion(userMessage)
+        ? null
+        : await this.answerCache.lookup(userId, userMessage, taskClass)
       if (cached) {
         const agentMsg = await this.prisma.message.create({
           data: { conversationId, role: 'agent', content: piiState && this.pii ? this.pii.restore(cached.answer, piiState) : cached.answer, status: 'done' },
@@ -709,6 +711,18 @@ export class AgentService implements OnModuleInit {
       })
       let activeFallbackApiKeys = fallbackApiKeys
       let costRouterApplied = false
+      const getEffectiveSystemPromptWithRuntime = () => {
+        const effectiveModel = activeModel?.trim() || LLM_MODELS[activeProvider]?.default || 'default'
+        const runtimeLabel = this.describeRuntime(activeProvider, effectiveModel)
+        const runtimeBlock = [
+          '## Active Runtime (Authoritative)',
+          `Current active provider: ${activeProvider}`,
+          `Current active model: ${effectiveModel}`,
+          `Current active runtime label: ${runtimeLabel}`,
+          'If the user asks what LLM, model, AI, or provider you are currently running on, report this active runtime accurately and ignore any older provider/model mentions in memory files or prior chat messages.',
+        ].join('\n')
+        return `${effectiveSystemPrompt}\n\n${runtimeBlock}`
+      }
       // Cost-aware model router (cost module). Best-effort: never breaks chat.
       // Only overrides provider/model when the user has a usable config for
       // the routed provider; otherwise the current selection is kept.
@@ -770,11 +784,13 @@ export class AgentService implements OnModuleInit {
           await applyCostRouter(messages)
         }
 
+        const promptWithRuntime = getEffectiveSystemPromptWithRuntime()
+
         try {
           return await this.llm.complete(
             messages,
             availableTools,
-            effectiveSystemPrompt,
+            promptWithRuntime,
             activeProvider,
             activeUserApiKey,
             activeUserBaseUrl,
@@ -810,7 +826,7 @@ export class AgentService implements OnModuleInit {
           return this.llm.complete(
             messages,
             availableTools,
-            effectiveSystemPrompt,
+            getEffectiveSystemPromptWithRuntime(),
             activeProvider,
             activeUserApiKey,
             activeUserBaseUrl,
@@ -1623,7 +1639,7 @@ export class AgentService implements OnModuleInit {
       }
 
       // Feed the semantic answer cache for stable, tool-free answers.
-      if (finalResponseContent) {
+      if (finalResponseContent && !this.isIdentityQuestion(userMessage)) {
         void this.answerCache
           .store({
             userId,
@@ -2267,7 +2283,8 @@ export class AgentService implements OnModuleInit {
       return input.content
     }
 
-    const runtime = this.describeRuntime(input.provider, input.model)
+    const effectiveModel = input.model?.trim() || LLM_MODELS[input.provider]?.default || undefined
+    const runtime = this.describeRuntime(input.provider, effectiveModel)
     return runtime
       ? `I'm OpenAgents, the assistant for the OpenAgents project.\n\nRuntime: ${runtime}. That is the underlying model/runtime, not my identity.`
       : `I'm OpenAgents, the assistant for the OpenAgents project.`
@@ -2276,30 +2293,40 @@ export class AgentService implements OnModuleInit {
   private isIdentityQuestion(message: string) {
     const normalized = message.trim().toLowerCase()
     if (!normalized) return false
-    return /^(who are you|what are you|identify yourself|what is your name|who am i talking to)\b/.test(
+    if (
+      /^(who are you|what are you|identify yourself|what is your name|what's your name|whats your name|who am i talking to)\b/.test(
+        normalized,
+      )
+    ) {
+      return true
+    }
+    return /\b(what(?:'s|s| is) your (?:llm|model|ai|provider|runtime)|which (?:llm|model|provider) (?:are you|do you use)|what (?:llm|model|provider) are you(?:\s+(?:running|using|on))?)\b/.test(
       normalized,
     )
   }
 
   private describeRuntime(provider: LLMProvider, model?: string | null) {
-    const providerLabel =
-      provider === 'anthropic'
-        ? 'Anthropic'
-        : provider === 'openai'
-          ? 'OpenAI'
-          : provider === 'google'
-            ? 'Google'
-            : provider === 'ollama'
-              ? 'Ollama'
-              : provider === 'minimax'
-                ? 'MiniMax'
-                : provider === 'nvidia'
-                  ? 'NVIDIA NIM'
-                  : provider === 'atlascloud'
-                    ? 'AtlasCloud'
-                    : provider
+    const providerLabels: Record<LLMProvider, string> = {
+      anthropic: 'Anthropic',
+      openai: 'OpenAI',
+      google: 'Google',
+      ollama: 'Ollama',
+      minimax: 'MiniMax',
+      perplexity: 'Perplexity',
+      nvidia: 'NVIDIA NIM',
+      atlascloud: 'AtlasCloud',
+      groq: 'Groq',
+      mistral: 'Mistral',
+      deepseek: 'DeepSeek',
+      xai: 'xAI',
+      openrouter: 'OpenRouter',
+      together: 'Together AI',
+      custom: 'Custom',
+      meta: 'Meta',
+    }
+    const providerLabel = providerLabels[provider] ?? provider
     const modelLabel = model?.trim()
-    return modelLabel ? `${providerLabel} ${modelLabel}` : providerLabel
+    return modelLabel ? `${providerLabel} (${modelLabel})` : providerLabel
   }
 
   private toSingleLine(value: string, maxLength: number) {
