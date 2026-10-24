@@ -388,7 +388,9 @@ export class AgentService implements OnModuleInit {
     // Semantic answer cache: near-identical recent stable questions return
     // the previous answer instantly — no LLM call at all.
     try {
-      const cached = this.isIdentityQuestion(userMessage)
+      const skipCache =
+        this.isIdentityQuestion(userMessage) || this.needsFreshData(userMessage)
+      const cached = skipCache
         ? null
         : await this.answerCache.lookup(userId, userMessage, taskClass)
       if (cached) {
@@ -714,11 +716,31 @@ export class AgentService implements OnModuleInit {
       const getEffectiveSystemPromptWithRuntime = () => {
         const effectiveModel = activeModel?.trim() || LLM_MODELS[activeProvider]?.default || 'default'
         const runtimeLabel = this.describeRuntime(activeProvider, effectiveModel)
+        const now = new Date()
+        const userTimezone = autonomyStatus.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        let localDateTime = now.toISOString()
+        try {
+          localDateTime = new Intl.DateTimeFormat('en-US', {
+            timeZone: userTimezone,
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            timeZoneName: 'short',
+          }).format(now)
+        } catch {
+          localDateTime = now.toUTCString()
+        }
         const runtimeBlock = [
-          '## Active Runtime (Authoritative)',
+          '## Active Runtime & Current Time (Authoritative)',
           `Current active provider: ${activeProvider}`,
           `Current active model: ${effectiveModel}`,
           `Current active runtime label: ${runtimeLabel}`,
+          `Current date and time: ${localDateTime} (ISO UTC: ${now.toISOString()}, timezone: ${userTimezone})`,
+          'If the user asks for the current time, date, or day of the week, answer directly using the current date and time above.',
           'If the user asks what LLM, model, AI, or provider you are currently running on, report this active runtime accurately and ignore any older provider/model mentions in memory files or prior chat messages.',
         ].join('\n')
         return `${effectiveSystemPrompt}\n\n${runtimeBlock}`
@@ -1639,7 +1661,11 @@ export class AgentService implements OnModuleInit {
       }
 
       // Feed the semantic answer cache for stable, tool-free answers.
-      if (finalResponseContent && !this.isIdentityQuestion(userMessage)) {
+      if (
+        finalResponseContent &&
+        !this.isIdentityQuestion(userMessage) &&
+        !this.needsFreshData(userMessage)
+      ) {
         void this.answerCache
           .store({
             userId,
@@ -2602,7 +2628,7 @@ export class AgentService implements OnModuleInit {
   }
 
   private needsFreshData(userMessage: string): boolean {
-    return /\b(latest|current(ly)?|today|tonight|now\b|right now|price|prices|news|weather|score|version|who (is|won|has)|as of|recent|upcoming|live|stock|ticker)\b/i.test(userMessage)
+    return /\b(latest|current(ly)?|today|tonight|now\b|right now|what time|what day|what date|time is it|date is it|day is it|price|prices|news|weather|score|version|who (is|won|has)|as of|recent|upcoming|live|stock|ticker)\b/i.test(userMessage)
   }
 
   private shouldUseFastAdvisoryMode(userMessage: string) {

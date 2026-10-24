@@ -40,9 +40,19 @@ export class ModelRouterService {
   }
 
   classify(userMessage: string): TaskClass {
-    const normalized = (userMessage ?? '').trim().toLowerCase()
+    const normalized = (userMessage ?? '').trim().toLowerCase().replace(/[!.?…\s]+$/g, '')
     if (!normalized) return 'general'
-    if (/^(hi|hey|hello|yo|sup|howdy|good\s?(morning|afternoon|evening)|thanks?|thank you|thx|bye|ok(ay)?|nice|cool|great)\b/.test(normalized) && normalized.length < 40) {
+    const hasQuestionOrTaskIntent =
+      /[?？]|https?:|\b(what|who|when|where|why|how|which|whose|whom|is|are|do|does|did|will|would|should|can you|could you|please|search|find|run|execute|send|create|build|make|generate|write|code|explain|tell me|show|open|delete|help me|i need|i want|remind|schedule|book|buy|order|time|date|day)\b/.test(
+        userMessage.trim().toLowerCase(),
+      )
+    if (
+      !hasQuestionOrTaskIntent &&
+      /^(hi+|hey+|hello+|hola|yo|sup|howdy|good\s?(morning|afternoon|evening|day|night)|morning|evening|afternoon|thanks?|thank\s?you|thx|bye+|goodbye|good\s?night|see\s?you|ok(ay)?|nice|cool|great|awesome|perfect)\b/.test(
+        normalized,
+      ) &&
+      normalized.length < 40
+    ) {
       return 'small-talk'
     }
     if (/\b(summari[sz]e|tl;?dr|condense|shorten|recap)\b/.test(normalized)) return 'summarize'
