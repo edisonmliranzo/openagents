@@ -67,7 +67,7 @@ function turboOrNestWatchRunning(serviceName) {
       [
         '-NoProfile',
         '-Command',
-        `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.ProcessId -ne ${process.pid} -and ($_.CommandLine -like '*turbo*run dev*' -or ($_.CommandLine -like '*nest*start --watch*' -and '${serviceName}' -eq 'api') -or ($_.CommandLine -like '*next*dev*' -and '${serviceName}' -eq 'web')) } | Select-Object -First 1 -ExpandProperty ProcessId`,
+        `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.ProcessId -ne ${process.pid} -and $_.CommandLine -like '*openagents*' -and ($_.CommandLine -like '*turbo*run dev*' -or ($_.CommandLine -like '*nest*start --watch*' -and '${serviceName}' -eq 'api') -or ($_.CommandLine -like '*next*dev*' -and '${serviceName}' -eq 'web')) } | Select-Object -First 1 -ExpandProperty ProcessId`,
       ],
       { timeout: 3000 },
     ).stdout?.toString().trim()
