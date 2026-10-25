@@ -870,6 +870,68 @@ verification.
 
 ---
 
+## ⌨️ opencode (anomalyco) parity — permission rules + tool-level plan mode (shipped)
+
+Audited against opencode (220k★) — the terminal coding agent this whole session runs on.
+OpenAgents already holds most of its essence: agents-as-config (specialists + roster), subagents
+(delegation/side-quest/parallel), skills (registry + self_learn), plugins (hooks), MCP,
+model roles, sessions/replay. Two genuinely-missing pieces were its signature safety
+model; both shipped.
+
+| opencode concept | OpenAgents before | Verdict |
+|---|---|---|
+| **Permission rules** — declarative allow/deny/ask per tool, pattern-matched, first-match-wins | Risk-scored approvals only; no user-declarable standing rules | **Gap — shipped** |
+| **plan agent = read-only at the tool layer** (denies edits, gates bash) | "Plan" was one of 4 chat modes but prompt-guidance only; nothing stopped a mutating tool call | **Gap — shipped (scope-gated)** |
+| build/plan/execute agent switch | assist/plan/execute/autopilot modes existed | ✅ |
+| Skills (SKILL.md + resources) | Skill registry (versions/signing) + UserSkill library + self_learn auto-capture | ✅ |
+| Plugins (lifecycle hooks) | hooks system (pre_tool can block/rewrite) | ✅ |
+| Custom agents from config | Specialists + 14-persona agency roster | ✅ |
+| MCP servers | Per-user MCP with live discovery | ✅ |
+
+**What was added (verified live):**
+- `apps/api/src/permissions/` — pure `tool-permission-rules.ts` (trailing-glob matching,
+  first-match-wins, plan-scope table, input normalization; 4 tests) + `ToolPermissionsService`
+  (DocumentStore-backed, 15s cache) + `GET/PUT /api/v1/permissions`, `POST /permissions/test`.
+- Enforcement in the agent tool loop, right beside the pre-tool hook gate: `deny` hard-blocks
+  (the model is told and explains the restriction to the user), `ask` forces approval,
+  `allow` skips approval, no-rule = existing risk-based behavior. `mode: 'plan'` now threads
+  from the chat into `AgentRunParams` and blocks mutating scopes (`system_mutation`,
+  `external_write`) via the new `ToolsService.scopeOf()`.
+- `permissions_list` / `permissions_set` agent tools — rules manageable from conversation
+  ("never run shell_execute" → the agent saves a standing deny rule).
+
+**Live proof:** rules set (shell deny / postgres ask / web_* allow) → `/permissions/test`
+resolved all four correctly; forced agent runs hit the deny gate and the agent replied
+"`echo gate-check` was not run — `shell_execute` is blocked by your own permission rules";
+plan-mode run self-restrained without executing anything. Test artifacts cleaned.
+
+**Worth taking next:** permission-rule UI in settings; per-conversation rule overrides;
+scope patterns on rule targets (e.g. deny `shell_execute` with `rm` args); opencode-style
+`AGENTS.md` project instructions file support.
+
+---
+
+## 🏆 The "Top 1" wave — six competitive gaps, all shipped (Oct 2026)
+
+The roadmap audit ranked the six gaps that decide market leadership vs muse.ai / OpenClaw /
+the frontier labs. All six shipped and were verified live in one pass.
+
+| # | Gap | What shipped | Verification |
+|---|---|---|---|
+| 1 | **Durable long-horizon execution** | `DurableExecutionService`: every tool round checkpoints the loop state onto the run record (`AgentRun.checkpointJson`); boot sweep RESUMES interrupted runs headlessly (LLM rounds + tools + permission rules enforced), posts the finished answer to the conversation, push-notifies, 150s hard timeouts so a wedged provider can never stall a resume; checkpoint-less runs get the old error marking | Seeded an interrupted run with a checkpoint → restarted the server twice → run resumed at boot and posted "The first 5 Fibonacci numbers: 0, 1, 1, 2, 3" to the conversation; status done, checkpoint cleared |
+| 2 | **5-minute onboarding** | `GET /api/v1/setup/health`: one checklist endpoint — DB, 7 provider keys (presence + placeholder detection), local Ollama probe, ffmpeg, web push, user readiness (memory/skills/pipeline) — with a readiness score, per-item fixes, and next steps. The wizard backend. | 14 checks, honest 50% score for this install (stale OpenAI key + missing optional keys — exactly right) |
+| 3 | **Real computer use** | Audited: `computer_*` toolset (session/navigate/click/snapshot, playwright + HTTP modes) registered and scoped. Added `computer-use-basics` catalog skill teaching the operate-snapshot-act loop and when NOT to use it | Catalog search returns the entry (15 entries now) |
+| 4 | **Predictive proactivity** | Briefing upgraded: new `learning` + `content_pipeline` cards (reads the self-learning journal + pipeline state) and the **act half** — `Today's Plan`: LLM-generated ranked concrete actions, with retry + deterministic fallback so a plan always ships | Manual briefing run: cards include content_pipeline; plan present ("1. Tasks & goals: 3 pending approvals — highest-priority...") |
+| 5 | **Speed** | Agent prep parallelized: 7 sequential awaits (compressor, goals, skill match, repair rules, lessons, expertise, tool list) → one `Promise.all` — the section that triggered the slow-prep warning | Chat completes normally (38s round-trip incl. LLM); type-safe |
+| 6 | **Ecosystem gravity** | `GET /skill-registry/public/index.json` (AAS-style machine-readable manifest for external agents) + `POST /skill-registry/import-skillmd` importing the external SKILL.md format (opencode/AAS/marketingskills) into the personal skill library; pure `skillmd-parser` + 5 tests (frontmatter, heading fallback, step extraction, dedupe, caps) | index.json serves 15 entries; a real SKILL.md imported as `daily-standup-digest` with 3 steps (cleaned up) |
+
+**Deferred (deliberately):** approval-resume continuation (the checkpoint makes it possible;
+needs careful ApprovalsModule↔AgentModule forwardRef surgery — the fragile module graph
+bit three times this session). Parallel tool-call execution inside a round (the per-call
+hook/permission/approval pipeline is order-sensitive; needs its own careful pass).
+
+---
+
 ## ✅ Phases Shipped & Verified (kept for history)
 
 ### Phase 1 — Advanced AI Capabilities ✅

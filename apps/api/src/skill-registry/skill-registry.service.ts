@@ -17,6 +17,7 @@ import { API_VERSION } from '@openagents/shared'
 import { NanobotSkillsRegistry } from '../nanobot/agent/nanobot-skills.registry'
 import { PrismaService } from '../prisma/prisma.service'
 import { ToolsService } from '../tools/tools.service'
+import { parseSkillMd, toIndexEntry } from './skillmd-parser'
 
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-.]+)?$/
 
@@ -357,6 +358,28 @@ const PUBLIC_SKILL_CATALOG: PublicCatalogDefinition[] = [
     },
     publishedAt: '2026-10-23T00:00:00.000Z',
   },
+  {
+    catalogId: 'computer-use-basics',
+    publisher: 'OpenAgents Catalog',
+    tags: ['automation', 'browser', 'computer-use', 'research'],
+    featured: true,
+    downloads: 0,
+    version: '1.0.0',
+    changelog: 'Operating real websites through the computer session tools.',
+    manifest: {
+      id: 'catalog-computer-use-basics',
+      title: 'Computer Use — Operating Real Websites',
+      description: 'Drive a real browser session: navigate, click, fill, and extract from live sites that block plain fetches.',
+      tools: ['computer_session_start', 'computer_navigate', 'computer_click_link', 'computer_snapshot'],
+      promptAppendix:
+        'Operate sites like a user, in a loop: (1) computer_session_start once per task (auto mode picks playwright when available, HTTP fallback otherwise). (2) computer_navigate to the target; if a selector is known, wait for it. (3) computer_snapshot to read the page state before acting. (4) Act one step at a time: click one link, submit one form, then snapshot again — never assume the result. (5) Prefer web_fetch/web_crawl when the site is static; use the computer session only when login, JavaScript, or interaction is required. (6) Close out by summarizing what was done on the site and any artifacts (screenshot, extracted rows).',
+    },
+    compatibility: {
+      minApiVersion: '1.0.0',
+      requiredTools: ['computer_session_start', 'computer_navigate'],
+    },
+    publishedAt: '2026-10-24T00:00:00.000Z',
+  },
 ]
 
 @Injectable()
@@ -586,9 +609,54 @@ export class SkillRegistryService {
     })
 
     return this.get(userId, entry.skillId)
-  }
+    }
 
-  async installPublic(
+    /**
+     * Machine-readable catalog manifest (AAS skills_index.json-style) so
+     * external agents can discover and consume Muse's catalog.
+     */
+    async publicIndex() {
+      return {
+        version: 1,
+        generatedAt: new Date().toISOString(),
+        source: 'openagents',
+        skills: PUBLIC_SKILL_CATALOG.map(toIndexEntry),
+      }
+    }
+
+    /**
+     * Import an external SKILL.md (opencode / agentic-awesome-skills /
+     * marketingskills format) into the user's personal skill library.
+     */
+    async importSkillMd(userId: string, markdown: string): Promise<
+      { success: true; skill: { id: string; name: string; description: string; steps: string[]; updated: boolean } } | { success: false; error: string }
+    > {
+      const parsed = parseSkillMd(markdown)
+      if (!parsed) {
+        return { success: false, error: 'Could not parse the SKILL.md: no name or heading found.' }
+      }
+      const steps = parsed.steps.length >= 2
+        ? parsed.steps
+        : parsed.body.split(/\n{2,}/).filter((p) => p.trim().length > 20).slice(0, 10)
+      const data = {
+        name: parsed.name,
+        description: parsed.description,
+        steps: JSON.stringify(steps),
+        toolsUsed: JSON.stringify([]),
+        tags: JSON.stringify(['imported', 'skill-md']),
+        triggerPhrase: null,
+      }
+      const existing = await this.prisma.userSkill.findFirst({ where: { userId, name: parsed.name } })
+      const row = existing
+        ? await this.prisma.userSkill.update({ where: { id: existing.id }, data })
+        : await this.prisma.userSkill.create({ data: { ...data, userId } })
+      return {
+        success: true,
+        skill: { id: row.id, name: row.name, description: row.description, steps, updated: Boolean(existing) },
+      }
+    }
+
+    async installPublic(
     userId: string,
     catalogId: string,
     input: InstallSkillVersionInput = {},

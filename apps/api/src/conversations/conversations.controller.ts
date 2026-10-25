@@ -148,7 +148,7 @@ export class ConversationsController {
         userId: req.user.id,
         userMessage: dto.content,
         emit,
-        ...(dto.mode ? { systemPromptAppendix: `User-selected mode: ${dto.mode}\nApply this mode's execution rules.` } : {}),
+        ...(dto.mode ? { mode: dto.mode, systemPromptAppendix: `User-selected mode: ${dto.mode}\nApply this mode's execution rules.` } : {}),
         ...(dto.effort ? { effort: dto.effort } : {}),
       })
     } catch (err: any) {

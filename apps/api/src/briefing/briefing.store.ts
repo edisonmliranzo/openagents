@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { DocumentStore } from '../prisma/document-store.service'
 
-export type BriefingSectionKey = 'email' | 'calendar' | 'tasks' | 'news' | 'memory'
-export const BRIEFING_SECTIONS: BriefingSectionKey[] = ['email', 'calendar', 'tasks', 'news', 'memory']
+export type BriefingSectionKey = 'email' | 'calendar' | 'tasks' | 'news' | 'memory' | 'learning' | 'content_pipeline'
+export const BRIEFING_SECTIONS: BriefingSectionKey[] = ['email', 'calendar', 'tasks', 'news', 'memory', 'learning', 'content_pipeline']
 
 export interface BriefingSettings {
   enabled: boolean
@@ -29,6 +29,8 @@ export interface BriefingRecord {
   trigger: 'scheduled' | 'manual'
   summary: string
   cards: BriefingCard[]
+  /** LLM-generated concrete plan for today (the "act" half of the briefing). */
+  plan?: string
 }
 
 interface UserBriefingFile {
@@ -45,7 +47,7 @@ export function defaultBriefingSettings(): BriefingSettings {
     enabled: false,
     time: '08:00',
     timezone: 'UTC',
-    sections: { email: true, calendar: true, tasks: true, news: false, memory: true },
+    sections: { email: true, calendar: true, tasks: true, news: false, memory: true, learning: true, content_pipeline: true },
     newsTopics: ['AI', 'technology'],
   }
 }

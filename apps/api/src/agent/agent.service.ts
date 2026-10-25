@@ -4,6 +4,8 @@ import { LLMService } from './llm.service'
 import { ToolsService } from '../tools/tools.service'
 import { MemoryService } from '../memory/memory.service'
 import { ApprovalsService } from '../approvals/approvals.service'
+import { ToolPermissionsService } from '../permissions/tool-permissions.service'
+import { planModeBlocksScope } from '../permissions/tool-permission-rules'
 import { UsersService } from '../users/users.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { DataLineageService } from '../lineage/lineage.service'
@@ -21,6 +23,7 @@ import { PersonaService } from './persona.service'
 import { SteeringService } from './steering.service'
 import { SkillSuggesterService } from '../learning/skill-suggester.service'
 import { EffortService } from './effort.service'
+import { DurableExecutionService } from './durable-execution.service'
 import { ExpertiseService } from './expertise.service'
 import { StudyService } from '../study/study.service'
 import { StakesService } from '../frontier/stakes.service'
@@ -216,6 +219,7 @@ export class AgentService implements OnModuleInit {
     private tools: ToolsService,
     private memory: MemoryService,
     private approvals: ApprovalsService,
+  private toolPermissions: ToolPermissionsService,
     private users: UsersService,
     private notifications: NotificationsService,
     private lineage: DataLineageService,
@@ -232,6 +236,7 @@ export class AgentService implements OnModuleInit {
     private steering: SteeringService,
     private skillSuggester: SkillSuggesterService,
     private effort: EffortService,
+  private durable: DurableExecutionService,
     private expertise: ExpertiseService,
     private study: StudyService,
     private costs: CostService,
@@ -247,22 +252,12 @@ export class AgentService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // Self-heal: mark runs left mid-flight by a previous process as interrupted.
-    try {
-      const staleBefore = new Date(Date.now() - 3 * 60 * 1000)
-      const result = await this.prisma.agentRun.updateMany({
-        where: { status: { in: ['thinking', 'running_tool'] }, startedAt: { lt: staleBefore } },
-        data: { status: 'error', finishedAt: new Date(), error: 'interrupted by server restart' },
-      })
-      if (result.count > 0) {
-        this.logger.warn(`Marked ${result.count} interrupted agent run(s) from a previous session.`)
-      }
-    } catch (error: any) {
-      this.logger.warn(`Interrupted-run sweep failed: ${error?.message ?? error}`)
-    }
+    // Durable execution: interrupted runs with a checkpoint are resumed
+    // headlessly; only checkpoint-less runs are marked as lost.
+    await this.durable.resumeInterruptedRuns()
   }
 
-  async run({ conversationId, userId, userMessage, emit, systemPromptAppendix, effort: effortOverride, modelOverride }: AgentRunParams) {
+  async run({ conversationId, userId, userMessage, emit, systemPromptAppendix, mode: runMode, effort: effortOverride, modelOverride }: AgentRunParams) {
     // 1. Save user message
     const userMsg = await this.prisma.message.create({
       data: { conversationId, role: 'user', content: userMessage, status: 'done' },
@@ -309,7 +304,7 @@ export class AgentService implements OnModuleInit {
 
     // 2. Create agent run record
     const run = await this.prisma.agentRun.create({
-      data: { conversationId, status: 'thinking' },
+      data: { conversationId, userId, status: 'thinking' },
     })
     const runStartedAtMs = run.startedAt.getTime()
     let activeProviderForRun: LLMProvider | null = null
@@ -501,9 +496,17 @@ export class AgentService implements OnModuleInit {
         : ''
 
       // Context compression summary
-      const compressionSummary = fastAdvisoryMode
-        ? null
-        : await this.compressor.getOrCreateSummary(conversationId, userId).catch(() => null)
+      // Speed: the independent prep lookups run concurrently instead of
+      // serially — this section previously dominated the slow-prep warning.
+      const [compressionSummary, goalSummary, skillBlock, repairRules, lessonsBlock, expertiseSummary, prepAvailableTools] = await Promise.all([
+        fastAdvisoryMode ? Promise.resolve(null) : this.compressor.getOrCreateSummary(conversationId, userId).catch(() => null),
+        this.goals.getActiveGoalSummary(userId).catch(() => ''),
+        this.skillLearner?.enabled ? this.skillLearner.matchForMessage(userId, userMessage).catch(() => []) : Promise.resolve([]),
+        this.promptPatches?.enabled ? this.promptPatches.rulesFor(userId, taskClass).catch(() => [] as string[]) : Promise.resolve([] as string[]),
+        this.lessons ? this.lessons.renderBlock(userId).catch(() => '') : Promise.resolve(''),
+        this.expertise.summaryForPrompt(userId).catch(() => ''),
+        (fastAdvisoryMode || effort === 'instant') ? Promise.resolve([]) : this.tools.getAvailableForUser(userId).catch(() => []),
+      ])
 
       const baseWithPersonality = personalityPrefix ? `${personalityPrefix}\n\n${basePrompt}` : basePrompt
       let systemPrompt = enrichedMemoryContext
@@ -512,30 +515,20 @@ export class AgentService implements OnModuleInit {
       if (compressionSummary) {
         systemPrompt = `${systemPrompt}\n\n${compressionSummary}`
       }
-      const goalSummary = await this.goals.getActiveGoalSummary(userId)
       if (goalSummary) {
         systemPrompt = `${systemPrompt}\n\nActive Goals:\n${goalSummary}`
       }
       // Learned skills: matching user-taught workflows guide the approach (never policy).
       if (this.skillLearner?.enabled) {
-        const matched = await this.skillLearner.matchForMessage(userId, userMessage).catch(() => [])
-        const block = this.skillLearner.renderBlock(matched)
+        const block = this.skillLearner.renderBlock(skillBlock)
         if (block) systemPrompt = `${systemPrompt}\n\n${block}`
       }
       // Prompt self-repair: rules learned from past failures in this task class.
-      if (this.promptPatches?.enabled) {
-        const rules = await this.promptPatches.rulesFor(userId, taskClass).catch(() => [] as string[])
-        if (rules.length) {
-          systemPrompt = `${systemPrompt}\n\nLearned rules (from past failures in ${taskClass} tasks):\n${rules.map((r) => `- ${r}`).join('\n')}`
-        }
+      if (this.promptPatches?.enabled && repairRules.length) {
+        systemPrompt = `${systemPrompt}\n\nLearned rules (from past failures in ${taskClass} tasks):\n${repairRules.map((r) => `- ${r}`).join('\n')}`
       }
       // Self-improvement: lessons extracted from past runs (capped ~800 tokens).
-      try {
-        const lessonsBlock = await this.lessons.renderBlock(userId)
-        if (lessonsBlock) systemPrompt = `${systemPrompt}\n\n${lessonsBlock}`
-      } catch {
-        // lessons are best-effort
-      }
+      if (lessonsBlock) systemPrompt = `${systemPrompt}\n\n${lessonsBlock}`
       const freshnessNote = this.needsFreshData(userMessage)
         ? 'This request may depend on current information. Use web_search/web_fetch to verify facts that change over time before answering — do not rely on stale training data.'
         : ''
@@ -547,7 +540,7 @@ export class AgentService implements OnModuleInit {
       openAgentsInstallAppendix,
       this.persona.enabled ? this.persona.appendixFor(taskClass) : '',
       freshnessNote,
-      await this.expertise.summaryForPrompt(userId).catch(() => ''),
+      expertiseSummary,
       runHookNotes.length
         ? `HOOK CONTEXT (from the user's own hooks — follow it):\n${runHookNotes.map((n) => `- ${n}`).join('\n')}`
         : '',
@@ -556,10 +549,8 @@ export class AgentService implements OnModuleInit {
         ? `${systemPrompt}\n\n${promptAppendices.join('\n\n')}`
         : systemPrompt
 
-      // 5. Get available tools for this user
-      const availableTools = fastAdvisoryMode || effort === 'instant'
-        ? []
-        : await this.tools.getAvailableForUser(userId)
+      // 5. Get available tools for this user (pre-fetched concurrently above)
+      const availableTools = prepAvailableTools
 
       // 6. Build LLM messages (oldest first)
       const llmMessages = this.buildLlmMessages(recentMessages, fastAdvisoryMode)
@@ -1029,6 +1020,37 @@ export class AgentService implements OnModuleInit {
           runMetrics.autonomyWithinWindow = autonomyStatus.withinWindow
           runMetrics.autonomyTimezone = autonomyStatus.timezone
           runMetrics.autonomyReason = autonomyStatus.reason
+
+          // opencode-style permission rules (first match wins): an explicit
+          // 'deny' hard-blocks the call; the plan-mode overlay keeps the run
+          // read-only by blocking mutating scopes.
+          let permissionNote = ''
+          try {
+            const permission = await this.toolPermissions.resolutionFor(userId, toolCall.name)
+            if (permission.effect === 'deny') {
+              this.logger.log(`Permission rule blocked ${toolCall.name}: ${permission.reason}`)
+              runMetrics.toolCalls.push({ name: toolCall.name, requiresApproval: false, status: 'failed' })
+              llmWorkingMessages.push({
+                role: 'assistant',
+                content: `The tool "${toolCall.name}" is blocked by the user's permission rules (${permission.reason}) and was not run. Do not call it again; explain the restriction and offer an alternative.`,
+              })
+              continue
+            }
+            if (permission.effect !== 'default') {
+              permissionNote = ` Permission rule (${permission.effect}): ${permission.reason}.`
+            }
+            if (runMode === 'plan' && planModeBlocksScope(this.tools.scopeOf(toolCall.name))) {
+              this.logger.log(`Plan mode blocked mutating tool: ${toolCall.name}`)
+              runMetrics.toolCalls.push({ name: toolCall.name, requiresApproval: false, status: 'failed' })
+              llmWorkingMessages.push({
+                role: 'assistant',
+                content: `Plan mode is read-only: "${toolCall.name}" mutates state and was blocked. Gather information, then present the plan and offer to switch to Execute mode to apply it.`,
+              })
+              continue
+            }
+          } catch (permissionErr: any) {
+            this.logger.warn(`Permission rule check failed for ${toolCall.name}: ${permissionErr?.message ?? permissionErr}`)
+          }
           const outsideAutonomyWindow = !toolDef.requiresApproval && !autonomyStatus.withinWindow
           const risk = this.approvals.scoreToolRisk({
             toolName: toolCall.name,
@@ -1043,6 +1065,16 @@ export class AgentService implements OnModuleInit {
           })
           let requiresApproval =
             toolDef.requiresApproval || outsideAutonomyWindow || !autoApprovedLowRisk
+
+          // Permission rules override the default approval decision:
+          // 'ask' always pauses for the user; 'allow' never does.
+          try {
+            const permission = await this.toolPermissions.resolutionFor(userId, toolCall.name)
+            if (permission.effect === 'ask') requiresApproval = true
+            else if (permission.effect === 'allow') requiresApproval = false
+          } catch {
+            // Fall back to the default decision when the rules store is unreadable.
+          }
 
           // Sentinel: an independent LLM vets high-risk actions that the
           // static policy would otherwise auto-run. Fail-closed to ASK.
@@ -1435,6 +1467,20 @@ export class AgentService implements OnModuleInit {
           emit('plan_progress', { done: Math.min(toolRound, planTotal), total: planTotal })
         }
 
+        // Durable execution: checkpoint the loop state after every completed
+        // round so a restart can resume this run instead of losing the work.
+        void this.durable.saveCheckpoint(run.id, {
+          version: 1,
+          workingMessages: llmWorkingMessages,
+          systemPrompt: effectiveSystemPrompt,
+          toolRound,
+          maxToolRounds,
+          mode: runMode,
+          provider: activeProvider,
+          model: activeModel,
+          userMessage,
+        })
+
         if (!executedAnyTool) {
           break
         }
@@ -1685,6 +1731,7 @@ export class AgentService implements OnModuleInit {
           status: 'done',
           finishedAt: new Date(),
           metadata: this.serializeRunMetrics(runMetrics, activeProvider, activeModel),
+          checkpointJson: null,
         },
       })
 
@@ -1816,6 +1863,7 @@ export class AgentService implements OnModuleInit {
           finishedAt: new Date(),
           error: err.message,
           metadata: JSON.stringify({ error: err.message }),
+          checkpointJson: null,
         },
       })
       void this.mission.publish({

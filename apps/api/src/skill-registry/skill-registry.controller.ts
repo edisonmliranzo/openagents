@@ -157,8 +157,14 @@ export class SkillRegistryController {
     return this.registry.list(req.user.id)
   }
 
-  @Get('public')
-  listPublic(
+    /** Machine-readable catalog manifest for external agents (AAS-style). */
+    @Get('public/index.json')
+    publicIndex() {
+      return this.registry.publicIndex()
+    }
+
+    @Get('public')
+    listPublic(
     @Req() req: any,
     @Query('q') q?: string,
     @Query('tool') tool?: string,
@@ -196,11 +202,21 @@ export class SkillRegistryController {
     return this.registry.publish(req.user.id, dto)
   }
 
-  @Post('public/:catalogId/install')
-  async installPublic(@Req() req: any, @Param('catalogId') catalogId: string, @Body() dto: InstallSkillVersionDto) {
-    await this.marketplace.assertCanInstall(req.user.id, 'skill', catalogId)
-    return this.registry.installPublic(req.user.id, catalogId, dto)
-  }
+    @Post('public/:catalogId/install')
+    async installPublic(@Req() req: any, @Param('catalogId') catalogId: string, @Body() dto: InstallSkillVersionDto) {
+      await this.marketplace.assertCanInstall(req.user.id, 'skill', catalogId)
+      return this.registry.installPublic(req.user.id, catalogId, dto)
+    }
+
+    /** Import an external SKILL.md (opencode/AAS/marketingskills format) into the personal skill library. */
+    @Post('import-skillmd')
+    importSkillMd(@Req() req: any, @Body() dto: { markdown?: string }) {
+      const markdown = String(dto?.markdown ?? '')
+      if (!markdown.trim()) {
+        return { success: false, error: 'markdown is required.' }
+      }
+      return this.registry.importSkillMd(req.user.id, markdown.slice(0, 100_000))
+    }
 
   @Post(':skillId/install')
   async install(@Req() req: any, @Param('skillId') skillId: string, @Body() dto: InstallSkillVersionDto) {

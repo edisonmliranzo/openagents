@@ -6,6 +6,7 @@ import { WebFetchTool } from './connectors/web-fetch.tool'
 import { CrawlSiteTool } from './connectors/crawl-site.tool'
 import { ContentPipelineTool } from './connectors/content-pipeline.tool'
 import { SelfLearnTool } from './connectors/self-learn.tool'
+import { PermissionsTool } from './connectors/permissions.tool'
 import { NotesTool } from './connectors/notes.tool'
 import { WebSearchTool } from './connectors/web-search.tool'
 import { TimeTool } from './connectors/time.tool'
@@ -84,6 +85,7 @@ export class ToolsService {
     @Inject(forwardRef(() => ContentPipelineTool))
     private contentPipeline: ContentPipelineTool,
     private selfLearn: SelfLearnTool,
+    private permissionsTool: PermissionsTool,
     private notes: NotesTool,
     private webSearch: WebSearchTool,
     private time: TimeTool,
@@ -143,6 +145,8 @@ export class ToolsService {
         ['content_pipeline_run', { def: this.withBuiltinSource(this.contentPipeline.runDef), execute: this.contentPipeline.run.bind(this.contentPipeline) }],
         ['buffer_list_profiles', { def: this.withBuiltinSource(this.contentPipeline.bufferProfilesDef), execute: this.contentPipeline.listProfiles.bind(this.contentPipeline) }],
         ['self_learn', { def: this.withBuiltinSource(this.selfLearn.def), execute: this.selfLearn.run.bind(this.selfLearn) }],
+        ['permissions_list', { def: this.withBuiltinSource(this.permissionsTool.listDef), execute: this.permissionsTool.list.bind(this.permissionsTool) }],
+        ['permissions_set', { def: this.withBuiltinSource(this.permissionsTool.setDef), execute: this.permissionsTool.set.bind(this.permissionsTool) }],
       ['web_search', { def: this.withBuiltinSource(this.webSearch.def), execute: this.webSearch.search.bind(this.webSearch) }],
       ['get_current_time', { def: this.withBuiltinSource(this.time.def), execute: this.time.getCurrentTime.bind(this.time) }],
       ['cron_add', { def: this.withBuiltinSource(this.cron.addDef), execute: this.cron.add.bind(this.cron) }],
@@ -330,6 +334,11 @@ export class ToolsService {
 
     const mcpTools = await this.mcp.listToolDefinitions()
     return [...filteredBuiltinTools, ...mcpTools]
+  }
+
+  /** Public classification used by read-only plan mode to gate mutating tools. */
+  scopeOf(toolName: string): 'local' | 'external_read' | 'external_write' | 'system_mutation' {
+    return this.inferScope(toolName)
   }
 
   async execute(toolName: string, input: Record<string, unknown>, userId: string): Promise<ToolResult> {

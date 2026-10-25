@@ -13,9 +13,11 @@ import { CriticService } from './critic.service'
 import { PersonaService } from './persona.service'
 import { SteeringService } from './steering.service'
 import { EffortService } from './effort.service'
+import { DurableExecutionService } from './durable-execution.service'
 import { ExpertiseService } from './expertise.service'
 import { StudyModule } from '../study/study.module'
 import { ToolsModule } from '../tools/tools.module'
+import { PermissionsModule } from '../permissions/permissions.module'
 import { MemoryModule } from '../memory/memory.module'
 import { ApprovalsModule } from '../approvals/approvals.module'
 import { UsersModule } from '../users/users.module'
@@ -32,6 +34,7 @@ import { ModelRoleController } from './model-role.controller'
 @Module({
   imports: [
     ToolsModule,
+    PermissionsModule,
     MemoryModule,
     ApprovalsModule,
     UsersModule,
@@ -47,7 +50,7 @@ import { ModelRoleController } from './model-role.controller'
     HooksModule,
   ],
   controllers: [AgentController, ModelRoleController],
-  providers: [AgentService, LLMService, ModelRoleService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],
-  exports: [AgentService, LLMService, ModelRoleService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService],
+  providers: [AgentService, LLMService, ModelRoleService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService, DurableExecutionService],
+  exports: [AgentService, LLMService, ModelRoleService, ParallelAgentService, ContextCompressorService, ModelRouterService, SentinelService, AnswerCacheService, CriticService, PersonaService, SteeringService, EffortService, ExpertiseService, DurableExecutionService],
 })
 export class AgentModule {}

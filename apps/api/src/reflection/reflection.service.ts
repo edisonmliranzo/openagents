@@ -5,6 +5,7 @@ import { MemoryService } from '../memory/memory.service'
 import { LLMService } from '../agent/llm.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { TelegramService } from '../channels/telegram/telegram.service'
+import { UsersService } from '../users/users.service'
 import type { LLMProvider } from '@openagents/shared'
 
 export interface ReflectionResult {
@@ -41,6 +42,7 @@ export class ReflectionService implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly notifications: NotificationsService,
     private readonly telegram: TelegramService,
+    private readonly users: UsersService,
   ) {}
 
   onModuleInit() {
@@ -107,14 +109,17 @@ export class ReflectionService implements OnModuleInit, OnModuleDestroy {
 
     const settings = await this.prisma.userSettings.findUnique({ where: { userId } })
     const provider = (settings?.preferredProvider ?? 'ollama') as LLMProvider
+    const userKey = await this.users.getRawLlmKey(userId, provider).catch(() => null)
+    const apiKey = userKey?.isActive ? (userKey.apiKey ?? userKey.loginPassword ?? undefined) : undefined
+    const baseUrl = userKey?.isActive ? (userKey.baseUrl ?? undefined) : undefined
 
     const response = await this.llm.complete(
       [{ role: 'user', content: `${REFLECTION_PROMPT}\n\n--- CONVERSATION LOG ---\n${log}` }],
       [],
       'Return only valid JSON.',
       provider,
-      undefined,
-      undefined,
+      apiKey,
+      baseUrl,
       settings?.preferredModel ?? undefined,
     )
 

@@ -93,13 +93,16 @@ export class LessonsService implements OnModuleInit, OnModuleDestroy {
       .slice(-8000)
     const settings = await this.users.getSettings(userId).catch(() => null as any)
     const provider = (settings?.preferredProvider ?? undefined) as LLMProvider | undefined
+    const userKey = provider ? await this.users.getRawLlmKey(userId, provider).catch(() => null) : null
+    const apiKey = userKey?.isActive ? (userKey.apiKey ?? userKey.loginPassword ?? undefined) : undefined
+    const baseUrl = userKey?.isActive ? (userKey.baseUrl ?? undefined) : undefined
     const res = await this.llm.complete(
       [{ role: 'user', content: `${LESSON_PROMPT}\n\n--- RUN ---\n${log}` }],
       [],
       'Return only valid JSON.',
       provider,
-      undefined,
-      undefined,
+      apiKey,
+      baseUrl,
       settings?.preferredModel ?? undefined,
     )
     const parsed = extractJson(res.content)

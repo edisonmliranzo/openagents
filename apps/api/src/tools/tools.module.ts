@@ -19,6 +19,8 @@ import { ContentPipelineTool } from './connectors/content-pipeline.tool'
 import { ContentPipelineModule } from '../content-pipeline/content-pipeline.module'
 import { SelfLearnTool } from './connectors/self-learn.tool'
 import { LearningModule } from '../learning/learning.module'
+import { PermissionsTool } from './connectors/permissions.tool'
+import { PermissionsModule } from '../permissions/permissions.module'
 import { NotesTool } from './connectors/notes.tool'
 import { WebSearchTool } from './connectors/web-search.tool'
 import { TimeTool } from './connectors/time.tool'
@@ -67,11 +69,12 @@ import { UserMcpController } from '../mcp/user-mcp.controller'
 import { SecurityModule } from '../security/security.module'
 
 @Module({
-  imports: [forwardRef(() => CronModule), forwardRef(() => ContentPipelineModule), forwardRef(() => LearningModule), ConnectorsModule, PolicyModule, MemoryModule, LibraryModule, UsersModule, GenerativeUIModule, SecurityModule],
+  imports: [forwardRef(() => CronModule), forwardRef(() => ContentPipelineModule), forwardRef(() => LearningModule), ConnectorsModule, PolicyModule, MemoryModule, LibraryModule, UsersModule, GenerativeUIModule, SecurityModule, PermissionsModule],
   providers: [
     CrawlSiteTool,
     ContentPipelineTool,
     SelfLearnTool,
+    PermissionsTool,
     ToolsService,
     GmailTool,
     CalendarTool,

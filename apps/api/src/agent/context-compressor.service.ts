@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { LLMService } from './llm.service'
+import { UsersService } from '../users/users.service'
+import type { LLMProvider } from '@openagents/shared'
 
 const COMPRESSION_THRESHOLD = 30   // compress when conversation exceeds this many messages
 const KEEP_RECENT = 10             // always preserve the most recent N messages verbatim
@@ -13,6 +15,7 @@ export class ContextCompressorService {
   constructor(
     private prisma: PrismaService,
     private llm: LLMService,
+    private users: UsersService,
   ) {}
 
   /**
@@ -61,14 +64,21 @@ export class ContextCompressorService {
       .join('\n\n')
 
     try {
+      const settings = await this.users.getSettings(userId).catch(() => null as any)
+      const provider = (settings?.preferredProvider ?? 'anthropic') as LLMProvider
+      const model = settings?.preferredModel?.trim() || (provider === 'anthropic' ? SUMMARY_MODEL : undefined)
+      const userKey = await this.users.getRawLlmKey(userId, provider).catch(() => null)
+      const apiKey = userKey?.isActive ? (userKey.apiKey ?? userKey.loginPassword ?? undefined) : undefined
+      const baseUrl = userKey?.isActive ? (userKey.baseUrl ?? undefined) : undefined
+
       const response = await this.llm.complete(
         [{ role: 'user', content: `Summarize the following conversation transcript concisely. Capture: key decisions made, tasks completed, important facts learned, current state of work, and any pending items. Be specific and factual — this summary will replace the full history in future turns.\n\n${transcript}` }],
         [],
         'You are a concise summarizer. Output only the summary text.',
-        'anthropic',
-        undefined,
-        undefined,
-        SUMMARY_MODEL,
+        provider,
+        apiKey,
+        baseUrl,
+        model,
       )
 
       const summary = response?.content?.trim() ?? ''
@@ -82,7 +92,7 @@ export class ContextCompressorService {
           keyTopics: JSON.stringify(keyTopics),
           type: 'auto',
           summaryType: 'full',
-          model: SUMMARY_MODEL,
+          model: model ?? SUMMARY_MODEL,
           tokensUsed: null,
         },
       })

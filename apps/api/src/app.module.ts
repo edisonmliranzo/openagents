@@ -49,6 +49,8 @@ import { AnalyticsModule } from './analytics/analytics.module'
 import { SecurityModule } from './security/security.module'
 import { OrchestrationModule } from './orchestration/orchestration.module'
 import { LearningModule } from './learning/learning.module'
+import { PermissionsModule } from './permissions/permissions.module'
+import { SystemSetupModule } from './system-setup/system-setup.module'
 import { WsModule } from './events/ws.module'
 import { ApiKeysModule } from './apikeys/apikeys.module'
 import { ExportModule } from './export/export.module'
@@ -194,6 +196,8 @@ import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
     PublicAgentsModule,
     ReplayModule,
     ContentPipelineModule,
+    PermissionsModule,
+    SystemSetupModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: CustomThrottlerGuard },

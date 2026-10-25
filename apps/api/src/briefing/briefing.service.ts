@@ -124,6 +124,7 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
       const settings = await this.store.getSettings(userId)
       const cards = await this.collectCards(userId, settings)
       const summary = await this.summarize(userId, cards)
+      const plan = await this.buildPlan(userId, cards)
       const record: BriefingRecord = {
         id: randomUUID(),
         createdAt: new Date().toISOString(),
@@ -131,6 +132,7 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
         trigger,
         summary,
         cards,
+        ...(plan ? { plan } : {}),
       }
       await this.store.addRecord(userId, record, trigger === 'scheduled')
       await this.deliver(userId, record)
@@ -185,6 +187,36 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
       })
     }
 
+    // Self-improvement: what the assistant taught itself + the content pipeline.
+    const [learnDoc, pipelineDoc] = await Promise.all([
+      this.prisma.userDocument.findUnique({ where: { userId_kind_key: { userId, kind: 'learning-log', key: '' } } }).catch(() => null),
+      this.prisma.userDocument.findUnique({ where: { userId_kind_key: { userId, kind: 'content-pipeline-config', key: '' } } }).catch(() => null),
+    ])
+    if (learnDoc?.data) {
+      try {
+        const entries = ((learnDoc.data as unknown) as Array<{ topic: string; at?: string }>).slice(-5).reverse()
+        if (Array.isArray(entries) && entries.length > 0) {
+          cards.push({
+            section: 'learning',
+            title: 'Recently self-learned',
+            items: entries.map((e) => `${e.topic}${e.at ? ` (${String(e.at).slice(0, 10)})` : ''}`),
+          })
+        }
+      } catch {
+        // unreadable learning log -> skip the card
+      }
+    }
+    if (pipelineDoc?.data) {
+      try {
+        const cfg = (pipelineDoc.data as unknown) as { niche?: string; lastRunSummary?: string }
+        if (cfg.lastRunSummary) {
+          cards.push({ section: 'content_pipeline', title: 'Content pipeline', items: [`Niche: ${cfg.niche ?? 'not set'}`, cfg.lastRunSummary] })
+        }
+      } catch {
+        // unreadable pipeline config -> skip the card
+      }
+    }
+
     const [email, calendar, news] = await Promise.all([
       s.email ? this.emailItems(userId) : Promise.resolve(null),
       s.calendar ? this.calendarItems(userId, settings.timezone) : Promise.resolve(null),
@@ -224,15 +256,54 @@ export class BriefingService implements OnModuleInit, OnModuleDestroy {
     return context.slice(0, 1500)
   }
 
-  private async deliver(userId: string, record: BriefingRecord) {
-    const title = 'Daily briefing ready'
-    const body = record.summary.slice(0, 300)
-    await this.notifications.create(userId, title, body, 'info').catch(() => undefined)
-    await this.push.sendToUser(userId, { title: `OpenAgents — ${title}`, body: body.slice(0, 160), url: '/briefing' })
-      .catch(() => undefined)
-    await this.telegram.deliver(userId, `Daily briefing\n\n${record.summary.slice(0, 3500)}`).catch(() => false)
-    this.logger.log(`Briefing ${record.id} delivered for ${userId} (${record.trigger}).`)
+  /** The "act" half: turn the cards into a ranked, concrete plan for today. */
+  private async buildPlan(userId: string, cards: BriefingCard[]): Promise<string | null> {
+    const context = cards
+      .filter((c) => c.items.length)
+      .map((c) => `${c.title}:\n${c.items.map((i) => `- ${i}`).join('\n')}`)
+      .join('\n\n')
+    if (!context) return null
+
+    const settings = await this.prisma.userSettings.findUnique({ where: { userId } }).catch(() => null)
+    const provider = (settings?.preferredProvider ?? 'ollama') as LLMProvider
+    const ask = `From today's briefing material, produce "Today's Plan": 3-5 concrete actions ranked by impact, each as "ACTION — why it matters now — first step". Plain text, no markdown headers.\n\n${context.slice(0, 8000)}`
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await this.llm.complete(
+          [{ role: 'user', content: ask }],
+          [],
+          'You are a decisive chief-of-staff. Output only the ranked plan lines.',
+          provider,
+        )
+        const text = (response.content ?? '').trim()
+        if (text) return text.slice(0, 2500)
+      } catch (err: any) {
+        this.logger.warn(`Briefing plan generation failed (attempt ${attempt + 1}): ${err?.message ?? err}`)
+      }
+    }
+    // Deterministic fallback: the briefing always ships with a plan.
+    const top = cards
+      .filter((c) => c.items.length)
+      .flatMap((c) => c.items.map((i) => `${c.title}: ${i}`))
+      .slice(0, 3)
+    if (top.length === 0) return null
+    return [
+      `1. ${top[0]} — highest-priority open item — open chat and act on it`,
+      `2. ${top[1] ?? 'Review the rest of the briefing'} — clear the next item before deep work`,
+      `3. ${top[2] ?? 'Pick one goal to advance today'} — make measurable progress before evening`,
+    ].join('\n')
   }
+
+    private async deliver(userId: string, record: BriefingRecord) {
+      const title = 'Daily briefing ready'
+      const fullBody = record.plan ? `${record.summary}\n\nToday's plan:\n${record.plan}` : record.summary
+      const body = fullBody.slice(0, 300)
+      await this.notifications.create(userId, title, body, 'info').catch(() => undefined)
+      await this.push.sendToUser(userId, { title: `OpenAgents — ${title}`, body: body.slice(0, 160), url: '/briefing' })
+        .catch(() => undefined)
+      await this.telegram.deliver(userId, `Daily briefing\n\n${fullBody.slice(0, 3500)}`).catch(() => false)
+      this.logger.log(`Briefing ${record.id} delivered for ${userId} (${record.trigger}).`)
+    }
 
   private async isConnected(userId: string, connectorId: string): Promise<boolean> {
     try {
