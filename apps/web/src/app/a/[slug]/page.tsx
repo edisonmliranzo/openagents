@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Bot, Send, Sparkles } from 'lucide-react'
 
@@ -17,7 +17,7 @@ interface ChatTurn {
   content: string
 }
 
-export default function PublicAgentChatPage() {
+function PublicAgentChatInner() {
   const params = useParams<{ slug: string }>()
   const searchParams = useSearchParams()
   const slug = params?.slug ?? ''
@@ -157,5 +157,13 @@ export default function PublicAgentChatPage() {
         </div>
       </form>
     </div>
+  )
+}
+
+export default function PublicAgentChatPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
+      <PublicAgentChatInner />
+    </Suspense>
   )
 }

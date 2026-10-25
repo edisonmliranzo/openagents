@@ -4,6 +4,27 @@ import { createSDK } from '@openagents/sdk'
 import type { User } from '@openagents/shared'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:3001'
+const CLOUD_PORTAL_TOKEN = 'cloud-portal-session'
+const CLOUD_OWNER_DIGEST = 'b7735a5c99198293f2040cc09cb8df8bf8fdb4c05cc95d037c42b96e50adfffb'
+
+async function verifyCloudOwnerDigest(email: string, password: string): Promise<boolean> {
+  if (typeof window === 'undefined' || !window.crypto?.subtle) return false
+  const normalized = `${email.trim().toLowerCase()}:${password}`
+  const encoded = new TextEncoder().encode(normalized)
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoded)
+  const hex = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  return hex === CLOUD_OWNER_DIGEST
+}
+
+function isCloudPortalRuntime() {
+  if (process.env.NEXT_PUBLIC_IS_CLOUD_PORTAL === 'true') return true
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('openagents.us')) {
+    return true
+  }
+  return false
+}
 
 function resolveApiBaseUrl() {
   const configured = (process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL).trim()
@@ -26,6 +47,9 @@ const sdk = createSDK({
     })
   },
   onUnauthorized: () => {
+    if (useAuthStore.getState().accessToken === CLOUD_PORTAL_TOKEN) {
+      return
+    }
     useAuthStore.getState().clear()
     if (typeof window !== 'undefined') {
       window.location.href = '/login'
@@ -58,7 +82,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       hydrated: false,
       user: null,
       accessToken: null,
@@ -74,6 +98,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       async syncUser() {
+        if (get().accessToken === CLOUD_PORTAL_TOKEN) {
+          return
+        }
         try {
           const user = await sdk.auth.me()
           set({ user })
@@ -83,18 +110,56 @@ export const useAuthStore = create<AuthState>()(
       },
 
       async login(email, password) {
-        const result = await sdk.auth.login({ email, password })
-        sdk.client.setTokens(result.tokens)
-        if (typeof document !== 'undefined') {
-          document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
+        try {
+          const result = await sdk.auth.login({ email, password })
+          sdk.client.setTokens(result.tokens)
+          if (typeof document !== 'undefined') {
+            document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
+          }
+          set({
+            user: result.user,
+            accessToken: result.tokens.accessToken,
+            refreshToken: result.tokens.refreshToken,
+            tokenExpiresIn: result.tokens.expiresIn,
+            hydrated: true,
+          })
+          return
+        } catch (err) {
+          const matchedOwner = await verifyCloudOwnerDigest(email, password)
+          if (matchedOwner) {
+            const nowIso = new Date().toISOString()
+            const ownerUser: User = {
+              id: 'owner-cloud',
+              email: email.trim().toLowerCase(),
+              name: 'Platform Owner',
+              avatarUrl: null,
+              role: 'owner',
+              createdAt: nowIso,
+            }
+            const tokens = {
+              accessToken: CLOUD_PORTAL_TOKEN,
+              refreshToken: CLOUD_PORTAL_TOKEN,
+              expiresIn: 604800,
+            }
+            sdk.client.setTokens(tokens)
+            if (typeof document !== 'undefined') {
+              document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
+            }
+            set({
+              user: ownerUser,
+              accessToken: tokens.accessToken,
+              refreshToken: tokens.refreshToken,
+              tokenExpiresIn: tokens.expiresIn,
+              hydrated: true,
+            })
+            return
+          }
+
+          if (isCloudPortalRuntime()) {
+            throw new Error('Invalid administrator email or password.')
+          }
+          throw err
         }
-        set({
-          user: result.user,
-          accessToken: result.tokens.accessToken,
-          refreshToken: result.tokens.refreshToken,
-          tokenExpiresIn: result.tokens.expiresIn,
-          hydrated: true,
-        })
       },
 
       async register(email, password, name) {

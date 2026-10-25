@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ArrowLeftRight, GitBranch, Plus } from 'lucide-react'
 import { sdk } from '@/stores/auth'
@@ -18,7 +18,7 @@ interface MessageItem {
   createdAt: string
 }
 
-export default function TimeTravelComparePage() {
+function TimeTravelCompareInner() {
   const searchParams = useSearchParams()
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [leftId, setLeftId] = useState(searchParams?.get('left') ?? '')
@@ -137,5 +137,13 @@ export default function TimeTravelComparePage() {
         ))}
       </div>
     </div>
+  )
+}
+
+export default function TimeTravelComparePage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-7xl p-6 text-xs text-slate-400">Loading timelines…</div>}>
+      <TimeTravelCompareInner />
+    </Suspense>
   )
 }
