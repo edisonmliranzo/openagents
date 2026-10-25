@@ -68,7 +68,7 @@ async function bootstrap() {
   }
 
   // The OpenAI-compatible API lives at /v1/chat/completions (outside the
-  // /api/v1 prefix) so stock OpenAI clients can point at Muse unchanged.
+  // /api/v1 prefix) so stock OpenAI clients can point at OpenAgents unchanged.
   app.setGlobalPrefix('api/v1', {
     exclude: ['v1/models', 'v1/chat/completions'],
   })
@@ -86,7 +86,12 @@ async function bootstrap() {
 
   const isProduction = (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production'
   const defaultWebPort = (process.env.WEB_PORT ?? '3000').trim() || '3000'
-  const defaults = [`http://localhost:${defaultWebPort}`, `http://127.0.0.1:${defaultWebPort}`]
+  const defaults = [
+    `http://localhost:${defaultWebPort}`,
+    `http://127.0.0.1:${defaultWebPort}`,
+    'https://openagents.us',
+    'https://www.openagents.us',
+  ]
   const explicitOrigins = (process.env.FRONTEND_URLS ?? '')
     .split(',')
     .map((value) => toOrigin(value))
@@ -100,6 +105,12 @@ async function bootstrap() {
   const isDevLoopbackOrigin = (origin: string) => {
     if (isProduction) return false
     return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)
+  }
+  const isCloudPortalOrigin = (origin: string) => {
+    return (
+      /^https:\/\/([a-z0-9-]+\.)?openagents\.us$/i.test(origin) ||
+      /^https:\/\/openagents\.[a-z0-9-]+\.workers\.dev$/i.test(origin)
+    )
   }
   const fallbackOrigins = [
     ...(legacyOrigin ? [legacyOrigin] : []),
@@ -145,7 +156,8 @@ async function bootstrap() {
     res.setHeader('X-Frame-Options', 'DENY')
     res.setHeader('Referrer-Policy', 'no-referrer')
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-    res.setHeader('Cross-Origin-Resource-Policy', 'same-site')
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+    res.setHeader('Access-Control-Allow-Private-Network', 'true')
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
     res.setHeader('X-Permitted-Cross-Domain-Policies', 'none')
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
@@ -163,7 +175,7 @@ async function bootstrap() {
         callback(null, true)
         return
       }
-      if (frontendOrigins.includes(origin) || isDevLoopbackOrigin(origin)) {
+      if (frontendOrigins.includes(origin) || isDevLoopbackOrigin(origin) || isCloudPortalOrigin(origin)) {
         callback(null, true)
         return
       }

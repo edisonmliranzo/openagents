@@ -308,6 +308,8 @@ export function AppShell({ children }: AppShellProps) {
     try {
       const list = await sdk.notifications.list()
       setNotifications(list)
+    } catch {
+      // ignore
     } finally {
       setIsNotificationsLoading(false)
     }

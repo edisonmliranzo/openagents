@@ -200,7 +200,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'openagents-auth',
-      version: 1,
+      version: 2,
       partialize: (s) => ({
         accessToken: s.accessToken,
         refreshToken: s.refreshToken,

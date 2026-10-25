@@ -72,11 +72,7 @@ export default function LoginPage() {
         typeof window !== 'undefined'
           ? new URLSearchParams(window.location.search).get('next')
           : null
-      const isCloudPortal =
-        process.env.NEXT_PUBLIC_IS_CLOUD_PORTAL === 'true' ||
-        (typeof window !== 'undefined' && window.location.hostname.endsWith('openagents.us'))
-      const defaultPath = isCloudPortal ? '/admin' : '/chat'
-      router.push(nextPath && nextPath.startsWith('/') ? nextPath : defaultPath)
+      router.push(nextPath && nextPath.startsWith('/') ? nextPath : '/chat')
     } catch (err: any) {
       setError(toErrorMessage(err, mode === 'login' ? 'Login failed' : 'Registration failed'))
     } finally {

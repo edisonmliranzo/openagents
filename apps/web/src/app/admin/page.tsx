@@ -242,7 +242,7 @@ export default function AdminAnalyticsPage() {
             </Link>
 
             <Link
-              href="/login"
+              href="/chat"
               className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
             >
               Launch Platform
