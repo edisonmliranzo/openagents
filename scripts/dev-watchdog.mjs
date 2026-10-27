@@ -106,7 +106,7 @@ function supervise(target) {
   }
   start()
   // Periodically adopt services that died while we were not their parent.
-  setInterval(() => void start(), 15000).unref?.()
+  setInterval(() => void start(), 15000)
 }
 
 function portOpen(port) {
