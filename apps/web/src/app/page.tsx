@@ -461,13 +461,25 @@ export default function OpenAgentsLandingPage() {
                 </Link>
               </div>
             ) : (
-              <a
-                href="#waitlist"
-                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
-              >
-                <span>Get Early Access</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </a>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/login"
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                    warmTheme
+                      ? 'border-black/10 bg-white/80 text-stone-800 hover:bg-white shadow-sm'
+                      : 'border-white/15 bg-white/5 text-slate-200 hover:bg-white/10'
+                  }`}
+                >
+                  <span>Sign In</span>
+                </Link>
+                <a
+                  href="#waitlist"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
+                >
+                  <span>Get Early Access</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </a>
+              </div>
             )}
           </div>
         </div>
@@ -1506,7 +1518,7 @@ export default function OpenAgentsLandingPage() {
             <a href="#how-it-works" className="hover:underline">
               Design Philosophy
             </a>
-            {isSuperadmin && (
+            {isSuperadmin ? (
               <>
                 <Link href="/chat" className="font-semibold text-rose-500 hover:underline">
                   Open Workspace (/chat)
@@ -1515,6 +1527,10 @@ export default function OpenAgentsLandingPage() {
                   Admin
                 </Link>
               </>
+            ) : (
+              <Link href="/login" className="font-semibold text-rose-500 hover:underline">
+                Admin Sign In
+              </Link>
             )}
             <a
               href="https://x.com/openagentsus"
