@@ -20,10 +20,47 @@ async function verifyCloudOwnerDigest(email: string, password: string): Promise<
 
 function isCloudPortalRuntime() {
   if (process.env.NEXT_PUBLIC_IS_CLOUD_PORTAL === 'true') return true
-  if (typeof window !== 'undefined' && window.location.hostname.endsWith('openagents.us')) {
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname.endsWith('openagents.us') ||
+      window.location.hostname.endsWith('workers.dev'))
+  ) {
     return true
   }
   return false
+}
+
+if (typeof window !== 'undefined' && isCloudPortalRuntime() && !(window as any).__oaFetchPatched) {
+  ;(window as any).__oaFetchPatched = true
+  const nativeFetch = window.fetch.bind(window)
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const rawUrl =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    let pathAndQuery = ''
+    if (rawUrl.startsWith('/api/') || rawUrl.startsWith('/v1/')) {
+      pathAndQuery = rawUrl
+    } else if (rawUrl.startsWith(window.location.origin)) {
+      const rest = rawUrl.slice(window.location.origin.length)
+      if (rest.startsWith('/api/') || rest.startsWith('/v1/')) {
+        pathAndQuery = rest
+      }
+    }
+    if (!pathAndQuery) {
+      return nativeFetch(input, init)
+    }
+    try {
+      const res = await nativeFetch(input, init)
+      if (res.status !== 502 && res.status !== 530 && res.status !== 405) {
+        return res
+      }
+    } catch {
+      // Fall through to local backend retry when cloud tunnel is unreachable.
+    }
+    const localBase = (
+      window.localStorage.getItem('openagents_api_url') || DEFAULT_API_BASE_URL
+    ).replace(/\/$/, '')
+    return nativeFetch(`${localBase}${pathAndQuery}`, init)
+  }
 }
 
 function resolveApiBaseUrl() {

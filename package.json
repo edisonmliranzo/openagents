@@ -19,6 +19,7 @@
     "build": "node scripts/build-cloudflare.mjs",
     "build:all": "turbo run build",
     "build:pages": "node scripts/build-cloudflare.mjs",
+    "deploy:cloudflare": "node scripts/build-cloudflare.mjs && npx wrangler deploy",
     "desktop:dev": "pnpm --filter @openagents/desktop dev",
     "desktop:build": "pnpm --filter @openagents/desktop build",
     "desktop:pack:win": "pnpm --filter @openagents/desktop run package:win",
