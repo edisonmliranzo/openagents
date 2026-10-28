@@ -20,6 +20,7 @@ function extractThinkingBlocks(raw: string): { thinking: string[]; visible: stri
   const thinking: string[] = []
   // Match <think>...</think> AND <thinking>...</thinking> (case-insensitive, multiline)
   const visible = raw
+    .replace(/^(\[(?:BIG BRAIN REASONING|DOTS MoE ROUTER|GROK DEEPSEARCH MODE|HERMES-3 COGNITIVE STEER):[^\]]*\]\s*)+/gi, '')
     .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, (match: string) => {
       const inner = match.replace(/^<think(?:ing)?>/i, '').replace(/<\/think(?:ing)?>$/i, '')
       thinking.push(inner.trim())

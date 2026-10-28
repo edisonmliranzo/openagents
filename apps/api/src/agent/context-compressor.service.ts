@@ -34,7 +34,10 @@ export class ContextCompressorService {
     })
     if (existing) return this.formatSummary(existing.summary, existing.keyTopics)
 
-    return this.createSummary(conversationId, userId)
+    // Never block the active chat request waiting for a summary LLM call;
+    // generate the summary asynchronously in the background for the next turn.
+    void this.createSummary(conversationId, userId).catch(() => null)
+    return null
   }
 
   async forceCompress(conversationId: string, userId: string): Promise<string> {

@@ -500,9 +500,9 @@ export function ChatWindow({
   const [offlineQueue, setOfflineQueue] = useState<string[]>([])
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false)
   const [grokDeepSearchActive, setGrokDeepSearchActive] = useState(false)
-  const [bigBrainActive, setBigBrainActive] = useState(true)
+  const [bigBrainActive, setBigBrainActive] = useState(false)
   const [hermesSteerActive, setHermesSteerActive] = useState(false)
-  const [dotsRouterActive, setDotsRouterActive] = useState(true)
+  const [dotsRouterActive, setDotsRouterActive] = useState(false)
   const [agentPersona, setAgentPersona] = useState<{
     name: string
     aura: string
@@ -1133,21 +1133,7 @@ export function ChatWindow({
     const pinned = buildPinnedContextBlock(pinnedItems)
 
     const contextPrefix = fileBlocks ? `${fileBlocks}\n\n` : ''
-    const frontierDirectives: string[] = []
-    if (grokDeepSearchActive) {
-      frontierDirectives.push('[GROK DEEPSEARCH MODE: Perform multi-hop truth-seeking synthesis with contrarian reality check and explicit source citations]')
-    }
-    if (bigBrainActive) {
-      frontierDirectives.push('[BIG BRAIN REASONING: Use extended first-principles chain-of-thought verification before emitting final actions]')
-    }
-    if (hermesSteerActive) {
-      frontierDirectives.push('[HERMES-3 COGNITIVE STEER: Prioritize high signal density, explicit tool execution, and zero corporate fluff]')
-    }
-    if (dotsRouterActive) {
-      frontierDirectives.push('[DOTS MoE ROUTER: Dynamically ground response across SOUL.md, repo graph, and active milestone state]')
-    }
-    const frontierBlock = frontierDirectives.length > 0 ? `${frontierDirectives.join('\n')}\n\n` : ''
-    const content = buildAssistantModePrompt(assistantMode, frontierBlock + contextPrefix + expanded + pinned)
+    const content = buildAssistantModePrompt(assistantMode, contextPrefix + expanded + pinned)
 
     const fileNames = files.length > 0 ? ` [${files.map((f) => f.name).join(', ')}]` : ''
     const displayWithFiles = displayContent ? `${displayContent}${fileNames}` : fileNames.trim()
@@ -1163,10 +1149,17 @@ export function ChatWindow({
         .catch(() => {})
     }
 
+    const effectiveEffort =
+      effort !== 'auto'
+        ? effort
+        : bigBrainActive
+          ? 'planned'
+          : undefined
+
     await sendMessage(content, {
       displayContent: displayWithFiles || displayContent,
       mode: assistantMode,
-      ...(effort !== 'auto' ? { effort } : {}),
+      ...(effectiveEffort ? { effort: effectiveEffort } : {}),
     })
   }
 

@@ -20,11 +20,9 @@ export class EffortService {
     if (LEVELS.includes(mode as EffortLevel)) return mode as EffortLevel
 
     if (taskClass === 'small-talk') return 'instant'
-    const len = userMessage.trim().length
-    const complex =
-      len > 220 ||
-      /\b(plan|build|architect|design|analyze|analyse|compare|research|strategy|multi[- ]step|end[- ]to[- ]end|migration|refactor)\b/i.test(userMessage)
-    if (complex || taskClass === 'reasoning' || taskClass === 'code') return 'planned'
+    // Keep 'auto' effort on the fast direct path by default so chat responses
+    // stream immediately without a blocking pre-plan LLM round. Users can still
+    // opt into 'planned' or 'max' via the effort selector or Big Brain toggle.
     return 'direct'
   }
 
