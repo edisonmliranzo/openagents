@@ -1201,8 +1201,32 @@ export function ChatWindow({
     }
   }
 
+  const ghostSuggestion = useMemo(() => {
+    const trimmed = input.trim()
+    if (trimmed.length < 4 || trimmed.startsWith('/') || isStreaming) return ''
+    const lower = trimmed.toLowerCase()
+    if (/news|headline|latest|today|market/.test(lower) && !lower.includes('citations')) {
+      return ' with live source citations and recency timestamps'
+    }
+    if (/bug|fix|error|slow|latency|optimize/.test(lower) && !lower.includes('verify')) {
+      return ' across apps/api and apps/web and verify zero regressions'
+    }
+    if (/deploy|ship|cloudflare|github/.test(lower) && !lower.includes('openagents.us')) {
+      return ' to GitHub origin/main and deploy live to https://openagents.us'
+    }
+    if (trimmed.length < 45 && !trimmed.endsWith('.')) {
+      return ' and summarize the key actionable takeaways'
+    }
+    return ''
+  }, [input, isStreaming])
+
   function handleKey(e: React.KeyboardEvent) {
     if (slashQuery !== null && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
+      return
+    }
+    if (e.key === 'Tab' && ghostSuggestion) {
+      e.preventDefault()
+      setInput((prev) => `${prev.trimEnd()}${ghostSuggestion}`)
       return
     }
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1948,6 +1972,26 @@ export function ChatWindow({
             )}
 
             <div className="oa-composer overflow-hidden">
+              {ghostSuggestion && (
+                <div className="flex items-center justify-between gap-2 border-b border-sky-500/15 bg-sky-500/[0.04] px-3.5 py-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  <div className="truncate">
+                    <span className="mr-1.5 rounded bg-sky-500/15 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-sky-600 dark:text-sky-300">
+                      ⚡ Speculative Pre-Warm
+                    </span>
+                    <span className="italic text-slate-400 dark:text-slate-500">…{ghostSuggestion}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInput((prev) => `${prev.trimEnd()}${ghostSuggestion}`)
+                      focusComposer()
+                    }}
+                    className="shrink-0 rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-700 hover:bg-slate-300 dark:bg-white/10 dark:text-slate-200"
+                  >
+                    Tab ↹
+                  </button>
+                </div>
+              )}
               <textarea
                 ref={textareaRef}
                 value={input}

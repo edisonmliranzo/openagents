@@ -356,6 +356,201 @@ export interface DotsRouteResult {
   createdAt: string
 }
 
+// 13. Speculative Pre-Fetch & Ghost Typing
+export interface SpeculativePrediction {
+  id: string
+  partialInput: string
+  ghostCompletion: string
+  predictedIntent: string
+  warmedResources: Array<{ kind: 'file' | 'memory' | 'web' | 'tool'; label: string; latencySavedMs: number }>
+  estimatedTimeToFirstTokenMs: number
+  createdAt: string
+}
+
+// 14. Full-Duplex Live Voice & Screen Co-Pilot
+export interface CopilotVisualAnalysis {
+  id: string
+  windowTitle: string
+  detectedElements: Array<{ label: string; region: string; actionableSuggestion: string }>
+  spokenResponse: string
+  suggestedCommand: string
+  createdAt: string
+}
+
+// 15. Prompt & Agent Evolution Arena (Genetic Prompt Optimizer)
+export interface PromptChromosome {
+  id: string
+  generation: number
+  label: string
+  systemPromptSnippet: string
+  mutationStrategy: string
+  accuracyScore: number
+  avgLatencyMs: number
+  avgTokens: number
+  fitnessScore: number
+  isChampion: boolean
+  createdAt: string
+}
+
+// 16. Autonomous Web Workflow Recorder ("Show Once, Run Forever" RPA)
+export interface RecordedMacroStep {
+  stepNumber: number
+  action: 'navigate' | 'click' | 'fill' | 'extract' | 'assert'
+  selector: string
+  visionFallbackAnchor: string
+  value?: string
+}
+
+export interface WebWorkflowMacro {
+  id: string
+  name: string
+  targetDomain: string
+  scheduleCron: string
+  parameters: string[]
+  steps: RecordedMacroStep[]
+  playwrightCode: string
+  runsCount: number
+  selfHealedCount: number
+  lastStatus: 'ready' | 'succeeded' | 'self_healed'
+  lastOutputPreview: string
+  createdAt: string
+}
+
+// 17. Inline Live Code Sandbox & Micro-App Renderer (Artifacts 2.0)
+export interface LiveMicroApp {
+  id: string
+  title: string
+  framework: 'html_tailwind' | 'svg_interactive' | 'data_dashboard'
+  prompt: string
+  sourceCode: string
+  publishedSlug?: string
+  viewsCount: number
+  createdAt: string
+}
+
+// 18. Personal Knowledge Time-Machine & Contradiction Detector
+export interface TemporalEventNode {
+  id: string
+  timestamp: string
+  source: 'commit' | 'decision' | 'goal' | 'memory'
+  title: string
+  summary: string
+}
+
+export interface ContradictionAlert {
+  id: string
+  severity: 'high' | 'medium'
+  earlierStatement: string
+  earlierDate: string
+  newerStatement: string
+  newerDate: string
+  resolutionSuggestion: string
+  resolved: boolean
+}
+
+export interface TimeMachineState {
+  events: TemporalEventNode[]
+  contradictions: ContradictionAlert[]
+  lastQueryAnswer?: string
+}
+
+// 19. Firewall & Secret-Zero Outbound Interceptor
+export interface FirewallRuleItem {
+  id: string
+  name: string
+  patternType: 'api_key' | 'jwt_token' | 'pii_email_phone' | 'private_key' | 'db_connection'
+  action: 'redact' | 'block'
+  enabled: boolean
+  hitsCount: number
+}
+
+export interface FirewallPacketInspection {
+  id: string
+  destination: string
+  originalLength: number
+  sanitizedPayload: string
+  redactedSecretsCount: number
+  matchedRules: string[]
+  verdict: 'sanitized_allowed' | 'blocked' | 'clean'
+  createdAt: string
+}
+
+// 20. Autonomous FinOps & API Arbitrage Engine
+export interface ProviderArbitrageRow {
+  provider: string
+  model: string
+  latencyMs: number
+  costPer1MTokensUsd: number
+  uptimePct: number
+  qualityScore: number
+  arbitrageRank: number
+  status: 'optimal' | 'standby' | 'degraded'
+}
+
+export interface FinOpsArbitrageState {
+  monthlySavedUsd: number
+  semanticCacheHitRatePct: number
+  totalArbitrageRoutes: number
+  providers: ProviderArbitrageRow[]
+  latestSimulation?: {
+    prompt: string
+    chosenProvider: string
+    chosenModel: string
+    baselineCostUsd: number
+    arbitrageCostUsd: number
+    savingsPct: number
+    rationale: string
+  }
+}
+
+// 21. Multiplayer Live War Room & Shared Agent Canvas
+export interface WarRoomParticipant {
+  id: string
+  name: string
+  kind: 'human' | 'specialist_agent'
+  role: string
+  status: 'online' | 'typing' | 'executing'
+}
+
+export interface WarRoomTurn {
+  id: string
+  authorName: string
+  authorKind: 'human' | 'specialist_agent'
+  roleBadge: string
+  content: string
+  createdAt: string
+}
+
+export interface MultiplayerWarRoomState {
+  roomId: string
+  title: string
+  sharedCanvasMarkdown: string
+  participants: WarRoomParticipant[]
+  turns: WarRoomTurn[]
+  updatedAt: string
+}
+
+// 22. 1-Click Prompt-to-Production Ship Pipeline
+export interface ShipPipelineStep {
+  name: string
+  status: 'passed' | 'running' | 'pending' | 'rolled_back'
+  durationMs: number
+  detail: string
+}
+
+export interface ShipPipelineRun {
+  id: string
+  title: string
+  promptOrDiff: string
+  branchName: string
+  commitSha: string
+  previewUrl: string
+  productionUrl: string
+  status: 'deployed' | 'rolled_back'
+  steps: ShipPipelineStep[]
+  createdAt: string
+}
+
 export function createAgenticSuiteApi(client: OpenAgentsClient) {
   return {
     // 1. Dynamic Tool Forge
@@ -470,5 +665,79 @@ export function createAgenticSuiteApi(client: OpenAgentsClient) {
     getDotsState: () => client.get<{ history: DotsRouteResult[] }>('/api/v1/agentic/dots'),
     routeWithDots: (input: { prompt: string }) =>
       client.post<DotsRouteResult>('/api/v1/agentic/dots/route', input),
+
+    // 13. Speculative Pre-Fetch & Ghost Typing
+    getSpeculativeState: () =>
+      client.get<{ history: SpeculativePrediction[] }>('/api/v1/agentic/speculative'),
+    predictSpeculative: (input: { partialInput: string }) =>
+      client.post<SpeculativePrediction>('/api/v1/agentic/speculative/predict', input),
+
+    // 14. Full-Duplex Live Voice & Screen Co-Pilot
+    getCopilotState: () =>
+      client.get<{ analyses: CopilotVisualAnalysis[] }>('/api/v1/agentic/copilot'),
+    analyzeScreenFrame: (input: { windowTitle: string; voiceTranscript: string; domSummary?: string }) =>
+      client.post<CopilotVisualAnalysis>('/api/v1/agentic/copilot/analyze', input),
+
+    // 15. Prompt & Agent Evolution Arena
+    getEvolutionArena: () =>
+      client.get<{ chromosomes: PromptChromosome[] }>('/api/v1/agentic/evolution'),
+    runEvolutionGeneration: (input: { benchmarkGoal: string }) =>
+      client.post<{ chromosomes: PromptChromosome[]; newChampion: PromptChromosome }>('/api/v1/agentic/evolution/mutate', input),
+    promotePromptVariant: (chromosomeId: string) =>
+      client.post<{ chromosomes: PromptChromosome[] }>(`/api/v1/agentic/evolution/${chromosomeId}/promote`, {}),
+
+    // 16. Autonomous Web Workflow Recorder (RPA)
+    getWebMacros: () =>
+      client.get<{ macros: WebWorkflowMacro[] }>('/api/v1/agentic/web-recorder'),
+    createWebMacro: (input: { name: string; targetDomain: string; demonstrationPrompt: string; scheduleCron?: string }) =>
+      client.post<WebWorkflowMacro>('/api/v1/agentic/web-recorder', input),
+    executeWebMacro: (macroId: string, params?: Record<string, string>) =>
+      client.post<WebWorkflowMacro>(`/api/v1/agentic/web-recorder/${macroId}/run`, { params }),
+
+    // 17. Inline Live Code Sandbox & Micro-App Renderer
+    getMicroApps: () =>
+      client.get<{ apps: LiveMicroApp[] }>('/api/v1/agentic/sandbox'),
+    createMicroApp: (input: { title: string; prompt: string; framework?: LiveMicroApp['framework'] }) =>
+      client.post<LiveMicroApp>('/api/v1/agentic/sandbox', input),
+    publishMicroApp: (appId: string) =>
+      client.post<LiveMicroApp>(`/api/v1/agentic/sandbox/${appId}/publish`, {}),
+
+    // 18. Personal Knowledge Time-Machine & Contradiction Detector
+    getTimeMachineState: () =>
+      client.get<TimeMachineState>('/api/v1/agentic/time-machine'),
+    queryTimeMachine: (input: { question: string }) =>
+      client.post<TimeMachineState>('/api/v1/agentic/time-machine/query', input),
+    resolveContradiction: (alertId: string) =>
+      client.post<TimeMachineState>(`/api/v1/agentic/time-machine/contradictions/${alertId}/resolve`, {}),
+
+    // 19. Firewall & Secret-Zero Outbound Interceptor
+    getFirewallState: () =>
+      client.get<{ rules: FirewallRuleItem[]; inspections: FirewallPacketInspection[] }>('/api/v1/agentic/firewall'),
+    scanOutboundPayload: (input: { destination: string; payload: string }) =>
+      client.post<FirewallPacketInspection>('/api/v1/agentic/firewall/scan', input),
+    toggleFirewallRule: (ruleId: string) =>
+      client.post<{ rules: FirewallRuleItem[] }>(`/api/v1/agentic/firewall/rules/${ruleId}/toggle`, {}),
+
+    // 20. Autonomous FinOps & API Arbitrage Engine
+    getFinOpsState: () =>
+      client.get<FinOpsArbitrageState>('/api/v1/agentic/finops'),
+    simulateArbitrageRoute: (input: { prompt: string; maxLatencyMs?: number }) =>
+      client.post<FinOpsArbitrageState>('/api/v1/agentic/finops/route', input),
+
+    // 21. Multiplayer Live War Room & Shared Agent Canvas
+    getWarRoomState: () =>
+      client.get<MultiplayerWarRoomState>('/api/v1/agentic/war-room'),
+    postWarRoomTurn: (input: { message: string; inviteSpecialists?: boolean }) =>
+      client.post<MultiplayerWarRoomState>('/api/v1/agentic/war-room/turn', input),
+    updateWarRoomCanvas: (input: { sharedCanvasMarkdown: string }) =>
+      client.post<MultiplayerWarRoomState>('/api/v1/agentic/war-room/canvas', input),
+
+    // 22. 1-Click Prompt-to-Production Ship Pipeline
+    getShipPipelines: () =>
+      client.get<{ pipelines: ShipPipelineRun[] }>('/api/v1/agentic/ship'),
+    runShipPipeline: (input: { title: string; promptOrDiff: string }) =>
+      client.post<ShipPipelineRun>('/api/v1/agentic/ship/run', input),
+    rollbackShipPipeline: (pipelineId: string) =>
+      client.post<ShipPipelineRun>(`/api/v1/agentic/ship/${pipelineId}/rollback`, {}),
   }
 }
