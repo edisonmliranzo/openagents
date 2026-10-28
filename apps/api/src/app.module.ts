@@ -92,6 +92,7 @@ import { PhoneModule } from './phone/phone.module'
 import { PrivacyModule } from './privacy/privacy.module'
 import { PublicAgentsModule } from './public-agents/public-agents.module'
 import { ReplayModule } from './replay/replay.module'
+import { AgenticSuiteModule } from './agentic-suite/agentic-suite.module'
 
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { GlobalAuthGuard } from './auth/guards/global-auth.guard'
@@ -198,6 +199,7 @@ import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
     ContentPipelineModule,
     PermissionsModule,
     SystemSetupModule,
+    AgenticSuiteModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: CustomThrottlerGuard },

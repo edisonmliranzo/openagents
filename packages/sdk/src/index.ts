@@ -191,6 +191,7 @@ export function createSDK(config: SDKConfig) {
     privacy: createPrivacyApi(client),
     publicAgents: createPublicAgentsApi(client),
     replay: createReplayApi(client),
+    agenticSuite: createAgenticSuiteApi(client),
   }
 }
 
@@ -240,6 +241,27 @@ export { createPhoneApi } from './api/phone'
 export { createPrivacyApi } from './api/privacy'
 export { createPublicAgentsApi } from './api/public-agents'
 export { createReplayApi } from './api/replay'
+export { createAgenticSuiteApi } from './api/agentic-suite'
+export type {
+  ForgedToolItem,
+  ActionBranch,
+  TreeOfActionsRollout,
+  ComputerUseStep,
+  ComputerUseSession,
+  SentinelWatcher,
+  SentinelIncident,
+  BreakerFinding,
+  AdversarialVerificationRun,
+  OvernightCheckpoint,
+  OvernightMission,
+  WorldStateNode,
+  ShadowActionCard,
+  DigitalTwinState,
+  SpecialistBidder,
+  SubtaskBid,
+  AwardedSubtask,
+  SwarmMarketContractRun,
+} from './api/agentic-suite'
 import { createBillingApi, createMarketplaceApi } from './api/billing'
 import { createEmailAutopilotApi } from './api/email-autopilot'
 import { createGraphApi } from './api/graph'
@@ -248,3 +270,4 @@ import { createPhoneApi } from './api/phone'
 import { createPrivacyApi } from './api/privacy'
 import { createPublicAgentsApi } from './api/public-agents'
 import { createReplayApi } from './api/replay'
+import { createAgenticSuiteApi } from './api/agentic-suite'
