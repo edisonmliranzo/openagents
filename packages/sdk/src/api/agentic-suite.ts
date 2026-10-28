@@ -234,6 +234,128 @@ export interface SwarmMarketContractRun {
   createdAt: string
 }
 
+// 9. Grok DeepSearch + Big Brain + Live Pulse Radar
+export type GrokToneMode = 'truth_seeking' | 'unfiltered_witty' | 'first_principles' | 'executive_brief'
+
+export interface GrokCitation {
+  id: string
+  title: string
+  url: string
+  sourceType: 'web' | 'x_realtime' | 'arxiv' | 'repo' | 'telemetry'
+  snippet: string
+  credibilityScore: number
+}
+
+export interface GrokDeepSearchResult {
+  id: string
+  query: string
+  toneMode: GrokToneMode
+  bigBrainEnabled: boolean
+  durationMs: number
+  confidenceScore: number
+  subQueries: string[]
+  thinkingTrace: string[]
+  synthesisMarkdown: string
+  contrarianTake: string
+  citations: GrokCitation[]
+  createdAt: string
+}
+
+export interface GrokPulseItem {
+  id: string
+  category: 'ai_frontier' | 'repo_ops' | 'market_signal' | 'security_watch'
+  headline: string
+  summary: string
+  momentum: string
+  suggestedPrompt: string
+  updatedAt: string
+}
+
+// 10. OpenClaw Core (SOUL.md / IDENTITY / Heartbeat Loop / Multi-Channel Gateway)
+export interface OpenClawChannelNode {
+  id: string
+  channel: 'telegram' | 'discord' | 'whatsapp' | 'slack' | 'local_shell' | 'browser_claw'
+  label: string
+  status: 'connected' | 'standby' | 'configured'
+  lastEvent: string
+}
+
+export interface OpenClawHeartbeatRun {
+  id: string
+  triggeredBy: 'manual' | 'autonomous_loop'
+  gitBranch: string
+  dirtyFilesCount: number
+  activeGoalsCount: number
+  sentinelAlertsCount: number
+  proactiveDecision: string
+  executedReflexes: string[]
+  createdAt: string
+}
+
+export interface OpenClawSoulState {
+  soulMd: string
+  userMd: string
+  heartbeatMd: string
+  memoryMd: string
+  heartbeatIntervalSec: number
+  heartbeatEnabled: boolean
+  channels: OpenClawChannelNode[]
+  recentHeartbeats: OpenClawHeartbeatRun[]
+  updatedAt: string
+}
+
+// 11. Hermes-3 Cognitive Steer & Native XML/JSON Function-Calling Trace
+export interface HermesSteerConfig {
+  reasoningDepth: number // 0-100
+  creativity: number // 0-100
+  toolAggressiveness: number // 0-100
+  directness: number // 0-100
+  uncensoredTechnicalMode: boolean
+  structuredJsonMode: boolean
+  systemDirective: string
+  updatedAt: string
+}
+
+export interface HermesTraceRun {
+  id: string
+  prompt: string
+  rawThinkXml: string
+  rawToolCallXml: string
+  toolExecutionResult: Record<string, unknown>
+  finalResponse: string
+  tokensPerSec: number
+  contextUtilizationPct: number
+  createdAt: string
+}
+
+// 12. Dots Mixture-of-Reasoners & Dynamic Compute Router
+export interface DotsExpertAllocation {
+  expertId: 'fast_reflex' | 'deep_math_logic' | 'code_tool_synth' | 'vision_doc_grounding' | 'swarm_consensus'
+  label: string
+  weightPct: number
+  modelTier: string
+  rationale: string
+}
+
+export interface DotsConnectedNode {
+  id: string
+  kind: 'memory' | 'goal' | 'file' | 'tool' | 'session'
+  label: string
+  relevanceScore: number
+}
+
+export interface DotsRouteResult {
+  id: string
+  prompt: string
+  selectedPrimaryPath: string
+  estimatedLatencyMs: number
+  computeSavedPct: number
+  allocations: DotsExpertAllocation[]
+  connectedDots: DotsConnectedNode[]
+  synthesizedAnswer: string
+  createdAt: string
+}
+
 export function createAgenticSuiteApi(client: OpenAgentsClient) {
   return {
     // 1. Dynamic Tool Forge
@@ -317,5 +439,36 @@ export function createAgenticSuiteApi(client: OpenAgentsClient) {
       client.get<{ bidders: SpecialistBidder[]; history: SwarmMarketContractRun[] }>('/api/v1/agentic/swarm-market'),
     broadcastMarketTask: (input: { task: string }) =>
       client.post<SwarmMarketContractRun>('/api/v1/agentic/swarm-market/broadcast', input),
+
+    // 9. Grok DeepSearch + Big Brain + Live Pulse Radar
+    getGrokState: () =>
+      client.get<{ pulse: GrokPulseItem[]; history: GrokDeepSearchResult[] }>('/api/v1/agentic/grok'),
+    runGrokDeepSearch: (input: {
+      query: string
+      toneMode?: GrokToneMode
+      bigBrainEnabled?: boolean
+    }) => client.post<GrokDeepSearchResult>('/api/v1/agentic/grok/deepsearch', input),
+
+    // 10. OpenClaw Core (SOUL.md / Heartbeat / Multi-Channel Claw)
+    getOpenClawState: () => client.get<OpenClawSoulState>('/api/v1/agentic/openclaw'),
+    updateOpenClawSoul: (input: Partial<Pick<OpenClawSoulState, 'soulMd' | 'userMd' | 'heartbeatMd' | 'memoryMd' | 'heartbeatIntervalSec' | 'heartbeatEnabled'>>) =>
+      client.post<OpenClawSoulState>('/api/v1/agentic/openclaw/soul', input),
+    runOpenClawHeartbeat: (triggeredBy: 'manual' | 'autonomous_loop' = 'manual') =>
+      client.post<{ state: OpenClawSoulState; latestRun: OpenClawHeartbeatRun }>('/api/v1/agentic/openclaw/heartbeat', {
+        triggeredBy,
+      }),
+
+    // 11. Hermes-3 Steer & Native XML Trace
+    getHermesState: () =>
+      client.get<{ config: HermesSteerConfig; traces: HermesTraceRun[] }>('/api/v1/agentic/hermes'),
+    updateHermesSteer: (input: Partial<HermesSteerConfig>) =>
+      client.post<HermesSteerConfig>('/api/v1/agentic/hermes/steer', input),
+    invokeHermesTrace: (input: { prompt: string }) =>
+      client.post<HermesTraceRun>('/api/v1/agentic/hermes/invoke', input),
+
+    // 12. Dots Mixture-of-Reasoners & Dynamic Compute Router
+    getDotsState: () => client.get<{ history: DotsRouteResult[] }>('/api/v1/agentic/dots'),
+    routeWithDots: (input: { prompt: string }) =>
+      client.post<DotsRouteResult>('/api/v1/agentic/dots/route', input),
   }
 }

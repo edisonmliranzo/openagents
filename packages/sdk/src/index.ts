@@ -261,6 +261,18 @@ export type {
   SubtaskBid,
   AwardedSubtask,
   SwarmMarketContractRun,
+  GrokToneMode,
+  GrokCitation,
+  GrokDeepSearchResult,
+  GrokPulseItem,
+  OpenClawChannelNode,
+  OpenClawHeartbeatRun,
+  OpenClawSoulState,
+  HermesSteerConfig,
+  HermesTraceRun,
+  DotsExpertAllocation,
+  DotsConnectedNode,
+  DotsRouteResult,
 } from './api/agentic-suite'
 import { createBillingApi, createMarketplaceApi } from './api/billing'
 import { createEmailAutopilotApi } from './api/email-autopilot'

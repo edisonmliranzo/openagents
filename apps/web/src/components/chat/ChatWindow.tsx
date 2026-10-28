@@ -35,6 +35,7 @@ import { PlanChecklist } from './PlanChecklist'
 import { ResponsePresets } from './ResponsePresets'
 import { WebRtcVoiceControls } from './WebRtcVoiceControls'
 import { OpenAgentsPowerToolbar, SPECIALIST_OPTIONS } from './OpenAgentsPowerSuite'
+import { FrontierEnginesDock } from './FrontierEnginesDock'
 import { storageGet, storageSet } from '@/lib/storage'
 import clsx from 'clsx'
 import {
@@ -498,6 +499,10 @@ export function ChatWindow({
   const [isOffline, setIsOffline] = useState(false)
   const [offlineQueue, setOfflineQueue] = useState<string[]>([])
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false)
+  const [grokDeepSearchActive, setGrokDeepSearchActive] = useState(false)
+  const [bigBrainActive, setBigBrainActive] = useState(true)
+  const [hermesSteerActive, setHermesSteerActive] = useState(false)
+  const [dotsRouterActive, setDotsRouterActive] = useState(true)
   const [agentPersona, setAgentPersona] = useState<{
     name: string
     aura: string
@@ -1128,10 +1133,35 @@ export function ChatWindow({
     const pinned = buildPinnedContextBlock(pinnedItems)
 
     const contextPrefix = fileBlocks ? `${fileBlocks}\n\n` : ''
-    const content = buildAssistantModePrompt(assistantMode, contextPrefix + expanded + pinned)
+    const frontierDirectives: string[] = []
+    if (grokDeepSearchActive) {
+      frontierDirectives.push('[GROK DEEPSEARCH MODE: Perform multi-hop truth-seeking synthesis with contrarian reality check and explicit source citations]')
+    }
+    if (bigBrainActive) {
+      frontierDirectives.push('[BIG BRAIN REASONING: Use extended first-principles chain-of-thought verification before emitting final actions]')
+    }
+    if (hermesSteerActive) {
+      frontierDirectives.push('[HERMES-3 COGNITIVE STEER: Prioritize high signal density, explicit tool execution, and zero corporate fluff]')
+    }
+    if (dotsRouterActive) {
+      frontierDirectives.push('[DOTS MoE ROUTER: Dynamically ground response across SOUL.md, repo graph, and active milestone state]')
+    }
+    const frontierBlock = frontierDirectives.length > 0 ? `${frontierDirectives.join('\n')}\n\n` : ''
+    const content = buildAssistantModePrompt(assistantMode, frontierBlock + contextPrefix + expanded + pinned)
 
     const fileNames = files.length > 0 ? ` [${files.map((f) => f.name).join(', ')}]` : ''
     const displayWithFiles = displayContent ? `${displayContent}${fileNames}` : fileNames.trim()
+
+    if (grokDeepSearchActive && displayContent) {
+      void sdk.agenticSuite
+        .runGrokDeepSearch({ query: displayContent, bigBrainEnabled: bigBrainActive })
+        .then((res) => {
+          appendOperatorMessage(
+            `🔍 Grok DeepSearch (${res.confidenceScore}% confidence • ${res.durationMs}ms):\n${res.thinkingTrace.join('\n')}\n\n⚡ Contrarian Check: ${res.contrarianTake}`,
+          )
+        })
+        .catch(() => {})
+    }
 
     await sendMessage(content, {
       displayContent: displayWithFiles || displayContent,
@@ -1498,6 +1528,20 @@ export function ChatWindow({
         onDispatchPrompt={(prompt) => dispatchMessage(prompt)}
         onAppendSystemMessage={(msg) => appendOperatorMessage(msg)}
         hasMessages={visibleMessages.length > 0}
+      />
+
+      {/* Frontier AI Engines Dock (Grok DeepSearch, Big Brain, OpenClaw Soul & Heartbeat, Hermes Steer, Dots MoE Router, ⌘K Command Palette) */}
+      <FrontierEnginesDock
+        onDispatchPrompt={(prompt) => dispatchMessage(prompt)}
+        onAppendAssistantOutput={(md) => appendOperatorMessage(md)}
+        grokDeepSearchActive={grokDeepSearchActive}
+        onToggleGrokDeepSearch={() => setGrokDeepSearchActive((v) => !v)}
+        bigBrainActive={bigBrainActive}
+        onToggleBigBrain={() => setBigBrainActive((v) => !v)}
+        hermesSteerActive={hermesSteerActive}
+        onToggleHermesSteer={() => setHermesSteerActive((v) => !v)}
+        dotsRouterActive={dotsRouterActive}
+        onToggleDotsRouter={() => setDotsRouterActive((v) => !v)}
       />
 
       {visibleMessages.length === 0 ? (

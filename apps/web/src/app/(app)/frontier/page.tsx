@@ -1,10 +1,41 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { sdk } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
-import type { FrontierStatus, TimelineHit, WatchTaskRow, PromptPatchRow, DebateResult, RoundtableResult, LearnedSkillRow } from '@openagents/sdk'
-import { Activity, AlarmClock, BrainCircuit, GitCompareArrows, Loader2, MessagesSquare, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
+import type {
+  FrontierStatus,
+  TimelineHit,
+  WatchTaskRow,
+  PromptPatchRow,
+  DebateResult,
+  RoundtableResult,
+  LearnedSkillRow,
+  GrokDeepSearchResult,
+  OpenClawSoulState,
+  HermesSteerConfig,
+  DotsRouteResult,
+} from '@openagents/sdk'
+import {
+  Activity,
+  AlarmClock,
+  ArrowUpRight,
+  BrainCircuit,
+  GitCompareArrows,
+  HeartPulse,
+  Loader2,
+  MessagesSquare,
+  Network,
+  Plus,
+  Radar,
+  Search,
+  Sliders,
+  Sparkles,
+  Trash2,
+  Zap,
+} from 'lucide-react'
+import { FRONTIER_AGENTIC_LINKS } from '@/components/chat/FrontierEnginesDock'
 
 function Section({ icon: Icon, title, subtitle, children }: { icon: any; title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -27,9 +58,18 @@ const inputCls = 'oa-input-surface h-10 w-full rounded-xl px-3 text-sm outline-n
 const btnCls = 'oa-accent-button h-10 shrink-0 rounded-xl px-4 text-sm font-semibold text-white transition disabled:opacity-50'
 
 export default function FrontierPage() {
+  const router = useRouter()
   const addToast = useUIStore((s) => s.addToast)
   const [status, setStatus] = useState<FrontierStatus | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+
+  // Frontier 4 Signature AI Engines State
+  const [grokQuery, setGrokQuery] = useState('')
+  const [grokResult, setGrokResult] = useState<GrokDeepSearchResult | null>(null)
+  const [openClaw, setOpenClaw] = useState<OpenClawSoulState | null>(null)
+  const [hermesCfg, setHermesCfg] = useState<HermesSteerConfig | null>(null)
+  const [dotsQuery, setDotsQuery] = useState('')
+  const [dotsResult, setDotsResult] = useState<DotsRouteResult | null>(null)
 
   const [tq, setTq] = useState('')
   const [from, setFrom] = useState('')
@@ -49,16 +89,20 @@ export default function FrontierPage() {
   const [skills, setSkills] = useState<LearnedSkillRow[]>([])
 
   const load = useCallback(async () => {
-    const [st, dg, ws, ps] = await Promise.allSettled([
+    const [st, dg, ws, ps, oc, hm] = await Promise.allSettled([
       sdk.frontier.status(),
       sdk.frontier.digest(),
       sdk.frontier.watches.list(),
       sdk.frontier.patches.list(),
+      sdk.agenticSuite.getOpenClawState(),
+      sdk.agenticSuite.getHermesState(),
     ])
     if (st.status === 'fulfilled') setStatus(st.value)
     if (dg.status === 'fulfilled' && dg.value) setDigest({ content: dg.value.content, createdAt: dg.value.createdAt })
     if (ws.status === 'fulfilled') setWatches(ws.value)
     if (ps.status === 'fulfilled') setPatches(ps.value)
+    if (oc.status === 'fulfilled') setOpenClaw(oc.value)
+    if (hm.status === 'fulfilled') setHermesCfg(hm.value.config)
     sdk.frontier.skills.list().then(setSkills).catch(() => undefined)
   }, [])
 
@@ -77,15 +121,184 @@ export default function FrontierPage() {
 
   return (
     <div className="oa-canvas h-full overflow-y-auto p-4 sm:p-6">
-      <div className="mx-auto max-w-3xl space-y-4 pb-24">
-        <header className="flex flex-wrap items-center gap-2">
-          <h1 className="mr-2 text-lg font-semibold text-[var(--tone-strong)]">Frontier</h1>
-          {status && Object.entries(status).map(([k, v]) => (
-            <span key={k} className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${v ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200/70 text-slate-500'}`}>
-              {k}
-            </span>
-          ))}
+      <div className="mx-auto max-w-4xl space-y-5 pb-24">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-extrabold text-[var(--tone-strong)]">
+              OpenAgents Frontier Command Center
+            </h1>
+            <p className="text-xs text-[var(--muted)]">
+              Unified autonomous operating system combining Grok DeepSearch, OpenClaw Soul &amp; Heartbeat, Hermes-3 Cognitive Steer, Dots MoE Router &amp; 8 Frontier Agentic Systems.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {status && Object.entries(status).map(([k, v]) => (
+              <span key={k} className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${v ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200/70 text-slate-500'}`}>
+                {k}
+              </span>
+            ))}
+          </div>
         </header>
+
+        {/* 8 Autonomous Agentic Systems Launch Grid */}
+        <Section
+          icon={Zap}
+          title="8 Autonomous Agentic Systems"
+          subtitle="Direct access to self-synthesizing tools, MCTS speculative rollouts, vision computer use, sentinel reflexes, red-team verification, overnight missions, digital twin & swarm market"
+        >
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+            {FRONTIER_AGENTIC_LINKS.map((item) => (
+              <button
+                key={item.href}
+                type="button"
+                onClick={() => router.push(item.href)}
+                className="group flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white/80 p-3.5 text-left transition hover:border-rose-400 hover:shadow-md dark:border-[#2d3347] dark:bg-[#151a28]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`rounded-lg bg-gradient-to-r ${item.color} px-2 py-0.5 text-[9px] font-black uppercase text-white`}>
+                    {item.badge}
+                  </span>
+                  <ArrowUpRight size={14} className="text-slate-400 group-hover:text-rose-500" />
+                </div>
+                <div className="mt-2.5">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">{item.title}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{item.subtitle}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </Section>
+
+        {/* Grok DeepSearch + Big Brain */}
+        <Section
+          icon={Radar}
+          title="Grok 3 DeepSearch + Big Brain Engine"
+          subtitle="Multi-hop truth-seeking synthesis with visible Chain-of-Thought trace, contrarian reality check & verified citations"
+        >
+          <div className="flex gap-2">
+            <input
+              className={inputCls}
+              placeholder="Ask Grok DeepSearch anything…"
+              value={grokQuery}
+              onChange={(e) => setGrokQuery(e.target.value)}
+            />
+            <button
+              className={btnCls}
+              disabled={busy === 'grok' || !grokQuery.trim()}
+              onClick={() =>
+                run('grok', async () => {
+                  const res = await sdk.agenticSuite.runGrokDeepSearch({
+                    query: grokQuery.trim(),
+                    bigBrainEnabled: true,
+                  })
+                  setGrokResult(res)
+                })
+              }
+            >
+              {busy === 'grok' ? <Loader2 size={15} className="animate-spin" /> : 'DeepSearch'}
+            </button>
+          </div>
+          {grokResult && (
+            <div className="mt-3 space-y-2 rounded-2xl border border-sky-200 bg-sky-50/60 p-3.5 text-xs dark:border-sky-500/30 dark:bg-sky-500/10">
+              <div className="font-mono text-[11px] font-bold text-sky-700 dark:text-sky-300">
+                Confidence {grokResult.confidenceScore}% · {grokResult.durationMs}ms · {grokResult.citations.length} citations
+              </div>
+              <pre className="whitespace-pre-wrap rounded-xl bg-white/80 p-2.5 font-mono text-[11px] text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                {grokResult.thinkingTrace.join('\n')}
+              </pre>
+              <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-100">{grokResult.synthesisMarkdown}</p>
+              <p className="rounded-xl bg-rose-500/10 p-2 font-medium text-rose-800 dark:text-rose-200">
+                <b>Contrarian Reality Check:</b> {grokResult.contrarianTake}
+              </p>
+            </div>
+          )}
+        </Section>
+
+        {/* OpenClaw Soul & Heartbeat Daemon */}
+        <Section
+          icon={HeartPulse}
+          title="OpenClaw Autonomous Core (SOUL.md & Heartbeat Loop)"
+          subtitle="Persistent markdown soul identity + background heartbeat daemon checking git, goals & sentinel state"
+        >
+          {openClaw && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/70 p-3 text-xs dark:bg-slate-900/70">
+                <span>
+                  <b>Heartbeat Loop:</b> {openClaw.heartbeatEnabled ? 'ACTIVE' : 'PAUSED'} (every{' '}
+                  {openClaw.heartbeatIntervalSec}s) · {openClaw.channels.length} Claw Channels
+                </span>
+                <button
+                  className={btnCls}
+                  disabled={busy === 'hb'}
+                  onClick={() =>
+                    run('hb', async () => {
+                      const res = await sdk.agenticSuite.runOpenClawHeartbeat('manual')
+                      setOpenClaw(res.state)
+                      addToast('success', res.latestRun.proactiveDecision)
+                    })
+                  }
+                >
+                  {busy === 'hb' ? <Loader2 size={15} className="animate-spin" /> : 'Pulse Heartbeat Now'}
+                </button>
+              </div>
+              {openClaw.recentHeartbeats[0] && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                  <b>Latest Pulse ({openClaw.recentHeartbeats[0].gitBranch}):</b>{' '}
+                  {openClaw.recentHeartbeats[0].proactiveDecision}
+                </div>
+              )}
+            </div>
+          )}
+        </Section>
+
+        {/* Hermes-3 Cognitive Steer & Dots MoE Router */}
+        <Section
+          icon={Network}
+          title="Dots Mixture-of-Reasoners & Hermes-3 Cognitive Steer"
+          subtitle="Dynamic expert compute routing across Fast Reflex, Deep Logic, Code Synth & Vision Grounding"
+        >
+          {hermesCfg && (
+            <div className="mb-3 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full bg-violet-100 px-2.5 py-1 font-semibold text-violet-800">
+                Hermes Depth: {hermesCfg.reasoningDepth}%
+              </span>
+              <span className="rounded-full bg-violet-100 px-2.5 py-1 font-semibold text-violet-800">
+                Tool Aggressiveness: {hermesCfg.toolAggressiveness}%
+              </span>
+              <span className="rounded-full bg-violet-100 px-2.5 py-1 font-semibold text-violet-800">
+                Directness: {hermesCfg.directness}%
+              </span>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input
+              className={inputCls}
+              placeholder="Test Dots Mixture-of-Reasoners compute routing on any task…"
+              value={dotsQuery}
+              onChange={(e) => setDotsQuery(e.target.value)}
+            />
+            <button
+              className={btnCls}
+              disabled={busy === 'dots' || !dotsQuery.trim()}
+              onClick={() =>
+                run('dots', async () => {
+                  const res = await sdk.agenticSuite.routeWithDots({ prompt: dotsQuery.trim() })
+                  setDotsResult(res)
+                })
+              }
+            >
+              {busy === 'dots' ? <Loader2 size={15} className="animate-spin" /> : 'Route Compute'}
+            </button>
+          </div>
+          {dotsResult && (
+            <div className="mt-3 space-y-2 rounded-xl bg-white/80 p-3 text-xs dark:bg-slate-900/70">
+              <div className="font-bold text-emerald-700 dark:text-emerald-400">
+                {dotsResult.selectedPrimaryPath} · Saved {dotsResult.computeSavedPct}% compute
+              </div>
+              <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{dotsResult.synthesizedAnswer}</p>
+            </div>
+          )}
+        </Section>
 
         <Section icon={Search} title="Semantic timeline" subtitle="Time-travel across memories, summaries and messages">
           <div className="flex flex-wrap gap-2">

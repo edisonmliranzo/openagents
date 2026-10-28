@@ -35,9 +35,13 @@ function formatTitle(title: string | null | undefined, fallback: string) {
 const QUICK_MODULES = [
   { label: 'Autonomous Tasks', href: '/tasks', icon: ListChecks, badge: 'Engine', color: 'text-emerald-500' },
   { label: 'Specialist Swarm', href: '/team', icon: Users, badge: '4 Active', color: 'text-rose-500' },
-  { label: 'Mission Control', href: '/control/mission-control', icon: Zap, badge: 'Live', color: 'text-amber-500' },
-  { label: 'Memory Graph', href: '/memory', icon: Brain, badge: 'Recall', color: 'text-cyan-500' },
-  { label: 'Full OS Console', href: '/control/overview', icon: LayoutGrid, badge: 'All', color: 'text-indigo-500' },
+  { label: 'Frontier Hub', href: '/frontier', icon: Sparkles, badge: '12 Engines', color: 'text-violet-500' },
+  { label: 'Tool Forge', href: '/agent/tool-forge', icon: Zap, badge: 'VM Synth', color: 'text-amber-500' },
+  { label: 'Tree-of-Actions', href: '/agent/tree-of-actions', icon: Brain, badge: 'MCTS', color: 'text-cyan-500' },
+  { label: 'Computer Use', href: '/computer-use', icon: Bot, badge: 'Vision', color: 'text-sky-500' },
+  { label: 'Ambient Sentinel', href: '/sentinel', icon: ShieldAlert, badge: '24/7', color: 'text-emerald-500' },
+  { label: 'Swarm Market', href: '/swarm/market', icon: Activity, badge: 'ELO Bid', color: 'text-fuchsia-500' },
+  { label: 'Full OS Console', href: '/control/overview', icon: LayoutGrid, badge: 'All 60+', color: 'text-indigo-500' },
 ]
 
 export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps) {

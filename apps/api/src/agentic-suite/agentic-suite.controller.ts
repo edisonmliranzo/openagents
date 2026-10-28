@@ -2,7 +2,13 @@ import { Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from '@nes
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { AgenticSuiteService } from './agentic-suite.service'
-import type { AdversarialVerificationRun, SentinelWatcher } from './agentic-suite.service'
+import type {
+  AdversarialVerificationRun,
+  GrokToneMode,
+  HermesSteerConfig,
+  OpenClawSoulState,
+  SentinelWatcher,
+} from './agentic-suite.service'
 
 @ApiTags('agentic')
 @ApiBearerAuth()
@@ -211,5 +217,74 @@ export class AgenticSuiteController {
   @Post('swarm-market/broadcast')
   broadcastMarketTask(@Req() req: any, @Body() body: { task: string }) {
     return this.suite.broadcastMarketTask(req.user.id, body)
+  }
+
+  // 9. Grok DeepSearch + Big Brain + Live Pulse Radar
+  @Get('grok')
+  getGrokState(@Req() req: any) {
+    return this.suite.getGrokState(req.user.id)
+  }
+
+  @Post('grok/deepsearch')
+  runGrokDeepSearch(
+    @Req() req: any,
+    @Body() body: { query: string; toneMode?: GrokToneMode; bigBrainEnabled?: boolean },
+  ) {
+    return this.suite.runGrokDeepSearch(req.user.id, body)
+  }
+
+  // 10. OpenClaw Core (SOUL.md / Heartbeat / Multi-Channel Claw)
+  @Get('openclaw')
+  getOpenClawState(@Req() req: any) {
+    return this.suite.getOpenClawState(req.user.id)
+  }
+
+  @Post('openclaw/soul')
+  updateOpenClawSoul(
+    @Req() req: any,
+    @Body()
+    body: Partial<
+      Pick<
+        OpenClawSoulState,
+        'soulMd' | 'userMd' | 'heartbeatMd' | 'memoryMd' | 'heartbeatIntervalSec' | 'heartbeatEnabled'
+      >
+    >,
+  ) {
+    return this.suite.updateOpenClawSoul(req.user.id, body)
+  }
+
+  @Post('openclaw/heartbeat')
+  runOpenClawHeartbeat(
+    @Req() req: any,
+    @Body() body: { triggeredBy?: 'manual' | 'autonomous_loop' },
+  ) {
+    return this.suite.runOpenClawHeartbeat(req.user.id, body?.triggeredBy ?? 'manual')
+  }
+
+  // 11. Hermes-3 Steer & Native XML Trace
+  @Get('hermes')
+  getHermesState(@Req() req: any) {
+    return this.suite.getHermesState(req.user.id)
+  }
+
+  @Post('hermes/steer')
+  updateHermesSteer(@Req() req: any, @Body() body: Partial<HermesSteerConfig>) {
+    return this.suite.updateHermesSteer(req.user.id, body)
+  }
+
+  @Post('hermes/invoke')
+  invokeHermesTrace(@Req() req: any, @Body() body: { prompt: string }) {
+    return this.suite.invokeHermesTrace(req.user.id, body)
+  }
+
+  // 12. Dots Mixture-of-Reasoners & Dynamic Compute Router
+  @Get('dots')
+  getDotsState(@Req() req: any) {
+    return this.suite.getDotsState(req.user.id)
+  }
+
+  @Post('dots/route')
+  routeWithDots(@Req() req: any, @Body() body: { prompt: string }) {
+    return this.suite.routeWithDots(req.user.id, body)
   }
 }
