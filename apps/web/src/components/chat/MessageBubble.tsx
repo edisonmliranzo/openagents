@@ -14,12 +14,63 @@ import { MessageFeedbackRow } from './MessageFeedbackRow'
 import { BrowserPreview } from './BrowserPreview'
 import { WarRoomPanel } from './WarRoomPanel'
 
+function formatLeakedToolDump(text: string): string {
+  const trimmed = text.trim()
+  const looksLeaked =
+    /^External content warning for\s+[a-z0-9_.-]+:/i.test(trimmed) ||
+    /^Tool result for\s+[a-z0-9_.-]+:/i.test(trimmed) ||
+    /^\[SYSTEM TOOL (?:OBSERVATION|NOTICE|ERROR)/i.test(trimmed) ||
+    (trimmed.includes('External content warning for ') && trimmed.includes('Tool result for '))
+
+  if (!looksLeaked) return trimmed
+
+  const cleaned = trimmed
+    .replace(/External content warning for [^\n]+/gi, '')
+    .replace(/\[SYSTEM TOOL [^\]]+\]/gi, '')
+    .replace(/\[INSTRUCTION:[^\]]+\]/gi, '')
+    .replace(/Tool result for [a-z0-9_.-]+:\s*/gi, '')
+    .trim()
+
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+      const url = typeof parsed.url === 'string' ? parsed.url.trim() : ''
+      const content =
+        (typeof parsed.content === 'string' && parsed.content.trim()) ||
+        (typeof parsed.text === 'string' && parsed.text.trim()) ||
+        (typeof parsed.snippet === 'string' && parsed.snippet.trim()) ||
+        ''
+
+      if (content) {
+        const sentences = content
+          .split(/(?<=[.!?])\s+(?=[A-Z])/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+        const lead = sentences.slice(0, 2).join(' ')
+        const bullets = sentences.slice(2, 9).map((b) => `- ${b}`)
+        return [
+          lead,
+          bullets.length > 0 ? `\n**Key Details:**\n${bullets.join('\n')}` : '',
+          url ? `\n**Source:** [${url}](${url})` : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      }
+    } catch {
+      // Fall through to cleaned text
+    }
+  }
+
+  return cleaned || trimmed
+}
+
 // Strip <think>/<thinking> blocks out of visible content and return them separately.
 // Models use both variants — handle both.
 function extractThinkingBlocks(raw: string): { thinking: string[]; visible: string } {
   const thinking: string[] = []
   // Match <think>...</think> AND <thinking>...</thinking> (case-insensitive, multiline)
-  const visible = raw
+  const stripped = raw
     .replace(/^(\[(?:BIG BRAIN REASONING|DOTS MoE ROUTER|GROK DEEPSEARCH MODE|HERMES-3 COGNITIVE STEER):[^\]]*\]\s*)+/gi, '')
     .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, (match: string) => {
       const inner = match.replace(/^<think(?:ing)?>/i, '').replace(/<\/think(?:ing)?>$/i, '')
@@ -33,6 +84,7 @@ function extractThinkingBlocks(raw: string): { thinking: string[]; visible: stri
       return ''
     })
     .trim()
+  const visible = formatLeakedToolDump(stripped)
   return { thinking, visible }
 }
 
