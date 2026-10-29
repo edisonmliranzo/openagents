@@ -198,6 +198,76 @@ export const FRONTIER_AGENTIC_LINKS = [
     badge: '1-Click Ship',
     color: 'from-cyan-500 to-indigo-600',
   },
+  {
+    title: 'Self-Training & Dataset Distiller',
+    subtitle: 'Distills verified trajectories into ShareGPT/LoRA JSONL',
+    href: '/agent/distiller',
+    badge: 'LoRA Distiller',
+    color: 'from-amber-500 to-orange-500',
+  },
+  {
+    title: 'Multi-Persona Boardroom Simulator',
+    subtitle: 'Synthetic CTO, Founder, SecOps & Growth VP focus group',
+    href: '/boardroom',
+    badge: '4 Personas',
+    color: 'from-violet-500 to-purple-600',
+  },
+  {
+    title: 'Autonomous Bug Hunter & Chaos Monkey',
+    subtitle: 'Null/Unicode/race fuzzing with auto-synthesized patches',
+    href: '/security/chaos',
+    badge: 'Chaos Fuzz',
+    color: 'from-rose-500 to-red-600',
+  },
+  {
+    title: 'Deep Repo & Doc Cartographer',
+    subtitle: 'Interactive call graph & blast-radius architecture map',
+    href: '/cartographer',
+    badge: 'Blast Radius',
+    color: 'from-sky-500 to-blue-600',
+  },
+  {
+    title: 'Revenue, Stripe & Growth Autopilot',
+    subtitle: 'Waitlist funnel telemetry & viral launch campaign generator',
+    href: '/growth',
+    badge: 'Growth Engine',
+    color: 'from-emerald-500 to-teal-600',
+  },
+  {
+    title: 'Cryptographic Proof-of-Execution Ledger',
+    subtitle: 'SHA-256 hash-chain & Ed25519 tamper-evident audit receipts',
+    href: '/security/ledger',
+    badge: 'SHA-256 Chain',
+    color: 'from-indigo-500 to-cyan-600',
+  },
+  {
+    title: 'Cross-Device Neural Dropzone & Beam',
+    subtitle: 'Instant snippet, URL & command handoff across devices',
+    href: '/beam',
+    badge: 'Neural Beam',
+    color: 'from-fuchsia-500 to-pink-600',
+  },
+  {
+    title: 'Autonomous API Reverse-Engineer',
+    subtitle: 'Turns raw curl/JSON into Zod schemas, TS SDK & MCP tools',
+    href: '/agent/reverse-engineer',
+    badge: 'cURL → SDK',
+    color: 'from-cyan-500 to-emerald-600',
+  },
+  {
+    title: 'Deep-Work Flow Guardian',
+    subtitle: 'Shields operator focus & auto-handles low-urgency pings',
+    href: '/flow-guardian',
+    badge: 'Flow Shield',
+    color: 'from-purple-500 to-indigo-600',
+  },
+  {
+    title: 'Database & SQL Optimization Lab',
+    subtitle: 'NL-to-SQL, index synthesizer & N+1 bottleneck detector',
+    href: '/database-lab',
+    badge: '38x SQL Speedup',
+    color: 'from-blue-500 to-indigo-600',
+  },
 ] as const
 
 export function FrontierEnginesDock({
@@ -570,7 +640,7 @@ export function FrontierEnginesDock({
           title="Open Frontier Command Palette (Ctrl+K / ⌘K)"
         >
           <Command size={11} />
-          <span>All 12 Engines</span>
+          <span>All 32 Engines</span>
           <kbd className="rounded bg-white/20 px-1 py-0.2 font-mono text-[9px] dark:bg-slate-900/15">⌘K</kbd>
         </button>
       </div>

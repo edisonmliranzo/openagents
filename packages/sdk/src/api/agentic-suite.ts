@@ -551,6 +551,190 @@ export interface ShipPipelineRun {
   createdAt: string
 }
 
+// 23. Autonomous Self-Training & Dataset Distiller
+export interface DistilledTrajectorySample {
+  id: string
+  title: string
+  sourceEngine: string
+  qualityScore: number
+  tokenCount: number
+  format: 'sharegpt_jsonl' | 'alpaca_jsonl' | 'hermes_xml_lora'
+  systemPrompt: string
+  userInput: string
+  thinkTrace: string
+  toolCallsJson: string
+  verifiedOutput: string
+  jsonlRow: string
+  createdAt: string
+}
+
+export interface DistillerState {
+  totalSamples: number
+  avgQualityScore: number
+  readyForLoraFineTune: boolean
+  targetLocalModel: string
+  samples: DistilledTrajectorySample[]
+}
+
+// 24. Multi-Persona Boardroom & Synthetic User Simulator
+export interface PersonaCritique {
+  personaId: string
+  personaName: string
+  role: string
+  conversionLikelihoodPct: number
+  topPraise: string
+  topObjection: string
+  concreteFix: string
+}
+
+export interface BoardroomSimulationRun {
+  id: string
+  proposal: string
+  overallScore: number
+  consensusVerdict: 'ship_now' | 'iterate_copy_and_ux' | 'high_risk_rework'
+  critiques: PersonaCritique[]
+  executiveSynthesis: string
+  createdAt: string
+}
+
+// 25. Autonomous Bug Hunter & Chaos Monkey Engine
+export interface ChaosFinding {
+  id: string
+  vector: 'null_boundary' | 'unicode_overflow' | 'jwt_expiry_race' | 'rate_limit_burst' | 'malformed_json'
+  targetEndpoint: string
+  severity: 'critical' | 'medium' | 'low'
+  status: 'auto_patched' | 'resilient'
+  reproductionTest: string
+  generatedPatch: string
+}
+
+export interface ChaosRunReport {
+  id: string
+  targetScope: string
+  resilienceScore: number
+  probesExecuted: number
+  findings: ChaosFinding[]
+  createdAt: string
+}
+
+// 26. Multimodal Deep Document & Repo Cartographer
+export interface CartographerNode {
+  id: string
+  label: string
+  layer: 'client_ui' | 'sdk_contract' | 'api_controller' | 'domain_service' | 'persistence'
+  filePath: string
+  blastRadiusScore: number
+  dependencies: string[]
+  summary: string
+}
+
+export interface CartographerMapState {
+  targetScope: string
+  totalFilesScanned: number
+  criticalPathSummary: string
+  nodes: CartographerNode[]
+  updatedAt: string
+}
+
+// 27. Autonomous Revenue, Stripe & Growth Autopilot
+export interface GrowthExperiment {
+  id: string
+  title: string
+  channel: 'x_thread' | 'linkedin_launch' | 'waitlist_email' | 'seo_landing'
+  predictedLiftPct: number
+  status: 'ready' | 'active' | 'completed'
+  generatedCopy: string
+  callToAction: string
+  createdAt: string
+}
+
+export interface GrowthAutopilotState {
+  waitlistCount: number
+  weeklyGrowthPct: number
+  conversionRatePct: number
+  mrrProjectedUsd: number
+  experiments: GrowthExperiment[]
+}
+
+// 28. Cryptographic Proof-of-Execution & Tamper-Evident Audit Ledger
+export interface CryptoExecutionReceipt {
+  id: string
+  blockIndex: number
+  timestamp: string
+  actor: string
+  actionType: string
+  payloadSummary: string
+  prevHash: string
+  sha256Hash: string
+  signature: string
+  verified: boolean
+}
+
+export interface CryptoLedgerState {
+  chainIntegrityValid: boolean
+  merkleRoot: string
+  totalBlocks: number
+  receipts: CryptoExecutionReceipt[]
+}
+
+// 29. Cross-Device Clipboard, Dropzone & Instant Handoff Beam
+export interface BeamDropItem {
+  id: string
+  title: string
+  kind: 'code_snippet' | 'url_bookmark' | 'prompt_brief' | 'terminal_command'
+  sourceDevice: 'Desktop Studio' | 'iPhone Companion' | 'Browser Claw' | 'CLI Terminal'
+  content: string
+  autoStagedAction: string
+  createdAt: string
+}
+
+// 30. Autonomous API & Webhook Reverse-Engineer
+export interface ReverseEngineeredSdk {
+  id: string
+  apiName: string
+  sourceInput: string
+  detectedAuthType: string
+  endpointsCount: number
+  zodSchemaCode: string
+  typescriptClientCode: string
+  mcpToolDefinitionJson: string
+  createdAt: string
+}
+
+// 31. Cognitive Load & Deep-Work Flow Guardian
+export interface InterceptedNoiseItem {
+  id: string
+  source: string
+  sender: string
+  originalMessage: string
+  urgencyScore: number
+  autoHandledResponse: string
+  receivedAt: string
+}
+
+export interface FlowGuardianState {
+  deepWorkEnabled: boolean
+  focusTopic: string
+  focusMinutesSaved: number
+  cognitiveLoadPct: number
+  whileYouWereInFlowDigest: string
+  interceptedItems: InterceptedNoiseItem[]
+}
+
+// 32. Autonomous Database & SQL Optimization Lab
+export interface SqlOptimizationReport {
+  id: string
+  naturalLanguageQuery: string
+  generatedSql: string
+  estimatedBeforeMs: number
+  estimatedAfterMs: number
+  speedupFactor: string
+  recommendedIndex: string
+  nPlusOneWarning: string | null
+  sampleRows: Array<Record<string, string | number>>
+  createdAt: string
+}
+
 export function createAgenticSuiteApi(client: OpenAgentsClient) {
   return {
     // 1. Dynamic Tool Forge
@@ -739,5 +923,73 @@ export function createAgenticSuiteApi(client: OpenAgentsClient) {
       client.post<ShipPipelineRun>('/api/v1/agentic/ship/run', input),
     rollbackShipPipeline: (pipelineId: string) =>
       client.post<ShipPipelineRun>(`/api/v1/agentic/ship/${pipelineId}/rollback`, {}),
+
+    // 23. Autonomous Self-Training & Dataset Distiller
+    getDistillerState: () =>
+      client.get<DistillerState>('/api/v1/agentic/distiller'),
+    distillTrajectory: (input: { title: string; userInput: string; format?: DistilledTrajectorySample['format'] }) =>
+      client.post<DistillerState>('/api/v1/agentic/distiller/distill', input),
+
+    // 24. Multi-Persona Boardroom & Synthetic User Simulator
+    getBoardroomState: () =>
+      client.get<{ runs: BoardroomSimulationRun[] }>('/api/v1/agentic/boardroom'),
+    runBoardroomSimulation: (input: { proposal: string }) =>
+      client.post<BoardroomSimulationRun>('/api/v1/agentic/boardroom/simulate', input),
+
+    // 25. Autonomous Bug Hunter & Chaos Monkey Engine
+    getChaosState: () =>
+      client.get<{ reports: ChaosRunReport[] }>('/api/v1/agentic/chaos'),
+    runChaosMonkey: (input: { targetScope: string }) =>
+      client.post<ChaosRunReport>('/api/v1/agentic/chaos/run', input),
+
+    // 26. Multimodal Deep Document & Repo Cartographer
+    getCartographerState: () =>
+      client.get<CartographerMapState>('/api/v1/agentic/cartographer'),
+    scanCartographerMap: (input: { targetScope: string }) =>
+      client.post<CartographerMapState>('/api/v1/agentic/cartographer/map', input),
+
+    // 27. Autonomous Revenue, Stripe & Growth Autopilot
+    getGrowthState: () =>
+      client.get<GrowthAutopilotState>('/api/v1/agentic/growth'),
+    generateGrowthCampaign: (input: { title: string; channel: GrowthExperiment['channel']; productAngle: string }) =>
+      client.post<GrowthAutopilotState>('/api/v1/agentic/growth/campaign', input),
+
+    // 28. Cryptographic Proof-of-Execution & Tamper-Evident Audit Ledger
+    getCryptoLedger: () =>
+      client.get<CryptoLedgerState>('/api/v1/agentic/ledger'),
+    signExecutionReceipt: (input: { actor: string; actionType: string; payloadSummary: string }) =>
+      client.post<CryptoLedgerState>('/api/v1/agentic/ledger/sign', input),
+    verifyCryptoLedger: () =>
+      client.post<{ valid: boolean; verifiedBlocks: number; merkleRoot: string }>('/api/v1/agentic/ledger/verify', {}),
+
+    // 29. Cross-Device Clipboard, Dropzone & Instant Handoff Beam
+    getBeamDrops: () =>
+      client.get<{ drops: BeamDropItem[] }>('/api/v1/agentic/beam'),
+    createBeamDrop: (input: {
+      title: string
+      kind?: BeamDropItem['kind']
+      sourceDevice?: BeamDropItem['sourceDevice']
+      content: string
+    }) => client.post<BeamDropItem>('/api/v1/agentic/beam/drop', input),
+
+    // 30. Autonomous API & Webhook Reverse-Engineer
+    getReverseEngineeredSdks: () =>
+      client.get<{ sdks: ReverseEngineeredSdk[] }>('/api/v1/agentic/reverse-engineer'),
+    synthesizeReverseEngineeredSdk: (input: { apiName: string; rawCurlOrJson: string }) =>
+      client.post<ReverseEngineeredSdk>('/api/v1/agentic/reverse-engineer/synthesize', input),
+
+    // 31. Cognitive Load & Deep-Work Flow Guardian
+    getFlowGuardianState: () =>
+      client.get<FlowGuardianState>('/api/v1/agentic/flow-guardian'),
+    toggleDeepWorkMode: (input: { deepWorkEnabled: boolean; focusTopic?: string }) =>
+      client.post<FlowGuardianState>('/api/v1/agentic/flow-guardian/toggle', input),
+    simulateInterceptedPing: (input: { source: string; sender: string; originalMessage: string }) =>
+      client.post<FlowGuardianState>('/api/v1/agentic/flow-guardian/intercept', input),
+
+    // 32. Autonomous Database & SQL Optimization Lab
+    getDatabaseLabState: () =>
+      client.get<{ reports: SqlOptimizationReport[] }>('/api/v1/agentic/database-lab'),
+    analyzeDatabaseQuery: (input: { naturalLanguageQuery: string }) =>
+      client.post<SqlOptimizationReport>('/api/v1/agentic/database-lab/analyze', input),
   }
 }

@@ -291,6 +291,23 @@ export type {
   MultiplayerWarRoomState,
   ShipPipelineStep,
   ShipPipelineRun,
+  DistilledTrajectorySample,
+  DistillerState,
+  PersonaCritique,
+  BoardroomSimulationRun,
+  ChaosFinding,
+  ChaosRunReport,
+  CartographerNode,
+  CartographerMapState,
+  GrowthExperiment,
+  GrowthAutopilotState,
+  CryptoExecutionReceipt,
+  CryptoLedgerState,
+  BeamDropItem,
+  ReverseEngineeredSdk,
+  InterceptedNoiseItem,
+  FlowGuardianState,
+  SqlOptimizationReport,
 } from './api/agentic-suite'
 import { createBillingApi, createMarketplaceApi } from './api/billing'
 import { createEmailAutopilotApi } from './api/email-autopilot'

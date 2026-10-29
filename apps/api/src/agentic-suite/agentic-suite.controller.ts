@@ -502,4 +502,164 @@ export class AgenticSuiteController {
   rollbackShipPipeline(@Req() req: any, @Param('pipelineId') pipelineId: string) {
     return this.suite.rollbackShipPipeline(req.user.id, pipelineId)
   }
+
+  // 23. Autonomous Self-Training & Dataset Distiller
+  @Get('distiller')
+  getDistillerState(@Req() req: any) {
+    return this.suite.getDistillerState(req.user.id)
+  }
+
+  @Post('distiller/distill')
+  distillTrajectory(
+    @Req() req: any,
+    @Body()
+    body: {
+      title: string
+      userInput: string
+      format?: 'sharegpt_jsonl' | 'alpaca_jsonl' | 'hermes_xml_lora'
+    },
+  ) {
+    return this.suite.distillTrajectory(req.user.id, body)
+  }
+
+  // 24. Multi-Persona Boardroom & Synthetic User Simulator
+  @Get('boardroom')
+  getBoardroomState(@Req() req: any) {
+    return this.suite.getBoardroomState(req.user.id)
+  }
+
+  @Post('boardroom/simulate')
+  runBoardroomSimulation(@Req() req: any, @Body() body: { proposal: string }) {
+    return this.suite.runBoardroomSimulation(req.user.id, body)
+  }
+
+  // 25. Autonomous Bug Hunter & Chaos Monkey Engine
+  @Get('chaos')
+  getChaosState(@Req() req: any) {
+    return this.suite.getChaosState(req.user.id)
+  }
+
+  @Post('chaos/run')
+  runChaosMonkey(@Req() req: any, @Body() body: { targetScope: string }) {
+    return this.suite.runChaosMonkey(req.user.id, body)
+  }
+
+  // 26. Multimodal Deep Document & Repo Cartographer
+  @Get('cartographer')
+  getCartographerState(@Req() req: any) {
+    return this.suite.getCartographerState(req.user.id)
+  }
+
+  @Post('cartographer/map')
+  scanCartographerMap(@Req() req: any, @Body() body: { targetScope: string }) {
+    return this.suite.scanCartographerMap(req.user.id, body)
+  }
+
+  // 27. Autonomous Revenue, Stripe & Growth Autopilot
+  @Get('growth')
+  getGrowthState(@Req() req: any) {
+    return this.suite.getGrowthState(req.user.id)
+  }
+
+  @Post('growth/campaign')
+  generateGrowthCampaign(
+    @Req() req: any,
+    @Body()
+    body: {
+      title: string
+      channel: 'x_thread' | 'linkedin_launch' | 'waitlist_email' | 'seo_landing'
+      productAngle: string
+    },
+  ) {
+    return this.suite.generateGrowthCampaign(req.user.id, body)
+  }
+
+  // 28. Cryptographic Proof-of-Execution & Tamper-Evident Audit Ledger
+  @Get('ledger')
+  getCryptoLedger(@Req() req: any) {
+    return this.suite.getCryptoLedger(req.user.id)
+  }
+
+  @Post('ledger/sign')
+  signExecutionReceipt(
+    @Req() req: any,
+    @Body() body: { actor: string; actionType: string; payloadSummary: string },
+  ) {
+    return this.suite.signExecutionReceipt(req.user.id, body)
+  }
+
+  @Post('ledger/verify')
+  verifyCryptoLedger(@Req() req: any) {
+    return this.suite.verifyCryptoLedger(req.user.id)
+  }
+
+  // 29. Cross-Device Clipboard, Dropzone & Instant Handoff Beam
+  @Get('beam')
+  getBeamDrops(@Req() req: any) {
+    return this.suite.getBeamDrops(req.user.id)
+  }
+
+  @Post('beam/drop')
+  createBeamDrop(
+    @Req() req: any,
+    @Body()
+    body: {
+      title: string
+      kind?: 'code_snippet' | 'url_bookmark' | 'prompt_brief' | 'terminal_command'
+      sourceDevice?: 'Desktop Studio' | 'iPhone Companion' | 'Browser Claw' | 'CLI Terminal'
+      content: string
+    },
+  ) {
+    return this.suite.createBeamDrop(req.user.id, body)
+  }
+
+  // 30. Autonomous API & Webhook Reverse-Engineer
+  @Get('reverse-engineer')
+  getReverseEngineeredSdks(@Req() req: any) {
+    return this.suite.getReverseEngineeredSdks(req.user.id)
+  }
+
+  @Post('reverse-engineer/synthesize')
+  synthesizeReverseEngineeredSdk(
+    @Req() req: any,
+    @Body() body: { apiName: string; rawCurlOrJson: string },
+  ) {
+    return this.suite.synthesizeReverseEngineeredSdk(req.user.id, body)
+  }
+
+  // 31. Cognitive Load & Deep-Work Flow Guardian
+  @Get('flow-guardian')
+  getFlowGuardianState(@Req() req: any) {
+    return this.suite.getFlowGuardianState(req.user.id)
+  }
+
+  @Post('flow-guardian/toggle')
+  toggleDeepWorkMode(
+    @Req() req: any,
+    @Body() body: { deepWorkEnabled: boolean; focusTopic?: string },
+  ) {
+    return this.suite.toggleDeepWorkMode(req.user.id, body)
+  }
+
+  @Post('flow-guardian/intercept')
+  simulateInterceptedPing(
+    @Req() req: any,
+    @Body() body: { source: string; sender: string; originalMessage: string },
+  ) {
+    return this.suite.simulateInterceptedPing(req.user.id, body)
+  }
+
+  // 32. Autonomous Database & SQL Optimization Lab
+  @Get('database-lab')
+  getDatabaseLabState(@Req() req: any) {
+    return this.suite.getDatabaseLabState(req.user.id)
+  }
+
+  @Post('database-lab/analyze')
+  analyzeDatabaseQuery(
+    @Req() req: any,
+    @Body() body: { naturalLanguageQuery: string },
+  ) {
+    return this.suite.analyzeDatabaseQuery(req.user.id, body)
+  }
 }
