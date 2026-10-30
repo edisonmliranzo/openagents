@@ -1,4 +1,4 @@
-const DEFAULT_TUNNEL_ORIGIN = 'https://survivor-sprint-animals-citysearch.trycloudflare.com'
+const DEFAULT_TUNNEL_ORIGIN = 'https://cookies-many-screen-louis.trycloudflare.com'
 
 export default {
   async fetch(request, env) {
