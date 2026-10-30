@@ -26,7 +26,7 @@ const TOUCH_LABELS: Record<
     label: 'Reply',
     icon: '↩️',
     badgeClass: 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border-sky-500/30',
-    defaultPlatform: 'X',
+    defaultPlatform: 'X (Twitter)',
   },
   dm: {
     label: 'DM',
@@ -56,7 +56,7 @@ const TOUCH_LABELS: Record<
 
 const ALL_PLATFORMS: OmnichannelPlatform[] = [
   'Reddit',
-  'X',
+  'X (Twitter)',
   'LinkedIn',
   'Email (SMTP/IMAP)',
   'SMS / Text',
@@ -95,7 +95,6 @@ export default function GrowthAutopilotPage() {
   const [scanPlatform, setScanPlatform] = useState<OmnichannelPlatform>('Reddit')
   const [scanHandle, setScanHandle] = useState('')
   const [scanContext, setScanContext] = useState('')
-  const [scanAngle, setScanAngle] = useState('')
   const [scanning, setScanning] = useState(false)
 
   const notify = (msg: string) => {
@@ -107,7 +106,7 @@ export default function GrowthAutopilotPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await sdk.agenticSuite.getGrowth()
+      const res = await sdk.agenticSuite.getGrowthState()
       setState(res)
     } catch (err: any) {
       setError(err?.message ?? 'Failed to load Outreach queue')
@@ -120,46 +119,46 @@ export default function GrowthAutopilotPage() {
     void load()
   }, [load])
 
-  const drafts = useMemo(() => state?.omnichannelDrafts ?? [], [state])
-  const ownReplies = useMemo(() => state?.ownPostReplies ?? [], [state])
+  const drafts = useMemo(() => state?.outreachQueue ?? [], [state])
+  const ownReplies = useMemo(() => state?.ownPostWatchers ?? [], [state])
   const connectors = useMemo(() => state?.connectors ?? [], [state])
 
   const filteredDrafts = useMemo(() => {
     if (activeChannel === 'skipped') {
-      return drafts.filter((d) => d.status === 'skipped_low_fit')
+      return drafts.filter((d) => d.status === 'skipped')
     }
-    const nonSkipped = drafts.filter((d) => d.status !== 'skipped_low_fit')
+    const nonSkipped = drafts.filter((d) => d.status !== 'skipped')
     if (activeChannel === 'all') return nonSkipped
     return nonSkipped.filter((d) => d.touchType === activeChannel)
   }, [drafts, activeChannel])
 
   const counts = useMemo(() => {
-    const active = drafts.filter((d) => d.status !== 'skipped_low_fit')
+    const active = drafts.filter((d) => d.status !== 'skipped')
     const countByTouch = (t: OmnichannelTouchType) => active.filter((d) => d.touchType === t).length
     return {
       all: active.length,
       approved: drafts.filter((d) => d.status === 'approved').length,
-      waitingReplies: ownReplies.filter((r) => r.status !== 'replied').length,
+      waitingReplies: ownReplies.filter((r) => r.status !== 'replied' && r.status !== 'dismissed').length,
       comment: countByTouch('comment'),
       reply: countByTouch('reply'),
       dm: countByTouch('dm'),
       email: countByTouch('email'),
       text_sms: countByTouch('text_sms'),
       whatsapp: countByTouch('whatsapp'),
-      skipped: drafts.filter((d) => d.status === 'skipped_low_fit').length,
+      skipped: drafts.filter((d) => d.status === 'skipped').length,
     }
   }, [drafts, ownReplies])
 
   async function handleDraftAction(
     draft: OmnichannelProspectDraft,
-    action: 'approve' | 'skip' | 'edit' | 'send_now',
+    action: 'approve' | 'skip' | 'edit' | 'send',
   ) {
     setBusyId(draft.id)
     setError(null)
     try {
       const next = await sdk.agenticSuite.actOnOmnichannelDraft(draft.id, {
         action,
-        editedDraft: action === 'edit' ? editBody : undefined,
+        draftMessage: action === 'edit' ? editBody : undefined,
         subjectLine: action === 'edit' && draft.touchType === 'email' ? editSubject : undefined,
       })
       setState(next)
@@ -167,11 +166,11 @@ export default function GrowthAutopilotPage() {
         setEditingDraftId(null)
         notify('Saved edit, taught voice, and approved.')
       } else if (action === 'approve') {
-        notify(`Approved ${TOUCH_LABELS[draft.touchType].label} for ${draft.prospectHandle}.`)
-      } else if (action === 'send_now') {
-        notify(`Sent ${TOUCH_LABELS[draft.touchType].label} to ${draft.prospectHandle}.`)
+        notify(`Approved ${TOUCH_LABELS[draft.touchType].label} for ${draft.prospectHandleOrContact}.`)
+      } else if (action === 'send') {
+        notify(`Sent ${TOUCH_LABELS[draft.touchType].label} to ${draft.prospectHandleOrContact}.`)
       } else if (action === 'skip') {
-        notify(`Skipped ${draft.prospectHandle}.`)
+        notify(`Skipped ${draft.prospectHandleOrContact}.`)
       }
     } catch (err: any) {
       setError(err?.message ?? 'Action failed')
@@ -184,9 +183,9 @@ export default function GrowthAutopilotPage() {
     setSendingApproved(true)
     setError(null)
     try {
-      const res = await sdk.agenticSuite.sendApprovedOmnichannelDrafts()
-      setState(res.state)
-      notify(`Sent ${res.sentCount} approved message(s).`)
+      const next = await sdk.agenticSuite.sendApprovedOmnichannelDrafts()
+      setState(next)
+      notify(`Sent ${counts.approved} approved message(s).`)
     } catch (err: any) {
       setError(err?.message ?? 'Failed to send approved drafts')
     } finally {
@@ -225,14 +224,12 @@ export default function GrowthAutopilotPage() {
       const next = await sdk.agenticSuite.scanOmnichannelProspects({
         touchType: scanTouchType,
         platform: scanPlatform,
-        prospectHandle: scanHandle.trim(),
+        prospectHandleOrContact: scanHandle.trim(),
         sourceContext: scanContext.trim(),
-        customAngle: scanAngle.trim() || undefined,
       })
       setState(next)
       setScanHandle('')
       setScanContext('')
-      setScanAngle('')
       setActiveChannel(scanTouchType)
       setViewTab('queue')
       notify(`Created new ${TOUCH_LABELS[scanTouchType].label} draft.`)
@@ -243,13 +240,13 @@ export default function GrowthAutopilotPage() {
     }
   }
 
-  async function handleOwnReplyAction(replyId: string, action: 'approve_reply' | 'dismiss') {
+  async function handleOwnReplyAction(replyId: string, action: 'approve_send' | 'dismiss') {
     setBusyId(replyId)
     setError(null)
     try {
       const next = await sdk.agenticSuite.actOnOwnPostReply(replyId, { action })
       setState(next)
-      notify(action === 'approve_reply' ? 'Reply sent.' : 'Dismissed.')
+      notify(action === 'approve_send' ? 'Reply sent.' : 'Dismissed.')
     } catch (err: any) {
       setError(err?.message ?? 'Reply action failed')
     } finally {
@@ -465,7 +462,7 @@ export default function GrowthAutopilotPage() {
                           {draft.prospectName}
                         </span>
                         <span className="font-mono text-xs text-[var(--muted)]">
-                          {draft.prospectHandle}
+                          {draft.prospectHandleOrContact}
                         </span>
                       </div>
 
@@ -479,7 +476,7 @@ export default function GrowthAutopilotPage() {
                               ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
                               : draft.status === 'sent'
                                 ? 'bg-sky-500/15 text-sky-600 dark:text-sky-300'
-                                : draft.status === 'skipped_low_fit'
+                                : draft.status === 'skipped'
                                   ? 'bg-slate-500/15 text-slate-500'
                                   : 'bg-amber-500/15 text-amber-600 dark:text-amber-300'
                           }`}
@@ -567,13 +564,13 @@ export default function GrowthAutopilotPage() {
                           <strong className="text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
                             Why they fit:{' '}
                           </strong>
-                          {draft.whyTheyFit}
+                          {draft.whyTheyFit.join(' · ')}
                         </p>
                         <p>
                           <strong className="text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
                             Agent reasoning:{' '}
                           </strong>
-                          {draft.chainOfThought}
+                          {draft.chainOfThought.join(' → ')}
                         </p>
                       </div>
                     )}
@@ -597,7 +594,7 @@ export default function GrowthAutopilotPage() {
                             <button
                               type="button"
                               disabled={busyId === draft.id}
-                              onClick={() => void handleDraftAction(draft, 'send_now')}
+                              onClick={() => void handleDraftAction(draft, 'send')}
                               className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-300"
                             >
                               ⚡ Send Now
@@ -614,7 +611,7 @@ export default function GrowthAutopilotPage() {
                             </button>
                           )}
 
-                          {draft.status !== 'skipped_low_fit' && draft.status !== 'sent' && (
+                          {draft.status !== 'skipped' && draft.status !== 'sent' && (
                             <button
                               type="button"
                               disabled={busyId === draft.id}
@@ -726,18 +723,6 @@ export default function GrowthAutopilotPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
-                Optional Note / Angle
-              </label>
-              <input
-                value={scanAngle}
-                onChange={(e) => setScanAngle(e.target.value)}
-                placeholder="e.g. Keep it under 2 sentences, invite them to try the local Docker build"
-                className="mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs text-[var(--tone-strong)] outline-none dark:text-[var(--tone-inverse)]"
-              />
-            </div>
-
             <div className="flex justify-end pt-2">
               <button
                 type="submit"
@@ -769,14 +754,14 @@ export default function GrowthAutopilotPage() {
                     {reply.platform}
                   </span>
                   <span className="text-sm font-bold text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
-                    {reply.replierHandle}
+                    {reply.commenterHandle}
                   </span>
-                  <span className="text-xs text-[var(--muted)]">on "{reply.postTitle}"</span>
+                  <span className="text-xs text-[var(--muted)]">on "{reply.postTitleOrSnippet}"</span>
                 </div>
 
                 {reply.status === 'waiting_for_you' ? (
                   <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-300">
-                    Needs Your Input ({reply.escalationReason})
+                    Needs Your Input {reply.attentionReason ? `(${reply.attentionReason})` : ''}
                   </span>
                 ) : reply.status === 'replied' ? (
                   <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-300">
@@ -790,22 +775,22 @@ export default function GrowthAutopilotPage() {
               </div>
 
               <p className="mt-2.5 text-xs text-[var(--muted)]">
-                <strong>Their reply:</strong> "{reply.incomingReply}"
+                <strong>Their reply:</strong> "{reply.incomingComment}"
               </p>
 
               <div className="mt-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-3 text-xs text-[var(--tone-strong)] dark:text-[var(--tone-inverse)]">
                 <p className="mb-1 text-[10px] font-semibold uppercase text-[var(--muted)]">
                   Suggested Response
                 </p>
-                {reply.suggestedResponse}
+                {reply.draftedReply}
               </div>
 
-              {reply.status !== 'replied' && (
+              {reply.status !== 'replied' && reply.status !== 'dismissed' && (
                 <div className="mt-3 flex items-center gap-2">
                   <button
                     type="button"
                     disabled={busyId === reply.id}
-                    onClick={() => void handleOwnReplyAction(reply.id, 'approve_reply')}
+                    onClick={() => void handleOwnReplyAction(reply.id, 'approve_send')}
                     className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
                   >
                     ✓ Approve & Send Reply
@@ -862,7 +847,7 @@ export default function GrowthAutopilotPage() {
                       {c.dailySent}/{c.dailyCap} today
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-[var(--muted)]">{c.transport}</p>
+                  <p className="mt-1 text-[11px] text-[var(--muted)]">{c.providerDetail}</p>
                 </div>
               ))}
             </div>
@@ -879,7 +864,7 @@ export default function GrowthAutopilotPage() {
                 </span>
               </div>
               <p className="mt-1 text-xs text-[var(--muted)]">
-                Tone: {state.voiceProfile.toneSummary}
+                Tone: {state.voiceProfile.tone}
               </p>
               <ul className="mt-3 space-y-1.5 text-xs text-[var(--tone-default)] dark:text-[var(--tone-inverse)]">
                 {state.voiceProfile.rules.map((rule, idx) => (
