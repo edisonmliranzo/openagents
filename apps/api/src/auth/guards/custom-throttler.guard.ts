@@ -15,17 +15,22 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
     if (await super.shouldSkip(context)) return true
     const req = context.switchToHttp().getRequest<{ url?: string; originalUrl?: string }>()
     const url = req?.url ?? req?.originalUrl ?? ''
-    return (
-      url.startsWith('/api/v1/health') ||
-      url.includes('/internal') ||
-      url.includes('/webhook')
-    )
+    return url.startsWith('/api/v1/health')
   }
 
   protected async getTracker(req: { ip?: string; headers?: Record<string, string | string[] | undefined> }): Promise<string> {
+    const cfIp = req?.headers?.['cf-connecting-ip']
+    const cfFirst = (Array.isArray(cfIp) ? cfIp[0] : cfIp)?.trim()
+    if (cfFirst) return cfFirst
+
+    const realIp = req?.headers?.['x-real-ip']
+    const realFirst = (Array.isArray(realIp) ? realIp[0] : realIp)?.trim()
+    if (realFirst) return realFirst
+
     const forwarded = req?.headers?.['x-forwarded-for']
-    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim()
-    if (first) return first
+    const parts = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',').map((s) => s.trim()).filter(Boolean)
+    // Use the last hop added by the trusted reverse proxy rather than the client-supplied first hop
+    if (parts && parts.length > 0) return parts[parts.length - 1]!
     return req?.ip ?? 'unknown'
   }
 }

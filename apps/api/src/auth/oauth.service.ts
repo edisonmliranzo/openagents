@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { randomUUID } from 'crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import type {
   OAuthProvider,
@@ -154,12 +154,13 @@ export class OAuthService {
     if (!config.tokenUrl) return null
 
     try {
+      const refreshToken = this.decryptSecret(key.loginPassword)
       const response = await fetch(config.tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'refresh_token',
-          refresh_token: key.loginPassword,
+          refresh_token: refreshToken,
           client_id: this.getClientId(provider),
           client_secret: this.getClientSecret(provider),
         }),
@@ -169,7 +170,7 @@ export class OAuthService {
       if (data.accessToken) {
         await this.prisma.llmApiKey.update({
           where: { id: key.id },
-          data: { apiKey: data.accessToken },
+          data: { apiKey: this.encryptSecret(data.accessToken) },
         })
         return data.accessToken
       }
@@ -262,21 +263,24 @@ export class OAuthService {
       throw new UnauthorizedException('Authenticated user session is required to connect an OAuth provider.')
     }
 
+    const encryptedAccess = this.encryptSecret(input.accessToken)
+    const encryptedRefresh = input.refreshToken ? this.encryptSecret(input.refreshToken) : undefined
+
     // Upsert the API key record
     await this.prisma.llmApiKey.upsert({
       where: { userId_provider: { userId: input.userId, provider: input.provider } },
       update: {
-        apiKey: input.accessToken,
+        apiKey: encryptedAccess,
         loginEmail: input.email,
-        loginPassword: input.refreshToken,
+        loginPassword: encryptedRefresh,
         isActive: true,
       },
       create: {
         userId: input.userId,
         provider: input.provider,
-        apiKey: input.accessToken,
+        apiKey: encryptedAccess,
         loginEmail: input.email,
-        loginPassword: input.refreshToken,
+        loginPassword: encryptedRefresh,
         isActive: true,
       },
     })
@@ -305,5 +309,43 @@ export class OAuthService {
 
   private getBaseUrl(): string {
     return this.config.get<string>('API_URL', 'http://localhost:3000')
+  }
+
+  private getEncryptionKey(): Buffer {
+    const secret =
+      process.env.SECRETS_ENCRYPTION_KEY?.trim() ||
+      process.env.ENCRYPTION_KEY?.trim() ||
+      process.env.JWT_SECRET?.trim() ||
+      'openagents-default-key-change-in-production'
+    return createHash('sha256').update(secret).digest()
+  }
+
+  private encryptSecret(value: string): string {
+    if (!value || value.startsWith('enc:v1:')) return value
+    const iv = randomBytes(12)
+    const cipher = createCipheriv('aes-256-gcm', this.getEncryptionKey(), iv)
+    const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
+    const authTag = cipher.getAuthTag()
+    return `enc:v1:${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted.toString('base64')}`
+  }
+
+  private decryptSecret(value: string): string {
+    if (!value || !value.startsWith('enc:v1:')) return value
+    try {
+      const [, , ivBase64, tagBase64, payloadBase64] = value.split(':')
+      const decipher = createDecipheriv(
+        'aes-256-gcm',
+        this.getEncryptionKey(),
+        Buffer.from(ivBase64, 'base64'),
+      )
+      decipher.setAuthTag(Buffer.from(tagBase64, 'base64'))
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(payloadBase64, 'base64')),
+        decipher.final(),
+      ])
+      return decrypted.toString('utf8')
+    } catch {
+      return value
+    }
   }
 }

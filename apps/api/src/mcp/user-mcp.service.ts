@@ -1,7 +1,8 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { EncryptionService } from '../security/encryption.service'
 import { McpService } from '../tools/mcp.service'
+import { assertPublicHttpUrl } from '../frontier/safe-fetch'
 
 export interface UserMcpServerView {
   id: string
@@ -75,18 +76,29 @@ export class UserMcpService {
       secretHeaders?: Record<string, string>
       enabled?: boolean
     },
+    userRole?: string,
   ) {
     const name = String(input.name ?? '').trim().slice(0, 80)
-    if (!name) throw new Error('Server name is required.')
-    if (input.transport === 'http' && !input.url?.trim()) {
-      throw new Error('An http server needs a url.')
-    }
-    if (input.transport !== 'http' && !input.command?.trim()) {
-      throw new Error('A stdio server needs a command.')
+    if (!name) throw new BadRequestException('Server name is required.')
+    const transport = input.transport ?? 'stdio'
+    if (transport === 'http') {
+      if (!input.url?.trim()) {
+        throw new BadRequestException('An http server needs a url.')
+      }
+      await assertPublicHttpUrl(input.url.trim()).catch((err) => {
+        throw new BadRequestException(err instanceof Error ? err.message : 'Invalid or private MCP server URL.')
+      })
+    } else {
+      if (userRole !== 'owner') {
+        throw new ForbiddenException('Only workspace owners can register local stdio command MCP servers.')
+      }
+      if (!input.command?.trim()) {
+        throw new BadRequestException('A stdio server needs a command.')
+      }
     }
 
     const count = await this.prisma.mcpServerConfig.count({ where: { userId } })
-    if (count >= MAX_SERVERS) throw new Error(`Server limit reached (${MAX_SERVERS}).`)
+    if (count >= MAX_SERVERS) throw new BadRequestException(`Server limit reached (${MAX_SERVERS}).`)
 
     const row = await this.prisma.mcpServerConfig.create({
       data: {
@@ -125,9 +137,22 @@ export class UserMcpService {
       secretHeaders: Record<string, string>
       transport: 'stdio' | 'http'
     }>,
+    userRole?: string,
   ) {
     const row = await this.prisma.mcpServerConfig.findFirst({ where: { id, userId } })
     if (!row) throw new NotFoundException('MCP server not found')
+
+    const nextTransport = patch.transport ?? (row.transport === 'http' ? 'http' : 'stdio')
+    if (nextTransport === 'stdio' && (patch.command !== undefined || patch.args !== undefined || patch.transport === 'stdio')) {
+      if (userRole !== 'owner') {
+        throw new ForbiddenException('Only workspace owners can configure local stdio command MCP servers.')
+      }
+    }
+    if (patch.url !== undefined && patch.url.trim()) {
+      await assertPublicHttpUrl(patch.url.trim()).catch((err) => {
+        throw new BadRequestException(err instanceof Error ? err.message : 'Invalid or private MCP server URL.')
+      })
+    }
 
     const data: Record<string, unknown> = {}
     if (patch.name !== undefined) data.name = String(patch.name).trim().slice(0, 80) || row.name
@@ -165,6 +190,11 @@ export class UserMcpService {
   async connect(userId: string, id: string) {
     const row = await this.prisma.mcpServerConfig.findFirst({ where: { id, userId } })
     if (!row) throw new NotFoundException('MCP server not found')
+    if (row.url) {
+      await assertPublicHttpUrl(row.url).catch((err) => {
+        throw new BadRequestException(err instanceof Error ? err.message : 'Invalid or private MCP server URL.')
+      })
+    }
 
     this.mcp.publishUserStatus(userId, { serverId: row.id, serverName: row.name, status: 'connecting' })
 
@@ -209,6 +239,11 @@ export class UserMcpService {
   async test(userId: string, id: string) {
     const row = await this.prisma.mcpServerConfig.findFirst({ where: { id, userId } })
     if (!row) throw new NotFoundException('MCP server not found')
+    if (row.url) {
+      await assertPublicHttpUrl(row.url).catch((err) => {
+        throw new BadRequestException(err instanceof Error ? err.message : 'Invalid or private MCP server URL.')
+      })
+    }
 
     const env = { ...(row.env as Record<string, string>), ...this.decryptMap(row.secretEnv as Record<string, string>) }
     const headers = { ...(row.headers as Record<string, string>), ...this.decryptMap(row.secretHeaders as Record<string, string>) }

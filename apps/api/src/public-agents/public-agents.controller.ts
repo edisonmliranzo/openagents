@@ -7,7 +7,12 @@ import { PublicAgentsService, type PublicAgentInput, type PublicChatInput } from
 const uid = (req: any): string => req.user?.id ?? req.user?.sub
 
 function clientIp(req: any): string {
-  const fwd = String(req.headers?.['x-forwarded-for'] ?? '').split(',')[0].trim()
+  const cfIp = String(req.headers?.['cf-connecting-ip'] ?? '').trim()
+  if (cfIp) return cfIp
+  const realIp = String(req.headers?.['x-real-ip'] ?? '').trim()
+  if (realIp) return realIp
+  const parts = String(req.headers?.['x-forwarded-for'] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  const fwd = parts.length > 0 ? parts[parts.length - 1]! : ''
   return fwd || req.ip || req.socket?.remoteAddress || 'unknown'
 }
 

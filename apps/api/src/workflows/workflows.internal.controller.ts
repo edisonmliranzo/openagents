@@ -1,6 +1,7 @@
 import { Body, Controller, Headers, Post, UnauthorizedException } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
 import { IsArray, IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator'
+import { timingSafeEqual } from 'node:crypto'
 import type { WorkflowTriggerKind } from '@openagents/shared'
 import { WorkflowsService } from './workflows.service'
 
@@ -56,7 +57,10 @@ export class WorkflowsInternalController {
   private assertToken(token?: string) {
     const expected = (process.env.WORKFLOW_WORKER_TOKEN ?? '').trim()
     if (!expected) throw new UnauthorizedException('Worker token is not configured')
-    if ((token ?? '').trim() !== expected) {
+    const actual = (token ?? '').trim()
+    const expectedBuf = Buffer.from(expected)
+    const actualBuf = Buffer.from(actual)
+    if (expectedBuf.length !== actualBuf.length || !timingSafeEqual(expectedBuf, actualBuf)) {
       throw new UnauthorizedException('Invalid workflow worker token')
     }
   }

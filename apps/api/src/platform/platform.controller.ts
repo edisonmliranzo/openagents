@@ -65,6 +65,8 @@ export class PlatformController {
   }
 
   @Post('evals/run')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('owner')
   runEval(@Req() req: any, @Body() dto: RunEvalDto) {
     return this.platform.runEval(req.user.id, dto)
   }
@@ -80,6 +82,8 @@ export class PlatformController {
   }
 
   @Patch('subscription')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('owner')
   setPlan(@Req() req: any, @Body() dto: SetPlanDto) {
     return this.platform.setPlan(req.user.id, dto)
   }

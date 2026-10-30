@@ -29,13 +29,13 @@ class CreatePairingDto {
 
 import { Public } from '../../common/public.decorator'
 @ApiTags('channels')
-@Public()
 @Controller('channels/discord')
 export class DiscordController {
   private readonly logger = new Logger(DiscordController.name)
 
   constructor(private discord: DiscordService) {}
 
+  @Public()
   @Get('health')
   health() {
     return this.discord.health()
@@ -74,6 +74,7 @@ export class DiscordController {
    * Must be registered as the "Interactions Endpoint URL" in the Discord Developer Portal.
    * Discord verifies requests using Ed25519 signatures.
    */
+  @Public()
   @Post('webhook')
   async webhook(
     @Req() req: RawBodyRequest<Request>,

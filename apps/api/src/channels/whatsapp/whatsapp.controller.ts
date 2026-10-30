@@ -38,14 +38,15 @@ class AllowWhatsAppDeviceDto {
 }
 
 import { Public } from '../../common/public.decorator'
+import { timingSafeEqual } from 'node:crypto'
 @ApiTags('channels')
-@Public()
 @Controller('channels/whatsapp')
 export class WhatsAppController {
   private readonly logger = new Logger(WhatsAppController.name)
 
   constructor(private whatsapp: WhatsAppService) {}
 
+  @Public()
   @Get('health')
   health() {
     return this.whatsapp.health()
@@ -88,6 +89,7 @@ export class WhatsAppController {
     return this.whatsapp.unlinkDevice(req.user.id, deviceId)
   }
 
+  @Public()
   @Post('webhook')
   webhook(
     @Body() payload: Record<string, unknown>,
@@ -107,7 +109,9 @@ export class WhatsAppController {
     const expected = (process.env.WHATSAPP_WEBHOOK_TOKEN ?? '').trim()
     if (!expected) throw new UnauthorizedException('WHATSAPP webhook secret is not configured')
     const actual = (token ?? '').trim()
-    if (actual !== expected) {
+    const expectedBuf = Buffer.from(expected)
+    const actualBuf = Buffer.from(actual)
+    if (expectedBuf.length !== actualBuf.length || !timingSafeEqual(expectedBuf, actualBuf)) {
       throw new UnauthorizedException('Invalid webhook token')
     }
   }

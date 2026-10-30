@@ -3,6 +3,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsArray, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
+import { RolesGuard } from '../auth/guards/roles.guard'
+import { Roles } from '../auth/decorators/roles.decorator'
 import { SystemService } from './system.service'
 
 class OllamaBenchmarkDto {
@@ -31,6 +33,8 @@ export class SystemController {
   constructor(private system: SystemService) {}
 
   @Get('usage')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('owner')
   usage() {
     return this.system.usage()
   }
@@ -41,6 +45,8 @@ export class SystemController {
   }
 
   @Post('ollama-benchmark')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('owner')
   benchmarkOllama(@Body() dto: OllamaBenchmarkDto) {
     return this.system.benchmarkOllama(dto.baseUrl, dto.models, dto.rounds)
   }

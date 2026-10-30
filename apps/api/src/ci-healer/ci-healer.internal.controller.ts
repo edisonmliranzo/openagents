@@ -1,6 +1,7 @@
 import { Body, Controller, Headers, Post, UnauthorizedException } from '@nestjs/common'
 import { ApiExcludeEndpoint, ApiTags } from '@nestjs/swagger'
 import { IsNotEmpty, IsString } from 'class-validator'
+import { timingSafeEqual } from 'node:crypto'
 import { CiHealerService } from './ci-healer.service'
 
 class ProcessCiIncidentDto {
@@ -30,7 +31,9 @@ export class CiHealerInternalController {
     const expected = (process.env.CI_HEALER_WORKER_TOKEN ?? '').trim()
     if (!expected) throw new UnauthorizedException('Worker token is not configured')
     const actual = (token ?? '').trim()
-    if (!expected || actual !== expected) {
+    const expectedBuf = Buffer.from(expected)
+    const actualBuf = Buffer.from(actual)
+    if (expectedBuf.length !== actualBuf.length || !timingSafeEqual(expectedBuf, actualBuf)) {
       throw new UnauthorizedException('Invalid CI healer worker token')
     }
   }

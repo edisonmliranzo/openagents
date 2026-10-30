@@ -13,6 +13,17 @@ export default {
       headers.set('x-forwarded-host', url.host)
       headers.set('x-forwarded-proto', url.protocol.replace(':', ''))
 
+      // Prevent client IP spoofing: overwrite X-Forwarded-For and X-Real-IP strictly
+      // from Cloudflare's verified CF-Connecting-IP header.
+      const verifiedClientIp = request.headers.get('cf-connecting-ip')
+      if (verifiedClientIp) {
+        headers.set('x-forwarded-for', verifiedClientIp)
+        headers.set('x-real-ip', verifiedClientIp)
+      } else {
+        headers.delete('x-forwarded-for')
+        headers.delete('x-real-ip')
+      }
+
       const init = {
         method: request.method,
         headers,

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { IsArray, IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator'
+import { timingSafeEqual } from 'node:crypto'
 import type { CiIncidentStatus, CreateCiIncidentInput } from '@openagents/shared'
 import { JwtAuthGuard } from '../auth/guards/jwt.guard'
 import { CiHealerService } from './ci-healer.service'
@@ -112,7 +113,9 @@ export class CiHealerController {
     const expected = (process.env.CI_HEALER_TOKEN ?? '').trim()
     if (!expected) throw new UnauthorizedException('CI healer token is not configured')
     const actual = (token ?? '').trim()
-    if (actual !== expected) {
+    const expectedBuf = Buffer.from(expected)
+    const actualBuf = Buffer.from(actual)
+    if (expectedBuf.length !== actualBuf.length || !timingSafeEqual(expectedBuf, actualBuf)) {
       throw new UnauthorizedException('Invalid CI healer token')
     }
   }

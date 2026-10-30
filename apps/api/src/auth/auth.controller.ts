@@ -121,12 +121,18 @@ export class AuthController {
   }
 
   private getClientIp(req: any) {
+    const cfIp = req?.headers?.['cf-connecting-ip']
+    if (typeof cfIp === 'string' && cfIp.trim()) return cfIp.trim()
+    const realIp = req?.headers?.['x-real-ip']
+    if (typeof realIp === 'string' && realIp.trim()) return realIp.trim()
     const forwarded = req?.headers?.['x-forwarded-for']
     if (Array.isArray(forwarded) && forwarded.length > 0) {
-      return String(forwarded[0]).split(',')[0].trim()
+      const parts = String(forwarded[0]).split(',').map((s) => s.trim()).filter(Boolean)
+      if (parts.length > 0) return parts[parts.length - 1]!
     }
     if (typeof forwarded === 'string' && forwarded.trim()) {
-      return forwarded.split(',')[0]?.trim() ?? 'unknown'
+      const parts = forwarded.split(',').map((s) => s.trim()).filter(Boolean)
+      if (parts.length > 0) return parts[parts.length - 1]!
     }
     return String(req?.ip ?? req?.socket?.remoteAddress ?? 'unknown').trim()
   }

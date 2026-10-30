@@ -1,6 +1,7 @@
 import { Body, Controller, Headers, Post, UnauthorizedException } from '@nestjs/common'
 import { ApiExcludeEndpoint, ApiTags } from '@nestjs/swagger'
 import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator'
+import { timingSafeEqual } from 'node:crypto'
 import { ToolsService } from './tools.service'
 
 class ProcessToolRunDto {
@@ -41,7 +42,9 @@ export class ToolsInternalController {
     const expected = (process.env.TOOL_RUN_WORKER_TOKEN ?? '').trim()
     if (!expected) throw new UnauthorizedException('Worker token is not configured')
     const actual = (token ?? '').trim()
-    if (!expected || actual !== expected) {
+    const expectedBuf = Buffer.from(expected)
+    const actualBuf = Buffer.from(actual)
+    if (expectedBuf.length !== actualBuf.length || !timingSafeEqual(expectedBuf, actualBuf)) {
       throw new UnauthorizedException('Invalid tool-run worker token')
     }
   }

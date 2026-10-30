@@ -1,12 +1,22 @@
-import { Injectable } from '@nestjs/common'
+import { BadRequestException, Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { WebhookEventType, WebhookPayload } from '@openagents/shared'
 import * as crypto from 'crypto'
 import type { RuntimeEvent } from '../events/runtime-event.types'
+import { assertPublicHttpUrl } from '../frontier/safe-fetch'
 
 @Injectable()
 export class WebhooksService {
   constructor(private prisma: PrismaService) {}
+
+  private async validatePublicWebhookUrl(rawUrl: string): Promise<string> {
+    try {
+      const parsed = await assertPublicHttpUrl(rawUrl)
+      return parsed.toString()
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : 'Invalid or private webhook URL')
+    }
+  }
 
   async create(
     userId: string,
@@ -15,10 +25,11 @@ export class WebhooksService {
     secret?: string,
     headers?: Record<string, string>,
   ) {
+    const safeUrl = await this.validatePublicWebhookUrl(url)
     return this.prisma.webhook.create({
       data: {
         userId,
-        url,
+        url: safeUrl,
         events: JSON.stringify(events),
         secret,
         headers: headers ? JSON.stringify(headers) : null,
@@ -82,7 +93,7 @@ export class WebhooksService {
     },
   ) {
     const updateData: any = {}
-    if (data.url !== undefined) updateData.url = data.url
+    if (data.url !== undefined) updateData.url = await this.validatePublicWebhookUrl(data.url)
     if (data.events !== undefined) updateData.events = JSON.stringify(data.events)
     if (data.secret !== undefined) updateData.secret = data.secret
     if (data.enabled !== undefined) updateData.enabled = data.enabled
@@ -246,12 +257,15 @@ export class WebhooksService {
     }
 
     try {
-      const response = await fetch(webhook.url, {
+      const safeUrl = await this.validatePublicWebhookUrl(webhook.url)
+      const response = await fetch(safeUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
+        redirect: 'error',
       })
 
+      const rawText = await response.text().catch(() => null)
       await this.prisma.webhookDelivery.update({
         where: { id: deliveryId },
         data: {
@@ -259,7 +273,7 @@ export class WebhooksService {
           attempts: { increment: 1 },
           lastAttemptAt: new Date(),
           responseStatus: response.status,
-          responseBody: await response.text().catch(() => null),
+          responseBody: rawText ? rawText.slice(0, 500) : null,
         },
       })
     } catch (error) {

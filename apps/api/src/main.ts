@@ -163,9 +163,7 @@ async function bootstrap() {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
     res.setHeader('Pragma', 'no-cache')
     res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-    if (isProduction) {
-      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
-    }
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
     next()
   })
 
@@ -184,7 +182,8 @@ async function bootstrap() {
     credentials: true,
   })
 
-  if (!isProduction) {
+  const enableSwagger = !isProduction && (process.env.ENABLE_SWAGGER ?? '').trim().toLowerCase() === 'true'
+  if (enableSwagger) {
     const swagger = new DocumentBuilder()
       .setTitle('OpenAgents API')
       .setVersion('1.0')
@@ -196,7 +195,6 @@ async function bootstrap() {
   const port = process.env.API_PORT ?? process.env.PORT ?? 3001
   await app.listen(port)
   console.log(`API running on http://localhost:${port}`)
-  console.log(`Swagger docs: http://localhost:${port}/docs`)
 }
 
 bootstrap()

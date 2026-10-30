@@ -33,14 +33,15 @@ class RegisterWebhookDto {
 }
 
 import { Public } from '../../common/public.decorator'
+import { timingSafeEqual } from 'node:crypto'
 @ApiTags('channels')
-@Public()
 @Controller('channels/telegram')
 export class TelegramController {
   private readonly logger = new Logger(TelegramController.name)
 
   constructor(private telegram: TelegramService) {}
 
+  @Public()
   @Get('health')
   health() {
     return this.telegram.health()
@@ -81,6 +82,7 @@ export class TelegramController {
     return this.telegram.registerWebhook(dto.webhookUrl)
   }
 
+  @Public()
   @Post('webhook')
   async webhook(
     @Body() update: TelegramUpdate,
@@ -97,7 +99,10 @@ export class TelegramController {
   private assertWebhookSecret(secret?: string) {
     const expected = (process.env.TELEGRAM_WEBHOOK_SECRET ?? '').trim()
     if (!expected) throw new UnauthorizedException('TELEGRAM webhook secret is not configured')
-    if ((secret ?? '').trim() !== expected) {
+    const actual = (secret ?? '').trim()
+    const expectedBuf = Buffer.from(expected)
+    const actualBuf = Buffer.from(actual)
+    if (expectedBuf.length !== actualBuf.length || !timingSafeEqual(expectedBuf, actualBuf)) {
       throw new UnauthorizedException('Invalid Telegram webhook secret')
     }
   }

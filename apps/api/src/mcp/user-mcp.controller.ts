@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Patch, Res, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post, Patch, Req, Res } from '@nestjs/common'
 import { Response } from 'express'
 import { UserMcpService } from './user-mcp.service'
 
@@ -49,13 +49,13 @@ export class UserMcpController {
   }
 
   @Post('servers')
-  create(@CurrentUserId() userId: string, @Body() body: any) {
-    return this.mcp.create(userId, body)
+  create(@CurrentUserId() userId: string, @Req() req: any, @Body() body: any) {
+    return this.mcp.create(userId, body, req?.user?.role)
   }
 
   @Patch('servers/:id')
-  update(@CurrentUserId() userId: string, @Param('id') id: string, @Body() body: any) {
-    return this.mcp.update(userId, id, body)
+  update(@CurrentUserId() userId: string, @Req() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.mcp.update(userId, id, body, req?.user?.role)
   }
 
   @Delete('servers/:id')

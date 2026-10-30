@@ -1,6 +1,8 @@
 import { Body, Controller, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger'
-import { AuthGuard } from '@nestjs/passport'
+import { JwtAuthGuard } from '../auth/guards/jwt.guard'
+import { RolesGuard } from '../auth/guards/roles.guard'
+import { Roles } from '../auth/decorators/roles.decorator'
 import { ReasoningService } from './reasoning.service'
 import { ReflectionService } from './reflection.service'
 import type {
@@ -25,7 +27,8 @@ import type {
 
 @ApiTags('Advanced AI')
 @Controller('advanced-ai')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('owner')
 export class AdvancedAIController {
   constructor(
     private readonly reasoningService: ReasoningService,
