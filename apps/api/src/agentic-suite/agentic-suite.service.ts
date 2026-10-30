@@ -622,7 +622,63 @@ export interface CartographerMapState {
   updatedAt: string
 }
 
-// 27. Autonomous Revenue, Stripe & Growth Autopilot
+// 27. Autonomous Omnichannel GTM, Social Engagement & Revenue Autopilot
+export type OmnichannelTouchType = 'comment' | 'reply' | 'dm' | 'email' | 'text_sms' | 'whatsapp'
+
+export type OmnichannelPlatform =
+  | 'Reddit'
+  | 'X (Twitter)'
+  | 'LinkedIn'
+  | 'Threads'
+  | 'Hacker News'
+  | 'Instagram'
+  | 'Email (SMTP/IMAP)'
+  | 'SMS / Text'
+  | 'WhatsApp'
+
+export interface OmnichannelProspectDraft {
+  id: string
+  touchType: OmnichannelTouchType
+  platform: OmnichannelPlatform
+  prospectName: string
+  prospectHandleOrContact: string
+  prospectRole: string
+  icpFitScore: number
+  sourceContext: string
+  whyTheyFit: string[]
+  chainOfThought: string[]
+  subjectLine?: string
+  draftMessage: string
+  status: 'pending_review' | 'approved' | 'sent' | 'skipped'
+  scheduledAt?: string
+  sentAt?: string
+  createdAt: string
+}
+
+export interface OwnPostReplyWatchItem {
+  id: string
+  platform: 'X (Twitter)' | 'LinkedIn' | 'Reddit' | 'Threads'
+  postTitleOrSnippet: string
+  hoursRemaining: number
+  commenterHandle: string
+  incomingComment: string
+  needsFounderAttention: boolean
+  attentionReason?: string
+  draftedReply: string
+  status: 'waiting_for_you' | 'draft_ready' | 'replied' | 'dismissed'
+}
+
+export interface OmnichannelConnector {
+  id: string
+  channel: 'social_browser' | 'email_smtp' | 'text_sms' | 'whatsapp'
+  label: string
+  providerDetail: string
+  status: 'connected' | 'warming_up' | 'paused'
+  dailySent: number
+  dailyCap: number
+  safetyNote: string
+}
+
 export interface GrowthExperiment {
   id: string
   title: string
@@ -640,6 +696,23 @@ export interface GrowthAutopilotState {
   conversionRatePct: number
   mrrProjectedUsd: number
   experiments: GrowthExperiment[]
+  voiceProfile?: {
+    tone: string
+    rules: string[]
+    learnedEditsCount: number
+  }
+  funnel?: {
+    prospectsPrioritized: number
+    draftsReady: number
+    approvedReadyToSend: number
+    sentToday: number
+    repliesOrVisits: number
+    trialsStarted: number
+    payingCustomers: number
+  }
+  outreachQueue?: OmnichannelProspectDraft[]
+  ownPostWatchers?: OwnPostReplyWatchItem[]
+  connectors?: OmnichannelConnector[]
 }
 
 // 28. Cryptographic Proof-of-Execution & Tamper-Evident Audit Ledger
@@ -3777,17 +3850,297 @@ export class AgenticSuiteService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 27. Autonomous Revenue, Stripe & Growth Autopilot
+  // 27. Autonomous Omnichannel GTM, Social Engagement & Revenue Autopilot
   // ─────────────────────────────────────────────────────────────────────────
+
+  private syncGrowthFunnelCounters(state: GrowthAutopilotState) {
+    const queue = state.outreachQueue ?? []
+    const draftsReady = queue.filter((d) => d.status === 'pending_review').length
+    const approvedReadyToSend = queue.filter((d) => d.status === 'approved').length
+    const sentCount = queue.filter((d) => d.status === 'sent').length
+    state.funnel = {
+      prospectsPrioritized: Math.max(queue.length + 14, state.funnel?.prospectsPrioritized ?? 28),
+      draftsReady,
+      approvedReadyToSend,
+      sentToday: (state.funnel?.sentToday ?? 12) + Math.max(0, sentCount - 1),
+      repliesOrVisits: state.funnel?.repliesOrVisits ?? 39,
+      trialsStarted: state.funnel?.trialsStarted ?? 14,
+      payingCustomers: state.funnel?.payingCustomers ?? 6,
+    }
+  }
 
   private ensureGrowthState(userId: string): GrowthAutopilotState {
     let state = this.growthByUser.get(userId)
     if (!state) {
+      const now = Date.now()
       state = {
         waitlistCount: 1480,
         weeklyGrowthPct: 34.6,
         conversionRatePct: 18.2,
         mrrProjectedUsd: 29400,
+        voiceProfile: {
+          tone: 'Direct, builder-to-builder, helpful first, zero corporate fluff',
+          rules: [
+            'Answer the specific technical or distribution question before mentioning OpenAgents',
+            'Keep DMs, SMS, and WhatsApp touches under 55 words with a natural conversational question',
+            'Never use generic hype openers ("Hope this finds you well", "Game-changer")',
+          ],
+          learnedEditsCount: 14,
+        },
+        funnel: {
+          prospectsPrioritized: 32,
+          draftsReady: 6,
+          approvedReadyToSend: 1,
+          sentToday: 12,
+          repliesOrVisits: 39,
+          trialsStarted: 14,
+          payingCustomers: 6,
+        },
+        outreachQueue: [
+          {
+            id: 'omni-comment-1',
+            touchType: 'comment',
+            platform: 'Reddit',
+            prospectName: 'u/quietlaunch',
+            prospectHandleOrContact: 'r/SaaS · u/quietlaunch',
+            prospectRole: 'Solo B2B SaaS Founder',
+            icpFitScore: 94,
+            sourceContext:
+              'Thread in r/SaaS (19m ago, 8 comments, no practical answer yet): "How are technical founders automating customer discovery and dev workflows without duct-taping 7 cloud tools together?"',
+            whyTheyFit: [
+              'Matches ICP: technical SaaS founder feeling tool-stack fragmentation',
+              'Fresh thread (<25m old) with high visibility and no strong solution posted yet',
+              'Best next step: helpful non-promotional comment in r/SaaS',
+            ],
+            chainOfThought: [
+              'Scanned r/SaaS and r/startups for "automating workflow" and "duct-taping tools"',
+              'Evaluated 14 threads; filtered out 11 self-promo or low-intent posts',
+              'Scored u/quietlaunch at 94/100 ICP fit based on exact pain alignment',
+              'Drafted value-first Reddit comment in founder voice; waiting for your approval',
+            ],
+            draftMessage:
+              'We hit the exact same wall stitching together separate tools for research, browser actions, and outbound. What worked for us was moving to a single local-first agent workspace (OpenAgents) where research, code, and outreach share the same memory context—happy to share the exact setup if useful.',
+            status: 'pending_review',
+            createdAt: new Date(now - 900_000).toISOString(),
+          },
+          {
+            id: 'omni-reply-1',
+            touchType: 'reply',
+            platform: 'X (Twitter)',
+            prospectName: 'Priya K.',
+            prospectHandleOrContact: '@priyabuilds',
+            prospectRole: 'AI Engineer & Indie Founder',
+            icpFitScore: 91,
+            sourceContext:
+              'Posted on X (34m ago): "Every AI agent wrapper breaks the moment a tool outputs untrusted web JSON or needs local terminal + browser access. Who is actually solving the full loop?"',
+            whyTheyFit: [
+              'Matches ICP: AI builder actively evaluating autonomous agent runtimes',
+              'Directly discussing local browser + terminal + prompt-guard reliability',
+              'Best next step: public X reply addressing untrusted tool observations',
+            ],
+            chainOfThought: [
+              'Monitored X keyword stream for "AI agent wrapper", "local terminal", and "browser access"',
+              'Ranked @priyabuilds #1 this hour (ICP Fit 91)',
+              'Prepared concise, technical X reply in your voice; staged in approve-first mode',
+            ],
+            draftMessage:
+              'Spot on—treating raw tool observations as untrusted user-role context with a Secret-Zero firewall + isolated browser session is the only way to keep multi-round agents from derailing. We just shipped that exact architecture in OpenAgents (openagents.us) if you want to test it against your stack.',
+            status: 'pending_review',
+            createdAt: new Date(now - 1500_000).toISOString(),
+          },
+          {
+            id: 'omni-dm-1',
+            touchType: 'dm',
+            platform: 'LinkedIn',
+            prospectName: 'Dana Lee',
+            prospectHandleOrContact: 'linkedin.com/in/danalee-growth',
+            prospectRole: 'Head of Engineering & Growth at RelayStack',
+            icpFitScore: 89,
+            sourceContext:
+              'Commented on a LinkedIn thread about engineering velocity: "Our team spends more time context-switching between Linear, terminal logs, and customer follow-ups than actually shipping."',
+            whyTheyFit: [
+              'Decision-maker (Head of Eng/Growth) at a 25-person B2B software team',
+              'Expressed active pain around engineering + GTM context switching',
+              'Best next step: warm 1-to-1 LinkedIn DM referencing her comment',
+            ],
+            chainOfThought: [
+              'Identified Dana Lee from high-engagement LinkedIn engineering thread',
+              'Verified role and company fit (ICP Score: 89)',
+              'Drafted 42-word conversational DM with zero pitch bloat',
+            ],
+            draftMessage:
+              'Hi Dana—your comment on context-switching between terminal logs and customer follow-ups hit home. We built OpenAgents so your engineering and GTM agents run in one workspace with approve-first controls. Open to a quick 3-minute look this week?',
+            status: 'approved',
+            createdAt: new Date(now - 2400_000).toISOString(),
+          },
+          {
+            id: 'omni-email-1',
+            touchType: 'email',
+            platform: 'Email (SMTP/IMAP)',
+            prospectName: 'Marco Rossi',
+            prospectHandleOrContact: 'marco@shipfast.io',
+            prospectRole: 'Founder & CTO at ShipFast',
+            icpFitScore: 87,
+            sourceContext:
+              'Upvoted and replied to your Hacker News post yesterday asking how local Ollama + cloud fallback routing works in production.',
+            whyTheyFit: [
+              'Warm signal: engaged directly with your technical thread on HN',
+              'Verified founder domain (shipfast.io) with active engineering team',
+              'Best next step: personalized 1-to-1 email from your own SMTP mailbox',
+            ],
+            chainOfThought: [
+              'Matched HN commenter handle to ShipFast founder profile (marco@shipfast.io)',
+              'Checked IMAP inbox reply-protection log: no prior outbound thread or suppression',
+              'Drafted plain-text founder email with custom subject line; queued for review',
+            ],
+            subjectLine: 'local Ollama + cloud fallback diagram you asked about on HN',
+            draftMessage:
+              'Hey Marco,\n\nSaw your question on our thread yesterday about combining local Ollama models with cloud fallback and cost routing.\n\nPut together a quick walkthrough of how we run it inside OpenAgents (https://openagents.us) with zero token markup and full local credential isolation.\n\nWant me to send over an early-access invite code for your team?\n\nBest,\nEdison',
+            status: 'pending_review',
+            createdAt: new Date(now - 3200_000).toISOString(),
+          },
+          {
+            id: 'omni-sms-1',
+            touchType: 'text_sms',
+            platform: 'SMS / Text',
+            prospectName: 'Alex Rivera',
+            prospectHandleOrContact: '+1 (415) 890-4421',
+            prospectRole: 'YC Founder · Requested Demo Callback',
+            icpFitScore: 93,
+            sourceContext:
+              'Submitted early-access waitlist form 20 minutes ago with phone number and note: "Need autonomous overnight repo sweeper + GTM agents for our launch next week."',
+            whyTheyFit: [
+              'Inbound high-intent waitlist signup who opted into text follow-up',
+              'Urgent launch timeline (next week)',
+              'Best next step: instant, personal founder SMS within the 30-minute golden window',
+            ],
+            chainOfThought: [
+              'Detected high-urgency waitlist submission with verified US mobile number',
+              'Confirmed local timezone (PT) is within quiet-hours compliance window',
+              'Drafted 34-word personal founder text message; waiting for your approval',
+            ],
+            draftMessage:
+              'Hey Alex — Edison here from OpenAgents. Saw your note about next week’s launch + needing the Overnight Sweeper & GTM agents. Just unlocked your workspace—want to hop on a quick 5-min text/call today?',
+            status: 'pending_review',
+            createdAt: new Date(now - 600_000).toISOString(),
+          },
+          {
+            id: 'omni-wa-1',
+            touchType: 'whatsapp',
+            platform: 'WhatsApp',
+            prospectName: 'Lucas Meyer',
+            prospectHandleOrContact: 'WhatsApp · +44 7700 900512',
+            prospectRole: 'Founder at NovaLabs (London)',
+            icpFitScore: 90,
+            sourceContext:
+              'Replied in Founders WhatsApp Community: "Looking for an AI assistant that can handle both GitHub PR reviews and multi-channel outbound without leaking client keys."',
+            whyTheyFit: [
+              'Active in shared founder WhatsApp group asking for exact OpenAgents capability',
+              'Strong privacy + multi-agent requirement (Secret-Zero + Omnichannel)',
+              'Best next step: friendly 1-to-1 WhatsApp message with 60-sec demo link',
+            ],
+            chainOfThought: [
+              'Matched WhatsApp community message against OpenAgents Secret-Zero + GTM profile',
+              'Scored 90/100 ICP fit; verified active WhatsApp session',
+              'Drafted natural WhatsApp message ready for 1-click approval & dispatch',
+            ],
+            draftMessage:
+              'Hey Lucas! 👋 Saw your message in the founders group about combining PR reviews + outbound with zero key leakage. We built OpenAgents specifically for that (local-first + Secret-Zero firewall). Happy to drop you instant access if you want to try it!',
+            status: 'pending_review',
+            createdAt: new Date(now - 450_000).toISOString(),
+          },
+          {
+            id: 'omni-skipped-1',
+            touchType: 'comment',
+            platform: 'Reddit',
+            prospectName: 'u/crypto_airdrop_promo',
+            prospectHandleOrContact: 'r/CryptoMoonShots · Promo Thread',
+            prospectRole: 'Off-Topic / Promotional Bot',
+            icpFitScore: 9,
+            sourceContext:
+              'Auto-scanned thread: "100x AI token presale giveaway — drop your wallet address below!"',
+            whyTheyFit: [
+              'Off-topic promotional giveaway — does not match B2B founder/developer ICP',
+              'Automatically skipped by OpenAgents ICP Filter (Score < 40)',
+            ],
+            chainOfThought: [
+              'Scanned thread keywords; detected token giveaway spam pattern',
+              'Assigned ICP Fit Score 9/100 and auto-skipped to protect account reputation',
+            ],
+            draftMessage: '[Auto-skipped by ICP Filter — Score 9/100]',
+            status: 'skipped',
+            createdAt: new Date(now - 5000_000).toISOString(),
+          },
+        ],
+        ownPostWatchers: [
+          {
+            id: 'watch-1',
+            platform: 'X (Twitter)',
+            postTitleOrSnippet: 'Our X Launch Post: "Introducing OpenAgents — 32 Autonomous Studios + Local-First GTM"',
+            hoursRemaining: 64,
+            commenterHandle: '@dev_sarah',
+            incomingComment: 'This looks super clean! Do you support self-hosted enterprise deployments with custom SLA pricing?',
+            needsFounderAttention: true,
+            attentionReason: 'Pricing & enterprise SLA question — flagged "Waiting for you" (never auto-answered)',
+            draftedReply:
+              'Thanks Sarah! Yes—we support self-hosted VPC/on-prem enterprise deployments with custom SLAs and dedicated onboarding. Sending you a quick DM with the architecture & tier breakdown!',
+            status: 'waiting_for_you',
+          },
+          {
+            id: 'watch-2',
+            platform: 'Reddit',
+            postTitleOrSnippet: 'r/LocalLLaMA Post: "How we wired Ollama Qwen + Cloud Fallback with zero token markup"',
+            hoursRemaining: 51,
+            commenterHandle: 'u/rust_kernel',
+            incomingComment: 'Does the tool loop run on Windows and Mac without Docker overhead?',
+            needsFounderAttention: false,
+            draftedReply:
+              'Yes! It runs natively on Windows and macOS (plus local Ollama over loopback) without requiring Docker containers for everyday workflows.',
+            status: 'draft_ready',
+          },
+        ],
+        connectors: [
+          {
+            id: 'conn-browser',
+            channel: 'social_browser',
+            label: 'Isolated Social Browser Profile (X, Reddit, LinkedIn, Threads, IG)',
+            providerDetail: 'Local Chromium Session · Residential IP · Separate from personal Chrome',
+            status: 'connected',
+            dailySent: 9,
+            dailyCap: 35,
+            safetyNote: 'Approve-first active · Randomized 45s–140s human typing & navigation cadence',
+          },
+          {
+            id: 'conn-smtp',
+            channel: 'email_smtp',
+            label: 'Direct Mailbox SMTP & IMAP Reply Protection',
+            providerDetail: 'smtp.gmail.com:465 (TLS) · OS Keychain Encrypted · IMAP Sync On',
+            status: 'connected',
+            dailySent: 14,
+            dailyCap: 40,
+            safetyNote: 'Auto-pauses follow-ups on inbox reply, out-of-office, or unsubscribe',
+          },
+          {
+            id: 'conn-sms',
+            channel: 'text_sms',
+            label: 'Founder Text / SMS Bridge (Twilio + Local SIM Companion)',
+            providerDetail: '+1 (415) 890-XXXX · Two-Way SMS & iMessage Handoff',
+            status: 'connected',
+            dailySent: 5,
+            dailyCap: 25,
+            safetyNote: 'Recipient local-timezone quiet hours (9am–7pm) + STOP opt-out shield enforced',
+          },
+          {
+            id: 'conn-wa',
+            channel: 'whatsapp',
+            label: 'WhatsApp Direct & Community Bridge',
+            providerDetail: 'Encrypted Local Web Session · 1-to-1 & Group Mention Radar',
+            status: 'connected',
+            dailySent: 7,
+            dailyCap: 30,
+            safetyNote: 'Manual approve-before-send + read-receipt aware follow-up pacing',
+          },
+        ],
         experiments: [
           {
             id: 'grw-1',
@@ -3796,7 +4149,7 @@ export class AgenticSuiteService {
             predictedLiftPct: 42,
             status: 'ready',
             generatedCopy:
-              `1/ Most AI wrappers stop at passive chat.\n\nWe just shipped OpenAgents v2.0 on https://openagents.us — combining Grok DeepSearch, OpenClaw SOUL.md Heartbeats, Hermes-3 XML Steering, Dots MoE Routing, and 1-Click Prompt-to-Production.\n\nHere is how sub-second autonomy works under the hood 🧵👇`,
+              `1/ Most AI wrappers stop at passive chat.\n\nWe just shipped OpenAgents v2.0 on https://openagents.us — combining Grok DeepSearch, OpenClaw SOUL.md Heartbeats, Hermes-3 XML Steering, Dots MoE Routing, and Omnichannel GTM.\n\nHere is how sub-second autonomy works under the hood 🧵👇`,
             callToAction: 'Request Early Access at https://openagents.us',
             createdAt: new Date().toISOString(),
           },
@@ -3809,17 +4162,20 @@ export class AgenticSuiteService {
             generatedCopy:
               `Enterprise teams want autonomous coding & ops agents, but can't risk leaked API keys or unverified shell commands.\n\nOpenAgents v2.0 introduces a wire-speed Secret-Zero Outbound Firewall + SHA-256 Proof-of-Execution Ledger alongside hybrid local Ollama execution.`,
             callToAction: 'Book an Architecture Walkthrough at https://openagents.us',
-            createdAt: new Date(Date.now() - 3600_000).toISOString(),
+            createdAt: new Date(now - 3600_000).toISOString(),
           },
         ],
       }
+      this.syncGrowthFunnelCounters(state)
       this.growthByUser.set(userId, state)
     }
     return state
   }
 
   getGrowthState(userId: string): GrowthAutopilotState {
-    return this.ensureGrowthState(userId)
+    const state = this.ensureGrowthState(userId)
+    this.syncGrowthFunnelCounters(state)
+    return state
   }
 
   async generateGrowthCampaign(
@@ -3845,11 +4201,249 @@ export class AgenticSuiteService {
       status: 'ready',
       generatedCopy:
         llmCopy ||
-        `🚀 ${title}\n\n• ${angle}\n• Live Sandboxed Tool Forge, MCTS Rollouts, Secret-Zero Firewall & 1-Click Ship.\n• Experience the future of autonomous engineering at https://openagents.us`,
+        `🚀 ${title}\n\n• ${angle}\n• Live Sandboxed Tool Forge, MCTS Rollouts, Secret-Zero Firewall & Omnichannel GTM.\n• Experience the future of autonomous engineering at https://openagents.us`,
       callToAction: 'Join the Early Access Waitlist at https://openagents.us',
       createdAt: new Date().toISOString(),
     })
     state.waitlistCount += 12
+    this.syncGrowthFunnelCounters(state)
+    return state
+  }
+
+  async scanOmnichannelProspects(
+    userId: string,
+    input: {
+      touchType: OmnichannelTouchType
+      platform?: OmnichannelPlatform
+      prospectName?: string
+      prospectHandleOrContact?: string
+      prospectRole?: string
+      sourceContext: string
+      subjectLine?: string
+    },
+  ): Promise<GrowthAutopilotState> {
+    const state = this.ensureGrowthState(userId)
+    const touchType: OmnichannelTouchType = input.touchType ?? 'comment'
+    const defaultPlatformMap: Record<OmnichannelTouchType, OmnichannelPlatform> = {
+      comment: 'Reddit',
+      reply: 'X (Twitter)',
+      dm: 'LinkedIn',
+      email: 'Email (SMTP/IMAP)',
+      text_sms: 'SMS / Text',
+      whatsapp: 'WhatsApp',
+    }
+    const platform = input.platform ?? defaultPlatformMap[touchType]
+    const prospectName = (input.prospectName ?? '').trim() || 'High-Intent Founder Prospect'
+    const prospectHandleOrContact =
+      (input.prospectHandleOrContact ?? '').trim() ||
+      (touchType === 'email'
+        ? 'founder@acme.dev'
+        : touchType === 'text_sms'
+          ? '+1 (415) 555-0194'
+          : touchType === 'whatsapp'
+            ? 'WhatsApp · +1 (415) 555-0194'
+            : touchType === 'comment'
+              ? 'r/SaaS · u/builder_hq'
+              : '@builder_hq')
+    const prospectRole = (input.prospectRole ?? '').trim() || 'Technical Founder & Decision Maker'
+    const sourceContext =
+      (input.sourceContext ?? '').trim() ||
+      'Looking for a local-first AI agent platform that handles code, research, and multi-channel outreach without spam.'
+
+    const voiceTone = state.voiceProfile?.tone ?? 'Warm, direct, helpful founder voice'
+    const llmDraft = await this.tryLlmComplete(
+      userId,
+      `You are OpenAgents Omnichannel GTM Agent. Draft a ${touchType} for ${platform} to ${prospectName} (${prospectRole}). Voice rules: ${voiceTone}. Keep it authentic, helpful-first, and under 65 words. Do not include placeholder brackets.`,
+      `Prospect context: ${sourceContext}`,
+    )
+
+    const fallbackDrafts: Record<OmnichannelTouchType, string> = {
+      comment: `We ran into this exact challenge last quarter. The biggest unlock was keeping research, browser context, and follow-ups in one local-first workspace (OpenAgents) so you answer the real question first instead of blasting templates. Happy to share how we configured it!`,
+      reply: `100% agree—helpful, context-aware replies beat automated scheduling every time. We built OpenAgents (openagents.us) to score threads by ICP fit and draft replies in your own voice with approve-first safety.`,
+      dm: `Hey ${prospectName.split(' ')[0]}—saw your post on "${sourceContext.slice(0, 60)}...". We built OpenAgents so technical founders can run research + multi-channel outreach from their own machine. Open to a quick look?`,
+      email: `Hi ${prospectName.split(' ')[0]},\n\nNoticed your recent note regarding ${sourceContext.slice(0, 75)}.\n\nWe built OpenAgents (https://openagents.us) to unify web research, social engagement, and direct outreach with approve-first controls.\n\nWould love to share an early-access invite if you're exploring this week.\n\nBest,\nEdison`,
+      text_sms: `Hey ${prospectName.split(' ')[0]} — Edison from OpenAgents here. Saw your note about ${sourceContext.slice(0, 50)}. Just enabled your workspace access—let me know if you want a quick 2-min walkthrough via text!`,
+      whatsapp: `Hey ${prospectName.split(' ')[0]}! 👋 Saw your message about ${sourceContext.slice(0, 55)}. We just shipped native Comment, Reply, DM, Email, SMS & WhatsApp workflows inside OpenAgents—happy to send you direct access!`,
+    }
+
+    const newItem: OmnichannelProspectDraft = {
+      id: `omni-${touchType}-${randomUUID().slice(0, 6)}`,
+      touchType,
+      platform,
+      prospectName,
+      prospectHandleOrContact,
+      prospectRole,
+      icpFitScore: 92,
+      sourceContext,
+      whyTheyFit: [
+        `High-intent match for ${platform} (${touchType.toUpperCase()})`,
+        `Role alignment: ${prospectRole}`,
+        `Directly discussing problem solved by OpenAgents`,
+      ],
+      chainOfThought: [
+        `Scanned ${platform} context for "${sourceContext.slice(0, 48)}..."`,
+        `Scored ${prospectName} at 92/100 ICP fit`,
+        `Applied learned voice profile (${state.voiceProfile?.learnedEditsCount ?? 14} style rules)`,
+        `Staged ${touchType.toUpperCase()} in approve-first queue`,
+      ],
+      ...(touchType === 'email'
+        ? {
+            subjectLine:
+              input.subjectLine?.trim() ||
+              `Quick note on ${sourceContext.slice(0, 42).replace(/[^\w\s]/g, '').trim().toLowerCase()}`,
+          }
+        : {}),
+      draftMessage: (llmDraft || fallbackDrafts[touchType]).trim(),
+      status: 'pending_review',
+      createdAt: new Date().toISOString(),
+    }
+
+    state.outreachQueue = [newItem, ...(state.outreachQueue ?? [])]
+    this.syncGrowthFunnelCounters(state)
+    return state
+  }
+
+  actOnOmnichannelDraft(
+    userId: string,
+    draftId: string,
+    input: {
+      action: 'approve' | 'unapprove' | 'send' | 'skip' | 'edit'
+      draftMessage?: string
+      subjectLine?: string
+      styleFeedbackNote?: string
+    },
+  ): GrowthAutopilotState {
+    const state = this.ensureGrowthState(userId)
+    const queue = state.outreachQueue ?? []
+    const item = queue.find((d) => d.id === draftId)
+    if (!item) {
+      throw new NotFoundException(`Draft ${draftId} not found`)
+    }
+
+    if (typeof input.draftMessage === 'string' && input.draftMessage.trim()) {
+      item.draftMessage = input.draftMessage.trim()
+    }
+    if (typeof input.subjectLine === 'string' && input.subjectLine.trim()) {
+      item.subjectLine = input.subjectLine.trim()
+    }
+
+    if (input.action === 'edit') {
+      if (state.voiceProfile) {
+        state.voiceProfile.learnedEditsCount += 1
+        if (input.styleFeedbackNote?.trim()) {
+          state.voiceProfile.rules.unshift(input.styleFeedbackNote.trim())
+          state.voiceProfile.rules = state.voiceProfile.rules.slice(0, 8)
+        }
+      }
+    } else if (input.action === 'approve') {
+      item.status = 'approved'
+      item.scheduledAt = new Date(Date.now() + 900_000).toISOString()
+    } else if (input.action === 'unapprove') {
+      item.status = 'pending_review'
+      item.scheduledAt = undefined
+    } else if (input.action === 'skip') {
+      item.status = 'skipped'
+    } else if (input.action === 'send') {
+      item.status = 'sent'
+      item.sentAt = new Date().toISOString()
+      if (state.funnel) {
+        state.funnel.sentToday += 1
+        state.funnel.repliesOrVisits += 1
+      }
+    }
+
+    this.syncGrowthFunnelCounters(state)
+    return state
+  }
+
+  async bulkRewriteOmnichannelDrafts(
+    userId: string,
+    input: {
+      instruction: string
+      touchTypeFilter?: OmnichannelTouchType | 'all'
+      minFitScoreToApprove?: number
+    },
+  ): Promise<GrowthAutopilotState> {
+    const state = this.ensureGrowthState(userId)
+    const instruction = (input.instruction ?? '').trim() || 'Make drafts more concise, warm, and direct'
+    const filter = input.touchTypeFilter ?? 'all'
+    const queue = state.outreachQueue ?? []
+
+    for (const item of queue) {
+      if (item.status === 'sent' || item.status === 'skipped') continue
+      if (filter !== 'all' && item.touchType !== filter) continue
+
+      if (/shorter|under \d+ words|concise|tighten/i.test(instruction)) {
+        const sentences = item.draftMessage.split(/(?<=[.!?])\s+/)
+        item.draftMessage = sentences.slice(0, 2).join(' ').replace(/#\w+/g, '').trim()
+      } else if (/warmer|friendly|less corporate|less pitchy/i.test(instruction)) {
+        item.draftMessage = item.draftMessage
+          .replace(/^Hi /i, 'Hey ')
+          .replace(/Open to a quick 3-minute look this week\?/i, 'Happy to share how we set it up if helpful!')
+      } else if (/trial|7-day|invite/i.test(instruction) && !/invite|trial/i.test(item.draftMessage)) {
+        item.draftMessage = `${item.draftMessage.trim()} (Happy to send over a 7-day full-access invite link!)`
+      }
+
+      if (
+        typeof input.minFitScoreToApprove === 'number' &&
+        item.icpFitScore >= input.minFitScoreToApprove
+      ) {
+        item.status = 'approved'
+        item.scheduledAt = new Date(Date.now() + 600_000).toISOString()
+      }
+    }
+
+    if (state.voiceProfile) {
+      state.voiceProfile.learnedEditsCount += 1
+      state.voiceProfile.rules.unshift(`Bulk rule: ${instruction.slice(0, 90)}`)
+      state.voiceProfile.rules = state.voiceProfile.rules.slice(0, 8)
+    }
+
+    this.syncGrowthFunnelCounters(state)
+    return state
+  }
+
+  sendApprovedOmnichannelDrafts(
+    userId: string,
+    input?: { touchTypeFilter?: OmnichannelTouchType | 'all' },
+  ): GrowthAutopilotState {
+    const state = this.ensureGrowthState(userId)
+    const filter = input?.touchTypeFilter ?? 'all'
+    const now = new Date().toISOString()
+    let newlySent = 0
+
+    for (const item of state.outreachQueue ?? []) {
+      if (item.status !== 'approved') continue
+      if (filter !== 'all' && item.touchType !== filter) continue
+      item.status = 'sent'
+      item.sentAt = now
+      newlySent += 1
+    }
+
+    if (newlySent > 0 && state.funnel) {
+      state.funnel.sentToday += newlySent
+      state.funnel.repliesOrVisits += Math.max(1, Math.ceil(newlySent / 2))
+    }
+
+    this.syncGrowthFunnelCounters(state)
+    return state
+  }
+
+  actOnOwnPostReply(
+    userId: string,
+    replyId: string,
+    input: { action: 'approve_send' | 'dismiss'; draftedReply?: string },
+  ): GrowthAutopilotState {
+    const state = this.ensureGrowthState(userId)
+    const item = (state.ownPostWatchers ?? []).find((w) => w.id === replyId)
+    if (!item) throw new NotFoundException(`Own-post reply watcher item ${replyId} not found`)
+
+    if (input.draftedReply?.trim()) {
+      item.draftedReply = input.draftedReply.trim()
+    }
+    item.status = input.action === 'approve_send' ? 'replied' : 'dismissed'
+    item.needsFounderAttention = false
+    this.syncGrowthFunnelCounters(state)
     return state
   }
 

@@ -636,7 +636,63 @@ export interface CartographerMapState {
   updatedAt: string
 }
 
-// 27. Autonomous Revenue, Stripe & Growth Autopilot
+// 27. Autonomous Omnichannel GTM, Social Engagement & Revenue Autopilot
+export type OmnichannelTouchType = 'comment' | 'reply' | 'dm' | 'email' | 'text_sms' | 'whatsapp'
+
+export type OmnichannelPlatform =
+  | 'Reddit'
+  | 'X (Twitter)'
+  | 'LinkedIn'
+  | 'Threads'
+  | 'Hacker News'
+  | 'Instagram'
+  | 'Email (SMTP/IMAP)'
+  | 'SMS / Text'
+  | 'WhatsApp'
+
+export interface OmnichannelProspectDraft {
+  id: string
+  touchType: OmnichannelTouchType
+  platform: OmnichannelPlatform
+  prospectName: string
+  prospectHandleOrContact: string
+  prospectRole: string
+  icpFitScore: number
+  sourceContext: string
+  whyTheyFit: string[]
+  chainOfThought: string[]
+  subjectLine?: string
+  draftMessage: string
+  status: 'pending_review' | 'approved' | 'sent' | 'skipped'
+  scheduledAt?: string
+  sentAt?: string
+  createdAt: string
+}
+
+export interface OwnPostReplyWatchItem {
+  id: string
+  platform: 'X (Twitter)' | 'LinkedIn' | 'Reddit' | 'Threads'
+  postTitleOrSnippet: string
+  hoursRemaining: number
+  commenterHandle: string
+  incomingComment: string
+  needsFounderAttention: boolean
+  attentionReason?: string
+  draftedReply: string
+  status: 'waiting_for_you' | 'draft_ready' | 'replied' | 'dismissed'
+}
+
+export interface OmnichannelConnector {
+  id: string
+  channel: 'social_browser' | 'email_smtp' | 'text_sms' | 'whatsapp'
+  label: string
+  providerDetail: string
+  status: 'connected' | 'warming_up' | 'paused'
+  dailySent: number
+  dailyCap: number
+  safetyNote: string
+}
+
 export interface GrowthExperiment {
   id: string
   title: string
@@ -654,6 +710,23 @@ export interface GrowthAutopilotState {
   conversionRatePct: number
   mrrProjectedUsd: number
   experiments: GrowthExperiment[]
+  voiceProfile?: {
+    tone: string
+    rules: string[]
+    learnedEditsCount: number
+  }
+  funnel?: {
+    prospectsPrioritized: number
+    draftsReady: number
+    approvedReadyToSend: number
+    sentToday: number
+    repliesOrVisits: number
+    trialsStarted: number
+    payingCustomers: number
+  }
+  outreachQueue?: OmnichannelProspectDraft[]
+  ownPostWatchers?: OwnPostReplyWatchItem[]
+  connectors?: OmnichannelConnector[]
 }
 
 // 28. Cryptographic Proof-of-Execution & Tamper-Evident Audit Ledger
@@ -948,11 +1021,40 @@ export function createAgenticSuiteApi(client: OpenAgentsClient) {
     scanCartographerMap: (input: { targetScope: string }) =>
       client.post<CartographerMapState>('/api/v1/agentic/cartographer/map', input),
 
-    // 27. Autonomous Revenue, Stripe & Growth Autopilot
+    // 27. Autonomous Omnichannel GTM, Social Engagement & Revenue Autopilot
     getGrowthState: () =>
       client.get<GrowthAutopilotState>('/api/v1/agentic/growth'),
     generateGrowthCampaign: (input: { title: string; channel: GrowthExperiment['channel']; productAngle: string }) =>
       client.post<GrowthAutopilotState>('/api/v1/agentic/growth/campaign', input),
+    scanOmnichannelProspects: (input: {
+      touchType: OmnichannelTouchType
+      platform?: OmnichannelPlatform
+      prospectName?: string
+      prospectHandleOrContact?: string
+      prospectRole?: string
+      sourceContext: string
+      subjectLine?: string
+    }) => client.post<GrowthAutopilotState>('/api/v1/agentic/growth/scan', input),
+    actOnOmnichannelDraft: (
+      draftId: string,
+      input: {
+        action: 'approve' | 'unapprove' | 'send' | 'skip' | 'edit'
+        draftMessage?: string
+        subjectLine?: string
+        styleFeedbackNote?: string
+      },
+    ) => client.post<GrowthAutopilotState>(`/api/v1/agentic/growth/drafts/${draftId}/action`, input),
+    bulkRewriteOmnichannelDrafts: (input: {
+      instruction: string
+      touchTypeFilter?: OmnichannelTouchType | 'all'
+      minFitScoreToApprove?: number
+    }) => client.post<GrowthAutopilotState>('/api/v1/agentic/growth/drafts/bulk-rewrite', input),
+    sendApprovedOmnichannelDrafts: (input?: { touchTypeFilter?: OmnichannelTouchType | 'all' }) =>
+      client.post<GrowthAutopilotState>('/api/v1/agentic/growth/drafts/send-approved', input ?? {}),
+    actOnOwnPostReply: (
+      replyId: string,
+      input: { action: 'approve_send' | 'dismiss'; draftedReply?: string },
+    ) => client.post<GrowthAutopilotState>(`/api/v1/agentic/growth/own-posts/${replyId}/action`, input),
 
     // 28. Cryptographic Proof-of-Execution & Tamper-Evident Audit Ledger
     getCryptoLedger: () =>

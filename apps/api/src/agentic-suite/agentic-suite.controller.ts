@@ -6,6 +6,8 @@ import type {
   AdversarialVerificationRun,
   GrokToneMode,
   HermesSteerConfig,
+  OmnichannelPlatform,
+  OmnichannelTouchType,
   OpenClawSoulState,
   SentinelWatcher,
 } from './agentic-suite.service'
@@ -555,7 +557,7 @@ export class AgenticSuiteController {
     return this.suite.scanCartographerMap(req.user.id, body)
   }
 
-  // 27. Autonomous Revenue, Stripe & Growth Autopilot
+  // 27. Autonomous Omnichannel GTM, Social Engagement & Revenue Autopilot
   @Get('growth')
   getGrowthState(@Req() req: any) {
     return this.suite.getGrowthState(req.user.id)
@@ -572,6 +574,68 @@ export class AgenticSuiteController {
     },
   ) {
     return this.suite.generateGrowthCampaign(req.user.id, body)
+  }
+
+  @Post('growth/scan')
+  scanOmnichannelProspects(
+    @Req() req: any,
+    @Body()
+    body: {
+      touchType: OmnichannelTouchType
+      platform?: OmnichannelPlatform
+      prospectName?: string
+      prospectHandleOrContact?: string
+      prospectRole?: string
+      sourceContext: string
+      subjectLine?: string
+    },
+  ) {
+    return this.suite.scanOmnichannelProspects(req.user.id, body)
+  }
+
+  @Post('growth/drafts/bulk-rewrite')
+  bulkRewriteOmnichannelDrafts(
+    @Req() req: any,
+    @Body()
+    body: {
+      instruction: string
+      touchTypeFilter?: OmnichannelTouchType | 'all'
+      minFitScoreToApprove?: number
+    },
+  ) {
+    return this.suite.bulkRewriteOmnichannelDrafts(req.user.id, body)
+  }
+
+  @Post('growth/drafts/send-approved')
+  sendApprovedOmnichannelDrafts(
+    @Req() req: any,
+    @Body() body?: { touchTypeFilter?: OmnichannelTouchType | 'all' },
+  ) {
+    return this.suite.sendApprovedOmnichannelDrafts(req.user.id, body)
+  }
+
+  @Post('growth/drafts/:draftId/action')
+  actOnOmnichannelDraft(
+    @Req() req: any,
+    @Param('draftId') draftId: string,
+    @Body()
+    body: {
+      action: 'approve' | 'unapprove' | 'send' | 'skip' | 'edit'
+      draftMessage?: string
+      subjectLine?: string
+      styleFeedbackNote?: string
+    },
+  ) {
+    return this.suite.actOnOmnichannelDraft(req.user.id, draftId, body)
+  }
+
+  @Post('growth/own-posts/:replyId/action')
+  actOnOwnPostReply(
+    @Req() req: any,
+    @Param('replyId') replyId: string,
+    @Body() body: { action: 'approve_send' | 'dismiss'; draftedReply?: string },
+  ) {
+    return this.suite.actOnOwnPostReply(req.user.id, replyId, body)
   }
 
   // 28. Cryptographic Proof-of-Execution & Tamper-Evident Audit Ledger
