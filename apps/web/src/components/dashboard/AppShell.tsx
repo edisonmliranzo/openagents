@@ -60,128 +60,49 @@ interface NavGroup {
   items: NavItem[]
 }
 
-const BASE_NAV_GROUPS: NavGroup[] = [
+const PRIMARY_NAV_GROUPS: NavGroup[] = [
   {
-    title: 'Home',
+    title: 'Workspace',
+    items: [
+      { label: 'Chat', href: '/chat', icon: MessageSquare },
+      { label: 'Outreach & Growth', href: '/growth', icon: Zap },
+      { label: 'Inbox', href: '/inbox', icon: FileText },
+      { label: 'Tasks', href: '/tasks', icon: Play },
+      { label: 'Approvals', href: '/approvals', icon: ShieldAlert },
+    ],
+  },
+  {
+    title: 'Setup & Settings',
+    items: [
+      { label: 'Channels (WA / Email)', href: '/control/channels', icon: Link2 },
+      { label: 'AI Models & Keys', href: '/settings/config', icon: Settings2 },
+      { label: 'Voice', href: '/settings/voice', icon: Mic },
+    ],
+  },
+]
+
+const ADVANCED_NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'More Modules',
     items: [
       { label: 'Get Started', href: '/settings/get-started', icon: Sparkles },
-      { label: 'Chat', href: '/chat', icon: MessageSquare },
-      { label: 'Tasks', href: '/tasks', icon: Play },
-      { label: 'Autonomy', href: '/autonomy', icon: Bot },
-      { label: 'Creations', href: '/creations', icon: FileText },
-      { label: 'Team', href: '/team', icon: Users },
+      { label: 'Team & Specialists', href: '/team', icon: Users },
       { label: 'Library', href: '/library', icon: BookOpen },
-      { label: 'Mind', href: '/mind', icon: Brain },
-      { label: 'Overview', href: '/control/overview', icon: Activity },
-      { label: 'Sessions', href: '/sessions', icon: Terminal },
-      { label: 'Memory', href: '/memory', icon: Brain },
-      { label: 'Briefing', href: '/briefing', icon: Sun },
-      { label: 'Research', href: '/research', icon: Search },
-      { label: 'Moments', href: '/moments', icon: Sparkles },
-      { label: 'Inbox Autopilot', href: '/inbox', icon: MessageSquare },
-      { label: 'Goals', href: '/goals', icon: Play },
-      { label: 'Knowledge Graph', href: '/graph', icon: GitBranch },
-    ],
-  },
-  {
-    title: 'Operate',
-    items: [
-      { label: 'Approvals', href: '/approvals', icon: ShieldAlert },
-      { label: 'Agent Teams', href: '/teams', icon: Users },
-      { label: 'Browser', href: '/browser', icon: Globe },
-      { label: 'Scheduler', href: '/scheduler', icon: Bell },
-      { label: 'MCP Servers', href: '/mcp', icon: Server },
-      { label: 'Audit Log', href: '/audit', icon: History },
+      { label: 'Memory & Mind', href: '/memory', icon: Brain },
+      { label: 'Browser Agent', href: '/browser', icon: Globe },
       { label: 'Phone Agent', href: '/phone', icon: Mic },
-      { label: 'Sandbox Replay', href: '/replay', icon: Play },
-      { label: 'Operator', href: '/control/operator', icon: ShieldCheck },
-      { label: 'Mission Control', href: '/control/mission-control', icon: Zap },
-      { label: 'Cron Jobs', href: '/control/cron-jobs', icon: Bell },
-      { label: 'Workflows', href: '/control/workflows', icon: GitBranch },
-      { label: 'Handoffs', href: '/control/handoffs', icon: Users },
-    ],
-  },
-  {
-    title: 'Agent',
-    items: [
-      { label: 'Agents', href: '/agent/agents', icon: Activity },
-      { label: 'Skills', href: '/agent/skills', icon: Brain },
-      { label: 'Presets', href: '/agent/presets', icon: Layers3 },
-      { label: 'Versions', href: '/agent/versions', icon: ScrollText },
-      { label: 'Nanobot', href: '/agent/nanobot', icon: Sparkles },
-      { label: 'Marketplace', href: '/agent/marketplace', icon: BookOpen },
-      { label: 'Self-Improving', href: '/lessons', icon: Brain },
-      { label: 'Multi-Model Debate', href: '/debate', icon: FlaskConical },
-      { label: 'Shareable Agents', href: '/share', icon: Globe },
-      { label: 'Branch Compare', href: '/compare', icon: GitBranch },
-      { label: 'Tool Forge', href: '/agent/tool-forge', icon: Wrench },
-      { label: 'Tree-of-Actions', href: '/agent/tree-of-actions', icon: GitBranch },
-      { label: 'Computer Use', href: '/computer-use', icon: Terminal },
-      { label: 'Ambient Sentinel', href: '/sentinel', icon: ShieldAlert },
-      { label: 'Red-Team Verifier', href: '/swarm/verifier', icon: ShieldCheck },
-      { label: 'Overnight Runner', href: '/overnight', icon: Moon },
-      { label: 'Digital Twin', href: '/digital-twin', icon: Brain },
-      { label: 'Swarm Market', href: '/swarm/market', icon: Users },
-      { label: 'Speculative Pre-Fetch', href: '/agent/speculative', icon: Zap },
-      { label: 'Live Voice & Screen Co-Pilot', href: '/copilot', icon: Mic },
-      { label: 'Prompt Evolution Arena', href: '/agent/evolution', icon: FlaskConical },
-      { label: 'Web Workflow Recorder', href: '/workflows/recorder', icon: Globe },
-      { label: 'Live Code Sandbox 2.0', href: '/sandbox', icon: Terminal },
-      { label: 'Knowledge Time-Machine', href: '/time-machine', icon: History },
-      { label: 'Secret-Zero Firewall', href: '/security/firewall', icon: ShieldCheck },
-      { label: 'FinOps Arbitrage Engine', href: '/finops', icon: DollarSign },
-      { label: 'Multiplayer War Room', href: '/war-room', icon: Users },
-      { label: '1-Click Ship Pipeline', href: '/ship', icon: Play },
-      { label: 'Dataset Distiller', href: '/agent/distiller', icon: Sparkles },
-      { label: 'Synthetic Boardroom', href: '/boardroom', icon: Users },
-      { label: 'Chaos Monkey Fuzzer', href: '/security/chaos', icon: ShieldAlert },
-      { label: 'Repo Cartographer', href: '/cartographer', icon: GitBranch },
-      { label: 'Growth Autopilot', href: '/growth', icon: Activity },
-      { label: 'Crypto Audit Ledger', href: '/security/ledger', icon: ShieldCheck },
-      { label: 'Neural Dropzone Beam', href: '/beam', icon: Zap },
-      { label: 'API Reverse-Engineer', href: '/agent/reverse-engineer', icon: Wrench },
-      { label: 'Deep-Work Flow Guardian', href: '/flow-guardian', icon: Brain },
-      { label: 'SQL Optimization Lab', href: '/database-lab', icon: Server },
-    ],
-  },
-  {
-    title: 'Insights',
-    items: [
-      { label: 'Usage', href: '/control/usage', icon: Activity },
-      { label: 'Costs & Router', href: '/costs', icon: DollarSign },
-      { label: 'Billing & Plans', href: '/billing', icon: DollarSign },
-      { label: 'Privacy Vault', href: '/privacy', icon: ShieldCheck },
-      { label: 'Lineage', href: '/control/lineage', icon: GitBranch },
-      { label: 'Provenance', href: '/control/provenance', icon: FileText },
-      { label: 'Repair', href: '/control/repair', icon: Wrench },
-      { label: 'Dry Run', href: '/control/dry-run', icon: Play },
-      { label: 'A/B Testing', href: '/control/ab-testing', icon: FlaskConical },
-    ],
-  },
-  {
-    title: 'Tools',
-    items: [
-      { label: 'API Keys', href: '/control/apikeys', icon: Key },
-      { label: 'Plugins', href: '/plugins', icon: Wrench },
-      { label: 'Export', href: '/control/export', icon: Download },
-      { label: 'Channels', href: '/control/channels', icon: Link2 },
-      { label: 'Automation', href: '/control/watchers', icon: ShieldCheck },
-      { label: 'Artifacts', href: '/artifacts', icon: FileText },
-      { label: 'Workspaces', href: '/workspaces', icon: Users },
-    ],
-  },
-  {
-    title: 'Settings',
-    items: [
-      { label: 'Config', href: '/settings/config', icon: Settings2 },
-      { label: 'Voice', href: '/settings/voice', icon: Mic },
-      { label: 'Doctor', href: '/settings/doctor', icon: Wrench },
-      { label: 'Logs', href: '/settings/logs', icon: ScrollText },
-      { label: 'Debug', href: '/settings/debug', icon: Terminal },
+      { label: 'Scheduler & Cron', href: '/scheduler', icon: Bell },
+      { label: 'MCP Servers', href: '/mcp', icon: Server },
+      { label: 'Skills & Marketplace', href: '/agent/skills', icon: Layers3 },
+      { label: 'Usage & Costs', href: '/costs', icon: DollarSign },
+      { label: 'Overview Console', href: '/control/overview', icon: Activity },
+      { label: 'Doctor & Logs', href: '/settings/doctor', icon: Wrench },
       { label: 'Docs', href: '/docs', icon: BookOpen },
     ],
   },
 ]
+
+const BASE_NAV_GROUPS: NavGroup[] = [...PRIMARY_NAV_GROUPS, ...ADVANCED_NAV_GROUPS]
 
 const CHAT_CONTROL_NAV_GROUPS: NavGroup[] = [
   {
@@ -263,6 +184,7 @@ export function AppShell({ children }: AppShellProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isNotificationsLoading, setIsNotificationsLoading] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [showMoreNav, setShowMoreNav] = useState(false)
   const [routeSearch, setRouteSearch] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null)
@@ -404,16 +326,23 @@ export function AppShell({ children }: AppShellProps) {
   )
   const beginnerMode = userSettings?.beginnerMode ?? false
   const visibleNavGroups = useMemo<NavGroup[]>(() => {
-    if (!beginnerMode) return navGroups
-    return navGroups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter(
-          (item) => BEGINNER_MODE_NAV_HREFS.has(item.href) || isActivePath(pathname, item.href),
-        ),
-      }))
-      .filter((group) => group.items.length > 0)
-  }, [beginnerMode, navGroups, pathname])
+    if (beginnerMode) {
+      return navGroups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter(
+            (item) => BEGINNER_MODE_NAV_HREFS.has(item.href) || isActivePath(pathname, item.href),
+          ),
+        }))
+        .filter((group) => group.items.length > 0)
+    }
+    if (showMoreNav) return navGroups
+    return navGroups.filter(
+      (group) =>
+        group.title !== 'More Modules' ||
+        group.items.some((item) => isActivePath(pathname, item.href)),
+    )
+  }, [beginnerMode, navGroups, pathname, showMoreNav])
   const allNavItems = useMemo(() => navGroups.flatMap((group) => group.items), [navGroups])
   const matchingRoute = useMemo(() => {
     const query = routeSearch.trim().toLowerCase()
@@ -570,6 +499,21 @@ export function AppShell({ children }: AppShellProps) {
                 </div>
               </div>
             ))}
+            {!beginnerMode && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowMoreNav((prev) => !prev)}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-medium text-[var(--muted)] transition hover:bg-[var(--surface-subtle)] hover:text-[var(--tone-strong)] dark:hover:text-[var(--tone-inverse)]"
+                >
+                  <span>{showMoreNav ? 'Hide extra modules' : 'More modules'}</span>
+                  <ChevronDown
+                    size={13}
+                    className={clsx('transition-transform', showMoreNav && 'rotate-180')}
+                  />
+                </button>
+              </div>
+            )}
           </nav>
 
           <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 dark:bg-[var(--surface-muted)]">

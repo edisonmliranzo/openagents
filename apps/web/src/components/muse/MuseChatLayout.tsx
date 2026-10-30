@@ -9,7 +9,8 @@ import {
   ListChecks,
   MessageCircle,
   PanelRight,
-  Sparkles,
+  Send,
+  Settings,
   Users,
 } from 'lucide-react'
 import { MuseActivityPanel } from './MuseActivityPanel'
@@ -18,12 +19,13 @@ import clsx from 'clsx'
 
 const TAB_ITEMS = [
   { icon: MessageCircle, label: 'Chat', href: '/chat' },
-  { icon: BookOpen, label: 'Library', href: '/library' },
-  { icon: Lightbulb, label: 'Ideas', action: 'ideas' },
+  { icon: Send, label: 'Outreach (Comment, DM, Email, WhatsApp)', href: '/growth' },
   { icon: CheckSquare, label: 'Approvals', href: '/approvals' },
   { icon: ListChecks, label: 'Tasks', href: '/tasks' },
   { icon: Users, label: 'Team', href: '/team' },
-  { icon: Sparkles, label: 'Frontier', href: '/frontier' },
+  { icon: BookOpen, label: 'Library', href: '/library' },
+  { icon: Lightbulb, label: 'Ideas', action: 'ideas' },
+  { icon: Settings, label: 'Settings', href: '/settings/config' },
 ]
 
 export function MuseChatLayout({ children }: { children: React.ReactNode }) {
