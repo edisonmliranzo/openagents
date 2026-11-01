@@ -226,6 +226,23 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
 
       {/* Bottom floating pill: settings · search · compose */}
       <div className="px-3 pb-3 pt-2 border-t border-slate-200/50 dark:border-slate-800/70">
+        <div className="flex items-center justify-center gap-3 pb-2 text-[10px] font-medium text-slate-400 dark:text-slate-500">
+          <button
+            type="button"
+            onClick={() => navigate('/support')}
+            className="hover:text-rose-500 transition"
+          >
+            Support Center
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => navigate('/terms')}
+            className="hover:text-rose-500 transition"
+          >
+            Terms &amp; Conditions
+          </button>
+        </div>
         <div className="flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/80 px-2 py-1 shadow-sm backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141927]/90">
           <button
             type="button"

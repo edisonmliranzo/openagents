@@ -77,6 +77,8 @@ const PRIMARY_NAV_GROUPS: NavGroup[] = [
       { label: 'Channels (WA / Email)', href: '/control/channels', icon: Link2 },
       { label: 'AI Models & Keys', href: '/settings/config', icon: Settings2 },
       { label: 'Voice', href: '/settings/voice', icon: Mic },
+      { label: 'Support & Help', href: '/support', icon: BookOpen },
+      { label: 'Terms & Conditions', href: '/terms', icon: FileText },
     ],
   },
 ]

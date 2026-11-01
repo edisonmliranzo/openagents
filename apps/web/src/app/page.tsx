@@ -418,9 +418,12 @@ export default function OpenAgentsLandingPage() {
             <a href="#artifacts-and-safety" className="hover:opacity-100 transition">
               Artifacts & Control
             </a>
-            <a href="#waitlist" className="hover:opacity-100 transition">
-              Early Access
-            </a>
+            <Link href="/support" className="hover:opacity-100 transition">
+              Support
+            </Link>
+            <Link href="/terms" className="hover:opacity-100 transition">
+              Terms
+            </Link>
           </nav>
 
           <div className="flex items-center gap-2.5">
@@ -1499,13 +1502,19 @@ export default function OpenAgentsLandingPage() {
             <span>• Your Personal AI Agent</span>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-6">
             <a href="#openagents-workspace" className="hover:underline">
               Live Preview
             </a>
             <a href="#how-it-works" className="hover:underline">
               Design Philosophy
             </a>
+            <Link href="/terms" className="hover:underline">
+              Terms &amp; Conditions
+            </Link>
+            <Link href="/support" className="hover:underline">
+              Support Center
+            </Link>
             {isSuperadmin && (
               <>
                 <Link href="/chat" className="font-semibold text-rose-500 hover:underline">
