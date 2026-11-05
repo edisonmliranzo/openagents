@@ -56,6 +56,15 @@ export class MarketplaceService {
     }
   }
 
+  /** Records a purchase + ledger entry (platform fee split). Used by the agent marketplace's payment provider flow. */
+  recordPurchase(input: Parameters<MarketplaceStore['recordPurchase']>[0]) {
+    return this.store.recordPurchase(input)
+  }
+
+  hasPurchased(userId: string, kind: MarketplaceItemKind, itemId: string) {
+    return this.store.hasPurchased(userId, kind, itemId)
+  }
+
   listPurchases(userId: string) {
     return this.store.listPurchases(userId)
   }

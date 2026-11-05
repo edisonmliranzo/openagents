@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { randomUUID } from 'crypto'
 import { PrismaService } from '../prisma/prisma.service'
 
-export type MarketplaceItemKind = 'skill' | 'pack'
+export type MarketplaceItemKind = 'skill' | 'pack' | 'agent'
 
 export interface MarketplacePrice {
   kind: MarketplaceItemKind

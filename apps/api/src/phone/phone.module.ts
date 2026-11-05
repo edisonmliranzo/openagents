@@ -10,6 +10,6 @@ import { PhoneStore } from './phone.store'
   imports: [PrismaModule, AgentModule, NotificationsModule],
   providers: [PhoneService, PhoneStore],
   controllers: [PhoneController, PhoneWebhookController],
-  exports: [PhoneService],
+  exports: [PhoneService, PhoneStore],
 })
 export class PhoneModule {}

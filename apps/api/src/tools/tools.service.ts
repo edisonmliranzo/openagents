@@ -52,6 +52,9 @@ import type { ToolDryRunResult, ToolResult } from '@openagents/shared'
 import { ConnectorsService } from '../connectors/connectors.service'
 import { McpService } from './mcp.service'
 import { PolicyService } from '../policy/policy.service'
+import { PolicyRulesService } from '../governance/policy-rules.service'
+import { AuditLedgerService } from '../governance/audit-ledger.service'
+import { InjectionFirewallService } from '../governance/injection-firewall.service'
 
 export interface ToolDefinition {
   name: string
@@ -78,6 +81,9 @@ export class ToolsService {
     private prisma: PrismaService,
     private connectors: ConnectorsService,
     private policy: PolicyService,
+    private policyRules: PolicyRulesService,
+    private auditLedger: AuditLedgerService,
+    private injectionFirewall: InjectionFirewallService,
     private gmail: GmailTool,
     private calendar: CalendarTool,
     private webFetch: WebFetchTool,
@@ -349,6 +355,32 @@ export class ToolsService {
       return { success: false, output: null, error: 'You do not have access to this tool.' }
     }
 
+    // Policy-as-code guardrails (per-user rules) run BEFORE the tool executes.
+    const guardrailScope = this.inferScope(toolName)
+    const guardrailCost = this.estimateCost(toolName, input)
+    try {
+      const guard = await this.policyRules.evaluateForTool(userId, {
+        toolName,
+        input,
+        scope: guardrailScope,
+        estimatedCostUsd: guardrailCost,
+        riskScore: this.policy.evaluate({ action: toolName, toolName, scope: guardrailScope, estimatedCostUsd: guardrailCost }).riskScore,
+      })
+      if (guard.decision === 'deny' || guard.decision === 'require_approval') {
+        const names = guard.matched.filter((m) => m.effect === guard.decision).map((m) => m.name).join(', ')
+        void this.auditLedger.append(userId, 'tool.blocked_by_policy', `tool:${toolName}`, { decision: guard.decision, rules: names, inputKeys: Object.keys(input).slice(0, 12) })
+        return {
+          success: false,
+          output: null,
+          error: guard.decision === 'deny'
+            ? `Blocked by policy rule: ${names}`
+            : `Policy rule requires explicit approval before this action can run: ${names}`,
+        }
+      }
+    } catch {
+      // Guardrail evaluation errors must never take the tool path down (fail-open on internal error).
+    }
+
     const startedAt = Date.now()
     try {
       const result = tool
@@ -361,6 +393,19 @@ export class ToolsService {
         error: result.error ?? undefined,
         rateLimited: this.isRateLimitError(result.error),
       }).catch(() => {})
+      void this.auditLedger.append(userId, 'tool.executed', `tool:${toolName}`, { success: result.success, latencyMs, scope: guardrailScope, inputKeys: Object.keys(input).slice(0, 12) })
+      // Prompt-injection firewall: annotate/quarantine untrusted tool output (non-breaking).
+      if (result.success && (!tool || guardrailScope !== 'local')) {
+        try {
+          const guarded = await this.injectionFirewall.guardToolOutput(userId, toolName, result.output)
+          if (guarded) {
+            void this.auditLedger.append(userId, 'firewall.flagged', `tool:${toolName}`, { ...guarded.summary })
+            return { ...result, output: guarded.output }
+          }
+        } catch {
+          // never fail the tool call because of the scanner
+        }
+      }
       return result
     } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : String(err)

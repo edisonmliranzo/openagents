@@ -88,6 +88,7 @@ const ADVANCED_NAV_GROUPS: NavGroup[] = [
     title: 'More Modules',
     items: [
       { label: 'Get Started', href: '/settings/get-started', icon: Sparkles },
+      { label: 'Frontier Hub', href: '/frontier/hub', icon: Sparkles },
       { label: 'Team & Specialists', href: '/team', icon: Users },
       { label: 'Library', href: '/library', icon: BookOpen },
       { label: 'Memory & Mind', href: '/memory', icon: Brain },

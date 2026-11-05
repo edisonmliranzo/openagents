@@ -30,6 +30,7 @@ import { HandoffsModule } from './handoffs/handoffs.module'
 import { SkillReputationModule } from './skill-reputation/skill-reputation.module'
 import { DataLineageModule } from './lineage/lineage.module'
 import { PolicyModule } from './policy/policy.module'
+import { GovernanceModule } from './governance/governance.module'
 import { ExtractionModule } from './extraction/extraction.module'
 import { CiHealerModule } from './ci-healer/ci-healer.module'
 import { ConnectorsModule } from './connectors/connectors.module'
@@ -58,6 +59,9 @@ import { AbTestingModule } from './ab-testing/ab-testing.module'
 import { StreamingModule } from './streaming/streaming.module'
 import { VisionModule } from './vision/vision.module'
 import { DelegationModule } from './delegation/delegation.module'
+import { AgentMarketplaceModule } from './agent-marketplace/agent-marketplace.module'
+import { TeamWorkspaceModule } from './team-workspace/team-workspace.module'
+import { TrustCenterModule } from './trust-center/trust-center.module'
 import { GoalsModule } from './goals/goals.module'
 import { ConversationSearchModule } from './conversation-search/search.module'
 import { TemplatesModule } from './templates/templates.module'
@@ -89,10 +93,17 @@ import { BillingModule } from './billing/billing.module'
 import { EmailAutopilotModule } from './email-autopilot/email-autopilot.module'
 import { GraphModule } from './graph/graph.module'
 import { PhoneModule } from './phone/phone.module'
+import { GrowthVoiceModule } from './growth-voice/growth-voice.module'
 import { PrivacyModule } from './privacy/privacy.module'
 import { PublicAgentsModule } from './public-agents/public-agents.module'
 import { ReplayModule } from './replay/replay.module'
+import { DurableModule } from './durable/durable.module'
+import { SandboxExecModule } from './sandbox-exec/sandbox-exec.module'
+import { SkillMiningModule } from './skill-mining/skill-mining.module'
+import { SyncModule } from './sync/sync.module'
 import { AgenticSuiteModule } from './agentic-suite/agentic-suite.module'
+import { SmartRouterModule } from './smart-router/smart-router.module'
+import { BoardroomModule } from './boardroom/boardroom.module'
 
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { GlobalAuthGuard } from './auth/guards/global-auth.guard'
@@ -110,6 +121,7 @@ import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
     MissionControlModule,
     DataLineageModule,
     PolicyModule,
+    GovernanceModule,
     ExtractionModule,
     CiHealerModule,
     ConnectorsModule,
@@ -163,6 +175,9 @@ import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
     StreamingModule,
     VisionModule,
     DelegationModule,
+    AgentMarketplaceModule,
+    TeamWorkspaceModule,
+    TrustCenterModule,
     GoalsModule,
     TemplatesModule,
     PinsModule,
@@ -193,13 +208,20 @@ import { CustomThrottlerGuard } from './auth/guards/custom-throttler.guard'
     EmailAutopilotModule,
     GraphModule,
     PhoneModule,
+    GrowthVoiceModule,
     PrivacyModule,
     PublicAgentsModule,
     ReplayModule,
+    DurableModule,
+    SandboxExecModule,
+    SkillMiningModule,
+    SyncModule,
     ContentPipelineModule,
     PermissionsModule,
     SystemSetupModule,
     AgenticSuiteModule,
+    SmartRouterModule,
+    BoardroomModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: CustomThrottlerGuard },

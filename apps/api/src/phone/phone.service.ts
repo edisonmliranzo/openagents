@@ -166,6 +166,11 @@ export class PhoneService {
       return this.gatherTwiml(call, 'Sorry, I did not catch that. Could you repeat?')
     }
     call.transcript.push({ role: 'caller', text: speech.slice(0, 2000), at: new Date().toISOString() })
+    if (call.humanTakeover) {
+      // A human operator has taken over: do not auto-reply, just hold the line.
+      await this.store.save(call)
+      return this.gatherTwiml(call, 'One moment please, a team member is joining the call.')
+    }
     const turns = call.transcript.filter((t) => t.role === 'caller').length
     let text = await this.reply(call, speech)
     const done = /\[END_CALL\]/i.test(text) || turns >= MAX_TURNS
@@ -219,6 +224,7 @@ export class PhoneService {
       `Goal: ${call.goal}`,
       'Speak naturally in 1-3 short sentences per turn. Never invent personal data you were not given. Disclose you are an AI assistant if asked.',
       'When the goal is achieved or the other party wants to end, say a brief goodbye and append [END_CALL].',
+      ...(call.steering?.length ? ['Live operator steering notes (follow these, do not read them aloud):', ...call.steering.slice(-5).map((n) => '- ' + n.text)] : []),
     ].join('\n')
     const messages = call.transcript.map((t) => ({ role: t.role === 'caller' ? 'user' : 'assistant', content: t.text })) as any[]
     if (!messages.length) messages.push({ role: 'user', content: '(The call has just connected. Open the conversation.)' })

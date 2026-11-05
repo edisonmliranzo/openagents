@@ -311,13 +311,21 @@ export class OAuthService {
     return this.config.get<string>('API_URL', 'http://localhost:3000')
   }
 
+  /**
+   * Must stay byte-for-byte compatible with UsersService (key resolution and
+   * `enc:v1:<iv hex>:<tag hex>:<data hex>` format) because UsersService is the
+   * component that decrypts stored provider keys when models are called.
+   */
   private getEncryptionKey(): Buffer {
-    const secret =
-      process.env.SECRETS_ENCRYPTION_KEY?.trim() ||
-      process.env.ENCRYPTION_KEY?.trim() ||
-      process.env.JWT_SECRET?.trim() ||
-      'openagents-default-key-change-in-production'
-    return createHash('sha256').update(secret).digest()
+    const raw =
+      (this.config.get<string>('ENCRYPTION_KEY') ?? '').trim() ||
+      (this.config.get<string>('JWT_SECRET') ?? '').trim() ||
+      'openagents-local-dev-key'
+    const normalizedHex = raw.replace(/^0x/i, '')
+    if (/^[0-9a-f]{64}$/i.test(normalizedHex)) {
+      return Buffer.from(normalizedHex, 'hex')
+    }
+    return createHash('sha256').update(raw).digest()
   }
 
   private encryptSecret(value: string): string {
@@ -326,21 +334,22 @@ export class OAuthService {
     const cipher = createCipheriv('aes-256-gcm', this.getEncryptionKey(), iv)
     const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
     const authTag = cipher.getAuthTag()
-    return `enc:v1:${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted.toString('base64')}`
+    return `enc:v1:${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`
   }
 
   private decryptSecret(value: string): string {
     if (!value || !value.startsWith('enc:v1:')) return value
     try {
-      const [, , ivBase64, tagBase64, payloadBase64] = value.split(':')
+      const [ivHex, tagHex, dataHex] = value.slice('enc:v1:'.length).split(':')
+      if (!ivHex || !tagHex || !dataHex) return value
       const decipher = createDecipheriv(
         'aes-256-gcm',
         this.getEncryptionKey(),
-        Buffer.from(ivBase64, 'base64'),
+        Buffer.from(ivHex, 'hex'),
       )
-      decipher.setAuthTag(Buffer.from(tagBase64, 'base64'))
+      decipher.setAuthTag(Buffer.from(tagHex, 'hex'))
       const decrypted = Buffer.concat([
-        decipher.update(Buffer.from(payloadBase64, 'base64')),
+        decipher.update(Buffer.from(dataHex, 'hex')),
         decipher.final(),
       ])
       return decrypted.toString('utf8')

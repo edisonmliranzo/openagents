@@ -31,6 +31,9 @@ export interface PhoneCallRecord {
   updatedAt: string
   approvedAt?: string
   endedAt?: string
+  /** Live-call controls (voice console): operator steering notes + human takeover flag. */
+  steering?: { text: string; at: string }[]
+  humanTakeover?: boolean
 }
 
 const MAX_CALLS = 200

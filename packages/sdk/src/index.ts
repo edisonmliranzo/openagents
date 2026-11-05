@@ -23,6 +23,8 @@ export { createHandoffsApi } from './api/handoffs'
 export { createSkillReputationApi } from './api/skill-reputation'
 export { createLineageApi } from './api/lineage'
 export { createPolicyApi } from './api/policy'
+export { createGovernanceApi } from './api/governance'
+export type { GovPolicyRule, GovRuleInput, GovRuleMatch, GovRuleEffect, GovRuleScope, GovRuleEvaluation, GovEvaluationLogEntry, GovRuleTestInput, LedgerEntry, LedgerVerification, LedgerTamperDemo, LedgerExport, FirewallScan, FirewallFinding, FirewallDetection, FirewallCategory } from './api/governance'
 export { createExtractionApi } from './api/extraction'
 export { createCiHealerApi } from './api/ci-healer'
 export { createSkillRegistryApi } from './api/skill-registry'
@@ -87,6 +89,7 @@ import { createHandoffsApi } from './api/handoffs'
 import { createSkillReputationApi } from './api/skill-reputation'
 import { createLineageApi } from './api/lineage'
 import { createPolicyApi } from './api/policy'
+import { createGovernanceApi } from './api/governance'
 import { createExtractionApi } from './api/extraction'
 import { createCiHealerApi } from './api/ci-healer'
 import { createSkillRegistryApi } from './api/skill-registry'
@@ -142,6 +145,7 @@ export function createSDK(config: SDKConfig) {
     skillReputation: createSkillReputationApi(client),
     lineage: createLineageApi(client),
     policy: createPolicyApi(client),
+    governance: createGovernanceApi(client),
     extraction: createExtractionApi(client),
     ciHealer: createCiHealerApi(client),
     skillRegistry: createSkillRegistryApi(client),
@@ -181,6 +185,9 @@ export function createSDK(config: SDKConfig) {
     mcp: createMcpApi(client),
     generativeUi: createGenerativeUiApi(client),
     delegation: createDelegationApi(client),
+    agentMarketplace: createAgentMarketplaceApi(client),
+    teamWorkspace: createTeamWorkspaceApi(client),
+    trustCenter: createTrustCenterApi(client),
     scheduler: createSchedulerApi(client),
     billing: createBillingApi(client),
     marketplace: createMarketplaceApi(client),
@@ -188,9 +195,18 @@ export function createSDK(config: SDKConfig) {
     graph: createGraphApi(client),
     moments: createMomentsApi(client),
     phone: createPhoneApi(client),
+    growthVoice: createGrowthVoiceApi(client),
     privacy: createPrivacyApi(client),
     publicAgents: createPublicAgentsApi(client),
     replay: createReplayApi(client),
+    smartRouter: createSmartRouterApi(client),
+    evalSuites: createEvalSuitesApi(client),
+    boardroom: createBoardroomApi(client),
+    durable: createDurableApi(client),
+    sandboxExec: createSandboxExecApi(client),
+    keys: createKeysApi(client),
+    skillProposals: createSkillProposalsApi(client),
+    sync: createSyncApi(client),
     agenticSuite: createAgenticSuiteApi(client),
   }
 }
@@ -231,6 +247,15 @@ import { createModelRolesApi } from './api/model-roles'
 import { createMcpApi } from './api/mcp'
 import { createGenerativeUiApi } from './api/generative-ui'
 import { createDelegationApi } from './api/delegation'
+import { createAgentMarketplaceApi } from './api/agent-marketplace'
+import { createTeamWorkspaceApi } from './api/team-workspace'
+import { createTrustCenterApi } from './api/trust-center'
+export { createAgentMarketplaceApi } from './api/agent-marketplace'
+export type { AgentPermissionManifest, AgentListingRow, AgentInstallRow, AgentMarketplaceInfo, AgentMarketplaceEarnings, PublishAgentListingInput, InstallAgentListingInput } from './api/agent-marketplace'
+export { createTeamWorkspaceApi } from './api/team-workspace'
+export type { TeamRole, TeamRisk, TeamMemberRow, TeamOverview, TeamDelegationRule, TeamDelegation, TeamMemoryScope, TeamMemoryEntry, TeamActivityEntry, TeamPendingApproval } from './api/team-workspace'
+export { createTrustCenterApi } from './api/trust-center'
+export type { TrustControl, TrustPosture, TrustSubprocessor, TrustRetention, TrustDataRequest } from './api/trust-center'
 import { createSchedulerApi } from './api/scheduler'
 
 export { createBillingApi, createMarketplaceApi } from './api/billing'
@@ -238,9 +263,24 @@ export { createEmailAutopilotApi } from './api/email-autopilot'
 export { createGraphApi } from './api/graph'
 export { createMomentsApi } from './api/moments'
 export { createPhoneApi } from './api/phone'
+export { createGrowthVoiceApi } from './api/growth-voice'
+export type { OutreachItem, OutreachChannel, OutreachStatus, OutreachRateRow, OutreachExperiment, OutreachAnalytics, OutreachPromotion, GrowthContact, ContactStage, ContactInteraction, ContactBrief, VoiceSession, VoiceSessionSummary, VoiceTurn, VoiceRole } from './api/growth-voice'
 export { createPrivacyApi } from './api/privacy'
 export { createPublicAgentsApi } from './api/public-agents'
 export { createReplayApi } from './api/replay'
+export { createSmartRouterApi } from './api/smart-router'
+export type { SmartRouterPolicy, SmartRouterPreview, SmartRouterRun, SmartRouterSavings, SmartRouterAttempt, RouterRung } from './api/smart-router'
+export { createEvalSuitesApi } from './api/eval-suites'
+export type { EvalSuiteRow, EvalCaseDef, EvalAssertionDef, EvalAssertionType, EvalSuiteTarget, EvalCaseResult, EvalAssertionResult, EvalSuiteRunSummary, EvalSuiteRunDetail, EvalSuiteComparison, EvalGateResult, EvalGateOptions } from './api/eval-suites'
+export { createBoardroomApi } from './api/boardroom'
+export type { BoardAgentDef, BoardRubricCriterion, BoardArgumentRow, BoardRoundRow, BoardVerdictRow, BoardSessionRow, BoardSessionSummary, BoardStartInput } from './api/boardroom'
+export { createDurableApi } from './api/durable'
+export type { DurableRun, DurableRunSummary, DurableStep, DurableStepInput, DurableStepKind, DurableRunStatus } from './api/durable'
+export { createSandboxExecApi } from './api/sandbox-exec'
+export type { SandboxLanguage, SandboxRunResult, SandboxStatus, SandboxRunRequest, SandboxMode } from './api/sandbox-exec'
+export type { ReplayTimeline, ReplayForkSummary, ReplayForkDiff, ReplayForkRequest, ReplayRunSummary } from './api/replay'
+export { createKeysApi, createSkillProposalsApi, createSyncApi } from './api/keys-sync'
+export type { KeyStatus, KeyRotationEvent, SkillProposalRow, SkillProposalStep, SkillProposalInput, SkillProposalEdit, SyncDeviceRow, SyncRecordRow, SyncConflictRow, SyncKeyringRow, SyncStateRow } from './api/keys-sync'
 export { createAgenticSuiteApi } from './api/agentic-suite'
 export type {
   ForgedToolItem,
@@ -319,7 +359,14 @@ import { createEmailAutopilotApi } from './api/email-autopilot'
 import { createGraphApi } from './api/graph'
 import { createMomentsApi } from './api/moments'
 import { createPhoneApi } from './api/phone'
+import { createGrowthVoiceApi } from './api/growth-voice'
 import { createPrivacyApi } from './api/privacy'
 import { createPublicAgentsApi } from './api/public-agents'
 import { createReplayApi } from './api/replay'
+import { createSmartRouterApi } from './api/smart-router'
+import { createEvalSuitesApi } from './api/eval-suites'
+import { createBoardroomApi } from './api/boardroom'
+import { createDurableApi } from './api/durable'
+import { createSandboxExecApi } from './api/sandbox-exec'
+import { createKeysApi, createSkillProposalsApi, createSyncApi } from './api/keys-sync'
 import { createAgenticSuiteApi } from './api/agentic-suite'

@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, Optional } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import type { RuntimeEvent } from '../events/runtime-event.types'
+import { AuditLedgerService } from '../governance/audit-ledger.service'
 
 export interface AuditListFilters {
   action?: string
@@ -14,7 +15,10 @@ const REVERSIBLE_ACTIONS = new Set(['memory_update', 'memory_delete', 'memory_pi
 
 @Injectable()
 export class AuditService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private ledger?: AuditLedgerService,
+  ) {}
 
   async log(
     userId: string,
@@ -23,6 +27,8 @@ export class AuditService {
     resourceId: string,
     metadata?: Record<string, unknown>,
   ) {
+    // Mirror into the tamper-evident hash-chained ledger (best-effort, never throws).
+    void this.ledger?.append(userId, action, `${resourceType}:${resourceId}`, metadata ?? {}, 'system')
     return this.prisma.auditLog.create({
       data: {
         userId,
