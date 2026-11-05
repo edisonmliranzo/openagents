@@ -44,6 +44,7 @@ import {
 } from 'lucide-react'
 import { sdk, useAuthStore } from '@/stores/auth'
 import type { Notification, UserSettings } from '@openagents/shared'
+import { LiveAvatar } from '@/components/chat/LiveAvatar'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -65,6 +66,7 @@ const PRIMARY_NAV_GROUPS: NavGroup[] = [
     title: 'Workspace',
     items: [
       { label: 'Chat', href: '/chat', icon: MessageSquare },
+      { label: 'Voice Calls & Avatars', href: '/phone', icon: Mic },
       { label: 'Outreach & Growth', href: '/growth', icon: Zap },
       { label: 'Inbox', href: '/inbox', icon: FileText },
       { label: 'Tasks', href: '/tasks', icon: Play },
@@ -76,7 +78,7 @@ const PRIMARY_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Channels (WA / Email)', href: '/control/channels', icon: Link2 },
       { label: 'AI Models & Keys', href: '/settings/config', icon: Settings2 },
-      { label: 'Voice', href: '/settings/voice', icon: Mic },
+      { label: 'Voice Settings', href: '/settings/voice', icon: Mic },
       { label: 'Support & Help', href: '/support', icon: BookOpen },
       { label: 'Terms & Conditions', href: '/terms', icon: FileText },
     ],
@@ -89,11 +91,11 @@ const ADVANCED_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Get Started', href: '/settings/get-started', icon: Sparkles },
       { label: 'Frontier Hub', href: '/frontier/hub', icon: Sparkles },
+      { label: 'Voice Call Console', href: '/frontier/voice-console', icon: Mic },
       { label: 'Team & Specialists', href: '/team', icon: Users },
       { label: 'Library', href: '/library', icon: BookOpen },
       { label: 'Memory & Mind', href: '/memory', icon: Brain },
       { label: 'Browser Agent', href: '/browser', icon: Globe },
-      { label: 'Phone Agent', href: '/phone', icon: Mic },
       { label: 'Scheduler & Cron', href: '/scheduler', icon: Bell },
       { label: 'MCP Servers', href: '/mcp', icon: Server },
       { label: 'Skills & Marketplace', href: '/agent/skills', icon: Layers3 },
@@ -110,7 +112,10 @@ const BASE_NAV_GROUPS: NavGroup[] = [...PRIMARY_NAV_GROUPS, ...ADVANCED_NAV_GROU
 const CHAT_CONTROL_NAV_GROUPS: NavGroup[] = [
   {
     title: 'Chat',
-    items: [{ label: 'Chat', href: '/chat', icon: MessageSquare }],
+    items: [
+      { label: 'Chat', href: '/chat', icon: MessageSquare },
+      { label: 'Voice Calls & Avatars', href: '/phone', icon: Mic },
+    ],
   },
   {
     title: 'Control',
@@ -584,6 +589,15 @@ export function AppShell({ children }: AppShellProps) {
                       enter
                     </span>
                   </div>
+
+                  <Link
+                    href="/phone"
+                    className="inline-flex h-9 items-center gap-2 rounded-full border border-rose-500/30 bg-gradient-to-r from-rose-500/15 to-amber-500/15 px-3 text-xs font-semibold text-rose-600 transition hover:border-rose-500/50 hover:brightness-105 dark:text-rose-300"
+                    title="Start a Live Voice Call with your Expressive Avatar"
+                  >
+                    <LiveAvatar personaId="nova" emotion="happy" size={20} showRings={false} />
+                    <span className="hidden sm:inline">Voice Call</span>
+                  </Link>
 
                   <button
                     type="button"
