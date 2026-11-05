@@ -501,7 +501,11 @@ export class ApprovalsService implements OnModuleInit, OnModuleDestroy {
       data: { status: 'streaming' },
     })
 
-    const result = await this.tools.execute(toolName, toolInput, userId)
+    const result = await this.tools.execute(toolName, toolInput, userId, {
+      policyApproved: true,
+      approvalId,
+      conversationId,
+    })
 
     await this.prisma.message.update({
       where: { id: messageId },

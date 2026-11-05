@@ -1070,9 +1070,32 @@ export class AgentService implements OnModuleInit {
             // Fall back to the default decision when the rules store is unreadable.
           }
 
+          // Policy-as-Code Guardrails: evaluate declarative per-user rules before execution.
+          let sentinelNote = ''
+          let policyGuardrailApprovalRequired = false
+          try {
+            const guard = await this.tools.evaluatePolicyForTool(userId, toolCall.name, toolCall.input)
+            if (guard.decision === 'deny') {
+              const names = guard.matched.filter((m) => m.effect === 'deny').map((m) => m.name).join(', ')
+              runMetrics.toolCalls.push({ name: toolCall.name, requiresApproval: false, status: 'failed' })
+              llmWorkingMessages.push({
+                role: 'user',
+                content: `[SYSTEM TOOL NOTICE]: Blocked by Policy Guardrail (${names}).`,
+              })
+              continue
+            }
+            if (guard.decision === 'require_approval') {
+              const names = guard.matched.filter((m) => m.effect === 'require_approval').map((m) => m.name).join(', ')
+              requiresApproval = true
+              policyGuardrailApprovalRequired = true
+              sentinelNote = ` Policy guardrail: ${names}.`
+            }
+          } catch {
+            // Fail-open on internal guardrail evaluation error.
+          }
+
           // Sentinel: an independent LLM vets high-risk actions that the
           // static policy would otherwise auto-run. Fail-closed to ASK.
-          let sentinelNote = ''
           if (!requiresApproval && this.sentinel.enabled && this.sentinel.isHighRisk(toolCall.name)) {
             const verdict = await this.sentinel.review({
               toolName: toolCall.name,
@@ -1151,7 +1174,7 @@ export class AgentService implements OnModuleInit {
               toolName: toolCall.name,
               toolInput: toolCall.input,
               risk,
-              requiresApprovalByPolicy: toolDef.requiresApproval,
+              requiresApprovalByPolicy: toolDef.requiresApproval || policyGuardrailApprovalRequired,
               autonomyWithinWindow: autonomyStatus.withinWindow,
             })
             lineageApprovals.push(approval.id)

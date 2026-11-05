@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common'
+import { Global, Module } from '@nestjs/common'
 import { BillingModule } from '../billing/billing.module'
 import { AgentMarketplaceController } from './agent-marketplace.controller'
 import { AgentMarketplaceService } from './agent-marketplace.service'
 import { PAYMENT_PROVIDER, SimulatedPaymentProvider } from './payment-provider'
 
+@Global()
 @Module({
   imports: [BillingModule],
   controllers: [AgentMarketplaceController],

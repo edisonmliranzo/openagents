@@ -1,4 +1,4 @@
-import { Injectable, Inject, forwardRef } from '@nestjs/common'
+import { Injectable, Inject, Optional, forwardRef } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { GmailTool } from './connectors/gmail.tool'
 import { CalendarTool } from './connectors/calendar.tool'
@@ -55,6 +55,20 @@ import { PolicyService } from '../policy/policy.service'
 import { PolicyRulesService } from '../governance/policy-rules.service'
 import { AuditLedgerService } from '../governance/audit-ledger.service'
 import { InjectionFirewallService } from '../governance/injection-firewall.service'
+import {
+  AgentMarketplaceService,
+  extractUrlsFromInput,
+  inferToolDataScope,
+} from '../agent-marketplace/agent-marketplace.service'
+
+export interface ToolExecutionOptions {
+  /** Trusted internal flag set ONLY by ApprovalsService when resuming an approved tool call. */
+  policyApproved?: boolean
+  approvalId?: string
+  conversationId?: string
+  /** Trusted internal ID of the installed marketplace agent executing this tool. */
+  marketplaceInstallId?: string
+}
 
 export interface ToolDefinition {
   name: string
@@ -134,6 +148,7 @@ export class ToolsService {
     private uiComponent: UiComponentTool,
     private cliAgent: CliAgentTool,
     private mcp: McpService,
+    @Optional() private agentMarketplace?: AgentMarketplaceService,
     ) {
     this.registry = new Map([
       ['gmail_search', { def: this.withBuiltinSource(this.gmail.searchDef), execute: this.gmail.search.bind(this.gmail) }],
@@ -347,7 +362,87 @@ export class ToolsService {
     return this.inferScope(toolName)
   }
 
-  async execute(toolName: string, input: Record<string, unknown>, userId: string): Promise<ToolResult> {
+  /** Evaluates user policy-as-code rules for a tool call before execution or approval creation. */
+  async evaluatePolicyForTool(userId: string, toolName: string, input: Record<string, unknown>) {
+    const guardrailScope = this.inferScope(toolName)
+    const guardrailCost = this.estimateCost(toolName, input)
+    return this.policyRules.evaluateForTool(userId, {
+      toolName,
+      input,
+      scope: guardrailScope,
+      estimatedCostUsd: guardrailCost,
+      riskScore: this.policy.evaluate({
+        action: toolName,
+        toolName,
+        scope: guardrailScope,
+        estimatedCostUsd: guardrailCost,
+      }).riskScore,
+    })
+  }
+
+  private async createPolicyApprovalRecord(
+    userId: string,
+    toolName: string,
+    input: Record<string, unknown>,
+    ruleNames: string,
+    conversationId?: string,
+  ): Promise<string | null> {
+    try {
+      let targetConversationId = conversationId
+      if (!targetConversationId) {
+        const latest = await this.prisma.conversation.findFirst({
+          where: { userId },
+          orderBy: { updatedAt: 'desc' },
+          select: { id: true },
+        })
+        if (latest) {
+          targetConversationId = latest.id
+        } else {
+          const createdConv = await this.prisma.conversation.create({
+            data: { userId, title: 'Policy Guardrail Approvals' },
+            select: { id: true },
+          })
+          targetConversationId = createdConv.id
+        }
+      }
+      const msg = await this.prisma.message.create({
+        data: {
+          conversationId: targetConversationId,
+          role: 'tool',
+          content: `Policy guardrail (${ruleNames}) requires approval to run ${toolName}.`,
+          status: 'pending',
+          toolCallJson: JSON.stringify({ name: toolName, input }),
+          metadata: JSON.stringify({
+            riskLevel: 'high',
+            riskScore: 85,
+            riskReason: `Policy rule matched: ${ruleNames}`,
+            requiresApprovalByPolicy: true,
+          }),
+        },
+        select: { id: true },
+      })
+      const approval = await this.prisma.approval.create({
+        data: {
+          conversationId: targetConversationId,
+          messageId: msg.id,
+          userId,
+          toolName,
+          toolInput: JSON.stringify(input),
+        },
+        select: { id: true },
+      })
+      return approval.id
+    } catch {
+      return null
+    }
+  }
+
+  async execute(
+    toolName: string,
+    input: Record<string, unknown>,
+    userId: string,
+    options?: ToolExecutionOptions,
+  ): Promise<ToolResult> {
     const tool = this.registry.get(toolName)
 
     // A runtime-registered tool must not be runnable by another user.
@@ -355,26 +450,69 @@ export class ToolsService {
       return { success: false, output: null, error: 'You do not have access to this tool.' }
     }
 
+    // Enforce Agent Marketplace permission manifest when running on behalf of an installed agent.
+    if (options?.marketplaceInstallId && this.agentMarketplace) {
+      try {
+        await this.agentMarketplace.assertAllowed(userId, options.marketplaceInstallId, { tool: toolName })
+        const dataScope = inferToolDataScope(toolName)
+        if (dataScope) {
+          await this.agentMarketplace.assertAllowed(userId, options.marketplaceInstallId, { scope: dataScope })
+        }
+        for (const url of extractUrlsFromInput(input)) {
+          await this.agentMarketplace.assertAllowed(userId, options.marketplaceInstallId, { url })
+        }
+      } catch (err: any) {
+        const reason = err instanceof Error ? err.message : String(err)
+        void this.auditLedger.append(userId, 'tool.blocked_by_marketplace', `tool:${toolName}`, {
+          marketplaceInstallId: options.marketplaceInstallId,
+          reason,
+        })
+        return { success: false, output: null, error: reason }
+      }
+    }
+
     // Policy-as-code guardrails (per-user rules) run BEFORE the tool executes.
     const guardrailScope = this.inferScope(toolName)
-    const guardrailCost = this.estimateCost(toolName, input)
     try {
-      const guard = await this.policyRules.evaluateForTool(userId, {
-        toolName,
-        input,
-        scope: guardrailScope,
-        estimatedCostUsd: guardrailCost,
-        riskScore: this.policy.evaluate({ action: toolName, toolName, scope: guardrailScope, estimatedCostUsd: guardrailCost }).riskScore,
-      })
-      if (guard.decision === 'deny' || guard.decision === 'require_approval') {
-        const names = guard.matched.filter((m) => m.effect === guard.decision).map((m) => m.name).join(', ')
-        void this.auditLedger.append(userId, 'tool.blocked_by_policy', `tool:${toolName}`, { decision: guard.decision, rules: names, inputKeys: Object.keys(input).slice(0, 12) })
+      const guard = await this.evaluatePolicyForTool(userId, toolName, input)
+      if (guard.decision === 'deny') {
+        const names = guard.matched.filter((m) => m.effect === 'deny').map((m) => m.name).join(', ')
+        void this.auditLedger.append(userId, 'tool.blocked_by_policy', `tool:${toolName}`, {
+          decision: 'deny',
+          rules: names,
+          inputKeys: Object.keys(input).slice(0, 12),
+        })
         return {
           success: false,
           output: null,
-          error: guard.decision === 'deny'
-            ? `Blocked by policy rule: ${names}`
-            : `Policy rule requires explicit approval before this action can run: ${names}`,
+          error: `Blocked by policy rule: ${names}`,
+        }
+      }
+      if (guard.decision === 'require_approval') {
+        const names = guard.matched.filter((m) => m.effect === 'require_approval').map((m) => m.name).join(', ')
+        if (options?.policyApproved === true) {
+          void this.auditLedger.append(userId, 'tool.policy_approval_resumed', `tool:${toolName}`, {
+            approvalId: options.approvalId ?? null,
+            rules: names,
+          })
+        } else {
+          const approvalId = await this.createPolicyApprovalRecord(
+            userId,
+            toolName,
+            input,
+            names,
+            options?.conversationId,
+          )
+          void this.auditLedger.append(userId, 'tool.policy_approval_requested', `tool:${toolName}`, {
+            approvalId,
+            rules: names,
+            inputKeys: Object.keys(input).slice(0, 12),
+          })
+          return {
+            success: false,
+            output: { status: 'pending_approval', approvalId, rules: names },
+            error: `Paused for approval by policy rule (${names})${approvalId ? ` [approvalId: ${approvalId}]` : ''}. Approve it in the Approvals queue to run.`,
+          }
         }
       }
     } catch {

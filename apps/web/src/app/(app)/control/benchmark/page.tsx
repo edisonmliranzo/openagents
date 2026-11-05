@@ -271,7 +271,19 @@ export default function BenchmarkPage() {
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              {error.includes('403') || error.toLowerCase().includes('forbidden') || error.toLowerCase().includes('owner')
+                ? 'Local Ollama benchmark runs are restricted to the platform owner. Use Continuous Eval Suites to run user-level evaluations.'
+                : error}
+            </span>
+            <a
+              href="/frontier/evals"
+              className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+            >
+              Open Continuous Eval Suites →
+            </a>
+          </div>
         </div>
       )}
     </div>

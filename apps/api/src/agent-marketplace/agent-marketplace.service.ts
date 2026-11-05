@@ -15,6 +15,26 @@ import { KeyedLock } from '../common/keyed-lock'
 import { assertPublicHttpUrl } from '../frontier/safe-fetch'
 import { PAYMENT_PROVIDER, type PaymentProvider } from './payment-provider'
 
+import {
+  DATA_SCOPES,
+  domainAllowed,
+  extractUrlsFromInput,
+  inferToolDataScope,
+  isSubset,
+  manifestHash,
+  type PermissionManifest,
+  validateAndNormalizeManifest,
+} from './marketplace-permissions'
+export {
+  DATA_SCOPES,
+  domainAllowed,
+  extractUrlsFromInput,
+  inferToolDataScope,
+  isSubset,
+  manifestHash,
+  type PermissionManifest,
+}
+
 const LISTING_KIND = 'am-listing'
 const INSTALL_KIND = 'am-install'
 const PAYOUT_KIND = 'am-payout'
@@ -23,21 +43,12 @@ const MAX_PRICE_CENTS = 100_000_00
 const MIN_PAYOUT_CENTS = 500
 const MAX_LISTINGS_SCAN = 500
 
-export const DATA_SCOPES = [
-  'memory:read',
-  'memory:write',
-  'conversations:read',
-  'files:read',
-  'files:write',
-  'calendar:read',
-  'email:read',
-  'contacts:read',
-] as const
-
-export interface PermissionManifest {
-  tools: string[]
-  networkDomains: string[]
-  dataScopes: string[]
+export function normalizeManifest(input: Partial<PermissionManifest> | undefined): PermissionManifest {
+  try {
+    return validateAndNormalizeManifest(input)
+  } catch (e: any) {
+    throw new BadRequestException(e?.message ?? 'Invalid permission manifest.')
+  }
 }
 
 export interface AgentListing {
@@ -70,34 +81,6 @@ export interface AgentInstall {
 
 interface PayoutDoc {
   payouts: Array<{ id: string; amountCents: number; currency: string; reference: string; provider: string; createdAt: string }>
-}
-
-const DOMAIN_RE = /^(\*\.)?([a-z0-9-]+\.)+[a-z]{2,}$/
-
-export function normalizeManifest(input: Partial<PermissionManifest> | undefined): PermissionManifest {
-  const uniq = (xs: unknown, map: (s: string) => string) =>
-    [...new Set((Array.isArray(xs) ? xs : []).filter((x): x is string => typeof x === 'string').map((s) => map(s.trim())).filter(Boolean))].sort()
-  const tools = uniq(input?.tools, (s) => s)
-  const networkDomains = uniq(input?.networkDomains, (s) => s.toLowerCase())
-  const dataScopes = uniq(input?.dataScopes, (s) => s)
-  for (const t of tools) if (t === '*' || t.length > 64) throw new BadRequestException(`Invalid tool name: ${t.slice(0, 40)}`)
-  for (const d of networkDomains) if (!DOMAIN_RE.test(d)) throw new BadRequestException(`Invalid network domain: ${d.slice(0, 80)}`)
-  for (const s of dataScopes) if (!(DATA_SCOPES as readonly string[]).includes(s)) throw new BadRequestException(`Unknown data scope: ${s.slice(0, 40)}`)
-  return { tools, networkDomains, dataScopes }
-}
-
-export function manifestHash(version: string, manifest: PermissionManifest): string {
-  return createHash('sha256').update(JSON.stringify({ version, ...normalizeManifest(manifest) })).digest('hex')
-}
-
-function isSubset(sub: string[], sup: string[]) {
-  const set = new Set(sup)
-  return sub.every((x) => set.has(x))
-}
-
-function domainAllowed(host: string, domains: string[]) {
-  const h = host.toLowerCase()
-  return domains.some((d) => (d.startsWith('*.') ? h.endsWith(d.slice(1)) && h.length > d.length - 1 : h === d))
 }
 
 function safeEqualHex(a: string, b: string) {
