@@ -29,7 +29,7 @@ export class AuthService {
     this.validatePasswordStrength(password)
     const shouldAssignOwner = this.isCreatorEmail(normalizedEmail)
 
-    if (!shouldAssignOwner) {
+    if (!shouldAssignOwner && !this.isPublicRegistrationEnabled()) {
       throw new BadRequestException('Public registration is currently closed. Please join the waitlist on the homepage.')
     }
 
@@ -63,14 +63,15 @@ export class AuthService {
     this.authRateLimit.assertLoginAllowed(normalizedEmail, clientIp)
 
     const isCreator = this.isCreatorEmail(normalizedEmail)
-    let user = isCreator
+    const allowPublic = this.isPublicRegistrationEnabled()
+    let user = (isCreator || allowPublic)
       ? await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
       : null
 
     const targetHash = user?.passwordHash ?? AuthService.DUMMY_BCRYPT_HASH
     const valid = await bcrypt.compare(password, targetHash)
 
-    if (!isCreator || !user || !valid) {
+    if ((!isCreator && !allowPublic) || !user || !valid) {
       this.authRateLimit.recordLoginFailure(normalizedEmail, clientIp)
       throw new UnauthorizedException('Invalid credentials')
     }
@@ -294,6 +295,11 @@ export class AuthService {
     } catch {
       // Device analytics should never block auth flow.
     }
+  }
+
+  private isPublicRegistrationEnabled() {
+    const raw = (this.config.get<string>('PUBLIC_REGISTRATION_ENABLED', 'true') ?? 'true').trim().toLowerCase()
+    return raw !== 'false' && raw !== '0'
   }
 
   private normalizeEmail(email: string) {

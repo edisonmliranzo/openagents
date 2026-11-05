@@ -1,0 +1,6 @@
+tunnel: 3fe926b0-199f-4b11-a1b5-4e443b77da1c
+credentials-file: C:\Users\edinson\.cloudflared\3fe926b0-199f-4b11-a1b5-4e443b77da1c.json
+ingress:
+  - hostname: api.openagents.us
+    service: http://localhost:3001
+  - service: http_status:404

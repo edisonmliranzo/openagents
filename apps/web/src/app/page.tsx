@@ -442,7 +442,7 @@ export default function OpenAgentsLandingPage() {
               <span className="hidden sm:inline">{warmTheme ? 'Warm Ivory' : 'Midnight'}</span>
             </button>
 
-            {isSuperadmin ? (
+            {hydrated && user ? (
               <div className="flex items-center gap-2">
                 <Link
                   href="/chat"
@@ -451,26 +451,40 @@ export default function OpenAgentsLandingPage() {
                   <span>Open Workspace</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
-                <Link
-                  href="/admin"
-                  className={`hidden sm:inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                    warmTheme
-                      ? 'border-black/10 bg-white/80 text-stone-700 hover:bg-white'
-                      : 'border-white/15 bg-white/5 text-slate-300 hover:bg-white/10'
-                  }`}
-                >
-                  <BarChart3 className="h-3.5 w-3.5 text-rose-500" />
-                  <span>Admin</span>
-                </Link>
+                {isSuperadmin && (
+                  <Link
+                    href="/admin"
+                    className={`hidden sm:inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                      warmTheme
+                        ? 'border-black/10 bg-white/80 text-stone-700 hover:bg-white'
+                        : 'border-white/15 bg-white/5 text-slate-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <BarChart3 className="h-3.5 w-3.5 text-rose-500" />
+                    <span>Admin</span>
+                  </Link>
+                )}
               </div>
             ) : (
-              <a
-                href="#waitlist"
-                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
-              >
-                <span>Get Early Access</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </a>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/login"
+                  className={`inline-flex items-center gap-1 rounded-full border px-3.5 py-2 text-xs font-semibold transition ${
+                    warmTheme
+                      ? 'border-black/10 bg-white/80 text-stone-800 hover:bg-white shadow-sm'
+                      : 'border-white/15 bg-white/5 text-slate-200 hover:bg-white/10'
+                  }`}
+                >
+                  <span>Sign In</span>
+                </Link>
+                <Link
+                  href="/login?mode=register"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
+                >
+                  <span>Get Started Free</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
             )}
           </div>
         </div>
@@ -528,8 +542,8 @@ export default function OpenAgentsLandingPage() {
             })}
           </div>
 
-          {/* Superadmin Quick Bar or Visitor Waitlist Card */}
-          {isSuperadmin ? (
+          {/* Workspace Quick Bar + Launch CTA */}
+          {hydrated && user ? (
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link
                 href="/chat"
@@ -538,6 +552,16 @@ export default function OpenAgentsLandingPage() {
                 <Sparkles className="h-4 w-4" />
                 <span>Launch OpenAgents (/chat)</span>
                 <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/frontier/hub"
+                className={`inline-flex items-center gap-2 rounded-full border px-5 py-3.5 text-xs font-semibold transition ${
+                  warmTheme
+                    ? 'border-black/10 bg-white text-stone-800 hover:bg-stone-50 shadow-sm'
+                    : 'border-white/15 bg-white/5 text-white hover:bg-white/10'
+                }`}
+              >
+                <span>Frontier Hub (18 Modules)</span>
               </Link>
               <Link
                 href="/tasks"
@@ -549,26 +573,37 @@ export default function OpenAgentsLandingPage() {
               >
                 <span>Autonomous Task Studio</span>
               </Link>
-              <Link
-                href="/team"
-                className={`inline-flex items-center gap-2 rounded-full border px-5 py-3.5 text-xs font-semibold transition ${
-                  warmTheme
-                    ? 'border-black/10 bg-white text-stone-800 hover:bg-stone-50 shadow-sm'
-                    : 'border-white/15 bg-white/5 text-white hover:bg-white/10'
-                }`}
-              >
-                <span>Specialist Swarm (4)</span>
-              </Link>
             </div>
           ) : (
-            <div
-              id="waitlist"
-              className={`mx-auto mt-9 max-w-xl rounded-[28px] border p-6 shadow-xl backdrop-blur-xl ${
-                warmTheme
-                  ? 'border-black/[0.08] bg-white/90 shadow-stone-900/5'
-                  : 'border-white/15 bg-white/[0.04]'
-              }`}
-            >
+            <>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <Link
+                  href="/login?mode=register"
+                  className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-rose-500/20 transition hover:brightness-105"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span>Create Free Account</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link
+                  href="/login"
+                  className={`inline-flex items-center gap-2 rounded-full border px-6 py-3.5 text-xs font-semibold transition ${
+                    warmTheme
+                      ? 'border-black/10 bg-white text-stone-800 hover:bg-stone-50 shadow-sm'
+                      : 'border-white/15 bg-white/5 text-white hover:bg-white/10'
+                  }`}
+                >
+                  <span>Sign In to Workspace</span>
+                </Link>
+              </div>
+              <div
+                id="waitlist"
+                className={`mx-auto mt-7 max-w-xl rounded-[28px] border p-6 shadow-xl backdrop-blur-xl ${
+                  warmTheme
+                    ? 'border-black/[0.08] bg-white/90 shadow-stone-900/5'
+                    : 'border-white/15 bg-white/[0.04]'
+                }`}
+              >
               <div className="flex items-center justify-between text-xs mb-3">
                 <span className="font-semibold text-rose-500 flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5" /> Public v2.0 Launch Countdown
@@ -632,7 +667,8 @@ export default function OpenAgentsLandingPage() {
                   </button>
                 </form>
               )}
-            </div>
+              </div>
+            </>
           )}
         </div>
 
