@@ -10,9 +10,9 @@ import { LLM_MODELS } from '@openagents/shared'
  * OpenAI-compatible API — the nanobot "Agent API" pattern.
  *
  * `POST /v1/chat/completions` lets any OpenAI-compatible client (Cursor,
- * LibreChat, chat UIs, scripts) use Muse as its model backend. History is
+ * LibreChat, chat UIs, scripts) use OpenAgents as its model backend. History is
  * managed by the server, like nanobot: each request carries one user message,
- * and the conversation lives in Muse with the full agent loop (tools, memory,
+ * and the conversation lives in OpenAgents with the full agent loop (tools, memory,
  * approvals) behind it.
  */
 
@@ -72,7 +72,7 @@ export class OpenAiCompatController {
       String(req.headers['x-conversation-id'] ?? '').trim(),
     )
 
-    const model = String(body?.model ?? 'muse-agent')
+    const model = String(body?.model ?? 'openagents/agent')
     const completionId = `chatcmpl-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
     const created = Math.floor(Date.now() / 1000)
 

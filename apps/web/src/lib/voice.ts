@@ -1,9 +1,11 @@
+import { AVATAR_PERSONAS, getSavedAvatarPersona, type AvatarPersonaId } from '@/components/chat/LiveAvatar'
+
 const VOICE_ENABLED_KEY = 'openagents-voice-enabled'
 
 /**
- * Spoken replies are strictly OFF by default.
- * Users must explicitly configure Fish Audio 2.0 (or ElevenLabs) in Settings -> Voice
- * and enable spoken replies. Never falls back to robotic browser speechSynthesis.
+ * Spoken replies are OFF by default until the user toggles voice mode or Expressive Avatar mode.
+ * Prefers configured neural TTS (Fish Audio 2.0 / ElevenLabs) and falls back cleanly
+ * to persona-tuned Web Speech synthesis when no external neural key is configured.
  */
 export function voiceEnabled(): boolean {
   try {
@@ -65,18 +67,65 @@ export function takeSentences(buffer: string, flush = false): { sentences: strin
   return { sentences, rest }
 }
 
-/** Synthesize one chunk with the user's neural voice; returns a playable data URL. */
+/** Synthesize one chunk with the user's neural voice; returns a playable data URL, or null if unconfigured. */
 export async function synthesize(text: string): Promise<string | null> {
   const clean = speakable(text)
   if (!clean) return null
-  const { sdk } = await import('@/stores/auth')
-  const tts = await sdk.life.tts(clean)
-  return `data:${tts.mimeType};base64,${tts.audioBase64}`
+  try {
+    const { sdk } = await import('@/stores/auth')
+    const tts = await sdk.life.tts(clean)
+    if (!tts?.audioBase64) return null
+    return `data:${tts.mimeType};base64,${tts.audioBase64}`
+  } catch {
+    return null
+  }
 }
 
 /**
- * Speak exclusively via configured neural TTS (Fish Audio 2.0 / ElevenLabs).
- * Never falls back to robotic browser speechSynthesis.
+ * Persona-tuned Web Speech synthesis fallback when neural TTS is not configured.
+ */
+export function speakWithBrowserPersona(
+  text: string,
+  personaId?: AvatarPersonaId,
+  callbacks?: { onStart?: () => void; onEnd?: () => void; onError?: (err: unknown) => void },
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const clean = speakable(text)
+    if (!clean || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      resolve(false)
+      return
+    }
+    try {
+      window.speechSynthesis.cancel()
+      const persona = AVATAR_PERSONAS[personaId ?? getSavedAvatarPersona()] ?? AVATAR_PERSONAS.nova
+      const utter = new SpeechSynthesisUtterance(clean)
+      utter.pitch = persona.pitch
+      utter.rate = persona.rate
+      const voices = window.speechSynthesis.getVoices()
+      const preferred =
+        voices.find((v) => /natural|neural|online|aria|jenny|guy|samantha|google us english/i.test(v.name)) ??
+        voices.find((v) => v.lang.toLowerCase().startsWith('en'))
+      if (preferred) utter.voice = preferred
+      utter.onstart = () => callbacks?.onStart?.()
+      utter.onend = () => {
+        callbacks?.onEnd?.()
+        resolve(true)
+      }
+      utter.onerror = (e) => {
+        callbacks?.onError?.(e)
+        resolve(false)
+      }
+      window.speechSynthesis.speak(utter)
+    } catch (err) {
+      callbacks?.onError?.(err)
+      resolve(false)
+    }
+  })
+}
+
+/**
+ * Speak via configured neural TTS (Fish Audio 2.0 / ElevenLabs), with seamless
+ * fallback to persona-tuned browser voice so Expressive Avatar voice works out-of-the-box.
  */
 export async function speak(
   text: string,
@@ -86,26 +135,28 @@ export async function speak(
   if (!clean || typeof window === 'undefined') return false
 
   try {
-    const { sdk } = await import('@/stores/auth')
-    const tts = await sdk.life.tts(clean)
-    stopSpeaking()
-    const audio = new Audio(`data:${tts.mimeType};base64,${tts.audioBase64}`)
-    currentAudio = audio
-    callbacks?.onStart?.()
-    audio.onended = () => {
-      if (currentAudio === audio) currentAudio = null
-      callbacks?.onEnd?.()
+    const dataUrl = await synthesize(clean)
+    if (dataUrl) {
+      stopSpeaking()
+      const audio = new Audio(dataUrl)
+      currentAudio = audio
+      callbacks?.onStart?.()
+      audio.onended = () => {
+        if (currentAudio === audio) currentAudio = null
+        callbacks?.onEnd?.()
+      }
+      audio.onerror = (e) => {
+        if (currentAudio === audio) currentAudio = null
+        callbacks?.onError?.(e)
+      }
+      await audio.play()
+      return true
     }
-    audio.onerror = (e) => {
-      if (currentAudio === audio) currentAudio = null
-      callbacks?.onError?.(e)
-    }
-    await audio.play()
-    return true
-  } catch (err) {
-    callbacks?.onError?.(err)
-    return false
+  } catch {
+    // Fall through to persona browser voice
   }
+
+  return speakWithBrowserPersona(clean, getSavedAvatarPersona(), callbacks)
 }
 
 export function stopSpeaking() {
@@ -125,4 +176,12 @@ export function stopSpeaking() {
       // ignore
     }
   }
+}
+
+export function isSpeaking(): boolean {
+  if (currentAudio !== null && !currentAudio.paused) return true
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis.speaking) {
+    return true
+  }
+  return false
 }

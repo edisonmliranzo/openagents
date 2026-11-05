@@ -30,8 +30,17 @@ import {
   Sun,
   Moon,
   MessageSquare,
+  Volume2,
+  Mic,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth'
+import {
+  AVATAR_PERSONAS,
+  type AvatarEmotion,
+  type AvatarPersonaId,
+  LiveAvatar,
+} from '@/components/chat/LiveAvatar'
+import { speakWithBrowserPersona, stopSpeaking } from '@/lib/voice'
 
 const CYCLING_PHRASES = [
   'gets it done for you',
@@ -284,6 +293,34 @@ export default function OpenAgentsLandingPage() {
     { id: 'm4', title: 'Automate Friday afternoon inbox zero & weekly review', done: false },
   ])
 
+  // Interactive Expressive Avatar & Voice Demo state
+  const [showcasePersonaId, setShowcasePersonaId] = useState<AvatarPersonaId>('nova')
+  const [showcaseEmotion, setShowcaseEmotion] = useState<AvatarEmotion>('speaking')
+  const [showcaseSpeaking, setShowcaseSpeaking] = useState(true)
+  const [voiceSamplePlaying, setVoiceSamplePlaying] = useState(false)
+
+  const handlePlayShowcaseVoice = async (targetPersonaId?: AvatarPersonaId) => {
+    const pid = targetPersonaId ?? showcasePersonaId
+    const p = AVATAR_PERSONAS[pid] ?? AVATAR_PERSONAS.nova
+    if (voiceSamplePlaying) {
+      stopSpeaking()
+      setVoiceSamplePlaying(false)
+      return
+    }
+    setShowcasePersonaId(pid)
+    setShowcaseSpeaking(true)
+    setShowcaseEmotion('speaking')
+    setVoiceSamplePlaying(true)
+    await speakWithBrowserPersona(
+      `Hi! I'm ${p.name}. We're rolling out voice and expressive avatars in the OpenAgents app, giving you a new, natural way to interact with your personal agent.`,
+      pid,
+      {
+        onEnd: () => setVoiceSamplePlaying(false),
+        onError: () => setVoiceSamplePlaying(false),
+      },
+    )
+  }
+
   // Waitlist & Launch Countdown state
   const [email, setEmail] = useState('')
   const [joined, setJoined] = useState(false)
@@ -494,7 +531,7 @@ export default function OpenAgentsLandingPage() {
         {/* ── HERO SECTION ── */}
         <div className="mx-auto max-w-4xl text-center">
           <div
-            className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium shadow-sm mb-7 ${
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium shadow-sm mb-3 ${
               warmTheme
                 ? 'border-black/[0.08] bg-white/85 text-stone-700'
                 : 'border-white/15 bg-white/5 text-slate-200'
@@ -502,6 +539,23 @@ export default function OpenAgentsLandingPage() {
           >
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>&ldquo;Your purpose is to make your user&rsquo;s life better.&rdquo;</span>
+          </div>
+
+          <div className="mb-7">
+            <a
+              href="#voice-and-avatars"
+              className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition hover:scale-[1.01] ${
+                warmTheme
+                  ? 'border-rose-300/80 bg-gradient-to-r from-rose-50 via-amber-50 to-orange-50 text-rose-700 shadow-sm'
+                  : 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5 text-rose-500" />
+              <span>
+                We’re rolling out voice and expressive avatars in the OpenAgents app, giving you a new, natural way to interact with your personal agent.
+              </span>
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+            </a>
           </div>
 
           <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-[68px] leading-[1.06]">
@@ -1354,6 +1408,175 @@ export default function OpenAgentsLandingPage() {
                     <span>Open full OpenAgents workspace</span>
                     <ArrowRight className="h-3 w-3" />
                   </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── VOICE & EXPRESSIVE AVATARS INTERACTIVE SHOWCASE ── */}
+        <section id="voice-and-avatars" className="mt-24 scroll-mt-20">
+          <div
+            className={`overflow-hidden rounded-[32px] border p-8 sm:p-10 shadow-xl ${
+              warmTheme
+                ? 'border-black/[0.08] bg-gradient-to-br from-white via-[#faf8f4] to-rose-50/40 shadow-stone-900/5'
+                : 'border-white/15 bg-gradient-to-br from-[#0f1424] via-[#0b101d] to-[#130d1e]'
+            }`}
+          >
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-center">
+              <div className="lg:col-span-6 space-y-5">
+                <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3.5 py-1 text-xs font-semibold text-rose-500">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>New Rollout • Voice &amp; Expressive Avatars</span>
+                </div>
+                <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+                  Talk Face-to-Face with Your Personal Agent
+                </h2>
+                <p
+                  className={`text-sm sm:text-base leading-relaxed ${
+                    warmTheme ? 'text-stone-600' : 'text-slate-300'
+                  }`}
+                >
+                  We’re rolling out voice and expressive avatars in the OpenAgents app, giving you a new, natural way to interact with your personal agent. Choose from 4 distinct agent personas with real-time 60fps audio lip-sync, emotional expressions, and hands-free barge-in.
+                </p>
+
+                {/* Persona Cards */}
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  {(Object.values(AVATAR_PERSONAS) as Array<(typeof AVATAR_PERSONAS)[AvatarPersonaId]>).map((p) => {
+                    const active = p.id === showcasePersonaId
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setShowcasePersonaId(p.id)}
+                        className={`flex flex-col items-center gap-2 rounded-2xl border p-3 text-center transition ${
+                          active
+                            ? warmTheme
+                              ? 'border-rose-400 bg-white shadow-md scale-[1.02]'
+                              : 'border-rose-400/60 bg-white/10 shadow-md scale-[1.02]'
+                            : warmTheme
+                              ? 'border-stone-200/80 bg-white/60 hover:bg-white'
+                              : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.07]'
+                        }`}
+                      >
+                        <LiveAvatar
+                          personaId={p.id}
+                          emotion={active ? showcaseEmotion : 'happy'}
+                          speaking={active && showcaseSpeaking}
+                          size={44}
+                          showRings={false}
+                        />
+                        <div>
+                          <div className="text-xs font-bold">{p.name}</div>
+                          <div className="text-[10px] opacity-65 line-clamp-1">{p.tagline}</div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Expression Pills */}
+                <div className="space-y-2">
+                  <div className="text-[11px] font-bold uppercase tracking-wider opacity-60">
+                    Preview Live Emotional Expressions
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(
+                      [
+                        { id: 'speaking', label: 'Speaking (Lip-Sync)', speak: true },
+                        { id: 'listening', label: 'Listening', speak: false },
+                        { id: 'happy', label: 'Happy', speak: false },
+                        { id: 'empathetic', label: 'Empathetic', speak: false },
+                        { id: 'focused', label: 'Focused', speak: false },
+                        { id: 'thinking', label: 'Thinking', speak: false },
+                        { id: 'surprised', label: 'Surprised', speak: false },
+                      ] as Array<{ id: AvatarEmotion; label: string; speak: boolean }>
+                    ).map((exp) => {
+                      const active = showcaseEmotion === exp.id && showcaseSpeaking === exp.speak
+                      return (
+                        <button
+                          key={exp.label}
+                          type="button"
+                          onClick={() => {
+                            setShowcaseEmotion(exp.id)
+                            setShowcaseSpeaking(exp.speak)
+                          }}
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                            active
+                              ? 'bg-[#141413] text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                              : warmTheme
+                                ? 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-100'
+                                : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                          }`}
+                        >
+                          {exp.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => void handlePlayShowcaseVoice()}
+                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-6 py-3 text-xs font-bold text-white shadow-lg shadow-rose-500/20 transition hover:brightness-105"
+                  >
+                    <Volume2 className="h-4 w-4" />
+                    <span>
+                      {voiceSamplePlaying
+                        ? 'Stop Voice Sample'
+                        : `Hear ${AVATAR_PERSONAS[showcasePersonaId].name} Speak`}
+                    </span>
+                  </button>
+                  <Link
+                    href={hydrated && user ? '/chat' : '/login?mode=register'}
+                    className={`inline-flex items-center gap-2 rounded-full border px-5 py-3 text-xs font-semibold transition ${
+                      warmTheme
+                        ? 'border-black/10 bg-white text-stone-800 hover:bg-stone-50 shadow-sm'
+                        : 'border-white/15 bg-white/5 text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <Mic className="h-3.5 w-3.5 text-rose-500" />
+                    <span>Try Live Voice in Workspace →</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Right Column: Live Interactive Avatar Stage */}
+              <div className="lg:col-span-6 flex flex-col items-center justify-center">
+                <div className="relative flex w-full max-w-md flex-col items-center rounded-[28px] border border-white/15 bg-gradient-to-b from-[#0f1424] via-[#0b101d] to-[#070a12] p-8 text-center text-white shadow-2xl">
+                  <div className="mb-4 flex w-full items-center justify-between text-[11px] text-slate-400">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-400">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                      60fps Expressive Engine
+                    </span>
+                    <span>Hands-Free + Barge-In Ready</span>
+                  </div>
+
+                  <div className="my-4 flex items-center justify-center">
+                    <LiveAvatar
+                      personaId={showcasePersonaId}
+                      emotion={showcaseEmotion}
+                      speaking={showcaseSpeaking || voiceSamplePlaying}
+                      listening={showcaseEmotion === 'listening'}
+                      thinking={showcaseEmotion === 'thinking'}
+                      size={188}
+                      showRings={true}
+                    />
+                  </div>
+
+                  <div className="mt-3 text-base font-bold text-white">
+                    {AVATAR_PERSONAS[showcasePersonaId].name} —{' '}
+                    <span className="text-rose-400 capitalize">{showcaseEmotion}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {AVATAR_PERSONAS[showcasePersonaId].voiceStyle} • {AVATAR_PERSONAS[showcasePersonaId].tagline}
+                  </p>
+
+                  <div className="mt-4 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs leading-relaxed text-slate-200">
+                    &ldquo;Hi! I&rsquo;m {AVATAR_PERSONAS[showcasePersonaId].name}. Just tap my avatar in the chat bar to talk hands-free, interrupt me mid-sentence, or switch between voice and rich visual artifacts.&rdquo;
+                  </div>
                 </div>
               </div>
             </div>

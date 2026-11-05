@@ -3,17 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
-import { stopSpeaking, synthesize, takeSentences } from '@/lib/voice'
+import { speakWithBrowserPersona, stopSpeaking, synthesize, takeSentences } from '@/lib/voice'
+import { getSavedAvatarPersona } from '@/components/chat/LiveAvatar'
 
 /**
  * Real-time voice conversation for OpenAgents (browser pipeline):
  *   mic -> Web Speech API (fallback: MediaRecorder -> /nanobot/voice/transcribe)
  *   -> chat store sendMessage (streamed agent reply)
- *   -> sentence-chunked neural TTS (user's Fish Audio / ElevenLabs voice)
+ *   -> sentence-chunked neural TTS (Fish Audio / ElevenLabs, with persona Web Speech fallback)
  *   -> ordered playback with barge-in (user speech stops playback).
- *
- * Voice output is OFF unless `ttsEnabled` is true; callers gate that on the
- * user having opted in from Settings -> Voice.
  */
 
 export type VoiceConversationState = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'speaking'
@@ -55,11 +53,16 @@ function speakablePrefix(content: string): string {
 }
 
 export interface UseVoiceConversationOptions {
-  /** Speak agent replies with the configured neural voice. */
+  /** Speak agent replies with the configured neural or persona voice. */
   ttsEnabled: boolean
   /** Auto-listen again after each reply finishes (conversation mode). */
   handsFree: boolean
   locale?: string
+}
+
+interface QueuedSentence {
+  text: string
+  synthPromise: Promise<string | null>
 }
 
 export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }: UseVoiceConversationOptions) {
@@ -67,6 +70,8 @@ export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }
   const [error, setError] = useState('')
   const [interim, setInterim] = useState('')
   const [supported, setSupported] = useState(true)
+  const [lastSpokenText, setLastSpokenText] = useState('')
+  const [activeAudio, setActiveAudio] = useState<HTMLAudioElement | null>(null)
 
   const sendMessage = useChatStore((s) => s.sendMessage)
   const isStreaming = useChatStore((s) => s.isStreaming)
@@ -80,8 +85,7 @@ export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }
   const bargeRecognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
 
-  // Playback queue: each item is a pending synth promise so synthesis runs ahead of playback.
-  const queueRef = useRef<Array<Promise<string | null>>>([])
+  const queueRef = useRef<QueuedSentence[]>([])
   const playingRef = useRef(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const generationRef = useRef(0)
@@ -117,6 +121,7 @@ export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }
     replyIdRef.current = null
     const a = audioRef.current
     audioRef.current = null
+    setActiveAudio(null)
     if (a) {
       try { a.pause() } catch { /* ignore */ }
     }
@@ -157,7 +162,6 @@ export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }
         heard += txt
         if (res?.isFinal) finalText += txt
       }
-      // Require a few characters so speaker echo / clicks don't cut the agent off.
       if (heard.trim().length < 3) return
       if (playingRef.current || queueRef.current.length) stopPlayback()
       setState('listening')
@@ -182,26 +186,33 @@ export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }
       const next = queueRef.current.shift()!
       let url: string | null = null
       try {
-        url = await next
-      } catch (err: any) {
-        setError(String(err?.message ?? 'Voice synthesis failed').slice(0, 160))
-        continue
+        url = await next.synthPromise
+      } catch {
+        url = null
       }
-      if (!url || gen !== generationRef.current) continue
+      if (gen !== generationRef.current) break
+      setLastSpokenText(next.text)
       setState('speaking')
       startBargeIn()
-      await new Promise<void>((resolve) => {
-        const audio = new Audio(url!)
-        audioRef.current = audio
-        audio.onended = () => resolve()
-        audio.onerror = () => resolve()
-        audio.onpause = () => resolve()
-        audio.play().catch(() => resolve())
-      })
+
+      if (url) {
+        await new Promise<void>((resolve) => {
+          const audio = new Audio(url!)
+          audioRef.current = audio
+          setActiveAudio(audio)
+          audio.onended = () => resolve()
+          audio.onerror = () => resolve()
+          audio.onpause = () => resolve()
+          audio.play().catch(() => resolve())
+        })
+      } else {
+        await speakWithBrowserPersona(next.text, getSavedAvatarPersona())
+      }
     }
     if (gen === generationRef.current) {
       playingRef.current = false
       audioRef.current = null
+      setActiveAudio(null)
       if (!useChatStore.getState().isStreaming) {
         stopBargeIn()
         setState((s) => (s === 'speaking' || s === 'thinking' ? 'idle' : s))
@@ -213,9 +224,9 @@ export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }
     (sentences: string[]) => {
       if (!sentences.length) return
       for (const s of sentences) {
-        const p = synthesize(s)
-        p.catch(() => undefined) // surfaced in pump
-        queueRef.current.push(p)
+        const synthPromise = synthesize(s)
+        synthPromise.catch(() => null)
+        queueRef.current.push({ text: s, synthPromise })
       }
       void pump()
     },
@@ -229,13 +240,15 @@ export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }
       const last = [...s.messages].reverse().find((m) => m.role === 'agent')
       if (!last || spokenIdsRef.current.has(last.id)) return
       if (replyIdRef.current !== last.id) {
-        if (!s.isStreaming && last.status === 'done') return // historical message, don't read
+        if (!s.isStreaming && last.status === 'done') return
         replyIdRef.current = last.id
         offsetRef.current = 0
         bufferRef.current = ''
       }
       const done = !s.isStreaming || last.status === 'done'
-      const prefix = done ? String(last.content ?? '').replace(/```[\s\S]*?(```|$)/g, ' Code block omitted. ') : speakablePrefix(String(last.content ?? ''))
+      const prefix = done
+        ? String(last.content ?? '').replace(/```[\s\S]*?(```|$)/g, ' Code block omitted. ')
+        : speakablePrefix(String(last.content ?? ''))
       if (prefix.length > offsetRef.current) {
         bufferRef.current += prefix.slice(offsetRef.current)
         offsetRef.current = prefix.length
@@ -360,13 +373,11 @@ export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }
     setState('idle')
   }, [stopPlayback])
 
-  // Reflect agent streaming state in the UI.
   useEffect(() => {
     if (isStreaming) setState((s) => (s === 'idle' || s === 'transcribing' ? 'thinking' : s))
     else if (!playingRef.current && !queueRef.current.length) setState((s) => (s === 'thinking' ? 'idle' : s))
   }, [isStreaming])
 
-  // Hands-free: re-open the mic once the agent has finished talking.
   useEffect(() => {
     if (!handsFree || state !== 'idle' || isStreaming) return
     const timer = window.setTimeout(() => {
@@ -375,12 +386,23 @@ export function useVoiceConversation({ ttsEnabled, handsFree, locale = 'en-US' }
     return () => window.clearTimeout(timer)
   }, [handsFree, state, isStreaming, startRecognition])
 
-  // Muting TTS mid-reply stops playback immediately.
   useEffect(() => {
     if (!ttsEnabled) stopPlayback()
   }, [ttsEnabled, stopPlayback])
 
   useEffect(() => () => stopAll(), [stopAll])
 
-  return { state, error, interim, supported, startListening, stopListening, stopPlayback, stopAll, setError }
+  return {
+    state,
+    error,
+    interim,
+    supported,
+    lastSpokenText,
+    activeAudio,
+    startListening,
+    stopListening,
+    stopPlayback,
+    stopAll,
+    setError,
+  }
 }
