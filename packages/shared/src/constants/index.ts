@@ -4,6 +4,11 @@ export const API_VERSION = 'v1'
 export const API_BASE = `/api/${API_VERSION}`
 
 export const LLM_MODELS = {
+  apisrouter: {
+    default: 'openai/gpt-4.1',
+    fast: 'google/gemini-2.5-flash',
+    powerful: 'anthropic/claude-sonnet-4-5',
+  },
   anthropic: {
     default: 'claude-sonnet-4-5-20250929',
     fast: 'claude-haiku-4-5-20251001',
@@ -101,6 +106,23 @@ export const LLM_MODELS = {
 export type ModelRole = 'chat' | 'artifact' | 'scheduled' | 'subagent' | 'background'
 
 export const LLM_MODEL_OPTIONS = {
+  apisrouter: [
+    // APIsRouter (https://apisrouter.dev/) — Main unified AI router (all top models via one key)
+    'anthropic/claude-sonnet-4-5',
+    'anthropic/claude-haiku-4-5',
+    'anthropic/claude-opus-4-1',
+    'openai/gpt-4.1',
+    'openai/gpt-4.1-mini',
+    'openai/gpt-4o',
+    'openai/o3',
+    'openai/o3-mini',
+    'google/gemini-2.5-pro',
+    'google/gemini-2.5-flash',
+    'deepseek/deepseek-r1',
+    'deepseek/deepseek-chat',
+    'meta-llama/llama-3.3-70b-instruct',
+    'x-ai/grok-3',
+  ],
   anthropic: [
     // Claude 4.x — latest generation
     'claude-sonnet-4-5-20250929',
@@ -263,6 +285,20 @@ export const LLM_PROVIDER_CAPABILITIES: Record<
     cautions: string[]
   }
 > = {
+  apisrouter: {
+    label: 'APIsRouter (apisrouter.dev) — Main Provider',
+    bestFor: 'Primary unified AI gateway (https://apisrouter.dev/) — create an account, get your API key, and access all frontier models (Claude, GPT, Gemini, DeepSeek, Llama, Grok) with one key.',
+    toolUse: 'strong',
+    latency: 'fast',
+    contextProfile: 'large',
+    strengths: [
+      'official main provider at https://apisrouter.dev/',
+      'one API key unlocks Claude, GPT-4.1/o3, Gemini 2.5, DeepSeek R1 & Llama',
+      'automatic smart routing, fallback resilience & unified billing',
+      'OpenAI-compatible /v1 endpoint',
+    ],
+    cautions: ['get your API key at https://apisrouter.dev/ and paste it in Settings > Config'],
+  },
   anthropic: {
     label: 'Anthropic',
     bestFor: 'Agentic coding, long-horizon tasks, and reliable multi-step tool orchestration.',

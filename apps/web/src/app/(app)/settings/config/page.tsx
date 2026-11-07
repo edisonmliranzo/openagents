@@ -17,6 +17,7 @@ import {
   XCircle,
   Loader2,
   Mic,
+  ExternalLink,
 } from 'lucide-react'
 import type { LlmApiKey, UserDomain, UserDomainProvider, UserDomainStatus } from '@openagents/shared'
 import { LLM_MODEL_OPTIONS, LLM_PROVIDER_CAPABILITIES } from '@openagents/shared'
@@ -24,12 +25,12 @@ import { ModelPicker } from '@/components/settings/ModelPicker'
 
 // Types
 
-type Provider = 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax' | 'perplexity' | 'nvidia' | 'atlascloud' | 'groq' | 'mistral' | 'deepseek' | 'xai' | 'openrouter' | 'together' | 'custom' | 'meta'
+type Provider = 'apisrouter' | 'anthropic' | 'openai' | 'google' | 'ollama' | 'minimax' | 'perplexity' | 'nvidia' | 'atlascloud' | 'groq' | 'mistral' | 'deepseek' | 'xai' | 'openrouter' | 'together' | 'custom' | 'meta'
 
-const PROVIDERS: Provider[] = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'meta', 'custom', 'ollama']
-const CLOUD_PROVIDERS = ['anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'meta', 'custom'] as const
+const PROVIDERS: Provider[] = ['apisrouter', 'anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'meta', 'custom', 'ollama']
+const CLOUD_PROVIDERS = ['apisrouter', 'anthropic', 'openai', 'google', 'perplexity', 'minimax', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'meta', 'custom'] as const
 // Providers speaking the OpenAI chat-completions API — users may override the endpoint.
-const COMPATIBLE_PROVIDERS: Provider[] = ['openai', 'google', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'meta', 'custom']
+const COMPATIBLE_PROVIDERS: Provider[] = ['apisrouter', 'openai', 'google', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'meta', 'custom']
 const DEFAULT_OLLAMA_BASE_URL = process.env.NEXT_PUBLIC_OLLAMA_BASE_URL?.trim() || 'http://localhost:11434'
 
 interface ProviderCardState {
@@ -47,6 +48,7 @@ interface ProviderCardState {
 }
 
 const DEFAULTS: Record<Provider, ProviderCardState> = {
+  apisrouter:{ apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   anthropic: { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   openai:    { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
   google:    { apiKey: '', baseUrl: '', showKey: false, loginEmail: '', loginPassword: '', showLoginPassword: false, subscriptionPlan: '', testStatus: 'idle', testModel: '', testError: '', isSaving: false },
@@ -66,6 +68,7 @@ const DEFAULTS: Record<Provider, ProviderCardState> = {
 }
 const OLLAMA_FALLBACK_MODELS: string[] = [...(LLM_MODEL_OPTIONS.ollama as unknown as string[])]
 const PROVIDER_PLAN_OPTIONS: Record<Exclude<Provider, 'ollama'>, string[]> = {
+  apisrouter: ['Free', 'Starter', 'Pro', 'Pay-As-You-Go', 'Enterprise'],
   anthropic: ['Free', 'Pro', 'Max', 'Team', 'Enterprise'],
   openai: ['Free', 'Plus (Codex)', 'Pro (Codex)', 'Team', 'Enterprise'],
   google: ['Free', 'AI Pro', 'AI Ultra', 'Workspace Enterprise'],
@@ -91,6 +94,14 @@ const PROVIDER_META: Record<Provider, {
   inputLabel: string
   isKeyless: boolean
 }> = {
+  apisrouter: {
+    label: 'APIsRouter (apisrouter.dev)',
+    icon: <Sparkles className="h-5 w-5" />,
+    gradient: 'from-violet-600 via-fuchsia-600 to-rose-500',
+    ring: 'ring-violet-400',
+    inputLabel: 'APIsRouter API Key (apisrouter.dev)',
+    isKeyless: false,
+  },
   anthropic: {
     label: 'Anthropic',
     icon: <KeyRound className="h-5 w-5" />,
@@ -386,7 +397,7 @@ function describeModelSelection(provider: Provider, model: string) {
 
 export default function ConfigPage() {
   const [profileEmail, setProfileEmail] = useState('')
-  const [activeProvider, setActiveProvider] = useState<Provider>('anthropic')
+  const [activeProvider, setActiveProvider] = useState<Provider>('apisrouter')
   const [activeModel, setActiveModel] = useState('')
   const [customSystemPrompt, setCustomSystemPrompt] = useState('')
   const [cards, setCards] = useState<Record<Provider, ProviderCardState>>({ ...DEFAULTS })
@@ -513,7 +524,7 @@ export default function ConfigPage() {
       setFallbackKeys(nextFallbackKeys)
       const preferredProvider = isProvider(settings.preferredProvider)
         ? settings.preferredProvider
-        : 'anthropic'
+        : 'apisrouter'
       setProfileEmail(profile.email ?? '')
       setActiveProvider(preferredProvider)
       setActiveModel(settings.preferredModel ?? '')
@@ -527,6 +538,7 @@ export default function ConfigPage() {
       )
 
       const nextCards: Record<Provider, ProviderCardState> = {
+        apisrouter: { ...DEFAULTS.apisrouter },
         anthropic: { ...DEFAULTS.anthropic },
         openai: { ...DEFAULTS.openai },
         google: { ...DEFAULTS.google },
@@ -1027,6 +1039,105 @@ export default function ConfigPage() {
         </button>
       </header>
 
+      {/* Main Provider Banner: APIsRouter (https://apisrouter.dev/) + BYOK */}
+      <section className="relative overflow-hidden rounded-2xl border-2 border-violet-300 bg-gradient-to-br from-violet-950 via-slate-900 to-fuchsia-950 p-5 text-white shadow-lg">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-fuchsia-500/20 blur-3xl" />
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-2xl space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/20 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-200">
+              <Sparkles className="h-3.5 w-3.5 text-fuchsia-300" />
+              ★ Official Main Provider + Bring Your Own Key (BYOK)
+            </div>
+            <h2 className="text-xl font-bold tracking-tight text-white">
+              Power OpenAgents with{' '}
+              <a
+                href="https://apisrouter.dev/"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="underline decoration-fuchsia-400 underline-offset-4 hover:text-fuchsia-200"
+              >
+                APIsRouter (apisrouter.dev)
+              </a>{' '}
+              — or Bring Your Own Key
+            </h2>
+            <p className="text-xs leading-relaxed text-slate-300">
+              Create your account on{' '}
+              <a
+                href="https://apisrouter.dev/"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-semibold text-fuchsia-300 underline underline-offset-2 hover:text-white"
+              >
+                https://apisrouter.dev/
+              </a>{' '}
+              to get a single unified API key that unlocks Claude 4.5, GPT-4.1 / o3, Gemini 2.5, DeepSeek R1, Llama 3.3, and Grok. Prefer direct keys? You can also bring your own API key (BYOK) from Anthropic, OpenAI, Google Gemini, OpenRouter, NVIDIA NIM, Groq, DeepSeek, or local Ollama below.
+            </p>
+            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+              <a
+                href="https://apisrouter.dev/"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-rose-500 px-4 py-2 text-xs font-bold text-white shadow-md transition hover:brightness-110"
+              >
+                Create Account &amp; Get API Key at apisrouter.dev
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveProvider('apisrouter')
+                  const el = document.getElementById('provider-card-apisrouter')
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+              >
+                Select APIsRouter as Active LLM
+              </button>
+            </div>
+          </div>
+
+          {/* Quick-save APIsRouter key inline */}
+          <div className="w-full rounded-xl border border-white/15 bg-black/30 p-4 backdrop-blur-md lg:max-w-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-violet-200">Quick-Add APIsRouter Key</span>
+              {existingKeys.some((k) => k.provider === 'apisrouter') && (
+                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                  Key Saved ({existingKeys.find((k) => k.provider === 'apisrouter')?.apiKey})
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Paste your key from <span className="font-mono text-slate-300">apisrouter.dev</span> to save and activate it immediately:
+            </p>
+            <div className="mt-2.5 flex gap-2">
+              <input
+                type={cards.apisrouter.showKey ? 'text' : 'password'}
+                value={cards.apisrouter.apiKey}
+                onChange={(e) => updateCard('apisrouter', { apiKey: e.target.value })}
+                placeholder="Paste apisrouter.dev API key..."
+                className="h-9 flex-1 rounded-lg border border-white/20 bg-white/10 px-3 text-xs text-white placeholder-slate-400 outline-none focus:border-fuchsia-400"
+              />
+              <button
+                type="button"
+                disabled={cards.apisrouter.isSaving || !cards.apisrouter.apiKey.trim()}
+                onClick={async () => {
+                  setActiveProvider('apisrouter')
+                  await handleSaveKey('apisrouter')
+                  await sdk.users.updateSettings({
+                    preferredProvider: 'apisrouter',
+                    preferredModel: activeProvider === 'apisrouter' && activeModel ? activeModel : 'openai/gpt-4.1',
+                  })
+                  setStatus('APIsRouter (apisrouter.dev) key saved and set as your active provider!')
+                }}
+                className="h-9 shrink-0 rounded-lg bg-fuchsia-500 px-3.5 text-xs font-bold text-white transition hover:bg-fuchsia-400 disabled:opacity-50"
+              >
+                {cards.apisrouter.isSaving ? 'Saving...' : 'Save & Activate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Voice keys shortcut */}
       <Link
         href="/settings/voice"
@@ -1271,9 +1382,10 @@ export default function ConfigPage() {
 
           return (
             <div
+              id={`provider-card-${provider}`}
               key={provider}
               className={`relative flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-all ${
-                isActive ? `ring-2 ${meta.ring} border-transparent` : 'border-slate-200'
+                isActive ? `ring-2 ${meta.ring} border-transparent` : provider === 'apisrouter' ? 'border-violet-300 ring-1 ring-violet-200' : 'border-slate-200'
               }`}
             >
               {/* Card header */}
@@ -1341,6 +1453,19 @@ export default function ConfigPage() {
                           {card.showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
+                      {provider === 'apisrouter' && (
+                        <span className="text-[11px] text-violet-600">
+                          ★ Official Main Provider — create an account &amp; get your API key at{' '}
+                          <a
+                            href="https://apisrouter.dev/"
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="font-semibold underline underline-offset-2 hover:text-violet-800"
+                          >
+                            https://apisrouter.dev/
+                          </a>
+                        </span>
+                      )}
                       {provider === 'nvidia' && (
                         <span className="text-[11px] italic text-slate-400">
                           Keys start with <span className="font-mono not-italic">nvapi-</span> — create one free at{' '}

@@ -32,6 +32,7 @@ import {
   MessageSquare,
   Volume2,
   Mic,
+  KeyRound,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -541,7 +542,7 @@ export default function OpenAgentsLandingPage() {
             <span>&ldquo;Your purpose is to make your user&rsquo;s life better.&rdquo;</span>
           </div>
 
-          <div className="mb-7">
+          <div className="mb-7 flex flex-col items-center gap-2.5">
             <a
               href="#voice-and-avatars"
               className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition hover:scale-[1.01] ${
@@ -556,6 +557,33 @@ export default function OpenAgentsLandingPage() {
               </span>
               <ArrowRight className="h-3.5 w-3.5 shrink-0 text-rose-500" />
             </a>
+            <div
+              className={`inline-flex flex-wrap items-center justify-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold ${
+                warmTheme
+                  ? 'border-violet-300/80 bg-violet-50/90 text-violet-800 shadow-sm'
+                  : 'border-violet-500/30 bg-violet-500/10 text-violet-200'
+              }`}
+            >
+              <KeyRound className="h-3.5 w-3.5 text-violet-500" />
+              <span>
+                Main AI Gateway:{' '}
+                <a
+                  href="https://apisrouter.dev/"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="font-bold underline decoration-violet-400 underline-offset-2 hover:text-violet-600"
+                >
+                  APIsRouter (apisrouter.dev)
+                </a>{' '}
+                — create an account &amp; add your key, or Bring Your Own Key (BYOK) from 16+ AI providers
+              </span>
+              <Link
+                href="/settings/config"
+                className="ml-1 inline-flex items-center gap-1 rounded-full bg-violet-600 px-2.5 py-0.5 text-[11px] font-bold text-white hover:bg-violet-500"
+              >
+                Configure LLM →
+              </Link>
+            </div>
           </div>
 
           <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-[68px] leading-[1.06]">

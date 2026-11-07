@@ -2167,6 +2167,7 @@ export class AgentService implements OnModuleInit {
   private normalizeProvider(value?: string | null): LLMProvider | null {
     const normalized = (value ?? '').trim().toLowerCase()
     if (
+      normalized === 'apisrouter' ||
       normalized === 'anthropic' ||
       normalized === 'openai' ||
       normalized === 'google' ||
@@ -2420,6 +2421,7 @@ export class AgentService implements OnModuleInit {
 
   private describeRuntime(provider: LLMProvider, model?: string | null) {
     const providerLabels: Record<LLMProvider, string> = {
+      apisrouter: 'APIsRouter (apisrouter.dev)',
       anthropic: 'Anthropic',
       openai: 'OpenAI',
       google: 'Google',

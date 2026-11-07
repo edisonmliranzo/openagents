@@ -6,9 +6,10 @@ import type { LLMProvider } from '@openagents/shared'
 import { LLM_MODELS, LLM_MODEL_OPTIONS } from '@openagents/shared'
 import { embedText } from './embeddings'
 
-const SUPPORTED_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
+const SUPPORTED_PROVIDERS: LLMProvider[] = ['apisrouter', 'anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
 
 const PROVIDER_LABELS: Record<LLMProvider, string> = {
+  apisrouter: 'APIsRouter (apisrouter.dev)',
   anthropic: 'Anthropic',
   openai: 'OpenAI',
   google: 'Google Gemini',
@@ -28,6 +29,7 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
 }
 
 const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
+  apisrouter: ['APISROUTER_API_KEY'],
   anthropic: ['ANTHROPIC_API_KEY'],
   openai: ['OPENAI_API_KEY'],
   google: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
@@ -46,6 +48,7 @@ const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
 }
 
 const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LLMProvider, string>> = {
+  apisrouter: 'https://apisrouter.dev/api/v1',
   google: 'https://generativelanguage.googleapis.com/v1beta/openai',
   minimax: 'https://api.minimaxi.chat/v1',
   perplexity: 'https://api.perplexity.ai',
@@ -113,6 +116,7 @@ export class LLMService {
     this.allowedOllamaHosts = this.readAllowedOllamaHosts()
 
     this.envApiKeys = {
+      apisrouter: this.readFirstEnv(PROVIDER_ENV_VARS.apisrouter),
       anthropic: this.readFirstEnv(PROVIDER_ENV_VARS.anthropic),
       openai: this.readFirstEnv(PROVIDER_ENV_VARS.openai),
       google: this.readFirstEnv(PROVIDER_ENV_VARS.google),
@@ -130,10 +134,10 @@ export class LLMService {
       meta: this.readFirstEnv(PROVIDER_ENV_VARS.meta),
     }
 
-    const configured = (config.get<string>('DEFAULT_LLM_PROVIDER') ?? 'anthropic').trim().toLowerCase()
+    const configured = (config.get<string>('DEFAULT_LLM_PROVIDER') ?? 'apisrouter').trim().toLowerCase()
     this.defaultProvider = this.isSupportedProvider(configured)
       ? (configured as LLMProvider)
-      : 'anthropic'
+      : 'apisrouter'
   }
 
   async complete(
@@ -975,12 +979,13 @@ export class LLMService {
     return new OpenAI({
       ...(baseURL ? { baseURL } : {}),
       apiKey,
-      // OpenRouter app attribution (https://openrouter.ai/docs/app-attribution)
-      ...(provider === 'openrouter'
+      // APIsRouter & OpenRouter app attribution
+      ...(provider === 'openrouter' || provider === 'apisrouter'
         ? {
             defaultHeaders: {
               'HTTP-Referer': (this.config.get<string>('PUBLIC_BASE_URL') ?? 'https://github.com/edisonmliranzo/openagents').trim(),
               'X-OpenRouter-Title': 'OpenAgents',
+              'X-Title': 'OpenAgents',
             },
           }
         : {}),
@@ -1085,9 +1090,8 @@ export class LLMService {
   ) {
     const override = baseUrl?.trim().replace(/\/+$/, '')
     if (override) {
-      // Loopback endpoints (LM Studio, llama.cpp, vLLM on the user's own
-      // machine) are always allowed. Remote overrides need the explicit flag.
-      if (!this.allowCustomOpenAIBaseUrls && !this.isLoopbackUrl(override)) {
+      // Loopback endpoints and official apisrouter.dev endpoints are always allowed.
+      if (!this.allowCustomOpenAIBaseUrls && !this.isLoopbackUrl(override) && !this.isTrustedRouterUrl(override)) {
         throw new Error('Custom LLM base URLs are disabled. Set ALLOW_CUSTOM_LLM_BASE_URLS=true to enable.')
       }
       return override
@@ -1099,6 +1103,16 @@ export class LLMService {
       )
     }
     return fallback
+  }
+
+  private isTrustedRouterUrl(raw: string) {
+    try {
+      const candidate = raw.match(/^[a-z]+:\/\//i) ? raw : `https://${raw}`
+      const host = this.normalizeHost(new URL(candidate).hostname)
+      return host === 'apisrouter.dev' || host.endsWith('.apisrouter.dev')
+    } catch {
+      return false
+    }
   }
 
   private isLoopbackUrl(raw: string) {

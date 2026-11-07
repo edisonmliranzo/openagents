@@ -6,12 +6,12 @@ import type { LLMProvider } from '@openagents/shared'
 
 const ENC_PREFIX = 'enc:v1:'
 
-const SUPPORTED_LLM_PROVIDERS: LLMProvider[] = ['anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
+const SUPPORTED_LLM_PROVIDERS: LLMProvider[] = ['apisrouter', 'anthropic', 'openai', 'google', 'ollama', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
 
 // Providers that speak the OpenAI chat-completions API and therefore accept
 // an optional custom base URL (stored as-is; the LLM service decides at call
 // time whether a non-default host is allowed).
-const OPENAI_COMPATIBLE_LLM_PROVIDERS: LLMProvider[] = ['openai', 'google', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
+const OPENAI_COMPATIBLE_LLM_PROVIDERS: LLMProvider[] = ['apisrouter', 'openai', 'google', 'minimax', 'perplexity', 'nvidia', 'atlascloud', 'groq', 'mistral', 'deepseek', 'xai', 'openrouter', 'together', 'custom', 'meta']
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
 const DEFAULT_OLLAMA_ALLOWED_HOSTS = [
   'localhost',
@@ -101,7 +101,7 @@ export class UsersService {
     return this.prisma.userSettings.upsert({
       where: { userId },
       update: {},
-      create: { userId },
+      create: { userId, preferredProvider: 'apisrouter', preferredModel: 'openai/gpt-4.1' },
     })
   }
 

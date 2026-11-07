@@ -11,6 +11,7 @@ export interface ApiKeyHealth {
 }
 
 const TRACKED_KEYS: Array<{ name: string; envVar: string }> = [
+  { name: 'APIsRouter (apisrouter.dev — Main)', envVar: 'APISROUTER_API_KEY' },
   { name: 'OpenAI', envVar: 'OPENAI_API_KEY' },
   { name: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' },
   { name: 'Google Gemini', envVar: 'GOOGLE_GENERATIVE_AI_API_KEY' },

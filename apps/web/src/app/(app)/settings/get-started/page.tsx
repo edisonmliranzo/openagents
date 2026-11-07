@@ -259,6 +259,54 @@ export default function GetStartedPage() {
         </div>
       </header>
 
+      <section className="rounded-2xl border-2 border-violet-300 bg-gradient-to-br from-violet-950 via-slate-900 to-fuchsia-950 p-5 text-white shadow-md">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="max-w-2xl space-y-1.5">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/20 px-3 py-0.5 text-[11px] font-bold uppercase tracking-wider text-violet-200">
+              <Sparkles size={12} />
+              ★ Official Main Provider + Bring Your Own Key (BYOK)
+            </span>
+            <h2 className="text-lg font-bold text-white">
+              Get your unified API key at{' '}
+              <a
+                href="https://apisrouter.dev/"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="underline decoration-fuchsia-400 underline-offset-4 hover:text-fuchsia-200"
+              >
+                https://apisrouter.dev/
+              </a>{' '}
+              — or bring your own key
+            </h2>
+            <p className="text-xs leading-relaxed text-slate-300">
+              Create an account at <strong>apisrouter.dev</strong> and paste your API key in{' '}
+              <Link href="/settings/config" className="font-semibold text-fuchsia-300 underline">
+                Settings → Config
+              </Link>{' '}
+              to unlock Claude, GPT-4.1/o3, Gemini 2.5, DeepSeek R1, and Llama with one key — or bring your own API key from Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, NVIDIA NIM, or local Ollama.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <a
+              href="https://apisrouter.dev/"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-rose-500 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:brightness-110"
+            >
+              Get API Key at apisrouter.dev
+              <ArrowRight size={13} />
+            </a>
+            <Link
+              href="/settings/config"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/20"
+            >
+              Add Key in Config
+              <Settings2 size={13} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-3">
           {checklist.map((item) => (
