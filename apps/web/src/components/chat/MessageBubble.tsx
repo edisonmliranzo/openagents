@@ -209,7 +209,7 @@ function ArtifactGallery({ artifacts }: { artifacts: MessageArtifact[] }) {
               {artifact.type === 'image' && preview && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <div className="bg-black/5 dark:bg-black/20">
-                  <img src={preview} alt={artifact.name} className="max-h-[22rem] w-full object-contain" />
+                  <img src={preview} alt={artifact.name || 'Generated agent image artifact'} className="max-h-[22rem] w-full object-contain" />
                 </div>
               )}
               {artifact.type === 'video' && preview && (

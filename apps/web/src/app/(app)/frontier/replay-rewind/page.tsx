@@ -165,7 +165,7 @@ export default function ReplayRewindPage() {
                     </div>
                     {step.screenshot && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={step.screenshot} alt="screenshot" className="max-h-64 rounded-lg border border-[var(--border)]" />
+                      <img src={step.screenshot} alt={step.title ? `Agent step screenshot: ${step.title}` : 'Agent execution step screenshot'} className="max-h-64 rounded-lg border border-[var(--border)]" />
                     )}
                     {step.content && <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2">{step.content}</pre>}
                     {step.input !== undefined ? <pre className="max-h-40 overflow-auto rounded-lg bg-slate-50 p-2">in: {JSON.stringify(step.input, null, 2)}</pre> : null}

@@ -33,6 +33,7 @@ import {
   Volume2,
   Mic,
   KeyRound,
+  PhoneCall,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -429,9 +430,13 @@ export default function OpenAgentsLandingPage() {
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 via-orange-400 to-amber-400 text-white shadow-sm">
-              <Sparkles className="h-4 w-4" />
-            </div>
+            <img
+              src="/favicon.svg"
+              alt="OpenAgents autonomous AI agent platform logo"
+              width={36}
+              height={36}
+              className="h-9 w-9 rounded-xl shadow-sm"
+            />
             <div className="flex items-center gap-2">
               <span className="text-base font-bold tracking-tight">OpenAgents</span>
               <span
@@ -456,6 +461,12 @@ export default function OpenAgentsLandingPage() {
             <a href="#artifacts-and-safety" className="hover:opacity-100 transition">
               Artifacts & Control
             </a>
+            <Link href="/docs" className="hover:opacity-100 transition">
+              Docs
+            </Link>
+            <Link href="/privacy-policy" className="hover:opacity-100 transition">
+              Privacy Policy
+            </Link>
             <Link href="/support" className="hover:opacity-100 transition">
               Support
             </Link>
@@ -600,6 +611,56 @@ export default function OpenAgentsLandingPage() {
           >
             More than a chatbot—a personal AI agent built around your whole life and work. It remembers what matters to you, shares its own computer and terminal, proactively tracks your goals, and stays 100% under your control.
           </p>
+
+          {/* ── ABOVE-THE-FOLD PRIMARY CTA BAR ── */}
+          <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
+            <Link
+              href={hydrated && user ? '/chat' : '/register'}
+              data-analytics-cta="hero_primary_launch_agent"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-rose-500/25 transition hover:scale-[1.02] hover:brightness-105"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span>{hydrated && user ? 'Open Live Agent Workspace' : 'Get Started Free — Launch Your Agent'}</span>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              href="/phone"
+              data-analytics-cta="hero_secondary_voice_avatar_call"
+              className={`inline-flex items-center justify-center gap-2 rounded-full border px-6 py-3.5 text-sm font-bold transition hover:scale-[1.01] ${
+                warmTheme
+                  ? 'border-stone-300 bg-white text-stone-900 shadow-sm hover:bg-stone-50'
+                  : 'border-white/20 bg-white/10 text-white hover:bg-white/15'
+              }`}
+            >
+              <PhoneCall className="h-4 w-4 text-rose-500" />
+              <span>Talk Live (Voice &amp; 3D Avatar Call)</span>
+            </Link>
+            <a
+              href="https://apisrouter.dev/"
+              target="_blank"
+              rel="noreferrer noopener"
+              data-analytics-cta="hero_tertiary_get_apisrouter_key"
+              className={`inline-flex items-center justify-center gap-2 rounded-full border px-5 py-3.5 text-xs font-bold transition ${
+                warmTheme
+                  ? 'border-violet-300 bg-violet-50/90 text-violet-900 hover:bg-violet-100'
+                  : 'border-violet-500/40 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25'
+              }`}
+            >
+              <KeyRound className="h-3.5 w-3.5 text-violet-500" />
+              <span>Get Unified Key at APIsRouter.dev (93+ Models) →</span>
+            </a>
+          </div>
+
+          <div
+            className={`mt-3.5 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[11px] font-medium ${
+              warmTheme ? 'text-stone-500' : 'text-slate-400'
+            }`}
+          >
+            <span>✓ Free Self-Hosted &amp; Cloud Workspace</span>
+            <span>✓ 93+ Live 2026 Models via APIsRouter</span>
+            <span>✓ Zero-Markup Bring Your Own Key (BYOK)</span>
+            <span>✓ Full-Duplex Voice &amp; Expressive Avatars</span>
+          </div>
 
           {/* Interactive Phrase Pills (Click any capability to preview) */}
           <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
@@ -1796,12 +1857,21 @@ export default function OpenAgentsLandingPage() {
             <a href="#how-it-works" className="hover:underline">
               Design Philosophy
             </a>
+            <Link href="/privacy-policy" className="hover:underline">
+              Privacy Policy
+            </Link>
             <Link href="/terms" className="hover:underline">
               Terms &amp; Conditions
             </Link>
             <Link href="/support" className="hover:underline">
               Support Center
             </Link>
+            <Link href="/docs" className="hover:underline">
+              Documentation
+            </Link>
+            <a href="/sitemap.xml" className="hover:underline">
+              Sitemap
+            </a>
             {isSuperadmin && (
               <>
                 <Link href="/chat" className="font-semibold text-rose-500 hover:underline">

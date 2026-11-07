@@ -1,0 +1,18 @@
+# OpenAgents robots.txt
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /docs
+Allow: /compare
+Allow: /support
+Allow: /terms
+Allow: /privacy-policy
+Allow: /phone
+Allow: /chat
+Allow: /frontier
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin
+
+Sitemap: https://openagents.edison0220.workers.dev/sitemap.xml

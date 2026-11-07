@@ -1673,7 +1673,7 @@ export function ChatWindow({
                     <div key={`${file.name}-${idx}`} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-2 py-1 text-[11px] text-[#344054] dark:border-[#2d3347] dark:bg-[#141824]">
                       {file.isImage ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={file.content} alt={file.name} className="h-5 w-5 rounded object-cover" />
+                        <img src={file.content} alt={file.name || 'Attached chat image preview'} className="h-5 w-5 rounded object-cover" />
                       ) : (
                         <Paperclip size={11} className="shrink-0 text-[#98a2b3]" />
                       )}
@@ -1960,7 +1960,7 @@ export function ChatWindow({
                   <div key={`${file.name}-${idx}`} className="inline-flex items-center gap-1.5 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-2 py-1 text-[11px] text-[#344054] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#c9d1e0]">
                     {file.isImage ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={file.content} alt={file.name} className="h-5 w-5 rounded object-cover" />
+                      <img src={file.content} alt={file.name || 'Attached chat image preview'} className="h-5 w-5 rounded object-cover" />
                     ) : (
                       <Paperclip size={11} className="shrink-0 text-[#98a2b3]" />
                     )}
