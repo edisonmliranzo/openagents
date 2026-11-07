@@ -101,7 +101,7 @@ export class UsersService {
     return this.prisma.userSettings.upsert({
       where: { userId },
       update: {},
-      create: { userId, preferredProvider: 'apisrouter', preferredModel: 'openai/gpt-4.1' },
+      create: { userId, preferredProvider: 'apisrouter', preferredModel: 'claude-sonnet-5.5' },
     })
   }
 

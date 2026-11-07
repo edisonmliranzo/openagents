@@ -114,7 +114,7 @@ function controlButtonClass() {
 function getDefaultRuntime(settings?: Pick<UserSettings, 'preferredProvider' | 'preferredModel'> | null) {
   return {
     provider: settings?.preferredProvider?.trim() || 'apisrouter',
-    model: settings?.preferredModel?.trim() || 'openai/gpt-4.1',
+    model: settings?.preferredModel?.trim() || 'claude-sonnet-5.5',
   }
 }
 

@@ -129,7 +129,7 @@ export default function SmartRouterPage() {
                 </div>
               ))}
               {policy.ladder.length < 6 && (
-                <button className="flex items-center gap-1 text-xs font-medium text-[var(--tone-strong)]" onClick={() => patch({ ladder: [...policy.ladder, { provider: 'openai', model: 'gpt-4o' }] })}><Plus size={12} /> Add model</button>
+                <button className="flex items-center gap-1 text-xs font-medium text-[var(--tone-strong)]" onClick={() => patch({ ladder: [...policy.ladder, { provider: 'apisrouter', model: 'claude-sonnet-5.5' }] })}><Plus size={12} /> Add model</button>
               )}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {([

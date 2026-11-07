@@ -383,12 +383,20 @@ function describeModelSelection(provider: Provider, model: string) {
   }
   if (
     normalized.includes('opus')
+    || normalized.includes('sonnet-5')
     || normalized.includes('sonnet')
-    || normalized.includes('gpt-5.1')
-    || normalized.includes('gemini-3.1')
+    || normalized.includes('gpt-6')
+    || normalized.includes('gpt-5')
+    || normalized.includes('gemini-4')
+    || normalized.includes('v4-pro')
+    || normalized.includes('k3.1')
+    || normalized.includes('k2.7')
+    || normalized.includes('grok-4.7')
+    || normalized.includes('max-prime')
+    || normalized.includes('maverick')
     || normalized.includes('pro')
   ) {
-    return 'Higher-capability tier. Prefer this for multi-step reasoning, approvals, workflows, and tool orchestration.'
+    return 'Frontier flagship tier. Best for multi-step coding, deep reasoning, approvals, workflows, and autonomous tool orchestration.'
   }
   return 'Balanced tier. Good default when you want decent reasoning without the slowest or most expensive option.'
 }
@@ -1070,7 +1078,9 @@ export default function ConfigPage() {
               >
                 https://apisrouter.dev/
               </a>{' '}
-              to get a single unified API key that unlocks Claude 4.5, GPT-4.1 / o3, Gemini 2.5, DeepSeek R1, Llama 3.3, and Grok. Prefer direct keys? You can also bring your own API key (BYOK) from Anthropic, OpenAI, Google Gemini, OpenRouter, NVIDIA NIM, Groq, DeepSeek, or local Ollama below.
+              to get a single unified API key (<code className="font-mono text-fuchsia-200">apr-sk-live-...</code>) on{' '}
+              <code className="font-mono text-fuchsia-200">https://apisrouter.dev/v1</code> that unlocks 93+ live frontier models including{' '}
+              <strong>Claude Sonnet 5.5, Claude Opus 5.5, GPT-6.1 Sol Pro, GPT-6.1 Terra Pro, Gemini 4 Argon, Gemini 3.8 Flash, DeepSeek V4.1 Flash, DeepSeek V4 Pro, Kimi K2.7 Code, Kimi K3.1 Pro, Grok 4.7, Qwen3.8 Max Prime, Llama 4 Maverick, Mistral Large 4, and MiniMax M3.1 Flash</strong>. Prefer direct keys? You can also bring your own API key (BYOK) from Anthropic, OpenAI, Google Gemini, OpenRouter, NVIDIA NIM, Groq, DeepSeek, or local Ollama below.
             </p>
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
               <a
@@ -1114,7 +1124,7 @@ export default function ConfigPage() {
                 type={cards.apisrouter.showKey ? 'text' : 'password'}
                 value={cards.apisrouter.apiKey}
                 onChange={(e) => updateCard('apisrouter', { apiKey: e.target.value })}
-                placeholder="Paste apisrouter.dev API key..."
+                placeholder="apr-sk-live-... (from apisrouter.dev)"
                 className="h-9 flex-1 rounded-lg border border-white/20 bg-white/10 px-3 text-xs text-white placeholder-slate-400 outline-none focus:border-fuchsia-400"
               />
               <button
@@ -1125,9 +1135,9 @@ export default function ConfigPage() {
                   await handleSaveKey('apisrouter')
                   await sdk.users.updateSettings({
                     preferredProvider: 'apisrouter',
-                    preferredModel: activeProvider === 'apisrouter' && activeModel ? activeModel : 'openai/gpt-4.1',
+                    preferredModel: activeProvider === 'apisrouter' && activeModel ? activeModel : 'claude-sonnet-5.5',
                   })
-                  setStatus('APIsRouter (apisrouter.dev) key saved and set as your active provider!')
+                  setStatus('APIsRouter (apisrouter.dev) key saved and set as your active provider (claude-sonnet-5.5)!')
                 }}
                 className="h-9 shrink-0 rounded-lg bg-fuchsia-500 px-3.5 text-xs font-bold text-white transition hover:bg-fuchsia-400 disabled:opacity-50"
               >
@@ -1442,7 +1452,7 @@ export default function ConfigPage() {
                           type={card.showKey ? 'text' : 'password'}
                           value={card.apiKey}
                           onChange={(e) => updateCard(provider, { apiKey: e.target.value })}
-                          placeholder={isConfigured ? 'Enter new key to update...' : provider === 'nvidia' ? 'nvapi-...' : 'sk-...'}
+                          placeholder={isConfigured ? 'Enter new key to update...' : provider === 'apisrouter' ? 'apr-sk-live-...' : provider === 'nvidia' ? 'nvapi-...' : 'sk-...'}
                           className="h-9 w-full rounded-lg border border-slate-200 py-0 pl-3 pr-9 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
                         />
                         <button

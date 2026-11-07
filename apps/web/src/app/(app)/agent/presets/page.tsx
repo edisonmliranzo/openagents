@@ -245,7 +245,7 @@ export default function AgentPresetsPage() {
               <input
                 value={preferredProvider}
                 onChange={(event) => setPreferredProvider(event.target.value)}
-                placeholder="anthropic"
+                placeholder="apisrouter"
                 className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-100"
               />
             </label>
@@ -255,7 +255,7 @@ export default function AgentPresetsPage() {
               <input
                 value={preferredModel}
                 onChange={(event) => setPreferredModel(event.target.value)}
-                placeholder="claude-sonnet-4-6"
+                placeholder="claude-sonnet-5.5"
                 className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-100"
               />
             </label>

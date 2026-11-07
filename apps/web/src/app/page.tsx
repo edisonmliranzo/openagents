@@ -575,7 +575,7 @@ export default function OpenAgentsLandingPage() {
                 >
                   APIsRouter (apisrouter.dev)
                 </a>{' '}
-                — create an account &amp; add your key, or Bring Your Own Key (BYOK) from 16+ AI providers
+                — create an account &amp; add your key for 93+ live models (Claude Sonnet 5.5, Opus 5.5, GPT-6.1 Sol Pro, Gemini 4 Argon, DeepSeek V4.1 Flash, Kimi K2.7 Code, Grok 4.7), or Bring Your Own Key (BYOK)
               </span>
               <Link
                 href="/settings/config"

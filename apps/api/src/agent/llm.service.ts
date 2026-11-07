@@ -48,7 +48,7 @@ const PROVIDER_ENV_VARS: Record<Exclude<LLMProvider, 'ollama'>, string[]> = {
 }
 
 const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<LLMProvider, string>> = {
-  apisrouter: 'https://apisrouter.dev/api/v1',
+  apisrouter: 'https://apisrouter.dev/v1',
   google: 'https://generativelanguage.googleapis.com/v1beta/openai',
   minimax: 'https://api.minimaxi.chat/v1',
   perplexity: 'https://api.perplexity.ai',
@@ -438,6 +438,12 @@ export class LLMService {
       }
       const json = await response.json() as { data?: Array<{ id?: string }> }
       return (json.data ?? []).map((m) => m.id ?? '').filter(Boolean)
+    }
+
+    if (provider === 'apisrouter' || provider === 'openrouter') {
+      const effectiveKey = apiKey?.trim() || this.envApiKeys[provider]?.trim() || 'public-catalog'
+      const client = this.createOpenAICompatibleClient(provider, effectiveKey, baseUrl)
+      return this.listModelIds(client)
     }
 
     const client = this.createOpenAICompatibleClient(provider, apiKey, baseUrl)

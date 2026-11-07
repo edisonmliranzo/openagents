@@ -54,25 +54,39 @@ export interface BudgetStatus {
   exceeded: boolean
 }
 
-// Approximate pricing per 1M tokens (USD)
+// Approximate pricing per 1M tokens (USD) — synced with https://apisrouter.dev/v1/models
 const PRICING: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
-  'claude-3-5-sonnet-20241022': { input: 3.0, output: 15.0 },
-  'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
-  'gpt-4o': { input: 2.5, output: 10.0 },
-  'gpt-4o-mini': { input: 0.15, output: 0.6 },
-  'gpt-4-turbo': { input: 10.0, output: 30.0 },
-  'gemini-2.0-flash': { input: 0.1, output: 0.4 },
-  'gemini-1.5-pro': { input: 1.25, output: 5.0 },
+  'claude-sonnet-5.5': { input: 3.0, output: 15.0 },
+  'claude-opus-5.5': { input: 5.2, output: 26.0 },
+  'claude-haiku-5.5': { input: 0.8, output: 4.0 },
+  'gpt-6.1-sol-pro': { input: 3.0, output: 15.0 },
+  'gpt-6.1-terra-pro': { input: 3.0, output: 15.0 },
+  'gpt-6-luna-pro': { input: 1.5, output: 6.0 },
+  'gpt-6-luna': { input: 0.4, output: 1.6 },
+  'kimi-k2.7-code': { input: 1.08, output: 6.3 },
+  'kimi-k3.1-pro': { input: 1.5, output: 7.5 },
+  'deepseek-v4.1-flash': { input: 0.14, output: 0.28 },
+  'deepseek-v4-pro-0813': { input: 0.55, output: 2.19 },
+  'gemini-4-argon': { input: 1.25, output: 5.0 },
+  'gemini-3.8-flash': { input: 0.1, output: 0.4 },
+  'grok-4.7': { input: 2.0, output: 10.0 },
+  'qwen3.8-max-prime': { input: 1.6, output: 6.4 },
+  'qwen3.8-flash': { input: 0.15, output: 0.6 },
+  'llama-4-maverick': { input: 0.2, output: 0.6 },
+  'llama-4-scout': { input: 0.1, output: 0.3 },
+  'mistral-large-4-0': { input: 2.0, output: 6.0 },
+  'devstral-2512': { input: 0.4, output: 1.2 },
+  'minimax-m3.1-flash': { input: 0.2, output: 0.8 },
+  'glm-5.3': { input: 0.5, output: 2.0 },
   'default': { input: 1.0, output: 3.0 },
 }
 
 export const DEFAULT_ROUTER_SETTINGS: RouterSettings = {
   mode: 'manual',
   tiers: {
-    simple: { provider: 'google', model: 'gemini-2.0-flash' },
-    standard: { provider: 'openai', model: 'gpt-4o-mini' },
-    complex: { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+    simple: { provider: 'apisrouter', model: 'deepseek-v4.1-flash' },
+    standard: { provider: 'apisrouter', model: 'kimi-k2.7-code' },
+    complex: { provider: 'apisrouter', model: 'claude-sonnet-5.5' },
   },
   monthlyBudgetUsd: 0,
   alertThresholdPct: 80,

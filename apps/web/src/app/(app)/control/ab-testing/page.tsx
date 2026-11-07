@@ -35,8 +35,8 @@ export default function AbTestingPage() {
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [variants, setVariants] = useState([
-    { name: 'Variant A', systemPrompt: '', model: 'gpt-4.1' },
-    { name: 'Variant B', systemPrompt: '', model: 'claude-sonnet-4-5-20250929' },
+    { name: 'Variant A', systemPrompt: '', model: 'claude-sonnet-5.5' },
+    { name: 'Variant B', systemPrompt: '', model: 'gpt-6.1-sol-pro' },
   ])
 
   async function loadTests() {

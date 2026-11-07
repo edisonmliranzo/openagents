@@ -279,11 +279,11 @@ export default function GetStartedPage() {
               — or bring your own key
             </h2>
             <p className="text-xs leading-relaxed text-slate-300">
-              Create an account at <strong>apisrouter.dev</strong> and paste your API key in{' '}
+              Create an account at <strong>apisrouter.dev</strong> and paste your <code className="font-mono text-fuchsia-200">apr-sk-live-...</code> API key in{' '}
               <Link href="/settings/config" className="font-semibold text-fuchsia-300 underline">
                 Settings → Config
               </Link>{' '}
-              to unlock Claude, GPT-4.1/o3, Gemini 2.5, DeepSeek R1, and Llama with one key — or bring your own API key from Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, NVIDIA NIM, or local Ollama.
+              to unlock 93+ live frontier models (Claude Sonnet 5.5, Claude Opus 5.5, GPT-6.1 Sol Pro, Gemini 4 Argon, DeepSeek V4.1 Flash, Kimi K2.7 Code, Grok 4.7, Qwen3.8 Max Prime, and Llama 4 Maverick) with one key — or bring your own API key from Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, NVIDIA NIM, or local Ollama.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
