@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { Loader2, Mic, MicOff, Sparkles, Square, Volume2, VolumeX, X, Settings2 } from 'lucide-react'
 import clsx from 'clsx'
@@ -285,9 +286,14 @@ export function WebRtcVoiceControls() {
       </div>
 
       {/* ── FULL-SCREEN / FLOATING EXPRESSIVE AVATAR & NATURAL VOICE STUDIO MODAL ── */}
-      {studioOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-xl animate-in fade-in duration-200">
-          <div className="relative flex w-full max-w-2xl flex-col overflow-hidden rounded-[32px] border border-white/15 bg-gradient-to-b from-[#0f1424] via-[#0b101d] to-[#080b14] p-6 text-white shadow-2xl sm:p-8">
+      {studioOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-xl animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeAvatarStudio()
+          }}
+        >
+          <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-y-auto rounded-[32px] border border-white/15 bg-gradient-to-b from-[#0f1424] via-[#0b101d] to-[#080b14] p-6 text-white shadow-2xl sm:p-8">
             {/* Top Header */}
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2.5">
@@ -376,7 +382,12 @@ export function WebRtcVoiceControls() {
                   <p className="italic text-sky-300">&ldquo;{interim}&rdquo;</p>
                 ) : lastSpokenText || latestAgentMessage ? (
                   <p className="line-clamp-3 text-slate-200">
-                    {(lastSpokenText || latestAgentMessage).slice(0, 260)}
+                    {(lastSpokenText || latestAgentMessage)
+                      .replace(/```[\s\S]*?```/g, '')
+                      .replace(/[*_#>`~-]+/g, ' ')
+                      .replace(/\s+/g, ' ')
+                      .trim()
+                      .slice(0, 260)}
                   </p>
                 ) : (
                   <p className="text-slate-400">
@@ -512,7 +523,8 @@ export function WebRtcVoiceControls() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )
