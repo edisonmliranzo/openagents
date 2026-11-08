@@ -1,4 +1,4 @@
-const DEFAULT_TUNNEL_ORIGIN = 'https://providing-fighter-terrace-console.trycloudflare.com'
+const DEFAULT_TUNNEL_ORIGIN = 'https://someone-edinburgh-interstate-relative.trycloudflare.com'
 
 export default {
   async fetch(request, env) {

@@ -24,6 +24,8 @@ export default function ChatPage() {
     conversations,
     conversationsLoaded,
     activeConversationId,
+    messages,
+    isStreaming,
     pendingApprovals,
     gatewayStatus,
     loadConversations,
@@ -38,6 +40,67 @@ export default function ChatPage() {
   useEffect(() => {
     void loadConversations()
   }, [loadConversations])
+
+  // Cross-device synchronization: keep sessions and active conversation synced across Mobile, Web, and PC
+  useEffect(() => {
+    const syncAcrossDevices = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      if (useChatStore.getState().isStreaming) return
+
+      await loadConversations()
+      const state = useChatStore.getState()
+      const currentRows = Array.isArray(state.conversations) ? state.conversations : []
+      if (currentRows.length === 0) return
+
+      const settings = await sdk.users.getSettings().catch(() => null)
+      const remotePreferredId = settings?.lastActiveConversationId ?? null
+      const currentActiveId = state.activeConversationId
+      const currentHasNoMessages = state.messages.length === 0
+
+      if (
+        remotePreferredId &&
+        remotePreferredId !== currentActiveId &&
+        currentHasNoMessages &&
+        currentRows.some((c) => c.id === remotePreferredId)
+      ) {
+        await selectConversation(remotePreferredId)
+        return
+      }
+
+      if (currentActiveId && currentRows.some((c) => c.id === currentActiveId)) {
+        try {
+          const latestMessages = await sdk.conversations.messages(currentActiveId)
+          if (
+            Array.isArray(latestMessages) &&
+            latestMessages.length !== useChatStore.getState().messages.length &&
+            !useChatStore.getState().isStreaming
+          ) {
+            useChatStore.setState({ messages: latestMessages })
+          }
+        } catch {
+          // ignore transient poll errors
+        }
+      }
+    }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void syncAcrossDevices()
+      }
+    }
+    const onFocus = () => void syncAcrossDevices()
+    const interval = window.setInterval(() => {
+      void syncAcrossDevices()
+    }, 8000)
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [loadConversations, selectConversation])
 
   useEffect(() => {
     const run = async () => {
