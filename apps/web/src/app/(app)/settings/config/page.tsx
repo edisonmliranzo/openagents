@@ -654,6 +654,10 @@ export default function ConfigPage() {
         }
         await sdk.users.upsertLlmKey('ollama', { baseUrl, isActive: true })
       }
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('openagents.preferred-provider', activeProvider)
+        window.localStorage.setItem('openagents.preferred-model', preferredModelToSave)
+      }
       await sdk.users.updateSettings({
         preferredProvider: activeProvider,
         preferredModel: preferredModelToSave,
@@ -1236,7 +1240,22 @@ export default function ConfigPage() {
                   <ModelPicker
                     models={modelOptions}
                     value={activeModel}
-                    onChange={(m) => setActiveModel(m)}
+                    onChange={(m) => {
+                      setActiveModel(m)
+                      if (typeof window !== 'undefined') {
+                        window.localStorage.setItem('openagents.preferred-provider', activeProvider)
+                        window.localStorage.setItem('openagents.preferred-model', m)
+                      }
+                      void sdk.users.updateSettings({
+                        preferredProvider: activeProvider,
+                        preferredModel: m,
+                      }).then(() => {
+                        const label = `${PROVIDER_META[activeProvider].label} - ${m}`
+                        setStatus(`Saved: ${label}`)
+                        setSavedActiveLabel(label)
+                        setTimeout(() => setSavedActiveLabel(''), 3000)
+                      }).catch(() => {})
+                    }}
                     placeholder="Select a model"
                   />
                 )}

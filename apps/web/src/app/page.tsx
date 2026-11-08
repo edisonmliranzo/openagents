@@ -427,15 +427,15 @@ export default function OpenAgentsLandingPage() {
             : 'border-white/10 bg-[#090b12]/80'
         }`}
       >
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 via-orange-400 to-amber-400 text-white shadow-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-3.5 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+            <div className="relative flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 via-orange-400 to-amber-400 text-white shadow-sm">
               <Sparkles className="h-4 w-4" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-bold tracking-tight">OpenAgents</span>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm sm:text-base font-bold tracking-tight">OpenAgents</span>
               <span
-                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                className={`hidden sm:inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                   warmTheme
                     ? 'bg-black/[0.05] text-stone-600'
                     : 'bg-white/10 text-slate-300'
@@ -464,12 +464,12 @@ export default function OpenAgentsLandingPage() {
             </Link>
           </nav>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
             {/* Theme toggle */}
             <button
               type="button"
               onClick={() => setWarmTheme((w) => !w)}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+              className={`inline-flex h-8 w-8 sm:h-auto sm:w-auto items-center justify-center gap-1.5 rounded-full border sm:px-3 sm:py-1.5 text-xs font-medium transition ${
                 warmTheme
                   ? 'border-black/10 bg-white/80 text-stone-700 hover:bg-white shadow-sm'
                   : 'border-white/15 bg-white/5 text-slate-200 hover:bg-white/10'
@@ -481,10 +481,10 @@ export default function OpenAgentsLandingPage() {
             </button>
 
             {hydrated && user ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <Link
                   href="/chat"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[#141413] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-slate-900"
+                  className="inline-flex whitespace-nowrap items-center gap-1.5 rounded-full bg-[#141413] px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-slate-900"
                 >
                   <span>Open Workspace</span>
                   <ArrowRight className="h-3.5 w-3.5" />
@@ -504,10 +504,10 @@ export default function OpenAgentsLandingPage() {
                 )}
               </div>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <Link
                   href="/login"
-                  className={`inline-flex items-center gap-1 rounded-full border px-3.5 py-2 text-xs font-semibold transition ${
+                  className={`inline-flex whitespace-nowrap items-center gap-1 rounded-full border px-3 py-1.5 sm:px-3.5 sm:py-2 text-[11px] sm:text-xs font-semibold transition ${
                     warmTheme
                       ? 'border-black/10 bg-white/80 text-stone-800 hover:bg-white shadow-sm'
                       : 'border-white/15 bg-white/5 text-slate-200 hover:bg-white/10'
@@ -517,10 +517,11 @@ export default function OpenAgentsLandingPage() {
                 </Link>
                 <Link
                   href="/login?mode=register"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
+                  className="inline-flex whitespace-nowrap items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
                 >
-                  <span>Get Started Free</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  <span className="sm:hidden">Get Started</span>
+                  <span className="hidden sm:inline">Get Started Free</span>
+                  <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 </Link>
               </div>
             )}
@@ -528,11 +529,11 @@ export default function OpenAgentsLandingPage() {
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-7xl px-4 pt-12 pb-24 sm:px-6 lg:px-8">
+      <main className="relative z-10 mx-auto max-w-7xl px-4 pt-6 pb-20 sm:px-6 sm:pt-12 sm:pb-24 lg:px-8">
         {/* ── HERO SECTION ── */}
         <div className="mx-auto max-w-4xl text-center">
           <div
-            className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium shadow-sm mb-3 ${
+            className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1 sm:px-4 sm:py-1.5 text-[11px] sm:text-xs font-medium shadow-sm mb-3 ${
               warmTheme
                 ? 'border-black/[0.08] bg-white/85 text-stone-700'
                 : 'border-white/15 bg-white/5 text-slate-200'
@@ -542,10 +543,10 @@ export default function OpenAgentsLandingPage() {
             <span>&ldquo;Your purpose is to make your user&rsquo;s life better.&rdquo;</span>
           </div>
 
-          <div className="mb-7 flex flex-col items-center gap-2.5">
+          <div className="mb-5 sm:mb-7 flex flex-col items-center gap-2">
             <a
               href="#voice-and-avatars"
-              className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition hover:scale-[1.01] ${
+              className={`hidden sm:inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition hover:scale-[1.01] ${
                 warmTheme
                   ? 'border-rose-300/80 bg-gradient-to-r from-rose-50 via-amber-50 to-orange-50 text-rose-700 shadow-sm'
                   : 'border-rose-500/30 bg-rose-500/10 text-rose-200'
@@ -558,14 +559,26 @@ export default function OpenAgentsLandingPage() {
               <ArrowRight className="h-3.5 w-3.5 shrink-0 text-rose-500" />
             </a>
             <div
-              className={`inline-flex flex-wrap items-center justify-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold ${
+              className={`inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 rounded-2xl sm:rounded-full border px-3.5 py-2 sm:px-4 sm:py-1.5 text-[11px] sm:text-xs font-semibold ${
                 warmTheme
                   ? 'border-violet-300/80 bg-violet-50/90 text-violet-800 shadow-sm'
                   : 'border-violet-500/30 bg-violet-500/10 text-violet-200'
               }`}
             >
-              <KeyRound className="h-3.5 w-3.5 text-violet-500" />
-              <span>
+              <KeyRound className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+              <span className="sm:hidden">
+                Main AI Gateway:{' '}
+                <a
+                  href="https://apisrouter.dev/"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="font-bold underline decoration-violet-400 underline-offset-2"
+                >
+                  APIsRouter.dev
+                </a>{' '}
+                (93+ Live Models + BYOK)
+              </span>
+              <span className="hidden sm:inline">
                 Main AI Gateway:{' '}
                 <a
                   href="https://apisrouter.dev/"
@@ -579,7 +592,7 @@ export default function OpenAgentsLandingPage() {
               </span>
               <Link
                 href="/settings/config"
-                className="ml-1 inline-flex items-center gap-1 rounded-full bg-violet-600 px-2.5 py-0.5 text-[11px] font-bold text-white hover:bg-violet-500"
+                className="inline-flex items-center gap-1 rounded-full bg-violet-600 px-2.5 py-0.5 text-[10px] sm:text-[11px] font-bold text-white hover:bg-violet-500"
               >
                 Configure LLM →
               </Link>

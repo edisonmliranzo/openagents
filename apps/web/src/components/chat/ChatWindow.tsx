@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
@@ -51,12 +52,14 @@ import {
   Mic,
   MessageSquarePlus,
   Paperclip,
+  PanelRight,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
   Star,
+  X,
 } from 'lucide-react'
 
 interface ChatWindowProps {
@@ -112,9 +115,13 @@ function controlButtonClass() {
 }
 
 function getDefaultRuntime(settings?: Pick<UserSettings, 'preferredProvider' | 'preferredModel'> | null) {
+  const storedProvider =
+    typeof window !== 'undefined' ? window.localStorage.getItem('openagents.preferred-provider')?.trim() : ''
+  const storedModel =
+    typeof window !== 'undefined' ? window.localStorage.getItem('openagents.preferred-model')?.trim() : ''
   return {
-    provider: settings?.preferredProvider?.trim() || 'apisrouter',
-    model: settings?.preferredModel?.trim() || 'claude-sonnet-5.5',
+    provider: settings?.preferredProvider?.trim() || storedProvider || 'apisrouter',
+    model: settings?.preferredModel?.trim() || storedModel || 'claude-sonnet-5.5',
   }
 }
 
@@ -232,7 +239,7 @@ function ModelRow({
         onClick={onSelect}
         title={inUse ? `${model} (in use)` : model}
         className={clsx(
-          'flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[12px]',
+          'flex min-h-[38px] sm:min-h-[32px] min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2.5 py-2 sm:px-2 sm:py-1.5 text-left text-[13px] sm:text-[12px] active:scale-[0.99]',
           inUse
             ? 'font-semibold text-[#10b981] dark:text-[#34d399]'
             : 'text-[#344054] dark:text-[#c9d1e0]',
@@ -487,9 +494,13 @@ export function ChatWindow({
   const [controlsExpanded, setControlsExpanded] = useState(false)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
+  const [modelSearchQuery, setModelSearchQuery] = useState('')
+  const [modelPickerAnchor, setModelPickerAnchor] = useState<{ top: number; left: number } | null>(null)
+  const [isMobileViewport, setIsMobileViewport] = useState(false)
   const [modelScope, setModelScope] = useState<'global' | 'chat'>('global')
   const [favoriteModels, setFavoriteModels] = useState<Record<string, string[]>>({})
   const modelPickerRef = useRef<HTMLDivElement>(null)
+  const modelButtonRef = useRef<HTMLButtonElement>(null)
   const [mcpDropdownOpen, setMcpDropdownOpen] = useState(false)
   const mcpPickerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -662,13 +673,18 @@ export function ChatWindow({
     [favoriteModels, activeProvider],
   )
   const favoriteSet = useMemo(() => new Set(providerFavorites), [providerFavorites])
+  const filteredProviderModelOptions = useMemo(() => {
+    const q = modelSearchQuery.trim().toLowerCase()
+    if (!q) return providerModelOptions
+    return providerModelOptions.filter((m) => m.toLowerCase().includes(q))
+  }, [providerModelOptions, modelSearchQuery])
   const favoriteOptions = useMemo(
-    () => providerModelOptions.filter((m) => favoriteSet.has(m)),
-    [providerModelOptions, favoriteSet],
+    () => filteredProviderModelOptions.filter((m) => favoriteSet.has(m)),
+    [filteredProviderModelOptions, favoriteSet],
   )
   const nonFavoriteOptions = useMemo(
-    () => providerModelOptions.filter((m) => !favoriteSet.has(m)),
-    [providerModelOptions, favoriteSet],
+    () => filteredProviderModelOptions.filter((m) => !favoriteSet.has(m)),
+    [filteredProviderModelOptions, favoriteSet],
   )
 
   function toggleFavoriteModel(model: string) {
@@ -788,14 +804,32 @@ export function ChatWindow({
   }, [activeConversationId])
 
   useEffect(() => {
-    if (!modelPickerOpen) return
-    const handler = (e: MouseEvent) => {
-      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
-        setModelPickerOpen(false)
+    if (!modelPickerOpen) {
+      setModelSearchQuery('')
+      return
+    }
+    const updatePosition = () => {
+      setIsMobileViewport(window.innerWidth < 640)
+      if (modelButtonRef.current) {
+        const rect = modelButtonRef.current.getBoundingClientRect()
+        setModelPickerAnchor({
+          top: rect.bottom + 8,
+          left: Math.max(12, Math.min(rect.left, window.innerWidth - 340)),
+        })
       }
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModelPickerOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+      document.removeEventListener('keydown', onKeyDown)
+    }
   }, [modelPickerOpen])
 
   useEffect(() => {
@@ -830,40 +864,59 @@ export function ChatWindow({
   }
 
   async function updateRuntimeSettings(provider: RuntimeProvider, model: string, source: string) {
+    // Optimistically apply provider & model immediately so mobile/web UI updates without waiting on network
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('openagents.preferred-provider', provider)
+      window.localStorage.setItem('openagents.preferred-model', model)
+    }
+    setRuntimeSettings((prev) => ({
+      ...(prev ?? ({} as UserSettings)),
+      preferredProvider: provider,
+      preferredModel: model,
+    }))
+    if (activeSession?.model || activeSession?.modelProvider) {
+      setActiveSession((prev) => (prev ? { ...prev, model: null, modelProvider: null } : prev))
+    }
+
     setRuntimeBusy(source)
     try {
-      const runtimeTest = await sdk.agent.testLlmConnection({
-        provider,
-        model,
-        ...(provider === 'ollama' && ollamaBaseUrl.trim() ? { baseUrl: ollamaBaseUrl.trim() } : {}),
-      })
-      if (!runtimeTest.ok) {
-        appendOperatorMessage(
-          normalizeRuntimeTestError(
-            runtimeTest.error,
-            `Failed to switch runtime to ${provider} / ${model}.`,
-          ),
-          'error',
-        )
-        return
-      }
-
       const updated = await sdk.users.updateSettings({
         preferredProvider: provider,
         preferredModel: model,
       })
       setRuntimeSettings(updated)
+      if (activeConversationId && (activeSession?.model || activeSession?.modelProvider)) {
+        await sdk.sessions.patch(activeConversationId, { model: null, modelProvider: null }).catch(() => {})
+      }
       await syncRuntimeState()
-      appendOperatorMessage(`Runtime updated to ${provider} / ${model}.`)
-    } catch (err) {
-      appendOperatorMessage(formatCommandError(err, 'Failed to update the runtime model.'), 'error')
+    } catch {
+      // Keep optimistic selection stored in localStorage & state even if backend is temporarily unreachable
     } finally {
       setRuntimeBusy(null)
     }
   }
 
+  async function selectProviderInPicker(nextProvider: RuntimeProvider) {
+    const defaultModel = LLM_MODELS[nextProvider]?.default || LLM_MODEL_OPTIONS[nextProvider]?.[0] || 'claude-sonnet-5.5'
+    if (modelScope === 'chat' && activeConversationId) {
+      setActiveSession((prev) =>
+        prev ? { ...prev, modelProvider: nextProvider, model: defaultModel } : prev,
+      )
+      await patchActiveSession(
+        { model: defaultModel, modelProvider: nextProvider },
+        `This chat will use ${defaultModel} (${nextProvider}).`,
+        'model',
+      )
+      return
+    }
+    await updateRuntimeSettings(nextProvider, defaultModel, 'model')
+  }
+
   async function selectModel(model: string) {
-    if (modelScope === 'chat') {
+    if (modelScope === 'chat' && activeConversationId) {
+      setActiveSession((prev) =>
+        prev ? { ...prev, model, modelProvider: activeProvider } : prev,
+      )
       await patchActiveSession(
         { model, modelProvider: activeProvider },
         `This chat will use ${model} (${activeProvider}). Your default runtime is unchanged.`,
@@ -1280,99 +1333,231 @@ export function ChatWindow({
           {offlineQueue.length > 0 && <span className="rounded-full bg-amber-200 px-2 py-0.5">{offlineQueue.length} queued</span>}
         </div>
       )}
-      <div className="relative flex items-center justify-between border-b border-slate-200/60 bg-white/50 px-4 py-3 backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141824]/50 sm:px-6">
-        {/* Left: model select */}
-        <div ref={modelPickerRef} className="relative z-10">
+      <div className="relative z-30 flex items-center justify-between gap-2 border-b border-slate-200/60 bg-white/75 px-3 py-2.5 backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141824]/75 sm:px-6 sm:py-3">
+        {/* Left: mobile menu + model select */}
+        <div ref={modelPickerRef} className="relative z-10 flex min-w-0 items-center gap-1.5">
+          {onOpenMobileSessions && (
+            <button
+              type="button"
+              onClick={onOpenMobileSessions}
+              className="oa-pill-btn h-8 w-8 shrink-0 border border-[#e4e7ec] bg-white text-[#667085] md:hidden dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+              title="Open Workspace & Sessions"
+              aria-label="Open Workspace & Sessions"
+            >
+              <Menu size={15} />
+            </button>
+          )}
           <button
+            ref={modelButtonRef}
             type="button"
             onClick={() => setModelPickerOpen((o) => !o)}
             disabled={Boolean(runtimeBusy) || runtimeLoading}
             className={clsx(
-              'oa-model-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-[#475467] transition hover:text-[#101828] dark:text-[#a1a1aa] dark:hover:text-white',
+              'oa-model-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] sm:text-[13px] font-medium text-[#475467] transition hover:text-[#101828] dark:text-[#a1a1aa] dark:hover:text-white',
               (Boolean(runtimeBusy) || runtimeLoading) && 'opacity-50 cursor-not-allowed',
             )}
-            title="Switch model"
+            title="Switch AI model"
           >
-            <span className="max-w-[120px] truncate sm:max-w-[200px]">{inUseModel.split('/').pop() || inUseModel}</span>
-            <ChevronDown size={14} className={clsx('transition-transform', modelPickerOpen ? 'rotate-180' : '')} />
+            <span className="max-w-[140px] truncate sm:max-w-[220px]">{inUseModel.split('/').pop() || inUseModel}</span>
+            <ChevronDown size={14} className={clsx('shrink-0 transition-transform', modelPickerOpen ? 'rotate-180' : '')} />
           </button>
 
-          {modelPickerOpen && (
-            <div className="absolute left-0 top-full z-50 mt-2 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-[18px] border border-[#e4e7ec] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12)] dark:border-[#2d3347] dark:bg-[#1a1f2e]">
-              <div className="flex items-center justify-between gap-2 border-b border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">Model</p>
-                <div className="flex items-center gap-1 rounded-full bg-[#f2f4f7] p-0.5 dark:bg-[#232837]">
-                  <button
-                    type="button"
-                    onClick={() => setModelScope('global')}
-                    className={clsx(
-                      'rounded-full px-2 py-0.5 text-[10px] font-semibold transition',
-                      modelScope === 'global'
-                        ? 'bg-white text-[#101828] shadow-sm dark:bg-[#141824] dark:text-white'
-                        : 'text-[#98a2b3] hover:text-[#475467]',
-                    )}
-                  >
-                    All chats
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModelScope('chat')}
-                    className={clsx(
-                      'rounded-full px-2 py-0.5 text-[10px] font-semibold transition',
-                      modelScope === 'chat'
-                        ? 'bg-white text-[#101828] shadow-sm dark:bg-[#141824] dark:text-white'
-                        : 'text-[#98a2b3] hover:text-[#475467]',
-                    )}
-                  >
-                    This chat
-                  </button>
-                </div>
-              </div>
-              {modelScope === 'chat' && (
-                <p className="border-b border-[#f2f4f7] bg-[#fffbeb] px-4 py-1.5 text-[10px] text-[#92400e] dark:border-[#2d3347] dark:bg-[#1c1917] dark:text-[#fbbf24]">
-                  {activeSession?.model
-                    ? <>This chat uses <span className="font-semibold">{activeSession.model}</span>. <button type="button" onClick={() => { void patchActiveSession({ model: null, modelProvider: null }, 'This chat now follows your default model.', 'model') }} className="underline underline-offset-2">Reset</button></>
-                    : 'Picks below apply to this chat only.'}
-                </p>
-              )}
+          {modelPickerOpen &&
+            typeof document !== 'undefined' &&
+            createPortal(
+              <div
+                className="fixed inset-0 z-[9999] flex items-end justify-center bg-slate-950/45 p-2.5 backdrop-blur-[2px] sm:block sm:bg-transparent sm:p-0 sm:backdrop-blur-none"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setModelPickerOpen(false)
+                }}
+              >
+                <div
+                  style={
+                    !isMobileViewport && modelPickerAnchor
+                      ? {
+                          position: 'fixed',
+                          top: `${Math.min(modelPickerAnchor.top, window.innerHeight - 480)}px`,
+                          left: `${modelPickerAnchor.left}px`,
+                          width: '340px',
+                        }
+                      : undefined
+                  }
+                  className="flex max-h-[82dvh] w-full max-w-md flex-col overflow-hidden rounded-[22px] border border-[#e4e7ec] bg-white shadow-[0_20px_50px_rgba(15,23,42,0.28)] sm:max-h-[460px] sm:rounded-[18px] dark:border-[#2d3347] dark:bg-[#1a1f2e]"
+                >
+                  <div className="flex items-center justify-between gap-2 border-b border-[#f2f4f7] px-4 py-3 dark:border-[#2d3347]">
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">
+                        Model ({providerModelOptions.length})
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 rounded-full bg-[#f2f4f7] p-0.5 dark:bg-[#232837]">
+                        <button
+                          type="button"
+                          onClick={() => setModelScope('global')}
+                          className={clsx(
+                            'rounded-full px-2 py-0.5 text-[10px] font-semibold transition',
+                            modelScope === 'global'
+                              ? 'bg-white text-[#101828] shadow-sm dark:bg-[#141824] dark:text-white'
+                              : 'text-[#98a2b3] hover:text-[#475467]',
+                          )}
+                        >
+                          All chats
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModelScope('chat')}
+                          className={clsx(
+                            'rounded-full px-2 py-0.5 text-[10px] font-semibold transition',
+                            modelScope === 'chat'
+                              ? 'bg-white text-[#101828] shadow-sm dark:bg-[#141824] dark:text-white'
+                              : 'text-[#98a2b3] hover:text-[#475467]',
+                          )}
+                        >
+                          This chat
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setModelPickerOpen(false)}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 dark:bg-[#232837] dark:text-slate-400"
+                        aria-label="Close model picker"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
 
-              {/* Model list — favorites first, active model marked in use */}
-              <div className="max-h-52 overflow-y-auto px-2 pb-3 pt-1">
-                {favoriteOptions.length > 0 && (
-                  <>
-                    <p className="px-3 pb-1 pt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">Favorites</p>
-                    {favoriteOptions.map((model) => (
+                  {/* Provider quick-switcher pills */}
+                  <div className="flex items-center gap-1 overflow-x-auto border-b border-[#f2f4f7] px-3 py-2 no-scrollbar dark:border-[#2d3347]">
+                    {(
+                      [
+                        { id: 'apisrouter', label: 'APIsRouter (93+)' },
+                        { id: 'anthropic', label: 'Anthropic' },
+                        { id: 'openai', label: 'OpenAI' },
+                        { id: 'google', label: 'Gemini' },
+                        { id: 'deepseek', label: 'DeepSeek' },
+                        { id: 'xai', label: 'Grok' },
+                        { id: 'groq', label: 'Groq' },
+                        { id: 'ollama', label: 'Ollama' },
+                      ] as Array<{ id: RuntimeProvider; label: string }>
+                    ).map((prov) => {
+                      const active = activeProvider === prov.id
+                      return (
+                        <button
+                          key={prov.id}
+                          type="button"
+                          onClick={() => void selectProviderInPicker(prov.id)}
+                          className={clsx(
+                            'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition',
+                            active
+                              ? 'bg-rose-500 text-white shadow-sm'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-[#232837] dark:text-slate-300',
+                          )}
+                        >
+                          {prov.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Search bar inside model picker */}
+                  <div className="border-b border-[#f2f4f7] px-3 py-2 dark:border-[#2d3347]">
+                    <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-1.5 dark:bg-[#141824]">
+                      <Search size={13} className="shrink-0 text-slate-400" />
+                      <input
+                        type="text"
+                        value={modelSearchQuery}
+                        onChange={(e) => setModelSearchQuery(e.target.value)}
+                        placeholder={`Search ${providerModelOptions.length} models...`}
+                        className="w-full bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
+                      />
+                      {modelSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setModelSearchQuery('')}
+                          className="text-[11px] text-slate-400 hover:text-slate-600"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {modelScope === 'chat' && (
+                    <p className="border-b border-[#f2f4f7] bg-[#fffbeb] px-4 py-1.5 text-[10px] text-[#92400e] dark:border-[#2d3347] dark:bg-[#1c1917] dark:text-[#fbbf24]">
+                      {activeSession?.model ? (
+                        <>
+                          This chat uses <span className="font-semibold">{activeSession.model}</span>.{' '}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void patchActiveSession(
+                                { model: null, modelProvider: null },
+                                'This chat now follows your default model.',
+                                'model',
+                              )
+                            }}
+                            className="underline underline-offset-2"
+                          >
+                            Reset
+                          </button>
+                        </>
+                      ) : (
+                        'Picks below apply to this chat only.'
+                      )}
+                    </p>
+                  )}
+
+                  {/* Model list — favorites first, active model marked in use */}
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 pt-1">
+                    {favoriteOptions.length > 0 && (
+                      <>
+                        <p className="px-3 pb-1 pt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">
+                          Favorites
+                        </p>
+                        {favoriteOptions.map((model) => (
+                          <ModelRow
+                            key={`fav-${model}`}
+                            model={model}
+                            inUse={inUseModel === model}
+                            favorite
+                            onToggleFavorite={() => toggleFavoriteModel(model)}
+                            onSelect={() => {
+                              void selectModel(model)
+                              setModelPickerOpen(false)
+                            }}
+                          />
+                        ))}
+                        <div className="mx-3 my-1 border-t border-[#f2f4f7] dark:border-[#2d3347]" />
+                      </>
+                    )}
+                    <p className="px-3 pb-1 pt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">
+                      {favoriteOptions.length > 0 ? 'All models' : 'Models'}
+                    </p>
+                    {nonFavoriteOptions.map((model) => (
                       <ModelRow
-                        key={`fav-${model}`}
+                        key={model}
                         model={model}
                         inUse={inUseModel === model}
-                        favorite
+                        favorite={false}
                         onToggleFavorite={() => toggleFavoriteModel(model)}
-                        onSelect={() => { void selectModel(model); setModelPickerOpen(false) }}
+                        onSelect={() => {
+                          void selectModel(model)
+                          setModelPickerOpen(false)
+                        }}
                       />
                     ))}
-                    <div className="mx-3 my-1 border-t border-[#f2f4f7] dark:border-[#2d3347]" />
-                  </>
-                )}
-                <p className="px-3 pb-1 pt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98a2b3]">
-                  {favoriteOptions.length > 0 ? 'All models' : 'Models'}
-                </p>
-                {nonFavoriteOptions.map((model) => (
-                  <ModelRow
-                    key={model}
-                    model={model}
-                    inUse={inUseModel === model}
-                    favorite={false}
-                    onToggleFavorite={() => toggleFavoriteModel(model)}
-                    onSelect={() => { void selectModel(model); setModelPickerOpen(false) }}
-                  />
-                ))}
-                {providerModelOptions.length === 0 && (
-                  <p className="px-3 py-2 text-[12px] text-[#98a2b3]">No models available.</p>
-                )}
-              </div>
-            </div>
-          )}
+                    {filteredProviderModelOptions.length === 0 && (
+                      <p className="px-3 py-4 text-center text-[12px] text-[#98a2b3]">
+                        No models match &ldquo;{modelSearchQuery.trim()}&rdquo;.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )}
         </div>
 
         {/* Center: Muse Personal Agent Identity + Live Status Pill */}
@@ -1492,59 +1677,58 @@ export function ChatWindow({
           )}
         </div>
 
-        {/* Right: New Chat + mobile menu */}
+        {/* Right: New Chat + mobile/tablet activity drawer */}
         <div className="relative z-10 flex items-center gap-1.5">
           {onNewSession && (
             <button
               type="button"
               onClick={() => void onNewSession()}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur transition hover:bg-white dark:border-[#2d3347] dark:bg-[#1a2032]/80 dark:text-slate-300"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur transition hover:bg-white sm:gap-1.5 sm:px-3 dark:border-[#2d3347] dark:bg-[#1a2032]/80 dark:text-slate-300"
               title="Start a New Chat Session"
             >
               <Plus size={12} />
               <span>New Chat</span>
             </button>
           )}
-          {onOpenMobileSessions && (
-            <button
-              type="button"
-              onClick={onOpenMobileSessions}
-              className="oa-pill-btn h-8 w-8 border border-[#e4e7ec] bg-white text-[#667085] xl:hidden dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
-              title="Menu"
-            >
-              <Menu size={15} />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('openagents:show-activity'))}
+            className="oa-pill-btn h-8 w-8 border border-[#e4e7ec] bg-white text-[#667085] xl:hidden dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
+            title="Open Activity & Goals"
+            aria-label="Open Activity & Goals"
+          >
+            <PanelRight size={15} />
+          </button>
         </div>
       </div>
 
       {visibleMessages.length === 0 ? (
         /* ── OpenAgents Personal AI Agent Empty State ── */
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-start sm:justify-center overflow-y-auto bg-transparent px-4 py-6 sm:py-8">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-start sm:justify-center overflow-y-auto bg-transparent px-3 py-4 sm:px-4 sm:py-8">
           {/* Live Telemetry & Directive Pill Bar */}
-          <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/10 px-3 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+          <div className="mb-2.5 flex flex-wrap items-center justify-center gap-1.5 sm:mb-3 sm:gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-0.5 text-[10px] sm:px-3 sm:py-1 sm:text-[11px] font-semibold text-rose-700 dark:text-rose-300">
               <Sparkles size={11} />
               &ldquo;Your purpose is to make your user&rsquo;s life better.&rdquo;
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] sm:px-3 sm:py-1 sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Brain: {inUseModel.split('/').pop() || inUseModel}
             </span>
           </div>
 
-          <div className="flex flex-col items-center justify-center text-center gap-1.5 mb-5">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col items-center justify-center text-center gap-1 mb-3.5 sm:gap-1.5 sm:mb-5">
+            <div className="flex items-center gap-2.5 sm:gap-3">
               <div
-                className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br ${agentPersona.aura} text-sm font-black text-white shrink-0 shadow-md`}
+                className={`flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-gradient-to-br ${agentPersona.aura} text-xs sm:text-sm font-black text-white shrink-0 shadow-md`}
               >
                 {(agentPersona.name[0] || 'V').toUpperCase()}
               </div>
-              <h1 className="oa-gradient-text text-2xl font-extrabold tracking-tight sm:text-4xl">
+              <h1 className="oa-gradient-text text-lg font-extrabold tracking-tight sm:text-4xl">
                 Hi, I&rsquo;m {agentPersona.name}. What can I get done for you?
               </h1>
             </div>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-xl">
+            <p className="text-[11px] sm:text-sm text-slate-500 dark:text-slate-400 max-w-xl">
               {agentPersona.style} • {assistantModeDefinition.description}
             </p>
           </div>
