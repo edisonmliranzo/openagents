@@ -135,21 +135,6 @@ export const useAuthStore = create<AuthState>()(
       },
 
       async syncUser() {
-        if (get().accessToken === CLOUD_PORTAL_TOKEN) {
-          try {
-            const res = await fetch('/api/v1/health')
-            if (res.ok) {
-              // Live backend is online — clear offline placeholder token so device authenticates against shared DB
-              get().clear()
-              if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-                window.location.href = '/login'
-              }
-            }
-          } catch {
-            // Keep offline session if backend is still unreachable
-          }
-          return
-        }
         try {
           const user = await sdk.auth.me()
           set({ user })
