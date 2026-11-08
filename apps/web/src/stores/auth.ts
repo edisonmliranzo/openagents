@@ -4,73 +4,20 @@ import { createSDK } from '@openagents/sdk'
 import type { User } from '@openagents/shared'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:3001'
-const CLOUD_PORTAL_TOKEN = 'cloud-portal-session'
-const CLOUD_OWNER_DIGEST = 'b7735a5c99198293f2040cc09cb8df8bf8fdb4c05cc95d037c42b96e50adfffb'
 
-async function verifyCloudOwnerDigest(email: string, password: string): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.crypto?.subtle) return false
-  const normalized = `${email.trim().toLowerCase()}:${password}`
-  const encoded = new TextEncoder().encode(normalized)
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoded)
-  const hex = Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-  return hex === CLOUD_OWNER_DIGEST
-}
-
-function isCloudPortalRuntime() {
-  if (process.env.NEXT_PUBLIC_IS_CLOUD_PORTAL === 'true') return true
-  if (
-    typeof window !== 'undefined' &&
-    (window.location.hostname.endsWith('openagents.us') ||
-      window.location.hostname.endsWith('workers.dev'))
-  ) {
-    return true
-  }
-  return false
-}
-
-if (typeof window !== 'undefined' && isCloudPortalRuntime() && !(window as any).__oaFetchPatched) {
-  ;(window as any).__oaFetchPatched = true
-  const nativeFetch = window.fetch.bind(window)
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const rawUrl =
-      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    let pathAndQuery = ''
-    if (rawUrl.startsWith('/api/') || rawUrl.startsWith('/v1/')) {
-      pathAndQuery = rawUrl
-    } else if (rawUrl.startsWith(window.location.origin)) {
-      const rest = rawUrl.slice(window.location.origin.length)
-      if (rest.startsWith('/api/') || rest.startsWith('/v1/')) {
-        pathAndQuery = rest
-      }
-    }
-    if (!pathAndQuery) {
-      return nativeFetch(input, init)
-    }
-    try {
-      const res = await nativeFetch(input, init)
-      if (res.status !== 502 && res.status !== 530 && res.status !== 405) {
-        return res
-      }
-    } catch {
-      // Fall through to local backend retry when cloud tunnel is unreachable.
-    }
-    const localBase = (
-      window.localStorage.getItem('openagents_api_url') || DEFAULT_API_BASE_URL
-    ).replace(/\/$/, '')
-    return nativeFetch(`${localBase}${pathAndQuery}`, init)
-  }
+function isValidSignedJwtFormat(token: string | null | undefined): boolean {
+  if (!token || typeof token !== 'string') return false
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+  // Reject unsigned alg:none tokens or legacy static tokens
+  if (parts[0] === 'eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0' || parts[2] === 'cf-d1') return false
+  return Boolean(parts[0] && parts[1] && parts[2])
 }
 
 function resolveApiBaseUrl() {
   const configured = (process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL).trim()
   if (!configured) return DEFAULT_API_BASE_URL
   if (typeof window === 'undefined') return configured
-
-  // Always use the current web origin in the browser.
-  // Next.js proxies /api requests to the real backend, which avoids
-  // first-run CORS and remote-host base URL issues for new installs.
   return window.location.origin
 }
 
@@ -84,11 +31,8 @@ const sdk = createSDK({
     })
   },
   onUnauthorized: () => {
-    if (useAuthStore.getState().accessToken === CLOUD_PORTAL_TOKEN) {
-      return
-    }
     useAuthStore.getState().clear()
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
       window.location.href = '/login'
     }
   },
@@ -119,7 +63,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       hydrated: false,
       user: null,
       accessToken: null,
@@ -139,61 +83,23 @@ export const useAuthStore = create<AuthState>()(
           const user = await sdk.auth.me()
           set({ user })
         } catch {
-          // Let unauthorized flow handle clearing tokens if needed.
+          // Unauthorized flow clears tokens if invalid/expired.
         }
       },
 
       async login(email, password) {
-        try {
-          const result = await sdk.auth.login({ email, password })
-          sdk.client.setTokens(result.tokens)
-          if (typeof document !== 'undefined') {
-            document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
-          }
-          set({
-            user: result.user,
-            accessToken: result.tokens.accessToken,
-            refreshToken: result.tokens.refreshToken,
-            tokenExpiresIn: result.tokens.expiresIn,
-            hydrated: true,
-          })
-          return
-        } catch (err) {
-          const matchedOwner = await verifyCloudOwnerDigest(email, password)
-          if (matchedOwner) {
-            const nowIso = new Date().toISOString()
-            const ownerUser: User = {
-              id: 'owner-cloud',
-              email: email.trim().toLowerCase(),
-              name: 'Platform Owner',
-              avatarUrl: null,
-              role: 'owner',
-              createdAt: nowIso,
-            }
-            const tokens = {
-              accessToken: CLOUD_PORTAL_TOKEN,
-              refreshToken: CLOUD_PORTAL_TOKEN,
-              expiresIn: 604800,
-            }
-            sdk.client.setTokens(tokens)
-            if (typeof document !== 'undefined') {
-              document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
-            }
-            set({
-              user: ownerUser,
-              accessToken: tokens.accessToken,
-              refreshToken: tokens.refreshToken,
-              tokenExpiresIn: tokens.expiresIn,
-              hydrated: true,
-            })
-            return
-          }
-
-          if (isCloudPortalRuntime()) {
-            throw new Error('Invalid administrator email or password.')
-          }
-          throw err
+        const result = await sdk.auth.login({ email, password })
+        sdk.client.setTokens(result.tokens)
+        if (typeof document !== 'undefined') {
+          document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
         }
+        set({
+          user: result.user,
+          accessToken: result.tokens.accessToken,
+          refreshToken: result.tokens.refreshToken,
+          tokenExpiresIn: result.tokens.expiresIn,
+          hydrated: true,
+        })
       },
 
       async register(email, password, name) {
@@ -212,7 +118,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       async logout() {
-        try { await sdk.auth.logout() } catch {}
+        try {
+          await sdk.auth.logout()
+        } catch {}
         sdk.client.clearTokens()
         if (typeof document !== 'undefined') {
           document.cookie = `openagents-authed=; ${authCookieSuffix(0)}`
@@ -234,7 +142,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'openagents-auth',
-      version: 2,
+      version: 3,
       partialize: (s) => ({
         accessToken: s.accessToken,
         refreshToken: s.refreshToken,
@@ -243,6 +151,15 @@ export const useAuthStore = create<AuthState>()(
       }),
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<AuthState>
+        if (!isValidSignedJwtFormat(persisted.accessToken)) {
+          return {
+            ...currentState,
+            user: null,
+            accessToken: null,
+            refreshToken: null,
+            tokenExpiresIn: null,
+          }
+        }
         return {
           ...currentState,
           user: persisted.user ?? currentState.user,
@@ -254,7 +171,7 @@ export const useAuthStore = create<AuthState>()(
       onRehydrateStorage: (state) => {
         state?.setHydrated(false)
         return (rehydratedState, error) => {
-          if (error) {
+          if (error || !isValidSignedJwtFormat(rehydratedState?.accessToken)) {
             sdk.client.clearTokens()
             if (typeof document !== 'undefined') {
               document.cookie = `openagents-authed=; ${authCookieSuffix(0)}`
@@ -280,7 +197,6 @@ export const useAuthStore = create<AuthState>()(
             }
           }
 
-          // Always finish hydration even when persisted state is missing/invalid.
           state?.setHydrated(true)
         }
       },
