@@ -4,19 +4,14 @@ import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import {
   Activity,
-  Bot,
-  Brain,
-  FolderKanban,
-  LayoutGrid,
+  History,
   ListChecks,
+  Mic,
   PenSquare,
   Search,
   Settings,
-  ShieldAlert,
-  Sparkles,
-  Users,
+  Trash2,
   X,
-  Zap,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useChatStore } from '@/stores/chat'
@@ -33,11 +28,11 @@ function formatTitle(title: string | null | undefined, fallback: string) {
 }
 
 const QUICK_MODULES = [
-  { label: 'Outreach & Growth', href: '/growth', icon: Zap, badge: 'DM · Email · WA', color: 'text-emerald-500' },
+  { label: 'Voice Calls & Avatars', href: '/phone', icon: Mic, badge: 'Live', color: 'text-rose-500' },
   { label: 'Channels & Accounts', href: '/control/channels', icon: Activity, badge: 'Connect', color: 'text-sky-500' },
   { label: 'Autonomous Tasks', href: '/tasks', icon: ListChecks, badge: 'Tasks', color: 'text-amber-500' },
-  { label: 'Specialist Team', href: '/team', icon: Users, badge: 'Swarm', color: 'text-rose-500' },
-  { label: 'Settings & Models', href: '/settings/config', icon: Settings, badge: 'Config', color: 'text-indigo-500' },
+  { label: 'Sessions Manager', href: '/sessions', icon: History, badge: 'History', color: 'text-emerald-500' },
+  { label: 'Settings & Models', href: '/settings/config', icon: Settings, badge: 'APIsRouter', color: 'text-indigo-500' },
 ]
 
 export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps) {
@@ -46,8 +41,12 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const selectConversation = useChatStore((s) => s.selectConversation)
   const createConversation = useChatStore((s) => s.createConversation)
+  const deleteConversation = useChatStore((s) => s.deleteConversation)
+  const clearAllConversations = useChatStore((s) => s.clearAllConversations)
   const [searchOpen, setSearchOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [clearingAll, setClearingAll] = useState(false)
 
   const navigate = (href: string) => {
     if (onNavigate) {
@@ -87,6 +86,30 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
     }
   }
 
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation()
+    if (deletingId) return
+    setDeletingId(id)
+    try {
+      await deleteConversation(id)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  async function handleClearAll() {
+    if (clearingAll || rows.length === 0) return
+    if (typeof window !== 'undefined' && !window.confirm('Delete all session history? This cannot be undone.')) {
+      return
+    }
+    setClearingAll(true)
+    try {
+      await clearAllConversations()
+    } finally {
+      setClearingAll(false)
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Brand Header */}
@@ -108,7 +131,7 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
                 v2.0
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500">Autonomous Agent OS</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500">Personal AI Agent</p>
           </div>
         </button>
         {onCloseMobile && (
@@ -123,10 +146,10 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
         )}
       </div>
 
-      {/* OS Modules Quick Switcher */}
+      {/* Quick Navigation */}
       <div className="px-3 pt-3 pb-2">
         <p className="px-2 pb-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-          OS Modules
+          Workspace
         </p>
         <div className="space-y-0.5">
           {QUICK_MODULES.map((mod) => {
@@ -163,91 +186,114 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
         <>
           {/* Primary Session */}
           <div className="mt-1 px-3">
-        <p className="px-2 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-          Active Stream
-        </p>
-        {mainChat ? (
-          <button
-            type="button"
-            onClick={() => void handleSelect(mainChat.id)}
-            className={clsx(
-              'w-full truncate rounded-xl px-3 py-2 text-left text-[13px] transition',
-              mainChat.id === activeConversationId
-                ? 'bg-gradient-to-r from-rose-500/15 to-orange-500/10 font-semibold text-rose-600 ring-1 ring-rose-500/25 dark:text-rose-300'
-                : 'text-slate-600 hover:bg-slate-200/40 dark:text-slate-300 dark:hover:bg-slate-800/60',
-            )}
-          >
-            {formatTitle(mainChat.title, 'Main Command Session')}
-          </button>
-        ) : (
-          <p className="px-3 py-2 text-[12px] text-slate-400">No sessions yet</p>
-        )}
-      </div>
-
-      {/* History / Side Chats */}
-      <div className="mt-3 flex items-center justify-between px-5">
-        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-          Session History ({sideChats.length})
-        </p>
-      </div>
-      <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-3 pb-2">
-        <div className="space-y-0.5">
-          {sideChats.map((c) => {
-            const title = formatTitle(c.title, 'Untitled session')
-            const isSpecialist = title.startsWith('@')
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => void handleSelect(c.id)}
+            <p className="px-2 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+              Active Session
+            </p>
+            {mainChat ? (
+              <div
                 className={clsx(
-                  'flex w-full items-center gap-2 truncate rounded-xl px-3 py-1.5 text-left text-[12px] transition',
-                  c.id === activeConversationId
+                  'group flex w-full items-center justify-between gap-1 rounded-xl px-3 py-2 text-[13px] transition',
+                  mainChat.id === activeConversationId
                     ? 'bg-gradient-to-r from-rose-500/15 to-orange-500/10 font-semibold text-rose-600 ring-1 ring-rose-500/25 dark:text-rose-300'
-                    : 'text-slate-600 hover:bg-slate-200/40 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200',
+                    : 'text-slate-600 hover:bg-slate-200/40 dark:text-slate-300 dark:hover:bg-slate-800/60',
                 )}
               >
-                {isSpecialist && (
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
-                )}
-                <span className="truncate">{title}</span>
-              </button>
-            )
-          })}
-          {sideChats.length === 0 && rows.length > 0 && (
-            <p className="px-3 py-1 text-[11px] text-slate-400 dark:text-slate-500">
-              Delegate to a specialist or start a new thread.
+                <button
+                  type="button"
+                  onClick={() => void handleSelect(mainChat.id)}
+                  className="min-w-0 flex-1 truncate text-left"
+                >
+                  {formatTitle(mainChat.title, 'New Session')}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => void handleDelete(e, mainChat.id)}
+                  disabled={deletingId === mainChat.id}
+                  title="Delete this session"
+                  aria-label="Delete session"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-70 transition hover:bg-rose-500/15 hover:text-rose-600 group-hover:opacity-100 disabled:opacity-40 dark:hover:text-rose-300"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ) : (
+              <p className="px-3 py-2 text-[12px] text-slate-400">No sessions yet</p>
+            )}
+          </div>
+
+          {/* History / Side Chats */}
+          <div className="mt-3 flex items-center justify-between px-5">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+              Session History ({sideChats.length})
             </p>
-          )}
-        </div>
-      </div>
+            {rows.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleClearAll()}
+                disabled={clearingAll}
+                title="Delete all session history"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-40 dark:hover:text-rose-400"
+              >
+                <Trash2 size={11} />
+                <span>{clearingAll ? 'Clearing...' : 'Clear all'}</span>
+              </button>
+            )}
+          </div>
+          <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+            <div className="space-y-0.5">
+              {sideChats.map((c) => {
+                const title = formatTitle(c.title, 'Untitled session')
+                const isSpecialist = title.startsWith('@')
+                return (
+                  <div
+                    key={c.id}
+                    className={clsx(
+                      'group flex w-full items-center justify-between gap-1 rounded-xl px-3 py-1.5 text-[12px] transition',
+                      c.id === activeConversationId
+                        ? 'bg-gradient-to-r from-rose-500/15 to-orange-500/10 font-semibold text-rose-600 ring-1 ring-rose-500/25 dark:text-rose-300'
+                        : 'text-slate-600 hover:bg-slate-200/40 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void handleSelect(c.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 truncate text-left"
+                    >
+                      {isSpecialist && (
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
+                      )}
+                      <span className="truncate">{title}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => void handleDelete(e, c.id)}
+                      disabled={deletingId === c.id}
+                      title={`Delete "${title}"`}
+                      aria-label={`Delete ${title}`}
+                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-60 transition hover:bg-rose-500/15 hover:text-rose-600 group-hover:opacity-100 disabled:opacity-40 dark:hover:text-rose-300"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )
+              })}
+              {sideChats.length === 0 && rows.length > 0 && (
+                <p className="px-3 py-1 text-[11px] text-slate-400 dark:text-slate-500">
+                  No older sessions in history.
+                </p>
+              )}
+            </div>
+          </div>
         </>
       )}
 
-      {/* Bottom floating pill: settings · search · compose */}
+      {/* Bottom bar: settings · search · new chat */}
       <div className="px-3 pb-3 pt-2 border-t border-slate-200/50 dark:border-slate-800/70">
-        <div className="flex items-center justify-center gap-3 pb-2 text-[10px] font-medium text-slate-400 dark:text-slate-500">
-          <button
-            type="button"
-            onClick={() => navigate('/support')}
-            className="hover:text-rose-500 transition"
-          >
-            Support Center
-          </button>
-          <span>•</span>
-          <button
-            type="button"
-            onClick={() => navigate('/terms')}
-            className="hover:text-rose-500 transition"
-          >
-            Terms &amp; Conditions
-          </button>
-        </div>
         <div className="flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/80 px-2 py-1 shadow-sm backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141927]/90">
           <button
             type="button"
             onClick={() => navigate('/settings/config')}
-            title="Brain & Provider Settings"
+            title="AI Models & APIsRouter Settings"
             aria-label="Settings"
             className="oa-pill-btn h-8 w-8 text-slate-500 dark:text-slate-400"
           >
@@ -264,7 +310,7 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
             type="button"
             onClick={() => void handleNew()}
             disabled={creating}
-            title="New Command Session"
+            title="New Session"
             aria-label="New chat"
             className="oa-pill-btn h-8 w-8 bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-sm hover:brightness-110 disabled:opacity-50"
           >

@@ -436,6 +436,8 @@ interface ChatState {
   loadConversations: () => Promise<void>
   selectConversation: (id: string) => Promise<void>
   createConversation: () => Promise<string>
+  deleteConversation: (id: string) => Promise<void>
+  clearAllConversations: () => Promise<void>
   sendMessage: (content: string, options?: { displayContent?: string; mode?: string; effort?: string }) => Promise<void>
   editAndResend: (messageId: string, newContent: string) => Promise<void>
   regenerateLast: () => Promise<void>
@@ -1089,6 +1091,61 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (err: any) {
       set({ lastError: err?.message ?? 'Failed to escalate conversation' })
     }
+  },
+
+  async deleteConversation(id: string) {
+    if (!id) return
+    const prevConversations = get().conversations
+    const wasActive = get().activeConversationId === id
+    const remaining = prevConversations.filter((c) => c.id !== id)
+
+    set({
+      conversations: remaining,
+      ...(wasActive
+        ? {
+            activeConversationId: remaining[0]?.id ?? null,
+            messages: [],
+            activeHandoff: null,
+            streamToolEvents: [],
+            runStatus: null,
+            plan: null,
+          }
+        : {}),
+    })
+
+    try {
+      await sdk.conversations.delete(id)
+    } catch {
+      await sdk.sessions.delete(id).catch(() => {})
+    }
+
+    if (wasActive) {
+      if (remaining[0]?.id) {
+        await get().selectConversation(remaining[0].id)
+      } else {
+        await get().createConversation().catch(() => {})
+      }
+    }
+  },
+
+  async clearAllConversations() {
+    const current = get().conversations
+    const ids = current.map((c) => c.id).filter(Boolean)
+    set({
+      conversations: [],
+      activeConversationId: null,
+      messages: [],
+      activeHandoff: null,
+      streamToolEvents: [],
+      runStatus: null,
+      plan: null,
+    })
+    await Promise.allSettled(
+      ids.map((id) =>
+        sdk.conversations.delete(id).catch(() => sdk.sessions.delete(id).catch(() => {})),
+      ),
+    )
+    await get().createConversation().catch(() => {})
   },
 
   clearError() {

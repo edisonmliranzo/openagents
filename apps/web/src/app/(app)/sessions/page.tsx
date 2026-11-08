@@ -2,8 +2,10 @@
 
 import Link from 'next/link'
 import { sdk } from '@/stores/auth'
+import { useChatStore } from '@/stores/chat'
 import type { SessionPatchInput, SessionRow, SessionsListResult } from '@openagents/shared'
 import { useCallback, useEffect, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 
 const DEFAULT_LIMIT = '120'
 const THINK_LEVELS = ['', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
@@ -87,7 +89,10 @@ export default function SessionsPage() {
   const [includeUnknown, setIncludeUnknown] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [busySessionId, setBusySessionId] = useState<string | null>(null)
+  const [clearingAll, setClearingAll] = useState(false)
   const [error, setError] = useState('')
+  const deleteConversation = useChatStore((s) => s.deleteConversation)
+  const clearAllConversations = useChatStore((s) => s.clearAllConversations)
 
   const loadSessions = useCallback(async () => {
     setIsLoading(true)
@@ -126,17 +131,15 @@ export default function SessionsPage() {
   }
 
   async function handleDeleteSession(row: SessionRow) {
-    if (row.kind !== 'direct' || !row.id || row.id.startsWith('__')) return
-    const confirmed = window.confirm(
-      `Delete session "${row.key}"?\n\nDeletes the session entry and conversation transcript.`,
-    )
-    if (!confirmed) return
-
+    if (!row.id || row.id.startsWith('__')) return
     setBusySessionId(row.id)
     setError('')
     try {
-      await sdk.sessions.delete(row.id)
-      await loadSessions()
+      await sdk.sessions.delete(row.id).catch(() => {})
+      await deleteConversation(row.id).catch(() => {})
+      setResult((prev) =>
+        prev ? { ...prev, sessions: prev.sessions.filter((s) => s.id !== row.id) } : prev,
+      )
     } catch (err: any) {
       setError(err?.message ?? 'Failed to delete session')
     } finally {
@@ -144,52 +147,85 @@ export default function SessionsPage() {
     }
   }
 
+  async function handleClearAllSessions() {
+    const deletable = (result?.sessions ?? []).filter((r) => r.id && !r.id.startsWith('__'))
+    if (deletable.length === 0 || clearingAll) return
+    if (!window.confirm(`Delete all ${deletable.length} session(s) and their chat transcripts?`)) {
+      return
+    }
+    setClearingAll(true)
+    setError('')
+    try {
+      await Promise.allSettled(deletable.map((r) => sdk.sessions.delete(r.id)))
+      await clearAllConversations().catch(() => {})
+      await loadSessions()
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to clear sessions')
+    } finally {
+      setClearingAll(false)
+    }
+  }
+
   const rows = result?.sessions ?? []
+  const deletableCount = rows.filter((r) => r.id && !r.id.startsWith('__')).length
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <header>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Sessions</h1>
-        <p className="mt-1 text-sm text-slate-500">Inspect active sessions and adjust per-session defaults.</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">Sessions History</h1>
+        <p className="mt-1 text-sm text-slate-500">Inspect active sessions, adjust per-session settings, or delete session history.</p>
       </header>
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 p-5 dark:border-slate-800">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Sessions</h2>
-            <p className="text-sm text-slate-500">Active session keys and per-session overrides.</p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Sessions ({rows.length})</h2>
+            <p className="text-sm text-slate-500">Click any session to open it in Chat, or delete individual / all sessions.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadSessions()}
-            disabled={isLoading}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-          >
-            {isLoading ? 'Refreshing...' : 'Refresh'}
-          </button>
+          <div className="flex items-center gap-2">
+            {deletableCount > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleClearAllSessions()}
+                disabled={clearingAll || isLoading}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+              >
+                <Trash2 size={14} />
+                <span>{clearingAll ? 'Deleting all...' : `Delete All (${deletableCount})`}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void loadSessions()}
+              disabled={isLoading}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              {isLoading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4 p-5">
           <div className="flex flex-wrap items-end gap-3">
-            <label className="w-[220px] text-sm text-slate-600">
+            <label className="w-[220px] text-sm text-slate-600 dark:text-slate-300">
               <span className="mb-1 block text-xs font-medium text-slate-500">Active within (minutes)</span>
               <input
                 value={activeWithinMinutes}
                 onChange={(e) => setActiveWithinMinutes(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none transition focus:border-red-200 focus:ring-2 focus:ring-red-100"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-red-200 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
             </label>
 
-            <label className="w-[165px] text-sm text-slate-600">
+            <label className="w-[165px] text-sm text-slate-600 dark:text-slate-300">
               <span className="mb-1 block text-xs font-medium text-slate-500">Limit</span>
               <input
                 value={limit}
                 onChange={(e) => setLimit(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none transition focus:border-red-200 focus:ring-2 focus:ring-red-100"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-red-200 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
             </label>
 
-            <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+            <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={includeGlobal}
@@ -199,7 +235,7 @@ export default function SessionsPage() {
               Include global
             </label>
 
-            <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+            <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={includeUnknown}
@@ -210,11 +246,9 @@ export default function SessionsPage() {
             </label>
           </div>
 
-          <p className="text-sm text-slate-500">Store: {result?.path ?? '(multiple)'}</p>
-
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800/70 dark:text-slate-400">
                 <tr>
                   <th className="px-4 py-3">Key</th>
                   <th className="px-4 py-3">Label</th>
@@ -228,7 +262,7 @@ export default function SessionsPage() {
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-slate-200 bg-white">
+              <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
                 {rows.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-500">
@@ -239,7 +273,7 @@ export default function SessionsPage() {
 
                 {rows.map((row) => {
                   const rowBusy = isLoading || busySessionId === row.id
-                  const canMutate = row.kind === 'direct' && !row.id.startsWith('__')
+                  const canMutate = Boolean(row.id && !row.id.startsWith('__'))
                   const thinkingRaw = row.thinkingLevel ?? ''
                   const binaryThinking = isBinaryThinkingProvider(row.modelProvider)
                   const thinking = resolveThinkingLevelDisplay(thinkingRaw, binaryThinking)
@@ -259,11 +293,11 @@ export default function SessionsPage() {
                     <tr key={row.id} className="align-top">
                       <td className="px-4 py-3">
                         {canMutate ? (
-                          <Link href={`/chat?conversation=${encodeURIComponent(row.id)}`} className="font-mono text-xs font-semibold text-red-600 hover:underline">
+                          <Link href={`/chat?conversation=${encodeURIComponent(row.id)}`} className="font-mono text-xs font-semibold text-red-600 hover:underline dark:text-rose-400">
                             {row.key}
                           </Link>
                         ) : (
-                          <p className="font-mono text-xs font-semibold text-red-600">{row.key}</p>
+                          <p className="font-mono text-xs font-semibold text-red-600 dark:text-rose-400">{row.key}</p>
                         )}
                         {showDisplayName && <p className="mt-1 truncate text-xs text-slate-500">{displayName}</p>}
                       </td>
@@ -280,13 +314,13 @@ export default function SessionsPage() {
                             }
                           }}
                           placeholder="(optional)"
-                          className="h-9 w-[180px] rounded-md border border-slate-300 px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400"
+                          className="h-9 w-[180px] rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                         />
                       </td>
 
-                      <td className="px-4 py-4 text-sm text-slate-700">{row.kind}</td>
-                      <td className="px-4 py-4 text-sm text-slate-600">{timeAgo(row.updatedAt)}</td>
-                      <td className="px-4 py-4 font-mono text-sm text-slate-700">{formatTokens(row)}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700 dark:text-slate-300">{row.kind}</td>
+                      <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-400">{timeAgo(row.updatedAt)}</td>
+                      <td className="px-4 py-4 font-mono text-sm text-slate-700 dark:text-slate-300">{formatTokens(row)}</td>
 
                       <td className="px-4 py-3">
                         <select
@@ -297,7 +331,7 @@ export default function SessionsPage() {
                               thinkingLevel: resolveThinkingPatchValue(e.target.value, binaryThinking),
                             })
                           }}
-                          className="h-9 rounded-md border border-slate-300 px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400"
+                          className="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                         >
                           {thinkingOptions.map((value) => (
                             <option key={value || 'inherit'} value={value}>
@@ -314,7 +348,7 @@ export default function SessionsPage() {
                           onChange={(e) => {
                             void patchSession(row.id, { verboseLevel: e.target.value || null })
                           }}
-                          className="h-9 rounded-md border border-slate-300 px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400"
+                          className="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                         >
                           {verboseOptions.map((option) => (
                             <option key={option.value || 'inherit'} value={option.value}>
@@ -331,7 +365,7 @@ export default function SessionsPage() {
                           onChange={(e) => {
                             void patchSession(row.id, { reasoningLevel: e.target.value || null })
                           }}
-                          className="h-9 rounded-md border border-slate-300 px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400"
+                          className="h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                         >
                           {reasoningOptions.map((value) => (
                             <option key={value || 'inherit'} value={value}>
@@ -347,9 +381,10 @@ export default function SessionsPage() {
                             type="button"
                             onClick={() => void handleDeleteSession(row)}
                             disabled={rowBusy}
-                            className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
                           >
-                            Delete
+                            <Trash2 size={12} />
+                            <span>{busySessionId === row.id ? 'Deleting...' : 'Delete'}</span>
                           </button>
                         ) : (
                           <span className="text-xs text-slate-400">-</span>

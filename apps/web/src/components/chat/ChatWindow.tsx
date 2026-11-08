@@ -1492,40 +1492,19 @@ export function ChatWindow({
           )}
         </div>
 
-        {/* Right: Ideas/Goals + Quick OS jumps + mobile menu */}
+        {/* Right: New Chat + mobile menu */}
         <div className="relative z-10 flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('openagents:show-ideas'))}
-            className="hidden rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-800 transition hover:bg-amber-500/20 sm:inline-flex dark:text-amber-300"
-            title="Proactive Ideas for You"
-          >
-            💡 Ideas
-          </button>
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('openagents:show-goals'))}
-            className="hidden rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-500/20 sm:inline-flex dark:text-rose-300"
-            title="Track Goals & Milestones"
-          >
-            🎯 Goals
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push('/tasks')}
-            className="hidden rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/20 md:inline-flex dark:text-emerald-300"
-            title="Autonomous Task Studio"
-          >
-            Tasks
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push('/team')}
-            className="hidden rounded-full border border-slate-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur transition hover:bg-white md:inline-flex dark:border-[#2d3347] dark:bg-[#1a2032]/80 dark:text-slate-300"
-            title="Manage Specialist Swarm"
-          >
-            Swarm (4)
-          </button>
+          {onNewSession && (
+            <button
+              type="button"
+              onClick={() => void onNewSession()}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur transition hover:bg-white dark:border-[#2d3347] dark:bg-[#1a2032]/80 dark:text-slate-300"
+              title="Start a New Chat Session"
+            >
+              <Plus size={12} />
+              <span>New Chat</span>
+            </button>
+          )}
           {onOpenMobileSessions && (
             <button
               type="button"
@@ -1538,28 +1517,6 @@ export function ChatWindow({
           )}
         </div>
       </div>
-
-      {/* OpenAgents Power Toolbar (Daily Pulse, Smart Clips, Shared Computer, Janitor, @all Roundtable, 1-Click Skills, Split Canvas, Phone QR) */}
-      <OpenAgentsPowerToolbar
-        agentName={agentPersona.name}
-        onDispatchPrompt={(prompt) => dispatchMessage(prompt)}
-        onAppendSystemMessage={(msg) => appendOperatorMessage(msg)}
-        hasMessages={visibleMessages.length > 0}
-      />
-
-      {/* Frontier AI Engines Dock (Grok DeepSearch, Big Brain, OpenClaw Soul & Heartbeat, Hermes Steer, Dots MoE Router, ⌘K Command Palette) */}
-      <FrontierEnginesDock
-        onDispatchPrompt={(prompt) => dispatchMessage(prompt)}
-        onAppendAssistantOutput={(md) => appendOperatorMessage(md)}
-        grokDeepSearchActive={grokDeepSearchActive}
-        onToggleGrokDeepSearch={() => setGrokDeepSearchActive((v) => !v)}
-        bigBrainActive={bigBrainActive}
-        onToggleBigBrain={() => setBigBrainActive((v) => !v)}
-        hermesSteerActive={hermesSteerActive}
-        onToggleHermesSteer={() => setHermesSteerActive((v) => !v)}
-        dotsRouterActive={dotsRouterActive}
-        onToggleDotsRouter={() => setDotsRouterActive((v) => !v)}
-      />
 
       {visibleMessages.length === 0 ? (
         /* ── OpenAgents Personal AI Agent Empty State ── */
@@ -1708,30 +1665,7 @@ export function ChatWindow({
                   >
                     <Plus size={14} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInput((prev) => prev.startsWith('/search ') ? prev : `/search ${prev}`)
-                      focusComposer()
-                    }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
-                  >
-                    <Search size={11} className="text-[#10b981]" />
-                    <span className="hidden min-[400px]:inline">Search</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onAssistantModeChange('execute')
-                      setInput((prev) => prev + (prev ? '\n' : '') + '```\n\n```')
-                      focusComposer()
-                    }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
-                  >
-                    <Code size={11} className="text-[#10b981]" />
-                    <span className="hidden min-[400px]:inline">Code</span>
-                  </button>
-                  
+
                   <div ref={mcpPickerRef} className="relative">
                     <button
                       type="button"
@@ -1763,25 +1697,6 @@ export function ChatWindow({
                         </div>
                       </div>
                     )}
-                  </div>
-
-                  {/* Effort selector inline */}
-                  <div className="hidden sm:inline-flex items-center gap-0.5 rounded-full border border-[#e4e7ec] bg-[#f8fafc] p-0.5 text-[11px] dark:border-[#2d3347] dark:bg-[#141824]">
-                    {(['auto', 'instant', 'planned', 'max'] as const).map((level) => (
-                      <button
-                        key={level}
-                        type="button"
-                        onClick={() => setEffort(level)}
-                        className={clsx(
-                          'rounded-full px-2 py-0.5 font-medium transition',
-                          effort === level
-                            ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
-                            : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
-                        )}
-                      >
-                        {level === 'auto' ? 'Auto' : level === 'instant' ? '⚡ Fast' : level === 'planned' ? '🧠 Plan' : '🚀 Max'}
-                      </button>
-                    ))}
                   </div>
                 </div>
 
@@ -1891,27 +1806,6 @@ export function ChatWindow({
             </div>
           )}
 
-          <BrowserActivityCard />
-
-          <PinnedContext items={pinnedItems} onRemove={handleRemovePin} onAdd={handleAddPin} />
-
-          {!isStreaming && (
-            <div className="px-4 pb-1 sm:px-7">
-              <TemplateLauncher
-                onPick={(template, starter) => {
-                  if (starter) setInput(starter)
-                  if (template.systemPrompt) {
-                    window.dispatchEvent(
-                      new CustomEvent('openagents:apply-system-prompt', {
-                        detail: { prompt: template.systemPrompt },
-                      }),
-                    )
-                  }
-                }}
-              />
-            </div>
-          )}
-
           <div className="border-t border-slate-200/70 bg-white/70 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-[#2d3347] dark:bg-[#141824]/70 sm:px-6">
             {slashQuery !== null && (
               <SlashCommandPalette
@@ -2002,7 +1896,7 @@ export function ChatWindow({
                 className="max-h-40 min-h-[48px] w-full resize-none bg-transparent px-4 pt-4 text-base text-[#101828] outline-none placeholder:text-[#a1a1aa] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:text-white"
               />
               <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-[#f2f4f7] px-3 py-2.5 dark:border-[#2d3347]">
-                {/* Left: attach + badge pills */}
+                {/* Left: attach + MCP */}
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="*/*" />
                   <button
@@ -2014,30 +1908,7 @@ export function ChatWindow({
                   >
                     <Plus size={14} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInput((prev) => prev.startsWith('/search ') ? prev : `/search ${prev}`)
-                      focusComposer()
-                    }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
-                  >
-                    <Search size={11} className="text-[#10b981]" />
-                    <span className="hidden min-[400px]:inline">Search</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onAssistantModeChange('execute')
-                      setInput((prev) => prev + (prev ? '\n' : '') + '```\n\n```')
-                      focusComposer()
-                    }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
-                  >
-                    <Code size={11} className="text-[#10b981]" />
-                    <span className="hidden min-[400px]:inline">Code</span>
-                  </button>
-                  
+
                   <div ref={mcpPickerRef} className="relative">
                     <button
                       type="button"
@@ -2085,55 +1956,6 @@ export function ChatWindow({
                     <ArrowUp size={15} />
                   </button>
                 </div>
-              </div>
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-[#98a2b3]">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-0.5 rounded-full border border-slate-200/70 bg-slate-100/70 p-0.5 dark:border-[#2d3347] dark:bg-[#1a1f2e]">
-                  {ASSISTANT_MODE_DEFINITIONS.map((def) => (
-                    <button
-                      key={def.id}
-                      type="button"
-                      onClick={() => onAssistantModeChange(def.id)}
-                      className={clsx(
-                        'rounded-full px-2.5 py-0.5 font-semibold transition',
-                        assistantMode === def.id
-                          ? 'bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-xs'
-                          : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white',
-                      )}
-                    >
-                      {def.label}
-                    </button>
-                  ))}
-                </span>
-                <span className="inline-flex items-center gap-0.5">
-                  {(['auto', 'instant', 'planned', 'max'] as const).map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      onClick={() => setEffort(level)}
-                      title={
-                        level === 'auto' ? 'Agent decides effort per message'
-                          : level === 'instant' ? 'Fastest: no tools, short answers'
-                            : level === 'planned' ? 'Plan first, then execute'
-                              : 'Max: plan + more steps + verified answer'
-                      }
-                      className={clsx(
-                        'rounded-full px-2 py-0.5 font-medium transition',
-                        effort === level
-                          ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800',
-                      )}
-                    >
-                      {level === 'auto' ? 'Auto' : level === 'instant' ? '⚡ Fast' : level === 'planned' ? '🧠 Plan' : '🚀 Max'}
-                    </button>
-                  ))}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center gap-1"><Command size={10} />/ commands</span>
-                <span>{assistantStatusText}</span>
               </div>
             </div>
           </div>
