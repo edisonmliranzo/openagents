@@ -461,6 +461,9 @@ export default function OpenAgentsLandingPage() {
             <a href="#artifacts-and-safety" className="hover:opacity-100 transition">
               Artifacts & Control
             </a>
+            <Link href="/opencode" className="font-semibold text-violet-600 dark:text-violet-400 hover:opacity-100 transition">
+              OpenCode TUI
+            </Link>
             <Link href="/docs" className="hover:opacity-100 transition">
               Docs
             </Link>
@@ -1824,6 +1827,153 @@ export default function OpenAgentsLandingPage() {
                     <li>• Orchestrates 4 specialist agents in parallel</li>
                     <li>• Connects to filesystem, GitHub & MCP servers</li>
                   </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── OPENCODE TERMINAL TUI & DUAL-AGENT ENGINE SECTION ── */}
+        <section id="opencode-tui" className="mt-20">
+          <div className="overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-[#090d16] via-[#0f172a] to-[#1e1b4b] p-6 sm:p-10 text-white shadow-2xl">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between border-b border-white/10 pb-8">
+              <div className="max-w-3xl space-y-3">
+                <div className="inline-flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-300">
+                    <Terminal className="h-3.5 w-3.5" />
+                    OpenCode-Class Terminal TUI + Desktop + Web
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/40 bg-violet-500/15 px-3 py-1 text-xs font-bold text-violet-200">
+                    <KeyRound className="h-3.5 w-3.5" />
+                    Pre-Wired to APIsRouter.dev (93+ Frontier Models)
+                  </span>
+                </div>
+                <h2 className="text-2xl font-extrabold tracking-tight sm:text-4xl">
+                  Switch Between <code className="text-emerald-400">build</code> &amp; <code className="text-amber-300">plan</code> Agents with <kbd className="rounded border border-white/20 bg-white/10 px-2 py-0.5 font-mono text-xl text-white">Tab</kbd>
+                </h2>
+                <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+                  Inspired by <code className="font-mono text-xs text-violet-300">anomalyco/opencode</code>, OpenAgents brings native Terminal TUI speed together with Web &amp; Voice/Avatar intelligence. Press <kbd className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs">Tab</kbd> in chat or terminal to toggle between full-access <strong>build</strong> mode and read-only <strong>plan</strong> mode, delegate multi-step searches to <code className="font-mono text-cyan-300">@general</code>, compile <code className="font-mono text-rose-300">AGENTS.md</code> via <code className="font-mono text-rose-300">/init</code>, and roll back Git snapshots with <code className="font-mono text-violet-300">/undo</code>.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row lg:flex-col gap-3 shrink-0">
+                <Link
+                  href="/opencode"
+                  data-analytics-cta="landing_open_opencode_studio"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-6 py-3.5 text-xs font-extrabold text-slate-950 shadow-lg hover:brightness-110 transition"
+                >
+                  <Terminal className="h-4 w-4" />
+                  <span>Launch OpenCode TUI Studio &amp; Config Generator</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <a
+                  href="https://apisrouter.dev/"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-violet-400/40 bg-violet-500/15 px-6 py-3 text-xs font-bold text-violet-200 hover:bg-violet-500/25 transition"
+                >
+                  <KeyRound className="h-4 w-4 text-violet-300" />
+                  <span>Get Unified API Key at APIsRouter.dev →</span>
+                </a>
+              </div>
+            </div>
+
+            <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
+              {/* Left: Dual Agents & Slash Commands */}
+              <div className="lg:col-span-6 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                    <div className="font-mono text-xs font-bold text-emerald-300">build (Tab)</div>
+                    <p className="mt-1 text-xs text-slate-300">
+                      Default full-access agent for code implementation, file patching, Git snapshots, and automatic post-edit LSP compiler diagnostics.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+                    <div className="font-mono text-xs font-bold text-amber-300">plan (Tab)</div>
+                    <p className="mt-1 text-xs text-slate-300">
+                      Read-only architect agent. Denies file edits by default and asks permission before running bash commands.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+                    <div className="font-mono text-xs font-bold text-cyan-300">@general</div>
+                    <p className="mt-1 text-xs text-slate-300">
+                      High-speed background subagent for complex codebase searches and multi-step research tasks.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/50 p-4 font-mono text-xs space-y-2">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    One-Line CLI Installation (macOS, Linux, Windows, WSL, Nix)
+                  </div>
+                  <pre className="overflow-x-auto text-emerald-300 leading-relaxed">
+{`# YOLO One-Liner
+curl -fsSL https://opencode.ai/v2/install | bash
+
+# Package Managers
+npm i -g @openagents/cli@latest @opencode/cli@latest
+brew install anomalyco/tap/opencode-v2
+sudo pacman -S opencode          # Arch Linux
+mise use -g opencode             # Any OS
+nix run github:anomalyco/opencode`}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Right: Desktop App Table & Power Features */}
+              <div className="lg:col-span-6 space-y-4">
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                  <div className="border-b border-white/10 px-4 py-3 flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">Desktop App (BETA) &amp; Local Daemon</span>
+                    <Link href="/opencode" className="text-[11px] font-semibold text-violet-300 hover:underline">
+                      Generate opencode.json →
+                    </Link>
+                  </div>
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-white/5 text-slate-300">
+                      <tr>
+                        <th className="px-4 py-2 font-semibold">Platform</th>
+                        <th className="px-4 py-2 font-semibold">Download Package</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10 text-slate-300">
+                      <tr>
+                        <td className="px-4 py-2">macOS (Apple Silicon)</td>
+                        <td className="px-4 py-2 font-mono text-emerald-300">opencode-desktop-mac-arm64.dmg</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-2">macOS (Intel)</td>
+                        <td className="px-4 py-2 font-mono text-emerald-300">opencode-desktop-mac-x64.dmg</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-2">Windows</td>
+                        <td className="px-4 py-2 font-mono text-emerald-300">opencode-desktop-win-x64.exe</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-2">Linux</td>
+                        <td className="px-4 py-2 font-mono text-emerald-300">.deb, .rpm, or .AppImage</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center font-mono text-xs">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="font-bold text-rose-300">/init</div>
+                    <div className="mt-0.5 text-[10px] text-slate-400">AGENTS.md compiler</div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="font-bold text-violet-300">/undo</div>
+                    <div className="mt-0.5 text-[10px] text-slate-400">Git snapshot rollback</div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="font-bold text-emerald-300">--worktree</div>
+                    <div className="mt-0.5 text-[10px] text-slate-400">Isolated branch run</div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="font-bold text-amber-300">LSP Loop</div>
+                    <div className="mt-0.5 text-[10px] text-slate-400">Auto compiler check</div>
+                  </div>
                 </div>
               </div>
             </div>
