@@ -1148,25 +1148,6 @@ export default function ConfigPage() {
         </div>
       </section>
 
-      {/* OpenCode TUI & opencode.json Generator shortcut */}
-      <Link
-        href="/opencode"
-        className="flex items-center gap-3 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-indigo-50 p-4 shadow-sm transition hover:border-violet-300 dark:border-violet-500/30 dark:from-violet-950/30 dark:via-slate-900 dark:to-indigo-950/30"
-      >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white font-mono text-xs font-extrabold">
-          TUI
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-slate-900 dark:text-white">
-            OpenCode TUI Studio &amp; 1-Click <code className="font-mono text-xs text-violet-600 dark:text-violet-300">opencode.json</code> Generator
-          </span>
-          <span className="block text-xs text-slate-500 dark:text-slate-400">
-            Export your APIsRouter.dev config for OpenCode CLI &amp; Desktop with Tab-switchable Build/Plan agents, @general subagent, /init AGENTS.md, and /undo Git snapshots.
-          </span>
-        </span>
-        <span className="text-xs font-semibold text-violet-600 dark:text-violet-300">Open TUI Studio →</span>
-      </Link>
-
       {/* Voice keys shortcut */}
       <Link
         href="/settings/voice"

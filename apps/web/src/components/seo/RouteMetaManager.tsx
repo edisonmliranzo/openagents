@@ -59,11 +59,6 @@ const ROUTE_META_MAP: Record<string, RouteMeta> = {
     description:
       'Chat with your autonomous AI agent powered by Claude Sonnet 5.5, GPT-6.1 Sol Pro, Gemini 4 Argon, DeepSeek V4.1, and Grok 4.7 with live voice & expressive avatar mode.',
   },
-  '/opencode': {
-    title: 'OpenCode TUI Studio & APIsRouter CLI Generator — Build vs Plan Agents | OpenAgents',
-    description:
-      'Interactive Terminal UI (TUI) Coding Agent Studio with Tab-switchable Build & Plan agents, @general subagent, /init AGENTS.md generator, /undo Git snapshots, and 1-click opencode.json config pre-wired to APIsRouter.dev (93+ models).',
-  },
   '/phone': {
     title: 'Live Voice Calls & Expressive 3D Avatars | OpenAgents',
     description:

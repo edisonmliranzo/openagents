@@ -41,7 +41,7 @@ import type {
 } from '@openagents/sdk'
 
 export interface SpecialistAgentOption {
-  handle: '@general' | '@Forge' | '@Scout' | '@Sentinel' | '@Atlas' | '@all'
+  handle: '@Forge' | '@Scout' | '@Sentinel' | '@Atlas' | '@all'
   name: string
   role: string
   badge: string
@@ -50,14 +50,6 @@ export interface SpecialistAgentOption {
 }
 
 export const SPECIALIST_OPTIONS: SpecialistAgentOption[] = [
-  {
-    handle: '@general',
-    name: 'General Subagent',
-    role: 'OpenCode Multi-Step Search & Research',
-    badge: 'from-violet-600 to-indigo-600',
-    description: 'OpenCode background subagent for complex codebase searches and multi-step tasks',
-    promptPrefix: 'Delegate to @general (Multi-Step Subagent Search): ',
-  },
   {
     handle: '@Forge',
     name: 'Forge',

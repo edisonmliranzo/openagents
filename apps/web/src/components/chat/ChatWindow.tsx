@@ -1069,55 +1069,6 @@ export function ChatWindow({
       return true
     }
 
-    if (parsed.id === 'init') {
-      appendOperatorMessage(
-        [
-          '⚡ OpenCode /init — Compiled Repository AGENTS.md',
-          '• Scanned Turborepo workspace: apps/web, apps/api, packages/shared, packages/sdk',
-          '• Primary AI Gateway: APIsRouter (https://apisrouter.dev/v1 — 93+ live 2026 frontier models) + BYOK',
-          '• Dual-Agent Rules: [BUILD] full-access with post-edit TypeScript LSP diagnostics • [PLAN] read-only exploration with bash approval gate (press Tab to toggle)',
-          '• Subagent: @general enabled for multi-step repository searches.',
-        ].join('\n'),
-      )
-      return true
-    }
-
-    if (parsed.id === 'undo') {
-      appendOperatorMessage(
-        '⏪ OpenCode /undo — Reverted working tree to the previous Git snapshot cleanly. All uncommitted agent file edits from the last turn have been rolled back.',
-      )
-      return true
-    }
-
-    if (parsed.id === 'redo') {
-      appendOperatorMessage(
-        '⏩ OpenCode /redo — Re-applied the most recently undone Git snapshot to your working tree.',
-      )
-      return true
-    }
-
-    if (parsed.id === 'worktree') {
-      const branchSlug = (parsed.arg || 'agent-task').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 32)
-      appendOperatorMessage(
-        `🌿 OpenCode --worktree — Spawned isolated Git worktree at .git/opencode-worktrees/${branchSlug} on branch opencode/${branchSlug}. Agent execution is now isolated from your main working tree.`,
-      )
-      return true
-    }
-
-    if (parsed.id === 'share') {
-      const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://openagents.edison0220.workers.dev'}/share?session=${activeConversationId || 'live'}`
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        void navigator.clipboard.writeText(shareUrl)
-      }
-      appendOperatorMessage(`🔗 Session Share Link Created & Copied:\n${shareUrl}`)
-      return true
-    }
-
-    if (parsed.id === 'opencode') {
-      router.push('/opencode')
-      return true
-    }
-
     return false
   }
 
@@ -1276,12 +1227,6 @@ export function ChatWindow({
     if (e.key === 'Tab' && ghostSuggestion) {
       e.preventDefault()
       setInput((prev) => `${prev.trimEnd()}${ghostSuggestion}`)
-      return
-    }
-    if (e.key === 'Tab' && !e.shiftKey) {
-      e.preventDefault()
-      const nextMode: AssistantMode = assistantMode === 'plan' ? 'execute' : 'plan'
-      onAssistantModeChange(nextMode)
       return
     }
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1777,40 +1722,14 @@ export function ChatWindow({
                   <button
                     type="button"
                     onClick={() => {
-                      const nextMode: AssistantMode = assistantMode === 'plan' ? 'execute' : 'plan'
-                      onAssistantModeChange(nextMode)
+                      onAssistantModeChange('execute')
+                      setInput((prev) => prev + (prev ? '\n' : '') + '```\n\n```')
                       focusComposer()
                     }}
-                    title="OpenCode Dual-Agent Mode: Press Tab to switch between BUILD (full-access) and PLAN (read-only architect)"
-                    className={clsx(
-                      'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 font-mono text-[11px] font-bold transition',
-                      assistantMode === 'plan'
-                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                        : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                    )}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
                   >
-                    <span className={clsx('h-1.5 w-1.5 rounded-full', assistantMode === 'plan' ? 'bg-amber-500' : 'bg-emerald-500')} />
-                    <span>{assistantMode === 'plan' ? 'PLAN (Read-Only)' : 'BUILD (Full)'}</span>
-                    <kbd className="rounded bg-black/10 px-1 py-0.5 text-[9px] dark:bg-white/10">Tab</kbd>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInput((prev) => prev.includes('@general') ? prev : `@general ${prev}`)
-                      focusComposer()
-                    }}
-                    title="Invoke @general subagent for multi-step repository searches"
-                    className="inline-flex h-8 items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 font-mono text-[11px] font-semibold text-violet-700 transition hover:bg-violet-500/20 dark:text-violet-300"
-                  >
-                    <span>@general</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push('/opencode')}
-                    title="Open OpenCode TUI Studio & APIsRouter config generator"
-                    className="hidden md:inline-flex h-8 items-center gap-1 rounded-full border border-[#e4e7ec] bg-white px-2.5 font-mono text-[11px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
-                  >
-                    <span>TUI / opencode.json</span>
+                    <Code size={11} className="text-[#10b981]" />
+                    <span className="hidden min-[400px]:inline">Code</span>
                   </button>
                   
                   <div ref={mcpPickerRef} className="relative">
@@ -2109,40 +2028,14 @@ export function ChatWindow({
                   <button
                     type="button"
                     onClick={() => {
-                      const nextMode: AssistantMode = assistantMode === 'plan' ? 'execute' : 'plan'
-                      onAssistantModeChange(nextMode)
+                      onAssistantModeChange('execute')
+                      setInput((prev) => prev + (prev ? '\n' : '') + '```\n\n```')
                       focusComposer()
                     }}
-                    title="OpenCode Dual-Agent Mode: Press Tab to switch between BUILD (full-access) and PLAN (read-only architect)"
-                    className={clsx(
-                      'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 font-mono text-[11px] font-bold transition',
-                      assistantMode === 'plan'
-                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                        : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                    )}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
                   >
-                    <span className={clsx('h-1.5 w-1.5 rounded-full', assistantMode === 'plan' ? 'bg-amber-500' : 'bg-emerald-500')} />
-                    <span>{assistantMode === 'plan' ? 'PLAN (Read-Only)' : 'BUILD (Full)'}</span>
-                    <kbd className="rounded bg-black/10 px-1 py-0.5 text-[9px] dark:bg-white/10">Tab</kbd>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInput((prev) => prev.includes('@general') ? prev : `@general ${prev}`)
-                      focusComposer()
-                    }}
-                    title="Invoke @general subagent for multi-step repository searches"
-                    className="inline-flex h-8 items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 font-mono text-[11px] font-semibold text-violet-700 transition hover:bg-violet-500/20 dark:text-violet-300"
-                  >
-                    <span>@general</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push('/opencode')}
-                    title="Open OpenCode TUI Studio & APIsRouter config generator"
-                    className="hidden md:inline-flex h-8 items-center gap-1 rounded-full border border-[#e4e7ec] bg-white px-2.5 font-mono text-[11px] font-semibold text-[#475467] transition hover:bg-[#f1f3f7] dark:border-[#2d3347] dark:bg-[#1a1f2e] dark:text-[#a1a1aa]"
-                  >
-                    <span>TUI / opencode.json</span>
+                    <Code size={11} className="text-[#10b981]" />
+                    <span className="hidden min-[400px]:inline">Code</span>
                   </button>
                   
                   <div ref={mcpPickerRef} className="relative">

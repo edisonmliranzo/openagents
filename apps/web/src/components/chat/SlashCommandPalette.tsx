@@ -7,18 +7,12 @@ import {
   BookOpen,
   Brain,
   Cpu,
-  FileCode2,
   FileSearch,
   FileText,
-  GitBranch,
   PlusCircle,
-  RotateCcw,
-  RotateCw,
   Search,
-  Share2,
   ShieldCheck,
   Tag,
-  Terminal,
   Workflow,
   Zap,
 } from 'lucide-react'
@@ -33,12 +27,6 @@ export interface SlashCommand {
 
 // Command ids as constants to avoid string scatter
 const CMD = {
-  INIT: 'init',
-  UNDO: 'undo',
-  REDO: 'redo',
-  WORKTREE: 'worktree',
-  OPENCODE: 'opencode',
-  SHARE: 'share',
   SEARCH: 'search',
   SUMMARIZE: 'summarize',
   DRAFT: 'draft',
@@ -61,33 +49,27 @@ const CMD = {
 } as const
 
 const AGENT_COMMANDS: SlashCommand[] = [
-  { id: CMD.INIT,      label: '/init',      description: 'Analyze repository & compile custom AGENTS.md instructions', icon: <FileCode2 size={14} />,  template: '/init'       },
-  { id: CMD.UNDO,      label: '/undo',      description: 'Roll back latest agent Git snapshot cleanly',                icon: <RotateCcw size={14} />,  template: '/undo'       },
-  { id: CMD.REDO,      label: '/redo',      description: 'Re-apply last undone agent Git snapshot',                    icon: <RotateCw size={14} />,   template: '/redo'       },
-  { id: CMD.WORKTREE,  label: '/worktree',  description: 'Spawn an isolated Git worktree run (--worktree)',            icon: <GitBranch size={14} />,  template: '/worktree '  },
-  { id: CMD.OPENCODE,  label: '/opencode',  description: 'Open OpenCode TUI Studio & APIsRouter config generator',     icon: <Terminal size={14} />,   template: '/opencode'   },
-  { id: CMD.SHARE,     label: '/share',     description: 'Create a shareable read-only link for this session',         icon: <Share2 size={14} />,     template: '/share'      },
-  { id: CMD.SEARCH,    label: '/search',    description: 'Search the web for information',                             icon: <Search size={14} />,     template: '/search '    },
-  { id: CMD.SUMMARIZE, label: '/summarize', description: 'Summarize the conversation or a piece of text',              icon: <FileText size={14} />,   template: '/summarize ' },
-  { id: CMD.DRAFT,     label: '/draft',     description: 'Draft a document, email, or message',                        icon: <FileSearch size={14} />, template: '/draft '     },
-  { id: CMD.WORKFLOW,  label: '/workflow',  description: 'Create or run a workflow',                                   icon: <Workflow size={14} />,   template: '/workflow '  },
-  { id: CMD.MEMORY,    label: '/memory',    description: 'Query or update agent memory',                               icon: <Brain size={14} />,      template: '/memory '    },
-  { id: CMD.RESEARCH,  label: '/research',  description: 'Deep research on a topic',                                   icon: <BookOpen size={14} />,   template: '/research '  },
-  { id: CMD.SCHEDULE,  label: '/schedule',  description: 'Schedule a task or reminder',                                icon: <Zap size={14} />,        template: '/schedule '  },
+  { id: CMD.SEARCH,    label: '/search',    description: 'Search the web for information',                    icon: <Search size={14} />,   template: '/search '    },
+  { id: CMD.SUMMARIZE, label: '/summarize', description: 'Summarize the conversation or a piece of text',     icon: <FileText size={14} />, template: '/summarize ' },
+  { id: CMD.DRAFT,     label: '/draft',     description: 'Draft a document, email, or message',               icon: <FileSearch size={14} />, template: '/draft '   },
+  { id: CMD.WORKFLOW,  label: '/workflow',  description: 'Create or run a workflow',                          icon: <Workflow size={14} />, template: '/workflow '  },
+  { id: CMD.MEMORY,    label: '/memory',    description: 'Query or update agent memory',                      icon: <Brain size={14} />,    template: '/memory '    },
+  { id: CMD.RESEARCH,  label: '/research',  description: 'Deep research on a topic',                          icon: <BookOpen size={14} />, template: '/research '  },
+  { id: CMD.SCHEDULE,  label: '/schedule',  description: 'Schedule a task or reminder',                       icon: <Zap size={14} />,      template: '/schedule '  },
 ]
 
 export const OPERATOR_COMMANDS: SlashCommand[] = [
-  { id: CMD.NEW,         label: '/new',         description: 'Start a fresh session',                                 icon: <PlusCircle size={14} />,  template: '/new' },
-  { id: CMD.STATUS,      label: '/status',      description: 'Show runtime, session, and approval status',            icon: <Activity size={14} />,    template: '/status' },
-  { id: CMD.MODEL,       label: '/model',       description: 'Set provider/model, e.g. /model apisrouter claude-sonnet-5.5', icon: <Cpu size={14} />,  template: '/model ' },
-  { id: CMD.THINK,       label: '/think',       description: 'Set session thinking level',                            icon: <Brain size={14} />,       template: '/think ' },
-  { id: CMD.VERBOSE,     label: '/verbose',     description: 'Set session verbosity',                                 icon: <FileText size={14} />,    template: '/verbose ' },
-  { id: CMD.REASONING,   label: '/reasoning',   description: 'Set reasoning visibility for the current session',      icon: <Workflow size={14} />,    template: '/reasoning ' },
-  { id: CMD.LABEL,       label: '/label',       description: 'Rename the current session label',                      icon: <Tag size={14} />,         template: '/label ' },
-  { id: CMD.APPROVALS,   label: '/approvals',   description: 'Summarize pending approvals',                           icon: <ShieldCheck size={14} />, template: '/approvals' },
-  { id: CMD.COMPRESS,    label: '/compress',    description: 'Compress old messages into a summary to free context',  icon: <FileText size={14} />,    template: '/compress' },
+  { id: CMD.NEW,        label: '/new',        description: 'Start a fresh session',                                 icon: <PlusCircle size={14} />, template: '/new' },
+  { id: CMD.STATUS,     label: '/status',     description: 'Show runtime, session, and approval status',           icon: <Activity size={14} />,   template: '/status' },
+  { id: CMD.MODEL,      label: '/model',      description: 'Set provider/model, for example /model openai gpt-5.1', icon: <Cpu size={14} />,        template: '/model ' },
+  { id: CMD.THINK,      label: '/think',      description: 'Set session thinking level',                           icon: <Brain size={14} />,      template: '/think ' },
+  { id: CMD.VERBOSE,    label: '/verbose',    description: 'Set session verbosity',                                icon: <FileText size={14} />,   template: '/verbose ' },
+  { id: CMD.REASONING,  label: '/reasoning',  description: 'Set reasoning visibility for the current session',     icon: <Workflow size={14} />,   template: '/reasoning ' },
+  { id: CMD.LABEL,      label: '/label',      description: 'Rename the current session label',                     icon: <Tag size={14} />,        template: '/label ' },
+  { id: CMD.APPROVALS,  label: '/approvals',  description: 'Summarize pending approvals',                          icon: <ShieldCheck size={14} />, template: '/approvals' },
+  { id: CMD.COMPRESS,   label: '/compress',   description: 'Compress old messages into a summary to free context', icon: <FileText size={14} />,   template: '/compress' },
   { id: CMD.PERSONALITY, label: '/personality', description: 'Set agent personality: concise|detailed|creative|technical|professional|friendly|socratic', icon: <Brain size={14} />, template: '/personality ' },
-  { id: CMD.HELP,        label: '/help',        description: 'Show OpenAgents command help',                          icon: <BadgeInfo size={14} />,   template: '/help' },
+  { id: CMD.HELP,       label: '/help',       description: 'Show OpenAgents command help',                         icon: <BadgeInfo size={14} />,  template: '/help' },
 ]
 
 const BUILT_IN_COMMANDS: SlashCommand[] = [...AGENT_COMMANDS, ...OPERATOR_COMMANDS]
@@ -95,21 +77,9 @@ const BUILT_IN_COMMANDS: SlashCommand[] = [...AGENT_COMMANDS, ...OPERATOR_COMMAN
 const OPERATOR_COMMAND_ALIASES: Record<string, string> = {
   [CMD.RESET]: CMD.NEW,
   reason: CMD.REASONING,
-  compact: CMD.COMPRESS,
-  oc: CMD.OPENCODE,
 }
 
-const OPERATOR_COMMAND_IDS = new Set([
-  ...OPERATOR_COMMANDS.map((command) => command.id),
-  CMD.COMPRESS,
-  CMD.PERSONALITY,
-  CMD.INIT,
-  CMD.UNDO,
-  CMD.REDO,
-  CMD.WORKTREE,
-  CMD.OPENCODE,
-  CMD.SHARE,
-])
+const OPERATOR_COMMAND_IDS = new Set([...OPERATOR_COMMANDS.map((command) => command.id), CMD.COMPRESS, CMD.PERSONALITY])
 
 export interface ParsedSlashCommand {
   id: string
@@ -133,29 +103,23 @@ export function isOperatorCommandId(id: string) {
 
 export function buildOperatorCommandHelpText() {
   return [
-    'OpenAgents + OpenCode commands',
-    'Tab (key): toggle between [BUILD] (full-access) and [PLAN] (read-only architect) agent modes',
-    '@general <query>: invoke the background subagent for multi-step repository search',
-    '/init: analyze project structure & compile custom AGENTS.md instructions',
-    '/undo: revert the latest agent Git snapshot cleanly',
-    '/redo: re-apply the last undone agent Git snapshot',
-    '/worktree [task]: spawn an isolated Git worktree branch run',
-    '/opencode: launch OpenCode TUI Studio & APIsRouter opencode.json generator',
-    '/share: generate a shareable read-only link for the current session',
+    'OpenAgents commands',
     '/new: start a fresh session',
     '/status: show runtime, session, and approval state',
-    '/model [provider] <model>: update the default provider/model (e.g. /model apisrouter claude-sonnet-5.5)',
+    '/model [provider] <model>: update the default provider/model',
     '/think <inherit|off|minimal|low|medium|high|xhigh|on>: set per-session thinking',
     '/verbose <inherit|off|on|full>: set per-session verbosity',
     '/reasoning <inherit|off|on|stream>: set per-session reasoning visibility',
     '/label <name|clear>: update the current session label',
     '/approvals: summarize pending approvals for this session',
-    '/compress (or /compact): compress old messages into a summary to free context',
+    '/compress: compress old messages into a summary to free context',
     '/personality <preset>: set agent tone — concise|detailed|creative|technical|professional|friendly|socratic',
     '/help: show this command list',
   ].join('\n')
 }
 
+// Expand a slash command input into the full prompt text sent to the agent.
+// Consolidates the with-arg / without-arg cases per command.
 export function expandSlashCommand(text: string): string {
   const parsed = parseSlashCommand(text)
   if (!parsed) return text
@@ -194,8 +158,11 @@ export function SlashCommandPalette({
 
   const [activeIndex, setActiveIndex] = useState(0)
 
+  // Reset selection when filtered list changes
   useEffect(() => { setActiveIndex(0) }, [query])
 
+  // Keyboard nav — only attached when palette is visible (component is mounted)
+  // Uses capture so it runs before the textarea's onKeyDown and can stop propagation.
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'ArrowDown') {
@@ -217,6 +184,7 @@ export function SlashCommandPalette({
         onClose()
       }
     }
+    // Capture phase so we intercept before textarea's onKeyDown
     window.addEventListener('keydown', handleKey, true)
     return () => window.removeEventListener('keydown', handleKey, true)
   }, [filtered, activeIndex, onSelect, onClose])
@@ -224,12 +192,11 @@ export function SlashCommandPalette({
   if (filtered.length === 0) return null
 
   return (
-    <div className="absolute bottom-full left-0 z-50 mb-2 w-80 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl">
-      <div className="border-b border-[var(--border)] px-3 py-2 flex items-center justify-between">
+    <div className="absolute bottom-full left-0 z-50 mb-2 w-72 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl">
+      <div className="border-b border-[var(--border)] px-3 py-2">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--muted)]">
-          OpenAgents &amp; OpenCode Commands
+          Commands
         </p>
-        <span className="font-mono text-[10px] text-emerald-500">Tab: Build ⇄ Plan</span>
       </div>
       <div className="max-h-64 overflow-y-auto py-1">
         {filtered.map((cmd, idx) => (
