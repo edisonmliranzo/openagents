@@ -75,6 +75,18 @@ function formatCallDuration(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+function cleanError(e: any, fallback: string): string {
+  const raw = String(e?.message ?? '').trim()
+  if (!raw || raw.startsWith('<') || /<html|<!doctype/i.test(raw)) return fallback
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed?.message) return String(parsed.message)
+  } catch {
+    /* not JSON */
+  }
+  return raw.length > 240 ? fallback : raw
+}
+
 const CALL_STARTERS = [
   'Give me a 30-second executive briefing on my priorities today.',
   'Roleplay a customer discovery call with me and ask tough questions.',
@@ -147,7 +159,7 @@ export default function PhoneAgentPage() {
         setSelected(list[0])
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to load phone agent')
+      setError(cleanError(e, 'Failed to load phone agent'))
     }
   }, [selected])
 
@@ -299,7 +311,7 @@ export default function PhoneAgentPage() {
       setSelected(created)
       await load()
     } catch (e: any) {
-      setError(e?.message || 'Could not queue call')
+      setError(cleanError(e, 'Could not queue call'))
     } finally {
       setBusy(false)
     }
@@ -313,7 +325,7 @@ export default function PhoneAgentPage() {
       setSelected(updated)
       await load()
     } catch (e: any) {
-      setError(e?.message || 'Approval failed')
+      setError(cleanError(e, 'Approval failed'))
     } finally {
       setBusy(false)
     }
@@ -327,7 +339,7 @@ export default function PhoneAgentPage() {
       setSelected(updated)
       await load()
     } catch (e: any) {
-      setError(e?.message || 'Reject failed')
+      setError(cleanError(e, 'Reject failed'))
     } finally {
       setBusy(false)
     }

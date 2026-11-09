@@ -686,6 +686,23 @@ async function ensureSchema(env) {
        expiresAt INTEGER NOT NULL
      )`,
   ).run()
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS phone_calls (
+       id TEXT PRIMARY KEY,
+       userId TEXT NOT NULL,
+       direction TEXT NOT NULL DEFAULT 'outbound',
+       toNumber TEXT NOT NULL,
+       fromNumber TEXT,
+       goal TEXT NOT NULL,
+       status TEXT NOT NULL,
+       transcript TEXT NOT NULL DEFAULT '[]',
+       summary TEXT,
+       error TEXT,
+       twilioSid TEXT,
+       createdAt TEXT NOT NULL,
+       updatedAt TEXT NOT NULL
+     )`,
+  ).run()
   schemaEnsured = true
 }
 
@@ -702,6 +719,117 @@ async function sendEmail(env, to, subject, html) {
     }),
   }).catch(() => null)
   return Boolean(res && res.ok)
+}
+
+// ── Telephony (Twilio Programmable Voice) ─────────────────────────────────
+function telephonyConfigured(env) {
+  return Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER)
+}
+
+function xmlEscape(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+function toSpeakable(text) {
+  return String(text || '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/[*_`#>]+/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 900)
+}
+
+async function verifyTwilioSignature(env, request, url, params) {
+  const sig = request.headers.get('x-twilio-signature') || ''
+  if (!sig || !env.TWILIO_AUTH_TOKEN) return false
+  const data = url + Object.keys(params).sort().map((k) => k + params[k]).join('')
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(env.TWILIO_AUTH_TOKEN),
+    { name: 'HMAC', hash: 'SHA-1' },
+    false,
+    ['sign'],
+  )
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data)))
+  let bin = ''
+  for (const b of mac) bin += String.fromCharCode(b)
+  return timingSafeEqualStr(btoa(bin), sig)
+}
+
+function twimlResponse(xml) {
+  return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${xml}</Response>`, {
+    status: 200,
+    headers: { 'content-type': 'text/xml; charset=utf-8' },
+  })
+}
+
+async function runPhoneLlmTurn(env, userId, goal, transcript) {
+  const settings = await env.DB.prepare('SELECT preferredProvider, preferredModel FROM user_settings WHERE userId = ?')
+    .bind(userId)
+    .first()
+  let provider = settings?.preferredProvider || 'apisrouter'
+  let model = settings?.preferredModel || 'claude-sonnet-5.5'
+  let keys = await getUserApiKeyCandidates(env, userId, provider)
+  if (keys.length === 0) {
+    const anyRow = await env.DB.prepare(
+      'SELECT provider FROM llm_keys WHERE userId = ? AND apiKey IS NOT NULL ORDER BY updatedAt DESC LIMIT 1',
+    )
+      .bind(userId)
+      .first()
+    if (anyRow?.provider) {
+      provider = anyRow.provider
+      keys = await getUserApiKeyCandidates(env, userId, provider)
+      model = (CURATED_MODELS[provider] || [model])[0]
+    }
+  }
+  if (keys.length === 0) return null
+  const baseUrl = validateSafeLlmBaseUrl(keys[0].baseUrl, provider)
+  const messages = [
+    {
+      role: 'system',
+      content:
+        `You are an AI phone agent placing a call on behalf of your user. Call goal: "${goal}". ` +
+        'Speak naturally in 1-3 short sentences per turn, like a polite human on the phone. ' +
+        'Introduce yourself as an AI assistant calling on behalf of your user at the start. ' +
+        'Never invent personal data you were not given. When the goal is achieved or the other person wants to end, say goodbye and include the token [END_CALL] at the very end.',
+    },
+    ...transcript.map((t) => ({ role: t.role === 'agent' ? 'assistant' : 'user', content: t.text })),
+  ]
+  if (transcript.length === 0) messages.push({ role: 'user', content: '(The call has just been answered. Open the conversation.)' })
+  for (const k of keys) {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${k.apiKey}` },
+      body: JSON.stringify({ model, messages, max_tokens: 220 }),
+    }).catch(() => null)
+    if (res && res.ok) {
+      const json = await res.json().catch(() => ({}))
+      return String(json?.choices?.[0]?.message?.content || '').trim() || null
+    }
+    if (!res || ![401, 402, 403, 429].includes(res.status)) break
+  }
+  return null
+}
+
+function phoneRowToRecord(r) {
+  return {
+    id: r.id,
+    direction: r.direction,
+    to: r.toNumber,
+    from: r.fromNumber || '',
+    goal: r.goal,
+    status: r.status,
+    transcript: parseJsonSafe(r.transcript) || [],
+    summary: r.summary || undefined,
+    error: r.error || undefined,
+    createdAt: r.createdAt,
+  }
 }
 
 async function getUserApiKeyCandidates(env, userId, provider) {
@@ -754,6 +882,72 @@ export default {
         }
 
         await ensureSchema(env)
+
+        // 1a. Twilio voice webhooks (public, authenticated by X-Twilio-Signature)
+        const twilioMatch = path.match(/^\/api\/v1\/phone\/twilio\/([^/]+)\/(voice|gather|status)$/)
+        if (twilioMatch && method === 'POST') {
+          const callId = decodeURIComponent(twilioMatch[1])
+          const stage = twilioMatch[2]
+          const form = await request.formData().catch(() => null)
+          const params = {}
+          if (form) for (const [k, v] of form.entries()) params[k] = String(v)
+          if (!(await verifyTwilioSignature(env, request, request.url, params))) {
+            return new Response('Forbidden', { status: 403 })
+          }
+          const row = await env.DB.prepare('SELECT * FROM phone_calls WHERE id = ?').bind(callId).first()
+          if (!row) return twimlResponse('<Hangup/>')
+          const transcript = parseJsonSafe(row.transcript) || []
+          const nowIso = new Date().toISOString()
+          const gatherUrl = `https://${url.host}/api/v1/phone/twilio/${encodeURIComponent(callId)}/gather`
+
+          if (stage === 'status') {
+            const cs = params.CallStatus || ''
+            const final = ['completed', 'busy', 'no-answer', 'failed', 'canceled'].includes(cs)
+            if (final) {
+              const nextStatus = cs === 'completed' ? 'completed' : 'failed'
+              const summary =
+                transcript.length > 0
+                  ? `Call ${cs}. ${transcript.length} turns exchanged.`
+                  : `Call ${cs}${cs === 'completed' ? '' : ' — no conversation took place'}.`
+              await env.DB.prepare('UPDATE phone_calls SET status = ?, summary = COALESCE(summary, ?), error = ?, updatedAt = ? WHERE id = ?')
+                .bind(nextStatus, summary, nextStatus === 'failed' ? `Call ${cs}` : null, nowIso, callId)
+                .run()
+            } else if (cs === 'in-progress') {
+              await env.DB.prepare("UPDATE phone_calls SET status = 'in_progress', updatedAt = ? WHERE id = ?").bind(nowIso, callId).run()
+            }
+            return new Response('', { status: 204 })
+          }
+
+          if (stage === 'gather' && params.SpeechResult) {
+            transcript.push({ role: 'caller', text: params.SpeechResult.slice(0, 1000), at: nowIso })
+          }
+          if (transcript.length > 40) {
+            return twimlResponse('<Say voice="Polly.Joanna">Thank you for your time. Goodbye.</Say><Hangup/>')
+          }
+
+          const reply = await runPhoneLlmTurn(env, row.userId, row.goal, transcript)
+          if (!reply) {
+            await env.DB.prepare("UPDATE phone_calls SET status = 'failed', error = ?, updatedAt = ? WHERE id = ?")
+              .bind('No working AI model key — add one in AI Models & Keys.', nowIso, callId)
+              .run()
+            return twimlResponse('<Say voice="Polly.Joanna">Sorry, I am unable to continue this call right now. Goodbye.</Say><Hangup/>')
+          }
+          const ending = reply.includes('[END_CALL]')
+          const spoken = toSpeakable(reply.replace('[END_CALL]', ''))
+          transcript.push({ role: 'agent', text: spoken, at: new Date().toISOString() })
+          await env.DB.prepare("UPDATE phone_calls SET transcript = ?, status = 'in_progress', updatedAt = ? WHERE id = ?")
+            .bind(JSON.stringify(transcript), nowIso, callId)
+            .run()
+
+          if (ending) {
+            return twimlResponse(`<Say voice="Polly.Joanna">${xmlEscape(spoken)}</Say><Hangup/>`)
+          }
+          return twimlResponse(
+            `<Gather input="speech" speechTimeout="auto" action="${xmlEscape(gatherUrl)}" method="POST">` +
+              `<Say voice="Polly.Joanna">${xmlEscape(spoken)}</Say></Gather>` +
+              `<Say voice="Polly.Joanna">I didn't catch that. I'll follow up another time. Goodbye.</Say><Hangup/>`,
+          )
+        }
 
         // 1b. Password reset (email via Resend when RESEND_API_KEY is configured)
         if (path === '/api/v1/auth/forgot-password' && method === 'POST') {
@@ -1101,6 +1295,7 @@ export default {
           await env.DB.prepare('DELETE FROM llm_keys WHERE userId = ?').bind(user.id).run()
           await env.DB.prepare('DELETE FROM llm_fallback_keys WHERE userId = ?').bind(user.id).run()
           await env.DB.prepare('DELETE FROM password_resets WHERE userId = ?').bind(user.id).run()
+          await env.DB.prepare('DELETE FROM phone_calls WHERE userId = ?').bind(user.id).run()
           await env.DB.prepare('DELETE FROM user_settings WHERE userId = ?').bind(user.id).run()
           await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id).run()
           return jsonResponse({ ok: true }, 200, origin)
@@ -1954,6 +2149,109 @@ export default {
           })
         }
 
+        // 8b. Phone Agent (D1 + Twilio) — real outbound AI calls with human approval
+        if (path === '/api/v1/phone/status' && method === 'GET') {
+          const configured = telephonyConfigured(env)
+          return jsonResponse(
+            {
+              configured,
+              fromNumber: configured ? String(env.TWILIO_FROM_NUMBER) : null,
+              allowed: user.role === 'owner' || user.role === 'admin',
+            },
+            200,
+            origin,
+          )
+        }
+
+        if (path === '/api/v1/phone/calls' && method === 'GET') {
+          const res = await env.DB.prepare('SELECT * FROM phone_calls WHERE userId = ? ORDER BY createdAt DESC LIMIT 50')
+            .bind(user.id)
+            .all()
+          return jsonResponse((res.results || []).map(phoneRowToRecord), 200, origin)
+        }
+
+        if (path === '/api/v1/phone/calls' && method === 'POST') {
+          if (user.role !== 'owner' && user.role !== 'admin') {
+            return jsonResponse(
+              { statusCode: 403, message: 'Outbound phone calls are not enabled for your account yet. Live voice calls in the browser are available to everyone.' },
+              403,
+              origin,
+            )
+          }
+          const body = await request.json().catch(() => ({}))
+          const toNumber = String(body.to || '').replace(/[\s()-]/g, '')
+          const goal = String(body.goal || '').trim().slice(0, 1000)
+          if (!/^\+[1-9]\d{7,14}$/.test(toNumber)) {
+            return jsonResponse({ statusCode: 400, message: 'Enter the number in international format, e.g. +15551234567.' }, 400, origin)
+          }
+          if (!goal) {
+            return jsonResponse({ statusCode: 400, message: 'Describe the goal of the call.' }, 400, origin)
+          }
+          if (await hitRateLimit(env, `phone:day:${user.id}`, 20, 24 * 60 * 60 * 1000)) {
+            return jsonResponse({ statusCode: 429, message: 'Daily call limit reached (20).' }, 429, origin)
+          }
+          const nowIso = new Date().toISOString()
+          const id = genId('cmp')
+          await env.DB.prepare(
+            `INSERT INTO phone_calls (id, userId, direction, toNumber, fromNumber, goal, status, transcript, createdAt, updatedAt)
+             VALUES (?, ?, 'outbound', ?, ?, ?, 'pending_approval', '[]', ?, ?)`,
+          )
+            .bind(id, user.id, toNumber, env.TWILIO_FROM_NUMBER || null, goal, nowIso, nowIso)
+            .run()
+          const row = await env.DB.prepare('SELECT * FROM phone_calls WHERE id = ?').bind(id).first()
+          return jsonResponse(phoneRowToRecord(row), 201, origin)
+        }
+
+        const phoneActionMatch = path.match(/^\/api\/v1\/phone\/calls\/([^/]+)\/(approve|reject)$/)
+        if (phoneActionMatch && method === 'POST') {
+          const callId = decodeURIComponent(phoneActionMatch[1])
+          const action = phoneActionMatch[2]
+          const row = await env.DB.prepare('SELECT * FROM phone_calls WHERE id = ? AND userId = ?').bind(callId, user.id).first()
+          if (!row) return jsonResponse({ statusCode: 404, message: 'Call not found' }, 404, origin)
+          if (row.status !== 'pending_approval') {
+            return jsonResponse({ statusCode: 400, message: `Call is already ${row.status}.` }, 400, origin)
+          }
+          const nowIso = new Date().toISOString()
+          if (action === 'reject') {
+            await env.DB.prepare("UPDATE phone_calls SET status = 'rejected', updatedAt = ? WHERE id = ?").bind(nowIso, callId).run()
+          } else if (!telephonyConfigured(env)) {
+            await env.DB.prepare("UPDATE phone_calls SET status = 'failed', error = ?, updatedAt = ? WHERE id = ?")
+              .bind('Telephony is not configured. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER secrets.', nowIso, callId)
+              .run()
+          } else {
+            const base = `https://${url.host}/api/v1/phone/twilio/${encodeURIComponent(callId)}`
+            const form = new URLSearchParams({
+              To: row.toNumber,
+              From: String(env.TWILIO_FROM_NUMBER),
+              Url: `${base}/voice`,
+              StatusCallback: `${base}/status`,
+              StatusCallbackMethod: 'POST',
+              MachineDetection: 'Enable',
+            })
+            for (const ev of ['initiated', 'ringing', 'answered', 'completed']) form.append('StatusCallbackEvent', ev)
+            const tw = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Calls.json`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Basic ${btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`)}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: form.toString(),
+            }).catch(() => null)
+            const twJson = tw ? await tw.json().catch(() => ({})) : {}
+            if (tw && tw.ok && twJson.sid) {
+              await env.DB.prepare("UPDATE phone_calls SET status = 'dialing', twilioSid = ?, updatedAt = ? WHERE id = ?")
+                .bind(twJson.sid, nowIso, callId)
+                .run()
+            } else {
+              await env.DB.prepare("UPDATE phone_calls SET status = 'failed', error = ?, updatedAt = ? WHERE id = ?")
+                .bind(`Twilio rejected the call: ${String(twJson.message || (tw ? `HTTP ${tw.status}` : 'network error')).slice(0, 200)}`, nowIso, callId)
+                .run()
+            }
+          }
+          const updated = await env.DB.prepare('SELECT * FROM phone_calls WHERE id = ?').bind(callId).first()
+          return jsonResponse(phoneRowToRecord(updated), 200, origin)
+        }
+
         // 9. Authenticated Handoffs & Approvals
         if (path.startsWith('/api/v1/handoffs/active/')) {
           return jsonResponse(null, 200, origin)
@@ -2015,6 +2313,15 @@ export default {
 
         try {
           const upstreamRes = await fetch(targetUrl, init)
+          const upstreamType = (upstreamRes.headers.get('content-type') || '').toLowerCase()
+          if (upstreamType.includes('text/html')) {
+            // Tunnel is down (Cloudflare 1016/530 HTML page) — never leak raw HTML into the app
+            return jsonResponse(
+              { statusCode: 503, message: 'Your desktop API is offline. Start OpenAgents on your computer to use this feature.' },
+              503,
+              origin,
+            )
+          }
           const resHeaders = new Headers(upstreamRes.headers)
           const sec = securityAndCorsHeaders(origin)
           for (const [k, v] of Object.entries(sec)) {
