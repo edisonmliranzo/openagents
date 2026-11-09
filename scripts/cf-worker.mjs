@@ -1344,6 +1344,17 @@ export default {
               .bind(user.id, provider, apiKey, baseUrl, isActive, existing?.createdAt ?? now, now)
               .run()
 
+            if (plainKey) {
+              await env.DB.prepare(
+                `DELETE FROM messages
+                 WHERE conversationId IN (SELECT id FROM conversations WHERE userId = ?)
+                   AND role = 'agent'
+                   AND (content LIKE '%Welcome to OpenAgents%' OR content LIKE '%Settings & Models%')`,
+              )
+                .bind(user.id)
+                .run()
+            }
+
             return jsonResponse(
               {
                 id: `${user.id}-${provider}`,
@@ -1722,10 +1733,22 @@ export default {
           )
             .bind(convId)
             .all()
-          const history = (histRes.results || []).map((m) => ({
-            role: m.role === 'agent' ? 'assistant' : 'user',
-            content: m.content,
-          }))
+          const history = (histRes.results || [])
+            .filter(
+              (m) =>
+                !(
+                  m.role === 'agent' &&
+                  (String(m.content || '').includes('Welcome to OpenAgents') ||
+                    String(m.content || '').includes('Settings & Models'))
+                ),
+            )
+            .map((m) => ({
+              role: m.role === 'agent' ? 'assistant' : 'user',
+              content: String(m.content || '').replace(
+                /\n*Want deeper research[\s\S]*?Settings & Models[\s\S]*$/i,
+                '',
+              ),
+            }))
 
           let keyCandidates = await getUserApiKeyCandidates(env, user.id, preferredProvider)
           let activeProvider = preferredProvider
@@ -1802,7 +1825,7 @@ export default {
                   role: 'system',
                   content:
                     customSystemPrompt ||
-                    'You are Veda, an autonomous personal AI agent on OpenAgents. Be concise, sharp, helpful, and action-oriented.',
+                    'You are Veda, an autonomous personal AI agent on OpenAgents. Be concise, sharp, helpful, and action-oriented. The user already has an active API key connected — never ask the user to connect an API key or visit Settings & Models.',
                 },
                 ...history,
               ]
