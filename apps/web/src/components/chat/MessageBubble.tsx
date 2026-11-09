@@ -3,6 +3,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import Link from 'next/link'
 import { sdk } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { openArtifact } from '@/stores/canvas'
@@ -631,6 +632,14 @@ export function MessageBubble({
                             <Columns size={12} />
                             {children}
                           </button>
+                        )
+                      }
+                      if (href && href.startsWith('/') && !href.startsWith('//')) {
+                        // Internal app link: navigate in the same tab so the signed-in session is kept
+                        return (
+                          <Link href={href} className="font-medium text-[#2563eb] underline underline-offset-2 dark:text-[#60a5fa]">
+                            {children}
+                          </Link>
                         )
                       }
                       return (
