@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { sdk } from '@/stores/auth'
+import { sdk, useAuthStore } from '@/stores/auth'
 import {
   KeyRound,
   Cpu,
@@ -404,6 +404,7 @@ function describeModelSelection(provider: Provider, model: string) {
 // Main Page
 
 export default function ConfigPage() {
+  const authUser = useAuthStore((s) => s.user)
   const [profileEmail, setProfileEmail] = useState('')
   const [activeProvider, setActiveProvider] = useState<Provider>('apisrouter')
   const [activeModel, setActiveModel] = useState('')
@@ -517,10 +518,10 @@ export default function ConfigPage() {
     setStatus('')
     try {
       const [profile, settings, keys, domainList, ...fallbackResults] = await Promise.all([
-        sdk.users.getProfile(),
-        sdk.users.getSettings(),
-        sdk.users.getLlmKeys(),
-        sdk.users.listDomains(),
+        sdk.users.getProfile().catch(() => null),
+        sdk.users.getSettings().catch(() => null),
+        sdk.users.getLlmKeys().catch(() => [] as LlmApiKey[]),
+        sdk.users.listDomains().catch(() => [] as UserDomain[]),
         ...CLOUD_PROVIDERS.map((p) =>
           sdk.users.listFallbackLlmKeys(p).then((list) => ({ provider: p, list })).catch(() => ({ provider: p, list: [] as Array<{ id: string; label: string | null; priority: number; isActive: boolean; createdAt: string }> })),
         ),
@@ -530,18 +531,19 @@ export default function ConfigPage() {
         nextFallbackKeys[provider] = list
       }
       setFallbackKeys(nextFallbackKeys)
-      const preferredProvider = isProvider(settings.preferredProvider)
+      const preferredProvider = settings && isProvider(settings.preferredProvider)
         ? settings.preferredProvider
         : 'apisrouter'
-      setProfileEmail(profile.email ?? '')
+      setProfileEmail(profile?.email ?? authUser?.email ?? '')
       setActiveProvider(preferredProvider)
-      setActiveModel(settings.preferredModel ?? '')
-      setCustomSystemPrompt(settings.customSystemPrompt ?? '')
-      setExistingKeys(keys)
-      setDomains(domainList)
+      setActiveModel(settings?.preferredModel ?? 'claude-sonnet-5.5')
+      setCustomSystemPrompt(settings?.customSystemPrompt ?? '')
+      setExistingKeys(Array.isArray(keys) ? keys : [])
+      const safeDomains = Array.isArray(domainList) ? domainList : []
+      setDomains(safeDomains)
       setDomainDrafts(
         Object.fromEntries(
-          domainList.map((domain) => [domain.id, toDomainDraft(domain)]),
+          safeDomains.map((domain) => [domain.id, toDomainDraft(domain)]),
         ),
       )
 
@@ -1036,9 +1038,9 @@ export default function ConfigPage() {
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Config</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">AI Models &amp; Keys</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Signed in as <span className="font-medium text-slate-700">{profileEmail || '...'}</span>
+            Signed in as <span className="font-medium text-slate-700">{profileEmail || authUser?.email || '...'}</span>
           </p>
         </div>
         <button
@@ -1126,6 +1128,11 @@ export default function ConfigPage() {
             <div className="mt-2.5 flex gap-2">
               <input
                 type={cards.apisrouter.showKey ? 'text' : 'password'}
+                name="oa-apisrouter-key-quick"
+                autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
                 value={cards.apisrouter.apiKey}
                 onChange={(e) => updateCard('apisrouter', { apiKey: e.target.value })}
                 placeholder="apr-sk-live-... (from apisrouter.dev)"
@@ -1176,26 +1183,39 @@ export default function ConfigPage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(244,63,94,0.08),transparent_60%)]" />
         <div className="relative">
           <h2 className="text-base font-semibold text-slate-900">Active LLM</h2>
-          <p className="mt-0.5 text-xs text-slate-500">The provider and model used for every agent run.</p>
+          <p className="mt-0.5 text-xs text-slate-500">The provider and model used for every agent run across web and mobile.</p>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => void switchLocalAndSave(activeProvider !== 'ollama')}
-              disabled={isSwitchingLocal}
-              className={`h-9 rounded-lg px-3 text-xs font-semibold transition disabled:opacity-50 ${
-                activeProvider === 'ollama'
+              onClick={async () => {
+                setActiveProvider('apisrouter')
+                setActiveModel('claude-sonnet-5.5')
+                if (typeof window !== 'undefined') {
+                  window.localStorage.setItem('openagents.preferred-provider', 'apisrouter')
+                  window.localStorage.setItem('openagents.preferred-model', 'claude-sonnet-5.5')
+                }
+                await sdk.users.updateSettings({
+                  preferredProvider: 'apisrouter',
+                  preferredModel: 'claude-sonnet-5.5',
+                  customSystemPrompt: customSystemPrompt.trim() || null,
+                }).catch(() => {})
+                const label = `${PROVIDER_META.apisrouter.label} - claude-sonnet-5.5`
+                setStatus(`Saved: ${label}`)
+                setSavedActiveLabel(label)
+                setTimeout(() => setSavedActiveLabel(''), 3000)
+              }}
+              className={`h-9 rounded-lg px-3.5 text-xs font-semibold transition ${
+                activeProvider === 'apisrouter'
                   ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                  : 'border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                  : 'border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
               }`}
             >
-              {isSwitchingLocal
-                ? 'Switching...'
-                : activeProvider === 'ollama'
-                  ? 'Using Local LLM (Switch to Cloud)'
-                  : 'Switch to Local LLM (Save)'}
+              {activeProvider === 'apisrouter'
+                ? '✓ Using APIsRouter (93+ Frontier Models)'
+                : 'Use APIsRouter (Recommended — 93+ Models)'}
             </button>
-            <span className="text-[11px] text-slate-500">Saves provider + model for all next runs.</span>
+            <span className="text-[11px] text-slate-500">Saves provider + model across all your devices.</span>
           </div>
 
           <div className="mt-4 flex flex-wrap items-end gap-3">
@@ -1298,8 +1318,8 @@ export default function ConfigPage() {
                 <span className="text-[11px] text-slate-500">
                   {liveModelsStatus === 'loading' && 'Loading live model catalog from provider...'}
                   {liveModelsStatus === 'loaded' && liveModelsSource === 'live' && `Live catalog: ${liveModels.length} models. Pick any, or type a custom id.`}
-                  {liveModelsStatus === 'loaded' && liveModelsSource === 'curated' && 'Live catalog unavailable (missing key?) — showing curated list. You can still type any model id.'}
-                  {liveModelsStatus === 'error' && 'Live catalog unavailable — showing curated list. You can still type any model id.'}
+                  {liveModelsStatus === 'loaded' && liveModelsSource === 'curated' && `Curated 2026 catalog (${modelOptions.length} models). Add your API key below for live discovery, or pick any model.`}
+                  {liveModelsStatus === 'error' && `Curated 2026 catalog (${modelOptions.length} models). Pick any model, or type a custom id.`}
                   {liveModelsStatus === 'idle' && 'Loading provider model catalog...'}
                 </span>
               )}
@@ -1401,12 +1421,9 @@ export default function ConfigPage() {
           const existing = existingKeys.find((k) => k.provider === provider)
           const isConfigured = !!existing
           const isActive = activeProvider === provider
-          const planOptions = provider === 'ollama' ? [] : PROVIDER_PLAN_OPTIONS[provider]
-          const hasLoginPair = card.loginEmail.trim().length > 0 && card.loginPassword.trim().length > 0
           const canSaveCredentials =
             meta.isKeyless
             || card.apiKey.trim().length > 0
-            || hasLoginPair
             || Boolean(existing)
 
           return (
@@ -1447,6 +1464,7 @@ export default function ConfigPage() {
                     <span className="text-xs font-medium text-slate-500">{meta.inputLabel}</span>
                     <input
                       type="text"
+                      autoComplete="off"
                       value={card.baseUrl}
                       onChange={(e) => updateCard(provider, { baseUrl: e.target.value })}
                       placeholder={DEFAULT_OLLAMA_BASE_URL}
@@ -1455,7 +1473,7 @@ export default function ConfigPage() {
                     <p className="text-[11px] italic text-slate-400">Ollama must be reachable from the API server host</p>
                   </label>
                 ) : (
-                  /* Cloud providers: API key + account login + plan */
+                  /* Cloud providers: API key + optional base URL */
                   <div className="space-y-3">
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">
@@ -1469,6 +1487,11 @@ export default function ConfigPage() {
                       <div className="relative">
                         <input
                           type={card.showKey ? 'text' : 'password'}
+                          name={`oa-api-key-${provider}`}
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-1p-ignore="true"
+                          data-form-type="other"
                           value={card.apiKey}
                           onChange={(e) => updateCard(provider, { apiKey: e.target.value })}
                           placeholder={isConfigured ? 'Enter new key to update...' : provider === 'apisrouter' ? 'apr-sk-live-...' : provider === 'nvidia' ? 'nvapi-...' : 'sk-...'}
@@ -1521,6 +1544,10 @@ export default function ConfigPage() {
                         </span>
                         <input
                           type="text"
+                          name={`oa-base-url-${provider}`}
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-1p-ignore="true"
                           value={card.baseUrl}
                           onChange={(e) => updateCard(provider, { baseUrl: e.target.value })}
                           placeholder={provider === 'custom' ? 'http://localhost:1234/v1' : 'Default endpoint (override optional)'}
@@ -1534,70 +1561,6 @@ export default function ConfigPage() {
                         )}
                       </label>
                     )}
-
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs font-medium text-slate-500">
-                        Login Email
-                        {existing?.loginEmail && (
-                          <span className="ml-1 font-normal text-slate-400">(stored: {existing.loginEmail})</span>
-                        )}
-                      </span>
-                      <input
-                        type="email"
-                        value={card.loginEmail}
-                        onChange={(e) => updateCard(provider, { loginEmail: e.target.value })}
-                        placeholder="you@example.com"
-                        className="h-9 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
-                      />
-                    </label>
-
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs font-medium text-slate-500">
-                        Login Password / Token
-                        {existing?.loginPassword && (
-                          <span className="ml-1 font-normal text-slate-400">(stored: {existing.loginPassword})</span>
-                        )}
-                      </span>
-                      <div className="relative">
-                        <input
-                          type={card.showLoginPassword ? 'text' : 'password'}
-                          value={card.loginPassword}
-                          onChange={(e) => updateCard(provider, { loginPassword: e.target.value })}
-                          placeholder={existing?.loginPassword ? 'Enter new password/token to update...' : 'Password or token'}
-                          className="h-9 w-full rounded-lg border border-slate-200 py-0 pl-3 pr-9 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => updateCard(provider, { showLoginPassword: !card.showLoginPassword })}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                        >
-                          {card.showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </label>
-
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs font-medium text-slate-500">Subscription Plan</span>
-                      <select
-                        value={card.subscriptionPlan}
-                        onChange={(event) => updateCard(provider, { subscriptionPlan: event.target.value })}
-                        className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
-                      >
-                        <option value="">Not set</option>
-                        {planOptions.map((plan) => (
-                          <option key={plan} value={plan}>
-                            {plan}
-                          </option>
-                        ))}
-                        {card.subscriptionPlan && !planOptions.includes(card.subscriptionPlan) && (
-                          <option value={card.subscriptionPlan}>{card.subscriptionPlan}</option>
-                        )}
-                      </select>
-                    </label>
-
-                    <p className="text-[11px] text-slate-400">
-                      If API key is blank, password/token is used as provider auth token.
-                    </p>
                   </div>
                 )}
 
@@ -1637,7 +1600,7 @@ export default function ConfigPage() {
                         void loadLiveModels(
                           provider,
                           card.baseUrl.trim() || undefined,
-                          card.apiKey.trim() || card.loginPassword.trim() || undefined,
+                          card.apiKey.trim() || undefined,
                         )
                       }}
                       disabled={liveModelsStatus === 'loading' && activeProvider === provider}
@@ -1653,7 +1616,7 @@ export default function ConfigPage() {
                     disabled={card.isSaving || !canSaveCredentials}
                     className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 bg-gradient-to-br ${meta.gradient}`}
                   >
-                    {card.isSaving ? 'Saving...' : 'Save Credentials'}
+                    {card.isSaving ? 'Saving...' : 'Save Key'}
                   </button>
 
                   {isConfigured && (
@@ -1717,6 +1680,11 @@ export default function ConfigPage() {
                 <div className="mt-3 space-y-1.5">
                   <input
                     type="password"
+                    name={`oa-fallback-key-${provider}`}
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
                     value={newFallbackKey[provider] ?? ''}
                     onChange={(e) => setNewFallbackKey((prev) => ({ ...prev, [provider]: e.target.value }))}
                     placeholder="sk-..."
@@ -1724,6 +1692,10 @@ export default function ConfigPage() {
                   />
                   <input
                     type="text"
+                    name={`oa-fallback-label-${provider}`}
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={newFallbackLabel[provider] ?? ''}
                     onChange={(e) => setNewFallbackLabel((prev) => ({ ...prev, [provider]: e.target.value }))}
                     placeholder="Label (optional)"

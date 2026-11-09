@@ -560,7 +560,7 @@ export function AppShell({ children }: AppShellProps) {
                     </p>
                     {!isChatControlRoute && (
                       <p className="truncate text-xs text-[var(--muted)] dark:text-[var(--muted)]">
-                        Local control plane for sessions, tools, and agents
+                        Personal AI Agent &amp; Cloud Workspace
                       </p>
                     )}
                   </div>
@@ -570,6 +570,12 @@ export function AppShell({ children }: AppShellProps) {
                   <div className="hidden items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 lg:flex">
                     <Search size={13} className="text-[var(--tone-soft)]" />
                     <input
+                      type="search"
+                      name="oa-command-search"
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      data-form-type="other"
                       value={routeSearch}
                       onChange={(event) => setRouteSearch(event.target.value)}
                       onKeyDown={handleRouteSearchKeyDown}

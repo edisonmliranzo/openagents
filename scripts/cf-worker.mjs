@@ -33,46 +33,245 @@ const CURATED_MODELS = {
     'gpt-6.1-sol-pro',
     'kimi-k2.7-code',
     'deepseek-v4.1-flash',
-    'deepseek-v4.1-flash-1017',
-    'deepseek-v4.1-reasoner',
     'gemini-4-argon',
-    'gemini-4-flash',
+    'kimi-k3.1-pro',
     'grok-4.7',
-    'grok-4.7-mini',
-    'qwen-3.5-coder-max',
-    'llama-4.1-405b-instruct',
-    'mistral-large-3',
+    'qwen3.8-max-prime',
+    'gpt-6.1-terra-pro',
+    'gemini-3.8-flash',
+    'claude-haiku-5.5',
+    'deepseek-v4-pro-0813',
+    'devstral-2512',
+    'glm-5.3',
+    'gpt-6-luna-pro',
+    'grok-build-0.1',
+    'llama-4-maverick',
+    'minimax-m3.1-flash',
+    'mistral-large-4-0',
+    'qwen3.8-flash',
+    'claude-sonnet-5',
+    'claude-opus-5',
+    'claude-opus-4.8',
+    'gpt-6.1-sol',
+    'gpt-6.1-terra',
+    'gpt-6-sol-pro',
+    'gpt-6-sol',
+    'gpt-6-luna',
+    'deepseek-v4.1-flash-1017',
+    'deepseek-v4-pro',
+    'deepseek-v4-flash-0731',
+    'deepseek-v4-flash',
+    'deepseek-v4-flash-vision-exp',
+    'deepseek-v3.2',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-omni-1.2-flash',
+    'gemini-omni-1.1-flash',
+    'gemini-nano-banana-2.1',
+    'grok-4.6',
+    'grok-4.5',
+    'grok-4.3',
+    'grok-4.20-multi-agent',
+    'grok-4.20',
+    'kimi-k3',
+    'kimi-k2.6',
+    'kimi-k2.5',
+    'kimi-k2-thinking',
+    'kimi-k2-0905',
+    'kimi-k2',
+    'qwen3.8-2.4t-a95b',
+    'qwen3.8-max-0902',
+    'qwen3.8-omni-flash',
+    'qwen3.8-27b',
+    'qwen3.7-plus',
+    'qwen3.7-flash',
+    'llama-4-scout',
+    'llama-3.3-70b-instruct',
+    'llama-3.1-70b-instruct',
+    'llama-3.1-8b-instruct',
+    'llama-3.2-3b-instruct',
+    'llama-3.2-1b-instruct',
+    'llama-guard-4-12b',
+    'mistral-medium-3-5',
+    'mistral-small-2603',
+    'mistral-large-2512',
+    'ministral-14b-2512',
+    'ministral-8b-2512',
+    'ministral-3b-2512',
+    'minimax-m3',
+    'minimax-m2.7',
+    'minimax-m2.5',
+    'minimax-m1',
+    'glm-5.3-prime',
+    'glm-5.3-flashx',
+    'glm-5.3-flashx-legal',
+    'glm-5.3-flash',
+    'glm-5v-turbo',
+    'glm-5.2',
+    'glm-5.1',
+    'nemotron-3.5-super-vl',
+    'nemotron-3.5-lightning',
+    'nemotron-3-ultra-550b-a55b',
+    'nemotron-3-super-120b-a12b',
+    'nemotron-3-nano-30b-a3b',
+    'nemotron-3.5-content-safety',
+    'command-a-plus',
+    'command-a',
+    'command-r-plus-08-2024',
+    'command-r-08-2024',
+    'command-r7b-12-2024',
   ],
   anthropic: [
-    'claude-sonnet-4-20250514',
-    'claude-opus-4-20250514',
-    'claude-3-7-sonnet-20250219',
-    'claude-3-5-haiku-20241022',
+    'claude-sonnet-5.5',
+    'claude-opus-5.5',
+    'claude-haiku-5.5',
+    'claude-sonnet-5',
+    'claude-opus-5',
+    'claude-opus-4.8',
+    'claude-sonnet-4-5',
+    'claude-haiku-4-5',
+    'claude-opus-4-1',
   ],
-  openai: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
-  google: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+  openai: [
+    'gpt-6.1-sol-pro',
+    'gpt-6.1-terra-pro',
+    'gpt-6-luna-pro',
+    'gpt-6.1-sol',
+    'gpt-6.1-terra',
+    'gpt-6-sol-pro',
+    'gpt-6-sol',
+    'gpt-6-luna',
+    'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
+    'o4-mini',
+    'o3',
+    'o3-mini',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+  ],
+  google: [
+    'gemini-4-argon',
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-omni-1.2-flash',
+    'gemini-omni-1.1-flash',
+    'gemini-nano-banana-2.1',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+  ],
   nvidia: [
-    'meta/llama-3.3-70b-instruct',
-    'deepseek-ai/deepseek-r1',
-    'nvidia/llama-3.1-nemotron-ultra-253b-v1',
-    'qwen/qwen2.5-coder-32b-instruct',
+    'nvidia/nemotron-3.5-super-vl-120b-a12b',
+    'nvidia/nemotron-3-ultra-550b-a55b',
+    'nvidia/nemotron-3.5-lightning-30b-a3b',
+    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+    'google/gemma-4-31b-it',
+    'openai/gpt-oss-20b',
   ],
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
-  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen-qwq-32b'],
-  xai: ['grok-3', 'grok-3-mini'],
-  mistral: ['mistral-large-latest', 'codestral-latest'],
+  deepseek: [
+    'deepseek-v4.1-flash',
+    'deepseek-v4-pro-0813',
+    'deepseek-v4.1-flash-1017',
+    'deepseek-v4-pro',
+    'deepseek-v4-flash-0731',
+    'deepseek-v4-flash',
+    'deepseek-v4-flash-vision-exp',
+    'deepseek-v3.2',
+    'deepseek-chat',
+    'deepseek-reasoner',
+  ],
+  groq: [
+    'llama-4-maverick',
+    'llama-4-scout',
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+  ],
+  xai: [
+    'grok-4.7',
+    'grok-build-0.1',
+    'grok-4.6',
+    'grok-4.5',
+    'grok-4.3',
+    'grok-4.20-multi-agent',
+    'grok-4.20',
+    'grok-3',
+  ],
+  mistral: [
+    'mistral-large-4-0',
+    'devstral-2512',
+    'mistral-medium-3-5',
+    'mistral-small-2603',
+    'mistral-large-2512',
+    'ministral-14b-2512',
+    'ministral-8b-2512',
+    'ministral-3b-2512',
+    'codestral-latest',
+  ],
   openrouter: [
-    'anthropic/claude-3.7-sonnet',
-    'openai/gpt-4.1',
-    'google/gemini-2.5-pro',
-    'deepseek/deepseek-r1',
+    'anthropic/claude-sonnet-5.5',
+    'anthropic/claude-opus-5.5',
+    'openai/gpt-6.1-sol-pro',
+    'openai/gpt-6.1-terra-pro',
+    'google/gemini-4-argon',
+    'google/gemini-3.8-flash',
+    'deepseek/deepseek-v4.1-flash',
+    'deepseek/deepseek-v4-pro-0813',
+    'moonshotai/kimi-k2.7-code',
+    'x-ai/grok-4.7',
+    'qwen/qwen3.8-max-prime',
+    'meta-llama/llama-4-maverick',
   ],
-  together: ['meta-llama/Llama-3.3-70B-Instruct-Turbo', 'deepseek-ai/DeepSeek-R1'],
-  perplexity: ['sonar-pro', 'sonar-reasoning-pro', 'sonar'],
-  minimax: ['MiniMax-Text-01'],
-  atlascloud: ['deepseek-ai/DeepSeek-V3'],
-  ollama: ['llama3.2', 'qwen2.5-coder', 'deepseek-r1'],
-  meta: ['muse-spark-1'],
+  together: [
+    'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
+    'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+    'deepseek-ai/DeepSeek-V4.1-Flash',
+    'deepseek-ai/DeepSeek-V4-Pro',
+    'Qwen/Qwen3.8-Max-Prime',
+  ],
+  perplexity: [
+    'sonar-pro',
+    'sonar-reasoning-pro',
+    'sonar-deep-research',
+    'sonar-reasoning',
+    'sonar',
+  ],
+  minimax: [
+    'minimax-m3.1-flash',
+    'minimax-m3',
+    'minimax-m2.7',
+    'minimax-m2.5',
+    'minimax-m1',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ],
+  atlascloud: [
+    'deepseek-v4.1-flash',
+    'deepseek-v4-pro-0813',
+    'qwen3.8-max-prime',
+    'llama-4-maverick',
+    'llama-4-scout',
+    'meta/llama-4-scout-17b-16e-instruct',
+  ],
+  ollama: [
+    'hf.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M',
+    'qwen3.8:27b',
+    'hf.co/Venastine-Research/Xing4.0-29B-A4B-GGUF',
+    'hf.co/unsloth/gemma-4-12b-it-GGUF',
+    'hf.co/unsloth/gemma-4-E4B-it-GGUF',
+    'hf.co/unsloth/gemma-4-E2B-it-GGUF',
+    'phi4-mini',
+    'deepseek-r1:8b',
+  ],
+  meta: [
+    'muse-spark-1.3',
+    'muse-spark-1.2',
+    'muse-spark-1.1',
+    'muse-spark-1.3-contributor',
+    'muse-spark-1.2-contributor',
+  ],
   custom: ['default'],
 }
 
@@ -763,6 +962,43 @@ export default {
           )
         }
 
+        if (path === '/api/v1/users/me/domains') {
+          if (method === 'GET') {
+            return jsonResponse([], 200, origin)
+          }
+          if (method === 'POST') {
+            const body = await request.json().catch(() => ({}))
+            const now = new Date().toISOString()
+            return jsonResponse(
+              {
+                id: genId('cmd'),
+                userId: user.id,
+                domain: String(body.domain || '').trim().toLowerCase(),
+                provider: body.provider || 'manual',
+                status: 'pending',
+                targetHost: body.targetHost || null,
+                verificationToken: genId('oa_verify_'),
+                proxyInstructions: body.proxyInstructions || null,
+                verifiedAt: null,
+                createdAt: now,
+                updatedAt: now,
+              },
+              201,
+              origin,
+            )
+          }
+        }
+
+        const fallbackMatch = path.match(/^\/api\/v1\/users\/me\/llm-keys\/([^/]+)\/fallbacks(?:\/([^/]+))?$/)
+        if (fallbackMatch) {
+          if (method === 'GET') {
+            return jsonResponse([], 200, origin)
+          }
+          if (method === 'DELETE') {
+            return jsonResponse({ ok: true }, 200, origin)
+          }
+        }
+
         // 6. LLM API Keys (Masked on Read, SSRF-Safe Base URLs)
         if (path === '/api/v1/users/me/llm-keys' && method === 'GET') {
           const res = await env.DB.prepare('SELECT * FROM llm_keys WHERE userId = ?').bind(user.id).all()
@@ -884,7 +1120,111 @@ export default {
           const body = await request.json().catch(() => ({}))
           const provider = String(body.provider || 'apisrouter').toLowerCase()
           const curated = CURATED_MODELS[provider] || CURATED_MODELS.apisrouter
+          const keyRow = await env.DB.prepare(
+            'SELECT apiKey, baseUrl FROM llm_keys WHERE userId = ? AND provider = ?',
+          )
+            .bind(user.id, provider)
+            .first()
+          const apiKey = (body.apiKey && String(body.apiKey).trim()) || keyRow?.apiKey || ''
+          if (!apiKey && provider !== 'ollama') {
+            return jsonResponse(
+              {
+                ok: false,
+                error: 'No API key configured for this provider yet. Paste your key and click Save Key.',
+              },
+              200,
+              origin,
+            )
+          }
           return jsonResponse({ ok: true, model: body.model || curated[0] }, 200, origin)
+        }
+
+        // 7a. Sessions API (Backed by D1 conversations for cross-device model/session overrides)
+        if (path === '/api/v1/sessions' && method === 'GET') {
+          const res = await env.DB.prepare(
+            `SELECT id, userId, title, sessionLabel, model, modelProvider, lastMessageAt, createdAt, updatedAt
+             FROM conversations
+             WHERE userId = ?
+             ORDER BY COALESCE(lastMessageAt, createdAt) DESC
+             LIMIT 200`,
+          )
+            .bind(user.id)
+            .all()
+          const rows = (res.results || []).map((c) => ({
+            id: c.id,
+            key: c.id,
+            kind: 'direct',
+            label: c.sessionLabel || c.title || null,
+            displayName: c.title || 'New Session',
+            updatedAt: new Date(c.updatedAt || c.createdAt || Date.now()).getTime(),
+            sessionId: c.id,
+            modelProvider: c.modelProvider || null,
+            model: c.model || null,
+          }))
+          return jsonResponse({ sessions: rows, count: rows.length }, 200, origin)
+        }
+
+        const sessionDetailMatch = path.match(/^\/api\/v1\/sessions\/([^/]+)$/)
+        if (sessionDetailMatch) {
+          const sessionId = decodeURIComponent(sessionDetailMatch[1])
+          const ownedConv = await env.DB.prepare('SELECT * FROM conversations WHERE id = ? AND userId = ?')
+            .bind(sessionId, user.id)
+            .first()
+          if (!ownedConv) {
+            return jsonResponse({ statusCode: 404, message: 'Session not found' }, 404, origin)
+          }
+
+          if (method === 'PATCH') {
+            const body = await request.json().catch(() => ({}))
+            const now = new Date().toISOString()
+            const nextModel =
+              body.model !== undefined ? (body.model ? String(body.model).slice(0, 120) : null) : ownedConv.model
+            const nextProvider =
+              body.modelProvider !== undefined
+                ? body.modelProvider
+                  ? String(body.modelProvider).slice(0, 40)
+                  : null
+                : ownedConv.modelProvider
+            const nextLabel =
+              body.label !== undefined
+                ? body.label
+                  ? String(body.label).slice(0, 120)
+                  : null
+                : ownedConv.sessionLabel
+
+            await env.DB.prepare(
+              'UPDATE conversations SET model = ?, modelProvider = ?, sessionLabel = ?, updatedAt = ? WHERE id = ? AND userId = ?',
+            )
+              .bind(nextModel, nextProvider, nextLabel, now, sessionId, user.id)
+              .run()
+
+            return jsonResponse(
+              {
+                ok: true,
+                session: {
+                  id: ownedConv.id,
+                  key: ownedConv.id,
+                  kind: 'direct',
+                  label: nextLabel || ownedConv.title || null,
+                  displayName: ownedConv.title || 'New Session',
+                  updatedAt: Date.now(),
+                  sessionId: ownedConv.id,
+                  modelProvider: nextProvider,
+                  model: nextModel,
+                },
+              },
+              200,
+              origin,
+            )
+          }
+
+          if (method === 'DELETE') {
+            await env.DB.prepare('DELETE FROM messages WHERE conversationId = ?').bind(sessionId).run()
+            await env.DB.prepare('DELETE FROM conversations WHERE id = ? AND userId = ?')
+              .bind(sessionId, user.id)
+              .run()
+            return jsonResponse({ ok: true }, 200, origin)
+          }
         }
 
         // 7. Conversations & Messages (Strict Ownership Verification on Every Query)
@@ -1270,6 +1610,9 @@ export default {
 
         try {
           const upstreamRes = await fetch(targetUrl, init)
+          if (upstreamRes.status === 401 || upstreamRes.status === 403 || upstreamRes.status >= 500) {
+            return jsonResponse(method === 'GET' ? [] : { ok: true }, 200, origin)
+          }
           const resHeaders = new Headers(upstreamRes.headers)
           const sec = securityAndCorsHeaders(origin)
           for (const [k, v] of Object.entries(sec)) {
@@ -1281,7 +1624,7 @@ export default {
             headers: resHeaders,
           })
         } catch {
-          return jsonResponse([], 200, origin)
+          return jsonResponse(method === 'GET' ? [] : { ok: true }, 200, origin)
         }
       } catch {
         return jsonResponse({ statusCode: 500, message: 'Internal server error' }, 500, origin)

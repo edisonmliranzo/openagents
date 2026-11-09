@@ -509,6 +509,9 @@ export function ChatWindow({
 
   const [isOffline, setIsOffline] = useState(false)
   const [offlineQueue, setOfflineQueue] = useState<string[]>([])
+  const [hasSavedApiKey, setHasSavedApiKey] = useState<boolean | null>(null)
+  const [quickApiKeyInput, setQuickApiKeyInput] = useState('')
+  const [isSavingQuickKey, setIsSavingQuickKey] = useState(false)
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false)
   const [grokDeepSearchActive, setGrokDeepSearchActive] = useState(false)
   const [bigBrainActive, setBigBrainActive] = useState(false)
@@ -748,8 +751,11 @@ export function ChatWindow({
       }
 
       if (llmKeysResult.status === 'fulfilled') {
-        const ollamaKey = (llmKeysResult.value ?? []).find((key) => key.provider === 'ollama')
+        const keyList = Array.isArray(llmKeysResult.value) ? llmKeysResult.value : []
+        const ollamaKey = keyList.find((key) => key.provider === 'ollama')
         setOllamaBaseUrl(ollamaKey?.baseUrl?.trim() || '')
+        const anyCloudKey = keyList.some((key) => key.provider !== 'ollama' && Boolean(key.apiKey))
+        setHasSavedApiKey(anyCloudKey)
       }
 
       return { settings: nextSettings, session: nextSession }
@@ -1765,6 +1771,75 @@ export function ChatWindow({
 
           {/* Input card */}
           <div className="relative w-full max-w-2xl">
+            {hasSavedApiKey === false && (
+              <div className="mb-3 flex flex-col gap-2.5 rounded-2xl border border-violet-300/70 bg-gradient-to-r from-violet-950/95 via-slate-900/95 to-fuchsia-950/95 p-3.5 text-white shadow-md sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-fuchsia-500/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-fuchsia-200">
+                      Step 1: Connect API Key
+                    </span>
+                    <a
+                      href="https://apisrouter.dev"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-xs font-bold text-fuchsia-300 underline underline-offset-2 hover:text-white"
+                    >
+                      Get 1 Key for 93+ Models at APIsRouter.dev ↗
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => router.push('/settings/config')}
+                      className="text-[11px] font-medium text-slate-300 underline underline-offset-2 hover:text-white"
+                    >
+                      or Bring Your Own Key →
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    Your OpenAgents cloud workspace is 100% free. Paste your <code className="font-mono text-fuchsia-200">apisrouter.dev</code> key below to activate Veda:
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <input
+                    type="password"
+                    name="oa-chat-quick-key"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
+                    value={quickApiKeyInput}
+                    onChange={(e) => setQuickApiKeyInput(e.target.value)}
+                    placeholder="apr-sk-live-..."
+                    className="h-8 w-40 rounded-lg border border-white/20 bg-white/10 px-2.5 text-xs text-white placeholder-slate-400 outline-none focus:border-fuchsia-400 sm:w-44"
+                  />
+                  <button
+                    type="button"
+                    disabled={isSavingQuickKey || !quickApiKeyInput.trim()}
+                    onClick={async () => {
+                      const trimmed = quickApiKeyInput.trim()
+                      if (!trimmed) return
+                      setIsSavingQuickKey(true)
+                      try {
+                        await sdk.users.upsertLlmKey('apisrouter', { apiKey: trimmed, isActive: true })
+                        await sdk.users.updateSettings({
+                          preferredProvider: 'apisrouter',
+                          preferredModel: 'claude-sonnet-5.5',
+                        })
+                        setQuickApiKeyInput('')
+                        setHasSavedApiKey(true)
+                        await syncRuntimeState()
+                      } catch {
+                        router.push('/settings/config')
+                      } finally {
+                        setIsSavingQuickKey(false)
+                      }
+                    }}
+                    className="h-8 shrink-0 rounded-lg bg-fuchsia-500 px-3 text-xs font-bold text-white transition hover:bg-fuchsia-400 disabled:opacity-50"
+                  >
+                    {isSavingQuickKey ? 'Saving...' : 'Activate'}
+                  </button>
+                </div>
+              </div>
+            )}
             {slashQuery !== null && (
               <SlashCommandPalette
                 query={slashQuery}

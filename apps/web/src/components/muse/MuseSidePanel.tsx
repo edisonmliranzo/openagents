@@ -226,7 +226,7 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
               Session History ({sideChats.length})
             </p>
-            {rows.length > 0 && (
+            {sideChats.length > 0 && (
               <button
                 type="button"
                 onClick={() => void handleClearAll()}
