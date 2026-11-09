@@ -273,6 +273,7 @@ const CURATED_MODELS = {
   ],
   meta: [
     'muse-spark-1.3',
+    'muse-ember-1.0',
     'muse-spark-1.2',
     'muse-spark-1.1',
     'muse-spark-1.3-contributor',

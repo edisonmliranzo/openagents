@@ -86,7 +86,7 @@ export const LLM_MODELS = {
   },
   meta: {
     default: 'muse-spark-1.3',
-    fast: 'muse-spark-1.3',
+    fast: 'muse-ember-1.0',
     powerful: 'muse-wonder-1.0',
   },
 } as const
@@ -374,6 +374,7 @@ export const LLM_MODEL_OPTIONS = {
   meta: [
     // Meta Model API (https://dev.meta.ai) — Muse Spark, OpenAI-compatible
     'muse-spark-1.3',
+    'muse-ember-1.0',
     'muse-spark-1.2',
     'muse-spark-1.1',
     'muse-spark-1.3-contributor',
