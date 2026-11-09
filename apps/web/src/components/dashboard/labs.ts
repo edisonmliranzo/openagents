@@ -12,6 +12,11 @@ export interface LabsLink {
 
 /** Experimental modules, hidden unless "Labs (experimental)" is enabled. */
 export const LABS_LINKS: LabsLink[] = [
+  { label: 'Memory & Mind', href: '/memory' },
+  { label: 'MCP Servers', href: '/mcp' },
+  { label: 'Skills & Marketplace', href: '/agent/skills' },
+  { label: 'Usage & Costs', href: '/costs' },
+  { label: 'Docs', href: '/docs' },
   { label: 'Frontier Hub', href: '/frontier' },
   { label: 'Agent Marketplace', href: '/frontier/agent-marketplace' },
   { label: 'Smart Router', href: '/frontier/smart-router' },
@@ -28,18 +33,10 @@ export const LABS_LINKS: LabsLink[] = [
   { label: 'Agent Evolution', href: '/agent/evolution' },
   { label: 'Tool Forge', href: '/agent/tool-forge' },
   { label: 'Tree of Actions', href: '/agent/tree-of-actions' },
-  { label: 'Speculative Exec', href: '/agent/speculative' },
-  { label: 'Security Chaos', href: '/security/chaos' },
-  { label: 'Security Firewall', href: '/security/firewall' },
   { label: 'Security Ledger', href: '/security/ledger' },
-  { label: 'Memory & Mind', href: '/memory' },
-  { label: 'MCP Servers', href: '/mcp' },
   { label: 'War Room', href: '/war-room' },
   { label: 'Digital Twin', href: '/digital-twin' },
-  { label: 'Time Machine', href: '/time-machine' },
-  { label: 'Workflows', href: '/workflows' },
-  { label: 'Usage & Costs', href: '/costs' },
-  { label: 'Docs', href: '/docs' },
+  { label: 'Workflow Recorder', href: '/workflows/recorder' },
 ]
 
 export function useLabsEnabled(): [boolean, (next: boolean) => void] {

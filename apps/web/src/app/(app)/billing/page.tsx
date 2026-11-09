@@ -278,6 +278,14 @@ export default function BillingPage() {
                   >
                     {isCurrent ? 'Active Free Plan' : 'Included Base Tier'}
                   </button>
+                ) : !planState?.configured ? (
+                  <a
+                    href={`mailto:support@openagents.us?subject=${encodeURIComponent(`${plan.name} Plan Waitlist`)}`}
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 py-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Coming Soon • Join Waitlist
+                  </a>
                 ) : (
                   <button
                     type="button"
@@ -288,11 +296,9 @@ export default function BillingPage() {
                     <Sparkles className="h-3.5 w-3.5" />
                     {isCurrent
                       ? 'Current Plan'
-                      : !planState?.configured
-                        ? 'Stripe Not Configured'
-                        : busyAction === plan.id
-                          ? 'Redirecting to Stripe...'
-                          : `Upgrade to ${plan.name}`}
+                      : busyAction === plan.id
+                        ? 'Redirecting to Stripe...'
+                        : `Upgrade to ${plan.name}`}
                   </button>
                 )}
               </div>

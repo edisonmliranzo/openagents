@@ -58,3 +58,5 @@ apps/desktop/release/
 !apps/desktop/resources/*.ico
 
 /data/
+
+backups/

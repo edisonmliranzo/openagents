@@ -4,7 +4,7 @@ import { handleBillingRoutes } from './worker-billing-stripe.mjs'
 import { reportError, handleClientError } from './worker-limits.mjs'
 import { sendEmail, passwordResetEmail, sendVerificationEmail, handleEmailRoutes } from './worker-email.mjs'
 
-const DEFAULT_TUNNEL_ORIGIN = 'https://someone-edinburgh-interstate-relative.trycloudflare.com'
+// Upstream proxying is disabled unless env.UPSTREAM_API_URL (or legacy env.API_TUNNEL_URL) is set.
 
 const ALLOWED_ORIGINS = new Set([
   'https://openagents.us',
@@ -2285,31 +2285,18 @@ export default {
           return jsonResponse([], 200, origin)
         }
 
-        // 10. Upstream Tunnel Proxy — ONLY for the workspace owner's self-hosted desktop API.
-        // Public cloud members are never forwarded to the owner's machine.
-        if (user.role !== 'owner') {
-          if (method === 'GET') {
-            const empty = new Response('[]', {
-              status: 200,
-              headers: {
-                'content-type': 'application/json; charset=utf-8',
-                'x-openagents-cloud': 'desktop-only',
-                ...securityAndCorsHeaders(origin),
-              },
-            })
-            return empty
-          }
-          return jsonResponse(
-            {
-              statusCode: 501,
-              message: 'This feature is available in the OpenAgents desktop app. The cloud workspace supports Chat, Sessions, and AI Models & Keys.',
-            },
-            501,
-            origin,
-          )
+        // 10. Endpoint not handled natively by the Worker (same behavior for every role).
+        const notAvailable = () => jsonResponse(
+          { statusCode: 501, message: 'This feature is not available yet.' },
+          501,
+          origin,
+        )
+        // Only proxy when an upstream is EXPLICITLY configured. No role/user-specific routing.
+        const configuredUpstream = String(env.UPSTREAM_API_URL || env.API_TUNNEL_URL || '').trim()
+        if (!configuredUpstream) {
+          return notAvailable()
         }
-
-        const upstreamBase = (env.API_TUNNEL_URL || DEFAULT_TUNNEL_ORIGIN).replace(/\/$/, '')
+        const upstreamBase = configuredUpstream.replace(/\/$/, '')
         const targetUrl = `${upstreamBase}${url.pathname}${url.search}`
 
         const headers = new Headers(request.headers)
@@ -2339,13 +2326,9 @@ export default {
         try {
           const upstreamRes = await fetch(targetUrl, init)
           const upstreamType = (upstreamRes.headers.get('content-type') || '').toLowerCase()
-          if (upstreamType.includes('text/html')) {
-            // Tunnel is down (Cloudflare 1016/530 HTML page) — never leak raw HTML into the app
-            return jsonResponse(
-              { statusCode: 503, message: 'Your desktop API is offline. Start OpenAgents on your computer to use this feature.' },
-              503,
-              origin,
-            )
+          if (upstreamType.includes('text/html') || upstreamRes.status === 530 || upstreamRes.status === 502) {
+            // Upstream unreachable (e.g. Cloudflare 1016/530 HTML page) — never leak raw HTML into the app
+            return notAvailable()
           }
           const resHeaders = new Headers(upstreamRes.headers)
           const sec = securityAndCorsHeaders(origin)
@@ -2358,11 +2341,7 @@ export default {
             headers: resHeaders,
           })
         } catch {
-          return jsonResponse(
-            { statusCode: 503, message: 'Your desktop API is offline. Start OpenAgents on your computer to use this feature.' },
-            503,
-            origin,
-          )
+          return notAvailable()
         }
       } catch (err) {
         await reportError(env, err, { path, method })

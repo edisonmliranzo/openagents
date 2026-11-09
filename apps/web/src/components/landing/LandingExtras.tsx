@@ -17,8 +17,8 @@ const FEATURES = [
 
 const PLANS = [
   { name: 'Free', price: '$0', period: 'forever', tagline: 'Bring your own key', features: ['Unlimited chat with your key', 'Voice calls & 1 avatar', 'Basic storage', 'Community support'], cta: 'Start free', href: '/register', highlight: false },
-  { name: 'Pro', price: '$12', period: '/mo', tagline: 'For power users', features: ['Everything in Free', 'More storage', 'More avatars', 'Priority processing & support'], cta: 'Go Pro', href: '/register?plan=pro', highlight: true },
-  { name: 'Team', price: '$29', period: '/seat/mo', tagline: 'For small teams', features: ['Everything in Pro', 'Shared workspaces', 'Team approvals & audit', 'Admin controls'], cta: 'Start team', href: '/register?plan=team', highlight: false },
+  { name: 'Pro', price: '$12', period: '/mo', tagline: 'For power users', features: ['Everything in Free', 'More storage', 'More avatars', 'Priority processing & support'], cta: 'Join waitlist', href: 'mailto:support@openagents.us?subject=Pro%20waitlist', comingSoon: true, highlight: true },
+  { name: 'Team', price: '$29', period: '/seat/mo', tagline: 'For small teams', features: ['Everything in Pro', 'Shared workspaces', 'Team approvals & audit', 'Admin controls'], cta: 'Join waitlist', href: 'mailto:support@openagents.us?subject=Team%20waitlist', comingSoon: true, highlight: false },
 ]
 
 const FAQS = [
@@ -122,7 +122,7 @@ export function LandingExtras({ warmTheme }: { warmTheme: boolean }) {
         <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
           {PLANS.map((plan) => (
             <div key={plan.name} className={`flex flex-col rounded-3xl border p-6 ${plan.highlight ? 'border-rose-500/60 ring-2 ring-rose-500/30' : ''} ${card}`}>
-              <p className="text-sm font-bold">{plan.name}</p>
+              <p className="text-sm font-bold">{plan.name}{'comingSoon' in plan && plan.comingSoon && <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-500">Coming soon</span>}</p>
               <p className={`text-xs ${muted}`}>{plan.tagline}</p>
               <p className="mt-4 text-3xl font-extrabold">
                 {plan.price}<span className={`text-sm font-medium ${muted}`}> {plan.period}</span>
@@ -132,12 +132,12 @@ export function LandingExtras({ warmTheme }: { warmTheme: boolean }) {
                   <li key={f} className="flex items-center gap-2"><Check className="h-4 w-4 shrink-0 text-emerald-500" />{f}</li>
                 ))}
               </ul>
-              <Link
+              <a
                 href={plan.href}
                 className={`mt-6 rounded-full px-4 py-2 text-center text-sm font-semibold ${plan.highlight ? 'bg-gradient-to-r from-rose-500 to-amber-500 text-white' : warmTheme ? 'border border-stone-300' : 'border border-white/20'}`}
               >
                 {plan.cta}
-              </Link>
+              </a>
             </div>
           ))}
         </div>
@@ -165,6 +165,14 @@ export function LandingExtras({ warmTheme }: { warmTheme: boolean }) {
             )
           })}
         </div>
+      </section>
+
+      {/* -- Contact -- */}
+      <section id="contact" className="mx-auto mt-16 max-w-3xl text-center">
+        <p className={`text-sm ${muted}`}>
+          Questions? Contact us at{' '}
+          <a href="mailto:support@openagents.us" className="font-semibold underline">support@openagents.us</a>
+        </p>
       </section>
     </>
   )

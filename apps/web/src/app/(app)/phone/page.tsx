@@ -514,14 +514,22 @@ export default function PhoneAgentPage() {
     setBriefingMsg(null)
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      const [lhRaw, lmRaw] = (briefingTime || '08:00').split(':')
+      const localHour = Number(lhRaw || 8)
+      const localMin = Number(lmRaw || 0)
+      const now = new Date()
+      const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), localHour, localMin, 0)
+      const utcHour = localDate.getUTCHours()
+      const utcMin = localDate.getUTCMinutes()
+      const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'
       await sdk.scheduler.create({
         name: 'Daily briefing call',
         description: 'Sends a notification each morning linking to a live briefing call on /phone.',
-        schedule: briefingTime ? `${Number(briefingTime.split(':')[1] || 0)} ${Number(briefingTime.split(':')[0] || 8)} * * *` : '0 8 * * *',
+        schedule: `${utcMin} ${utcHour} * * *`,
         message: `Send me a short notification: "Your daily briefing call is ready — tap to start: ${origin}/phone?briefing=1". Include the link exactly.`,
         deliveryMode: 'announce',
       })
-      setBriefingMsg(`Daily briefing call scheduled for ${briefingTime || '08:00'} (UTC). You'll get a notification linking to /phone?briefing=1.`)
+      setBriefingMsg(`Daily briefing call scheduled for ${briefingTime || '08:00'} (${tzName}). You'll get a notification linking to /phone?briefing=1.`)
     } catch (e: any) {
       setBriefingMsg(cleanError(e, 'Could not schedule the briefing call.'))
     }
