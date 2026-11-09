@@ -156,6 +156,69 @@ function timingSafeEqualStr(a, b) {
   return diff === 0
 }
 
+function bytesToHex(bytes) {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+  }
+  return bytes
+}
+
+async function hashPasswordPbkdf2(password) {
+  const salt = new Uint8Array(16)
+  crypto.getRandomValues(salt)
+  const iterations = 100000
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits'],
+  )
+  const derivedBits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+    keyMaterial,
+    256,
+  )
+  return `pbkdf2:${iterations}:${bytesToHex(salt)}:${bytesToHex(new Uint8Array(derivedBits))}`
+}
+
+async function verifyPasswordPbkdf2(password, stored) {
+  if (!stored || typeof stored !== 'string' || !stored.startsWith('pbkdf2:')) return false
+  const parts = stored.split(':')
+  if (parts.length !== 4) return false
+  const iterations = Number(parts[1])
+  const saltHex = parts[2]
+  const expectedHex = parts[3]
+  if (!Number.isFinite(iterations) || iterations < 1000 || iterations > 500000 || !saltHex || !expectedHex) {
+    return false
+  }
+  try {
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(password),
+      { name: 'PBKDF2' },
+      false,
+      ['deriveBits'],
+    )
+    const derivedBits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: hexToBytes(saltHex), iterations, hash: 'SHA-256' },
+      keyMaterial,
+      256,
+    )
+    const candidateHex = bytesToHex(new Uint8Array(derivedBits))
+    return timingSafeEqualStr(candidateHex, expectedHex)
+  } catch {
+    return false
+  }
+}
+
 function base64UrlEncodeBytes(bytes) {
   let binary = ''
   for (let i = 0; i < bytes.length; i++) {
@@ -342,7 +405,115 @@ export default {
           )
         }
 
-        // 2. Hardened Login with Brute-Force Protection & Constant-Time Digest Verification
+        // 2. Public User Registration (Free Cloud Workspace, Zero Free Keys)
+        if (path === '/api/v1/auth/register' && method === 'POST') {
+          if (!env.DB) {
+            return jsonResponse({ statusCode: 503, message: 'Database unavailable.' }, 503, origin)
+          }
+
+          const body = await request.json().catch(() => ({}))
+          const email = String(body.email || '').trim().toLowerCase()
+          const password = String(body.password || '')
+          const rawName = body.name ? String(body.name).trim().slice(0, 80) : null
+
+          if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+            return jsonResponse({ statusCode: 400, message: 'Please enter a valid email address.' }, 400, origin)
+          }
+          if (!password || password.length < 8 || password.length > 256) {
+            return jsonResponse(
+              { statusCode: 400, message: 'Password must be at least 8 characters long.' },
+              400,
+              origin,
+            )
+          }
+
+          const clientIp = request.headers.get('cf-connecting-ip') || 'unknown'
+          const regBucket = `register:${clientIp}`
+          const nowMs = Date.now()
+          const hourMs = 60 * 60 * 1000
+          const regRate = await env.DB.prepare('SELECT failures, windowStart FROM auth_rate_limits WHERE bucket = ?')
+            .bind(regBucket)
+            .first()
+          if (regRate && nowMs - Number(regRate.windowStart) < hourMs && Number(regRate.failures) >= 5) {
+            return jsonResponse(
+              { statusCode: 429, message: 'Too many accounts created from this IP. Please try again later.' },
+              429,
+              origin,
+            )
+          }
+
+          const existing = await env.DB.prepare('SELECT id FROM users WHERE lower(email) = ? LIMIT 1')
+            .bind(email)
+            .first()
+          if (existing) {
+            return jsonResponse({ statusCode: 409, message: 'Email already in use.' }, 409, origin)
+          }
+
+          const userId = genId('cmu')
+          const nowIso = new Date().toISOString()
+          const passwordHash = await hashPasswordPbkdf2(password)
+          const displayName = rawName || email.split('@')[0]
+
+          await env.DB.prepare(
+            `INSERT INTO users (id, email, name, avatarUrl, passwordHash, role, createdAt, updatedAt)
+             VALUES (?, ?, ?, NULL, ?, 'member', ?, ?)`,
+          )
+            .bind(userId, email, displayName, passwordHash, nowIso, nowIso)
+            .run()
+
+          await env.DB.prepare(
+            `INSERT INTO user_settings (userId, preferredProvider, preferredModel, customSystemPrompt, lastActiveConversationId, beginnerMode, onboardingCompletedAt, createdAt, updatedAt)
+             VALUES (?, 'apisrouter', 'claude-sonnet-5.5', NULL, NULL, 0, NULL, ?, ?)`,
+          )
+            .bind(userId, nowIso, nowIso)
+            .run()
+
+          const nextCount =
+            regRate && nowMs - Number(regRate.windowStart) < hourMs ? Number(regRate.failures) + 1 : 1
+          const nextWindow =
+            regRate && nowMs - Number(regRate.windowStart) < hourMs ? Number(regRate.windowStart) : nowMs
+          await env.DB.prepare(
+            'INSERT OR REPLACE INTO auth_rate_limits (bucket, failures, windowStart) VALUES (?, ?, ?)',
+          )
+            .bind(regBucket, nextCount, nextWindow)
+            .run()
+
+          const user = {
+            id: userId,
+            email,
+            name: displayName,
+            avatarUrl: null,
+            role: 'member',
+            createdAt: nowIso,
+          }
+
+          const secret = await getJwtSecret(env)
+          const accessToken = await signJwtHs256(
+            { sub: user.id, email: user.email, role: user.role },
+            secret,
+            604800,
+          )
+          const refreshToken = await signJwtHs256(
+            { sub: user.id, email: user.email, role: user.role, typ: 'refresh' },
+            secret,
+            1209600,
+          )
+
+          return jsonResponse(
+            {
+              user,
+              tokens: {
+                accessToken,
+                refreshToken,
+                expiresIn: 604800,
+              },
+            },
+            201,
+            origin,
+          )
+        }
+
+        // 2b. Hardened Login with Brute-Force Protection & Constant-Time Password Verification
         if (path === '/api/v1/auth/login' && method === 'POST') {
           if (!env.DB) {
             return jsonResponse({ statusCode: 503, message: 'Database unavailable.' }, 503, origin)
@@ -372,17 +543,38 @@ export default {
             )
           }
 
-          const candidateDigest = await sha256Hex(`${email}:${password}`)
-          const ownerDigest = await getOwnerDigest(env)
-          const digestMatches = Boolean(ownerDigest && timingSafeEqualStr(candidateDigest, ownerDigest))
+          const dbUser = await env.DB.prepare(
+            'SELECT id, email, name, avatarUrl, role, passwordHash, createdAt FROM users WHERE lower(email) = ? LIMIT 1',
+          )
+            .bind(email)
+            .first()
 
-          const user = digestMatches
-            ? await env.DB.prepare(
-                'SELECT id, email, name, avatarUrl, role, createdAt FROM users WHERE lower(email) = ? LIMIT 1',
-              )
-                .bind(email)
-                .first()
-            : null
+          let passwordValid = false
+          if (dbUser?.passwordHash && String(dbUser.passwordHash).startsWith('pbkdf2:')) {
+            passwordValid = await verifyPasswordPbkdf2(password, String(dbUser.passwordHash))
+          } else if (dbUser) {
+            const candidateDigest = await sha256Hex(`${email}:${password}`)
+            const ownerDigest = await getOwnerDigest(env)
+            passwordValid = Boolean(ownerDigest && timingSafeEqualStr(candidateDigest, ownerDigest))
+            if (passwordValid) {
+              const upgradedHash = await hashPasswordPbkdf2(password)
+              await env.DB.prepare('UPDATE users SET passwordHash = ?, updatedAt = ? WHERE id = ?')
+                .bind(upgradedHash, new Date().toISOString(), dbUser.id)
+                .run()
+            }
+          }
+
+          const user =
+            dbUser && passwordValid
+              ? {
+                  id: dbUser.id,
+                  email: dbUser.email,
+                  name: dbUser.name,
+                  avatarUrl: dbUser.avatarUrl,
+                  role: dbUser.role,
+                  createdAt: dbUser.createdAt,
+                }
+              : null
 
           if (!user) {
             const nextFailures =
@@ -895,9 +1087,42 @@ export default {
               await sendSse('status', { status: 'thinking' })
 
               if (!apiKey) {
-                throw new Error(
-                  `No API key configured for ${activeProvider}. Add your key in Settings & Models -> APIsRouter.`,
+                const onboardingReply = [
+                  '### Welcome to OpenAgents — Your Cloud Workspace is 100% Free',
+                  '',
+                  'To start running tasks and chatting with Veda, connect your AI model key (OpenAgents does not bundle free model keys):',
+                  '',
+                  '1. **Recommended — All 93+ Frontier Models in 1 Key:**',
+                  '   Get an API key at **[APIsRouter.dev](https://apisrouter.dev)** to unlock `claude-sonnet-5.5`, `claude-opus-5.5`, `gpt-6.1-sol-pro`, `deepseek-v4.1-flash`, `gemini-4-argon`, `kimi-k2.7-code`, and `grok-4.7` with a single key.',
+                  '2. **Or Bring Your Own Key (BYOK):**',
+                  '   Use your existing key from Anthropic, OpenAI, Google Gemini, NVIDIA, DeepSeek, Groq, or xAI.',
+                  '',
+                  '👉 Open **[Settings & Models → APIsRouter](/settings/config)** in the left sidebar, paste your key, and send your message again!',
+                ].join('\n')
+
+                const completedAt = new Date().toISOString()
+                await sendSse('delta', { content: onboardingReply })
+                await env.DB.prepare(
+                  `INSERT INTO messages (id, conversationId, role, content, status, metadata, toolCallJson, toolResultJson, createdAt)
+                   VALUES (?, ?, 'agent', ?, 'done', NULL, NULL, NULL, ?)`,
                 )
+                  .bind(agentMsgId, convId, onboardingReply, completedAt)
+                  .run()
+                await env.DB.prepare(
+                  'UPDATE conversations SET lastMessageAt = ?, updatedAt = ? WHERE id = ? AND userId = ?',
+                )
+                  .bind(completedAt, completedAt, convId, user.id)
+                  .run()
+                await sendSse('message', {
+                  id: agentMsgId,
+                  conversationId: convId,
+                  role: 'agent',
+                  content: onboardingReply,
+                  status: 'done',
+                  createdAt: completedAt,
+                })
+                await sendSse('done', { conversationId: convId })
+                return
               }
 
               const llmMessages = [

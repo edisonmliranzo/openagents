@@ -181,9 +181,21 @@ export default function LoginPage() {
           />
 
           {mode === 'register' && (
-            <p className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs text-slate-400">
-              Use 12+ characters with uppercase, lowercase, number, and symbol.
-            </p>
+            <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs text-slate-300">
+              <p>Use 8+ characters for your password.</p>
+              <p className="text-slate-400">
+                100% Free Cloud Workspace — pair with an{' '}
+                <a
+                  href="https://apisrouter.dev"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-orange-400 underline hover:text-orange-300"
+                >
+                  APIsRouter.dev
+                </a>{' '}
+                key (93+ models in 1 key) or Bring Your Own Key (BYOK).
+              </p>
+            </div>
           )}
 
           <button

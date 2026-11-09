@@ -91,7 +91,7 @@ export default function ChatPage() {
     const onFocus = () => void syncAcrossDevices()
     const interval = window.setInterval(() => {
       void syncAcrossDevices()
-    }, 8000)
+    }, 25000)
 
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisibility)
