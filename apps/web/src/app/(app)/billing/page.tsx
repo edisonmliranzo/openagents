@@ -14,7 +14,7 @@ import { sdk } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 
 type BillingPlanId = 'free' | 'pro' | 'team'
-type BillingUsageMetric = 'messages' | 'researchJobs' | 'agents' | 'voiceMinutes'
+type BillingUsageMetric = 'messages' | 'researchJobs' | 'agents' | 'voiceMinutes' | 'avatars' | 'storageMB'
 
 interface BillingPlanLimits {
   messages: number
@@ -60,6 +60,8 @@ const METRIC_LABELS: Record<BillingUsageMetric, { title: string; unit: string }>
   researchJobs: { title: 'Deep Research Jobs', unit: 'jobs' },
   agents: { title: 'Active Agents', unit: 'agents' },
   voiceMinutes: { title: 'Voice Minutes', unit: 'min' },
+  avatars: { title: 'Realistic Avatars', unit: 'avatars' },
+  storageMB: { title: 'Avatar Storage', unit: 'MB' },
 }
 
 export default function BillingPage() {
@@ -170,9 +172,9 @@ export default function BillingPage() {
         <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-800">
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
           <div>
-            <p className="font-semibold">Self-Hosted Unlimited Mode (Stripe Not Configured)</p>
+            <p className="font-semibold">Billing not configured yet</p>
             <p className="mt-0.5 text-xs text-emerald-700">
-              <code>STRIPE_SECRET_KEY</code> is not set on this OpenAgents server, so all usage quotas are unlocked and unlimited. Configure Stripe environment variables to enable paid cloud tiers.
+              Paid upgrades are not available yet on this server (<code>STRIPE_SECRET_KEY</code> / price IDs not set). You are on the Free plan limits shown below.
             </p>
           </div>
         </div>

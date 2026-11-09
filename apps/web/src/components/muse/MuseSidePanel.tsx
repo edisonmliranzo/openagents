@@ -4,17 +4,22 @@ import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import {
   Activity,
+  FileText,
+  FlaskConical,
   History,
+  LifeBuoy,
   ListChecks,
   Mic,
   PenSquare,
   Search,
   Settings,
+  ShieldAlert,
   Trash2,
   X,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useChatStore } from '@/stores/chat'
+import { LABS_LINKS, useLabsEnabled } from '@/components/dashboard/labs'
 import { ConversationSearchPanel } from './ConversationSearchPanel'
 
 interface MuseSidePanelProps {
@@ -34,6 +39,10 @@ const QUICK_MODULES = [
   { label: 'Autonomous Tasks', href: '/tasks', icon: ListChecks, badge: 'Tasks', color: 'text-amber-500' },
   { label: 'Sessions Manager', href: '/sessions', icon: History, badge: 'History', color: 'text-emerald-500' },
   { label: 'Settings & Models', href: '/settings/config', icon: Settings, badge: 'APIsRouter', color: 'text-indigo-500' },
+  { label: 'Approvals', href: '/approvals', icon: ShieldAlert, badge: 'Review', color: 'text-orange-500' },
+  { label: 'Voice Settings', href: '/settings/voice', icon: Mic, badge: 'Voice', color: 'text-pink-500' },
+  { label: 'Support', href: '/support', icon: LifeBuoy, badge: 'Help', color: 'text-teal-500' },
+  { label: 'Terms', href: '/terms', icon: FileText, badge: 'Legal', color: 'text-slate-500' },
 ]
 
 export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps) {
@@ -48,6 +57,7 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
   const [creating, setCreating] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [clearingAll, setClearingAll] = useState(false)
+  const [labsEnabled, setLabsEnabled] = useLabsEnabled()
 
   const navigate = (href: string) => {
     if (onNavigate) {
@@ -173,6 +183,35 @@ export function MuseSidePanel({ onNavigate, onCloseMobile }: MuseSidePanelProps)
             )
           })}
         </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={labsEnabled}
+          onClick={() => setLabsEnabled(!labsEnabled)}
+          className="mt-1.5 flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left text-[11px] font-medium text-slate-500 transition hover:bg-slate-200/50 dark:text-slate-400 dark:hover:bg-slate-800/70"
+        >
+          <span className="flex items-center gap-2">
+            <FlaskConical size={13} className="text-violet-500" /> Labs (experimental)
+          </span>
+          <span className={clsx('relative inline-flex h-4 w-7 items-center rounded-full transition', labsEnabled ? 'bg-violet-500' : 'bg-slate-300 dark:bg-slate-700')}>
+            <span className={clsx('inline-block h-3 w-3 rounded-full bg-white shadow transition-transform', labsEnabled ? 'translate-x-3.5' : 'translate-x-0.5')} />
+          </span>
+        </button>
+        {labsEnabled && (
+          <div className="mt-1 max-h-48 space-y-0.5 overflow-y-auto">
+            {LABS_LINKS.map((link) => (
+              <button
+                key={link.href}
+                type="button"
+                onClick={() => navigate(link.href)}
+                className="flex w-full items-center gap-2 truncate rounded-xl px-2.5 py-1 text-left text-[11px] text-slate-500 transition hover:bg-slate-200/50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-white"
+              >
+                <FlaskConical size={11} className="shrink-0 text-violet-400" />
+                <span className="truncate">{link.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Search (expandable) */}

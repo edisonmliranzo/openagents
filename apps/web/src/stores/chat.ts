@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { sdk } from './auth'
-import { speak, stopSpeaking, voiceEnabled } from '@/lib/voice'
+import { chatReaderClaimed, speak, stopSpeaking, voiceEnabled } from '@/lib/voice'
 import type { Conversation, Message, Approval, HumanHandoffTicket, MessageArtifact, MessageMeta, MessageProgressState, MessageUiComponent, MessageWorkflowState, MessageWorkflowStep } from '@openagents/shared'
 
 type GatewayStatus = 'connecting' | 'connected' | 'disconnected'
@@ -974,7 +974,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       })
 
       // Voice mode: read the finished reply aloud.
-      if (!streamError && voiceEnabled()) {
+      if (!streamError && voiceEnabled() && !chatReaderClaimed()) {
         const lastAgent = [...nextMessages].reverse().find((m) => m.role === 'agent' && m.status !== 'error')
         if (lastAgent) speak(lastAgent.content)
       }

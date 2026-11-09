@@ -10,6 +10,7 @@ import {
 import { ApprovalBanner } from '@/components/chat/ApprovalBanner'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import CanvasPanel from '@/components/chat/CanvasPanel'
+import { FloatingChatAvatar } from '@/components/avatar/FloatingChatAvatar'
 import { MuseChatLayout } from '@/components/muse/MuseChatLayout'
 import { storageGet, storageSet } from '@/lib/storage'
 import { sdk } from '@/stores/auth'
@@ -182,6 +183,7 @@ export default function ChatPage() {
           </div>
         </div>
         <CanvasPanel />
+        <FloatingChatAvatar />
       </div>
     </MuseChatLayout>
   )

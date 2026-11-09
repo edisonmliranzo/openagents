@@ -45,6 +45,19 @@ import {
 import { sdk, useAuthStore } from '@/stores/auth'
 import type { Notification, UserSettings } from '@openagents/shared'
 import { LiveAvatar } from '@/components/chat/LiveAvatar'
+import { LABS_LINKS, useLabsEnabled } from '@/components/dashboard/labs'
+import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
+import { InstallPrompt } from '@/components/pwa/InstallPrompt'
+import { VerifyEmailBanner } from '@/components/dashboard/VerifyEmailBanner'
+import { installErrorReporting } from '@/lib/errorReporting'
+
+if (typeof window !== 'undefined') {
+  try {
+    installErrorReporting()
+  } catch {
+    // ignore
+  }
+}
 
 interface AppShellProps {
   children: React.ReactNode
@@ -85,21 +98,16 @@ const PRIMARY_NAV_GROUPS: NavGroup[] = [
   },
 ]
 
-const ADVANCED_NAV_GROUPS: NavGroup[] = [
-  {
-    title: 'More Modules',
-    items: [
-      { label: 'Get Started', href: '/settings/get-started', icon: Sparkles },
-      { label: 'Memory & Mind', href: '/memory', icon: Brain },
-      { label: 'MCP Servers', href: '/mcp', icon: Server },
-      { label: 'Skills & Marketplace', href: '/agent/skills', icon: Layers3 },
-      { label: 'Usage & Costs', href: '/costs', icon: DollarSign },
-      { label: 'Docs', href: '/docs', icon: BookOpen },
-    ],
-  },
-]
+const LABS_NAV_GROUP: NavGroup = {
+  title: 'Labs',
+  items: [
+    { label: 'Get Started', href: '/settings/get-started', icon: Sparkles },
+    { label: 'Skills & Marketplace', href: '/agent/skills', icon: Layers3 },
+    ...LABS_LINKS.map((link) => ({ label: link.label, href: link.href, icon: FlaskConical })),
+  ],
+}
 
-const BASE_NAV_GROUPS: NavGroup[] = [...PRIMARY_NAV_GROUPS, ...ADVANCED_NAV_GROUPS]
+const BASE_NAV_GROUPS: NavGroup[] = PRIMARY_NAV_GROUPS
 
 const CHAT_CONTROL_NAV_GROUPS: NavGroup[] = [
   {
@@ -184,7 +192,7 @@ export function AppShell({ children }: AppShellProps) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isNotificationsLoading, setIsNotificationsLoading] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
-  const [showMoreNav, setShowMoreNav] = useState(false)
+  const [labsEnabled, setLabsEnabled] = useLabsEnabled()
   const [routeSearch, setRouteSearch] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null)
@@ -202,15 +210,16 @@ export function AppShell({ children }: AppShellProps) {
 
   const navGroups = useMemo<NavGroup[]>(() => {
     if (isChatControlRoute) return CHAT_CONTROL_NAV_GROUPS
-    if (!isOwnerUser) return BASE_NAV_GROUPS
-    return [
-      ...BASE_NAV_GROUPS,
-      {
+    const groups: NavGroup[] = [...BASE_NAV_GROUPS]
+    if (labsEnabled) groups.push(LABS_NAV_GROUP)
+    if (isOwnerUser) {
+      groups.push({
         title: 'Creator',
         items: [{ label: 'Admin', href: '/control/admin', icon: ShieldCheck }],
-      },
-    ]
-  }, [isChatControlRoute, isOwnerUser])
+      })
+    }
+    return groups
+  }, [isChatControlRoute, isOwnerUser, labsEnabled])
 
   useEffect(() => {
     try {
@@ -336,13 +345,8 @@ export function AppShell({ children }: AppShellProps) {
         }))
         .filter((group) => group.items.length > 0)
     }
-    if (showMoreNav) return navGroups
-    return navGroups.filter(
-      (group) =>
-        group.title !== 'More Modules' ||
-        group.items.some((item) => isActivePath(pathname, item.href)),
-    )
-  }, [beginnerMode, navGroups, pathname, showMoreNav])
+    return navGroups
+  }, [beginnerMode, navGroups, pathname])
   const allNavItems = useMemo(() => navGroups.flatMap((group) => group.items), [navGroups])
   const matchingRoute = useMemo(() => {
     const query = routeSearch.trim().toLowerCase()
@@ -419,6 +423,8 @@ export function AppShell({ children }: AppShellProps) {
     return (
       <div className="dashboard-theme relative min-h-[100dvh] bg-[#f7f8fb] dark:bg-[#0f1117]">
         <main className="h-[100dvh] min-h-[100dvh] overflow-hidden">{children}</main>
+        <OnboardingWizard />
+        <InstallPrompt />
       </div>
     )
   }
@@ -503,14 +509,27 @@ export function AppShell({ children }: AppShellProps) {
               <div className="pt-1">
                 <button
                   type="button"
-                  onClick={() => setShowMoreNav((prev) => !prev)}
+                  role="switch"
+                  aria-checked={labsEnabled}
+                  onClick={() => setLabsEnabled(!labsEnabled)}
                   className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-medium text-[var(--muted)] transition hover:bg-[var(--surface-subtle)] hover:text-[var(--tone-strong)] dark:hover:text-[var(--tone-inverse)]"
                 >
-                  <span>{showMoreNav ? 'Hide extra modules' : 'More modules'}</span>
-                  <ChevronDown
-                    size={13}
-                    className={clsx('transition-transform', showMoreNav && 'rotate-180')}
-                  />
+                  <span className="flex items-center gap-1.5">
+                    <FlaskConical size={12} /> Labs (experimental)
+                  </span>
+                  <span
+                    className={clsx(
+                      'relative inline-flex h-4 w-7 items-center rounded-full transition',
+                      labsEnabled ? 'bg-[var(--accent)]' : 'bg-[var(--border)]',
+                    )}
+                  >
+                    <span
+                      className={clsx(
+                        'inline-block h-3 w-3 rounded-full bg-white shadow transition-transform',
+                        labsEnabled ? 'translate-x-3.5' : 'translate-x-0.5',
+                      )}
+                    />
+                  </span>
                 </button>
               </div>
             )}
@@ -698,6 +717,7 @@ export function AppShell({ children }: AppShellProps) {
               isChatControlRoute && 'h-[calc(100dvh-74px)] overflow-hidden px-2 pb-3 pt-3 sm:px-6 sm:pb-5 sm:pt-3',
             )}
           >
+            <VerifyEmailBanner />
             {beginnerMode && pathname !== '/settings/get-started' && (
               <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 Beginner mode is on. Only the essential routes are visible.
@@ -711,6 +731,8 @@ export function AppShell({ children }: AppShellProps) {
             )}
             {children}
           </main>
+          <OnboardingWizard />
+          <InstallPrompt />
         </div>
       </div>
     </div>

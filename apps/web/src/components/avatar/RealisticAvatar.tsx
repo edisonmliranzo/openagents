@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { sdk } from '@/stores/auth'
+import { getVoiceLevel, onPlaybackChange } from '@/lib/voice'
 
 export type AvatarSlot = 'portrait' | 'idle' | 'listening' | 'thinking' | 'talking' | 'talking_alt'
 export type AvatarCallState = 'idle' | 'listening' | 'thinking' | 'speaking'
@@ -88,13 +89,47 @@ interface RealisticAvatarProps {
  * thinking / talking A+B) and cross-fades between them in sync with the call state.
  * Falls back to an animated portrait when no clips exist yet.
  */
-export function RealisticAvatar({ avatar, state, className, showStatus = true }: RealisticAvatarProps) {
+export function RealisticAvatar({ avatar, state: requestedState, className, showStatus = true }: RealisticAvatarProps) {
   const videoA = useRef<HTMLVideoElement>(null)
   const videoB = useRef<HTMLVideoElement>(null)
+  const portraitRef = useRef<HTMLImageElement>(null)
   const [front, setFront] = useState<'a' | 'b'>('a')
   const [currentSlot, setCurrentSlot] = useState<AvatarSlot | null>(null)
   const altTalkRef = useRef(false)
   const lastStateRef = useRef<AvatarCallState>('idle')
+  const [audioPlaying, setAudioPlaying] = useState(false)
+
+  useEffect(() => onPlaybackChange(setAudioPlaying), [])
+
+  // Lip-sync: only show talking clips while speech audio is actually playing
+  // (between sentences / while the next sentence is fetched we hold an idle pose).
+  const state: AvatarCallState = requestedState === 'speaking' && !audioPlaying ? 'idle' : requestedState
+
+  // Portrait fallback: modulate a subtle jaw/scale motion from the live audio level.
+  useEffect(() => {
+    const el = portraitRef.current
+    if (!el || state !== 'speaking') {
+      if (el) el.style.transform = ''
+      return
+    }
+    let raf = 0
+    let smooth = 0
+    let heard = false
+    const tick = () => {
+      const measured = getVoiceLevel()
+      if (measured > 0.02) heard = true
+      // Browser speech synthesis can't be analysed; use a gentle synthetic cadence instead.
+      const lvl = heard ? measured : 0.18 + 0.14 * Math.sin(performance.now() / 95)
+      smooth = smooth * 0.7 + lvl * 0.3
+      el.style.transform = `scale(${(1.04 + smooth * 0.018).toFixed(4)}) translateY(${(-smooth * 0.8).toFixed(3)}%) scaleY(${(1 + smooth * 0.012).toFixed(4)})`
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => {
+      cancelAnimationFrame(raf)
+      el.style.transform = ''
+    }
+  }, [state])
 
   useEffect(() => {
     // Alternate the talking camera angle on every new speaking turn.
@@ -167,11 +202,12 @@ export function RealisticAvatar({ avatar, state, className, showStatus = true }:
       ) : portrait ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          ref={portraitRef}
           src={portrait}
           alt={avatar.name}
           className={clsx(
-            'absolute inset-0 h-full w-full object-cover',
-            state === 'speaking' ? 'animate-[oaTalk_0.9s_ease-in-out_infinite]' : 'animate-[oaBreathe_6s_ease-in-out_infinite]',
+            'absolute inset-0 h-full w-full object-cover origin-[50%_65%] will-change-transform',
+            state === 'speaking' ? '' : 'animate-[oaBreathe_6s_ease-in-out_infinite]',
           )}
         />
       ) : (

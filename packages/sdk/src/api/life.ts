@@ -172,7 +172,14 @@ export function createLifeApi(client: OpenAgentsClient) {
       }>('/api/v1/life/tts/fish/voices'),
     tts: (text: string, opts?: { voiceId?: string; provider?: string }) =>
       client.post<{ audioBase64: string; mimeType: string; provider: string; voiceId: string; cached: boolean }>('/api/v1/life/tts', { text, ...opts }),
-    ttsClone: (input: { name: string; audioBase64: string; mimeType?: string }) =>
-      client.post<{ voiceId: string; provider: string }>('/api/v1/life/tts/clone', input),
+    ttsClone: (input: {
+      name: string
+      audioBase64: string
+      mimeType?: string
+      /** Must be true: the user confirms they own / have consent to clone this voice. */
+      consent: boolean
+      provider?: 'fish' | 'elevenlabs'
+    }) =>
+      client.post<{ voiceId: string; provider: string; name?: string }>('/api/v1/life/tts/clone', input),
   }
 }

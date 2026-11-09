@@ -5,6 +5,9 @@ import Link from 'next/link'
 import clsx from 'clsx'
 import { Camera, CheckCircle2, Film, Loader2, Mic, Play, Plus, Sparkles, Trash2, Upload, Wand2, XCircle } from 'lucide-react'
 import { sdk } from '@/stores/auth'
+import { SharePanel } from '@/components/avatar/SharePanel'
+import { VoiceCloneCard } from '@/components/avatar/VoiceCloneCard'
+import { VariationCard } from '@/components/avatar/VariationCard'
 import {
   RealisticAvatar,
   useAvatars,
@@ -44,6 +47,7 @@ export default function AvatarStudioPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [likenessConsent, setLikenessConsent] = useState(false)
   const [previewState, setPreviewState] = useState<AvatarCallState>('idle')
   const [videoModel, setVideoModel] = useState('veo-3.1')
 
@@ -98,13 +102,13 @@ export default function AvatarStudioPage() {
     return () => clearInterval(t)
   }, [running, selected, replace])
 
-  async function createFromBlob(name: string, description: string, blob: Blob) {
+  async function createFromBlob(name: string, description: string, blob: Blob, consent: '1' | 'preset' = '1') {
     setBusy('create')
     setError(null)
     try {
       const created = await sdk.client.post<RealisticAvatarRecord>('/api/v1/avatars', { name, description })
       const withPortrait = await sdk.client.upload<RealisticAvatarRecord>(
-        `/api/v1/avatars/${created.id}/upload?slot=portrait`,
+        `/api/v1/avatars/${created.id}/upload?slot=portrait&consent=${consent}`,
         blob,
         blob.type || 'image/jpeg',
       )
@@ -122,15 +126,20 @@ export default function AvatarStudioPage() {
   async function createFromPreset(p: (typeof PRESETS)[number]) {
     const res = await fetch(p.src)
     const blob = await res.blob()
-    await createFromBlob(p.name, p.description, blob)
+    await createFromBlob(p.name, p.description, blob, 'preset')
   }
 
   async function uploadSlot(slot: AvatarSlot, file: File) {
     if (!selected) return
+    if (slot === 'portrait' && !likenessConsent) {
+      setError('Please confirm you own this likeness or have permission before uploading a photo.')
+      return
+    }
     setBusy(`upload-${slot}`)
     setError(null)
     try {
-      replace(await sdk.client.upload<RealisticAvatarRecord>(`/api/v1/avatars/${selected.id}/upload?slot=${slot}`, file, file.type))
+      const consentQs = slot === 'portrait' ? '&consent=1' : ''
+      replace(await sdk.client.upload<RealisticAvatarRecord>(`/api/v1/avatars/${selected.id}/upload?slot=${slot}${consentQs}`, file, file.type))
     } catch (e) {
       setError(errMsg(e, 'Upload failed'))
     } finally {
@@ -264,7 +273,18 @@ export default function AvatarStudioPage() {
                 </div>
               </button>
             ))}
-            <label className="flex aspect-[3/4] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-slate-500 transition hover:border-rose-300 hover:text-rose-600 sm:aspect-auto">
+            <label
+              onClick={(e) => {
+                if (!likenessConsent) {
+                  e.preventDefault()
+                  setError('Please tick the consent box below before uploading your photo.')
+                }
+              }}
+              className={clsx(
+                'flex aspect-[3/4] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-slate-500 transition hover:border-rose-300 hover:text-rose-600 sm:aspect-auto',
+                !likenessConsent && 'opacity-60',
+              )}
+            >
               {busy === 'create' ? <Loader2 className="animate-spin" /> : <Camera />}
               <span className="text-sm font-semibold">Upload your photo</span>
               <span className="px-3 text-center text-[11px]">JPG / PNG / WebP</span>
@@ -272,6 +292,7 @@ export default function AvatarStudioPage() {
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 className="hidden"
+                disabled={!likenessConsent}
                 onChange={(e) => {
                   const f = e.target.files?.[0]
                   if (f) void createFromBlob(f.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'My Avatar', '', f)
@@ -280,6 +301,10 @@ export default function AvatarStudioPage() {
               />
             </label>
           </div>
+          <label className="mt-3 flex items-start gap-2 text-xs text-slate-600">
+            <input type="checkbox" className="mt-0.5" checked={likenessConsent} onChange={(e) => setLikenessConsent(e.target.checked)} />
+            <span>I own this likeness/voice or have permission to use it.</span>
+          </label>
           {avatars.length > 0 && (
             <button type="button" onClick={() => setCreating(false)} className="mt-3 text-xs text-slate-500 underline">
               Cancel
@@ -293,6 +318,7 @@ export default function AvatarStudioPage() {
           {/* Preview */}
           <div className="space-y-3">
             <RealisticAvatar avatar={selected} state={previewState} />
+            <SharePanel avatarId={selected.id} />
             <div className="grid grid-cols-4 gap-1.5">
               {(['idle', 'listening', 'thinking', 'speaking'] as AvatarCallState[]).map((s) => (
                 <button
@@ -458,6 +484,10 @@ export default function AvatarStudioPage() {
                         }}
                       />
                     </label>
+                    <label className="flex items-start gap-1.5 text-[10px] leading-tight text-slate-500">
+                      <input type="checkbox" checked={likenessConsent} onChange={(e) => setLikenessConsent(e.target.checked)} />
+                      <span>I own this likeness/voice or have permission</span>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -495,7 +525,27 @@ export default function AvatarStudioPage() {
                   </button>
                 </div>
               )}
+              {hasVoiceKey && (
+                <VoiceCloneCard
+                  avatarName={selected.name}
+                  hasFishKey={Boolean(ttsCfg?.hasFishKey)}
+                  hasElevenlabsKey={Boolean(ttsCfg?.hasElevenlabsKey)}
+                  onCloned={async (v) => {
+                    setVoices((prev) => [{ id: v.voiceId, name: `${v.name} (cloned)`, provider: v.provider }, ...prev])
+                    await saveVoice(`${v.provider}:${v.voiceId}`)
+                    setNotice(`Cloned voice saved as ${selected.name}'s voice.`)
+                  }}
+                />
+              )}
             </section>
+            <VariationCard
+              avatar={selected}
+              onCreated={async (created) => {
+                await refresh()
+                setSelectedId(created.id)
+                setNotice(`Variation "${created.name}" saved as a new avatar.`)
+              }}
+            />
           </div>
         </div>
       )}

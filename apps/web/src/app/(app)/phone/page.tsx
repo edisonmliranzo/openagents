@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import { sdk } from '@/stores/auth'
-import { speak, stopSpeaking } from '@/lib/voice'
+import { SpeechQueue, speak, stopSpeaking, takeSentences } from '@/lib/voice'
 import {
   AVATAR_PERSONAS,
   type AvatarEmotion,
@@ -93,6 +93,17 @@ function cleanError(e: any, fallback: string): string {
   return raw.length > 240 ? fallback : raw
 }
 
+const CALL_LANGUAGES = [
+  { code: 'en-US', label: 'English' },
+  { code: 'es-ES', label: 'Español' },
+  { code: 'pt-BR', label: 'Português (BR)' },
+  { code: 'fr-FR', label: 'Français' },
+  { code: 'de-DE', label: 'Deutsch' },
+  { code: 'it-IT', label: 'Italiano' },
+  { code: 'ja-JP', label: '日本語' },
+  { code: 'zh-CN', label: '中文 (简体)' },
+]
+
 const CALL_STARTERS = [
   'Give me a 30-second executive briefing on my priorities today.',
   'Roleplay a customer discovery call with me and ask tough questions.',
@@ -115,6 +126,26 @@ export default function PhoneAgentPage() {
   const [liveTurns, setLiveTurns] = useState<PhoneTurn[]>([])
   const [liveConvId, setLiveConvId] = useState<string | null>(null)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const bargeRef = useRef<SpeechRecognitionLike | null>(null)
+  const speechQueueRef = useRef<SpeechQueue | null>(null)
+  const [handsFree, setHandsFree] = useState(false)
+  const [callLang, setCallLang] = useState<string>('en-US')
+  const [callSummary, setCallSummary] = useState<{ status: 'loading' | 'ready' | 'saved' | 'error'; text: string } | null>(null)
+  const [briefingTime, setBriefingTime] = useState('08:00')
+  const [briefingMsg, setBriefingMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      setHandsFree(window.localStorage.getItem('openagents-phone-handsfree') === '1')
+      const savedLang = window.localStorage.getItem('openagents-phone-lang')
+      if (savedLang && CALL_LANGUAGES.some((l) => l.code === savedLang)) setCallLang(savedLang)
+    } catch {
+      /* ignore */
+    }
+    return () => {
+      speechQueueRef.current?.stop()
+    }
+  }, [])
 
   // ── Telephony Call Queue state ──
   const [status, setStatus] = useState<{ configured: boolean; fromNumber: string | null } | null>(null)
@@ -193,32 +224,101 @@ export default function PhoneAgentPage() {
     return () => clearInterval(timer)
   }, [load])
 
+  const inLiveCallRef = useRef(false)
+  useEffect(() => {
+    inLiveCallRef.current = inLiveCall
+  }, [inLiveCall])
+  const handsFreeRef = useRef(handsFree)
+  useEffect(() => {
+    handsFreeRef.current = handsFree
+    try {
+      window.localStorage.setItem('openagents-phone-handsfree', handsFree ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [handsFree])
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('openagents-phone-lang', callLang)
+    } catch {
+      /* ignore */
+    }
+  }, [callLang])
+  const startMicCaptureRef = useRef<() => void>(() => {})
+
+  /** Builds a fresh sentence queue bound to the active avatar voice. */
+  const newSpeechQueue = useCallback(() => {
+    speechQueueRef.current?.stop()
+    const q = new SpeechQueue({
+      voiceId: activeCustomAvatar?.voiceId || undefined,
+      provider: activeCustomAvatar?.voiceProvider || undefined,
+      onStart: () => setCallState('speaking'),
+      onIdle: () => {
+        if (speechQueueRef.current !== q) return
+        setCallState((s) => (s === 'speaking' || s === 'thinking' ? 'idle' : s))
+        // Hands-free: reopen the mic automatically once the reply finished.
+        if (handsFreeRef.current && inLiveCallRef.current) {
+          setTimeout(() => {
+            if (speechQueueRef.current === q && inLiveCallRef.current) startMicCaptureRef.current()
+          }, 250)
+        }
+      },
+    })
+    speechQueueRef.current = q
+    return q
+  }, [activeCustomAvatar])
+
   const speakAgentReply = useCallback(
     async (text: string) => {
       if (!speakerOn) {
         setCallState('idle')
         return
       }
-      setCallState('speaking')
-      await speak(text, {
-        voiceId: activeCustomAvatar?.voiceId || undefined,
-        provider: activeCustomAvatar?.voiceProvider || undefined,
-        onEnd: () => setCallState('idle'),
-        onError: () => setCallState('idle'),
-      })
-      setCallState('idle')
+      const q = newSpeechQueue()
+      const { sentences } = takeSentences(text, true)
+      sentences.forEach((s) => q.enqueue(s))
+      q.end()
     },
-    [speakerOn, activeCustomAvatar],
+    [speakerOn, newSpeechQueue],
   )
 
   const sendVoiceCallTurn = useCallback(
-    async (userText: string) => {
+    async (userText: string, opts?: { displayText?: string }) => {
       const clean = userText.trim()
       if (!clean) return
       setInterimText('')
-      const userTurn: PhoneTurn = { role: 'caller', text: clean, at: new Date().toISOString() }
+      speechQueueRef.current?.stop()
+      const userTurn: PhoneTurn = { role: 'caller', text: opts?.displayText || clean, at: new Date().toISOString() }
       setLiveTurns((prev) => [...prev, userTurn])
       setCallState('thinking')
+      const at = new Date().toISOString()
+      const langName = CALL_LANGUAGES.find((l) => l.code === callLang)?.label ?? 'English'
+      const prompt =
+        callLang === 'en-US'
+          ? clean
+          : `${clean}\n\n[Voice call — the caller is speaking ${langName} (${callLang}). Reply in ${langName}, conversationally and briefly.]`
+
+      // Streaming spoken reply: speak sentence-by-sentence as tokens arrive.
+      const q = speakerOn ? newSpeechQueue() : null
+      let full = ''
+      let pending = ''
+      let consumed = 0
+      const pushText = (text: string) => {
+        full = text
+        setLiveTurns((prev) => {
+          const last = prev[prev.length - 1]
+          if (last && last.role === 'agent' && last.at === at) {
+            return [...prev.slice(0, -1), { ...last, text }]
+          }
+          return [...prev, { role: 'agent', text, at }]
+        })
+        if (!q) return
+        pending += text.slice(consumed)
+        consumed = text.length
+        const { sentences, rest } = takeSentences(pending)
+        pending = rest
+        sentences.forEach((s) => q.enqueue(s))
+      }
 
       try {
         let convId = liveConvId
@@ -227,23 +327,44 @@ export default function PhoneAgentPage() {
           convId = created.id
           setLiveConvId(convId)
         }
-        await sdk.conversations.sendMessage(convId, clean, () => {})
-        const msgs = await sdk.conversations.messages(convId)
-        const lastAgent = [...msgs].reverse().find((m) => m.role === 'agent')
-        const reply =
-          lastAgent?.content?.trim() ||
-          `I heard you say: "${clean}". How would you like to proceed?`
-        const agentTurn: PhoneTurn = { role: 'agent', text: reply, at: new Date().toISOString() }
-        setLiveTurns((prev) => [...prev, agentTurn])
-        await speakAgentReply(reply)
+        await sdk.conversations.sendMessage(convId, prompt, (chunk) => {
+          try {
+            const data = JSON.parse(chunk)
+            if (data.event === 'delta') {
+              const piece = typeof data.data?.content === 'string' ? data.data.content : ''
+              if (!piece) return
+              // Deltas may be cumulative or incremental — handle both.
+              pushText(piece.startsWith(full) ? piece : full + piece)
+            } else if (data.event === 'delta_reset') {
+              full = ''
+              pending = ''
+              consumed = 0
+            }
+          } catch {
+            /* ignore malformed chunk */
+          }
+        })
+        if (!full.trim()) {
+          const msgs = await sdk.conversations.messages(convId)
+          const lastAgent = [...msgs].reverse().find((m) => m.role === 'agent')
+          pushText(lastAgent?.content?.trim() || `I heard you say: "${clean}". How would you like to proceed?`)
+        }
+        if (q) {
+          const { sentences } = takeSentences(pending, true)
+          sentences.forEach((s) => q.enqueue(s))
+          pending = ''
+          q.end()
+        } else {
+          setCallState('idle')
+        }
       } catch {
         const fallback = `I'm right here with you on the call! Regarding "${clean}", let's tackle the highest-impact step first. What details should I lock in?`
-        const agentTurn: PhoneTurn = { role: 'agent', text: fallback, at: new Date().toISOString() }
-        setLiveTurns((prev) => [...prev, agentTurn])
+        if (q) q.stop()
+        pushText(fallback)
         await speakAgentReply(fallback)
       }
     },
-    [liveConvId, displayAvatarName, speakAgentReply],
+    [liveConvId, displayAvatarName, speakAgentReply, speakerOn, newSpeechQueue, callLang],
   )
 
   const startMicCapture = useCallback(() => {
@@ -253,14 +374,21 @@ export default function PhoneAgentPage() {
       setError('Browser speech recognition is unavailable — type your voice turn below.')
       return
     }
+    speechQueueRef.current?.stop()
     stopSpeaking()
+    try {
+      bargeRef.current?.abort()
+    } catch {
+      // ignore
+    }
+    bargeRef.current = null
     try {
       recognitionRef.current?.abort()
     } catch {
       // ignore
     }
     const r = new Ctor()
-    r.lang = 'en-US'
+    r.lang = callLang
     r.continuous = false
     r.interimResults = true
     r.maxAlternatives = 1
@@ -294,10 +422,166 @@ export default function PhoneAgentPage() {
     } catch {
       recognitionRef.current = null
     }
-  }, [muted, sendVoiceCallTurn])
+  }, [muted, sendVoiceCallTurn, callLang])
+
+  useEffect(() => {
+    startMicCaptureRef.current = startMicCapture
+  }, [startMicCapture])
+
+  // ── Barge-in: while the avatar speaks, listen lightly; if the caller talks, interrupt. ──
+  useEffect(() => {
+    if (!inLiveCall || muted || callState !== 'speaking') return
+    const Ctor = getSpeechRecognitionCtor()
+    if (!Ctor) return
+    const r = new Ctor()
+    r.lang = callLang
+    r.continuous = true
+    r.interimResults = true
+    r.maxAlternatives = 1
+    let interrupted = false
+    let finalText = ''
+    r.onresult = (event: any) => {
+      let heard = ''
+      for (let i = 0; i < (event.results?.length ?? 0); i++) {
+        const res = event.results[i]
+        heard += String(res?.[0]?.transcript ?? '')
+        if (res?.isFinal) finalText = heard
+      }
+      const words = heard.trim().split(/\s+/).filter(Boolean)
+      // Require two words to avoid triggering on the avatar's own audio bleed.
+      if (!interrupted && words.length >= 2) {
+        interrupted = true
+        speechQueueRef.current?.stop()
+        stopSpeaking()
+        setCallState('listening')
+      }
+      if (interrupted) {
+        setInterimText(heard.trim())
+        if (finalText.trim()) {
+          const text = finalText
+          finalText = ''
+          try {
+            r.abort()
+          } catch {
+            /* ignore */
+          }
+          if (bargeRef.current === r) bargeRef.current = null
+          void sendVoiceCallTurn(text)
+        }
+      }
+    }
+    r.onend = () => {
+      if (bargeRef.current === r) bargeRef.current = null
+    }
+    r.onerror = () => {
+      if (bargeRef.current === r) bargeRef.current = null
+    }
+    bargeRef.current = r
+    try {
+      r.start()
+    } catch {
+      bargeRef.current = null
+    }
+    return () => {
+      // Keep the recognizer alive if it is mid-capture after an interruption.
+      if (!interrupted) {
+        try {
+          r.abort()
+        } catch {
+          /* ignore */
+        }
+        if (bargeRef.current === r) bargeRef.current = null
+      }
+    }
+  }, [inLiveCall, muted, callState, callLang, sendVoiceCallTurn])
+
+  // ── Daily briefing deep link: /phone?briefing=1 auto-starts a briefing call ──
+  const briefingStartedRef = useRef(false)
+  useEffect(() => {
+    if (briefingStartedRef.current || typeof window === 'undefined') return
+    if (new URLSearchParams(window.location.search).get('briefing') !== '1') return
+    briefingStartedRef.current = true
+    setInLiveCall(true)
+    setLiveTurns([])
+    void sendVoiceCallTurn(
+      "Give me today's briefing: top priorities, meetings, anything urgent in my inbox or tasks, and one suggestion. Keep it under a minute when spoken.",
+      { displayText: "📅 Today's briefing, please." },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleScheduleBriefing() {
+    setBriefingMsg(null)
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      await sdk.scheduler.create({
+        name: 'Daily briefing call',
+        description: 'Sends a notification each morning linking to a live briefing call on /phone.',
+        schedule: briefingTime ? `${Number(briefingTime.split(':')[1] || 0)} ${Number(briefingTime.split(':')[0] || 8)} * * *` : '0 8 * * *',
+        message: `Send me a short notification: "Your daily briefing call is ready — tap to start: ${origin}/phone?briefing=1". Include the link exactly.`,
+        deliveryMode: 'announce',
+      })
+      setBriefingMsg(`Daily briefing call scheduled for ${briefingTime || '08:00'} (UTC). You'll get a notification linking to /phone?briefing=1.`)
+    } catch (e: any) {
+      setBriefingMsg(cleanError(e, 'Could not schedule the briefing call.'))
+    }
+  }
+
+  async function summarizeCall(turns: PhoneTurn[], convId: string | null) {
+    const exchanges = turns.filter((t) => t.role === 'caller').length
+    if (exchanges < 2) return
+    setCallSummary({ status: 'loading', text: '' })
+    const transcript = turns
+      .map((t) => `${t.role === 'agent' ? displayAvatarName : 'Caller'}: ${t.text}`)
+      .join('\n')
+      .slice(-6000)
+    try {
+      let id = convId
+      if (!id) id = (await sdk.conversations.create(`Voice Call summary`)).id
+      let text = ''
+      await sdk.conversations.sendMessage(
+        id,
+        `The voice call just ended. Summarize it in exactly 3 short bullet points (start each with "- "), covering decisions and next steps. Do not use tools.\n\nTranscript:\n${transcript}`,
+        (chunk) => {
+          try {
+            const data = JSON.parse(chunk)
+            if (data.event === 'delta' && typeof data.data?.content === 'string') {
+              const piece = data.data.content
+              text = piece.startsWith(text) ? piece : text + piece
+            } else if (data.event === 'delta_reset') {
+              text = ''
+            }
+          } catch {
+            /* ignore */
+          }
+        },
+      )
+      if (!text.trim()) {
+        const msgs = await sdk.conversations.messages(id)
+        text = [...msgs].reverse().find((m) => m.role === 'agent')?.content ?? ''
+      }
+      text = text.trim()
+      if (!text) throw new Error('empty summary')
+      setCallSummary({ status: 'ready', text })
+      try {
+        await sdk.memory.writeEvent({
+          kind: 'conversation',
+          summary: `Voice call with ${displayAvatarName} (${new Date().toLocaleString()}):\n${text}`,
+          sourceRef: id ? `conversation:${id}` : undefined,
+          tags: ['voice-call', 'call-summary'],
+        })
+        setCallSummary({ status: 'saved', text })
+      } catch {
+        /* summary still shown even if memory save fails */
+      }
+    } catch {
+      setCallSummary({ status: 'error', text: 'Could not generate a call summary.' })
+    }
+  }
 
   async function handleStartLiveCall() {
     setError(null)
+    setCallSummary(null)
     setInLiveCall(true)
     const greeting = `Hey! It's ${displayAvatarName}. We're connected on a live voice call—what would you like to work on together?`
     setLiveTurns([{ role: 'agent', text: greeting, at: new Date().toISOString() }])
@@ -305,16 +589,21 @@ export default function PhoneAgentPage() {
   }
 
   function handleEndLiveCall() {
+    speechQueueRef.current?.stop()
+    speechQueueRef.current = null
     stopSpeaking()
-    try {
-      recognitionRef.current?.abort()
-    } catch {
-      // ignore
+    for (const ref of [recognitionRef, bargeRef]) {
+      try {
+        ref.current?.abort()
+      } catch {
+        // ignore
+      }
+      ref.current = null
     }
-    recognitionRef.current = null
     setInLiveCall(false)
     setCallState('idle')
     setInterimText('')
+    void summarizeCall(liveTurns, liveConvId)
   }
 
   function handleSelectPersona(id: AvatarPersonaId) {
@@ -437,11 +726,11 @@ export default function PhoneAgentPage() {
       )}
 
       {/* ── FLAGSHIP LIVE REALISTIC AVATAR VOICE CALL DECK ── */}
-      <section className="overflow-hidden rounded-[28px] border border-white/15 bg-gradient-to-br from-[#0f1424] via-[#0b101d] to-[#130d1e] p-6 text-white shadow-2xl sm:p-8">
-        <div className="grid gap-8 lg:grid-cols-12 lg:items-center">
+      <section className="overflow-hidden rounded-[20px] border border-white/15 bg-gradient-to-br from-[#0f1424] via-[#0b101d] to-[#130d1e] p-4 text-white shadow-2xl sm:rounded-[28px] sm:p-8">
+        <div className="grid gap-6 sm:gap-8 lg:grid-cols-12 lg:items-center">
           {/* Left: Realistic Video / Portrait Avatar Call Stage */}
           <div className="flex flex-col items-center text-center lg:col-span-5">
-            <div className="mb-3 flex w-full items-center justify-between text-xs text-slate-400">
+            <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
               <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-400">
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                 {inLiveCall ? `On Call • ${formatCallDuration(callSeconds)}` : 'Ready for Voice Call'}
@@ -453,7 +742,7 @@ export default function PhoneAgentPage() {
 
             <div
               onClick={() => (inLiveCall ? startMicCapture() : void handleStartLiveCall())}
-              className="group relative my-2 w-full max-w-[260px] cursor-pointer focus:outline-none"
+              className="group relative my-2 w-full max-w-[220px] cursor-pointer focus:outline-none sm:max-w-[260px]"
               title={inLiveCall ? 'Tap avatar to speak or interrupt' : 'Tap to start live voice call'}
             >
               <RealisticAvatar avatar={stageAvatarRecord} state={callState} />
@@ -538,6 +827,59 @@ export default function PhoneAgentPage() {
 
           {/* Right: Persona Switcher, Expression Controls & Live Call Transcript */}
           <div className="space-y-4 lg:col-span-7">
+            {/* Call options: language, hands-free, daily briefing */}
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-300">
+              <label className="inline-flex items-center gap-1.5">
+                <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-400">Language</span>
+                <select
+                  value={callLang}
+                  onChange={(e) => setCallLang(e.target.value)}
+                  className="h-7 rounded-lg border border-white/15 bg-slate-900 px-2 text-xs text-white outline-none"
+                >
+                  {CALL_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.label} ({l.code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="inline-flex cursor-pointer items-center gap-1.5" title="Automatically re-open the mic after each reply. Speak over the avatar any time to interrupt.">
+                <input type="checkbox" checked={handsFree} onChange={(e) => setHandsFree(e.target.checked)} className="accent-emerald-500" />
+                <span>Hands-free (auto-listen after reply)</span>
+              </label>
+              <span className="ml-auto inline-flex items-center gap-1.5">
+                <input
+                  type="time"
+                  value={briefingTime}
+                  onChange={(e) => setBriefingTime(e.target.value)}
+                  className="h-7 rounded-lg border border-white/15 bg-slate-900 px-2 text-xs text-white outline-none"
+                  title="Briefing time (UTC)"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleScheduleBriefing()}
+                  className="inline-flex h-7 items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2.5 font-semibold text-white hover:bg-white/10"
+                >
+                  <PhoneIncoming className="h-3.5 w-3.5 text-emerald-400" /> Schedule daily briefing call
+                </button>
+              </span>
+              {briefingMsg && <p className="w-full text-[11px] text-emerald-300">{briefingMsg}</p>}
+            </div>
+
+            {callSummary && (
+              <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-xs text-slate-100">
+                <div className="mb-1 flex items-center justify-between font-semibold text-emerald-300">
+                  <span>Call summary</span>
+                  <span className="flex items-center gap-2 text-[10px] font-medium text-slate-400">
+                    {callSummary.status === 'loading' ? 'Summarizing…' : callSummary.status === 'saved' ? 'Saved to Memory ✓' : callSummary.status === 'error' ? 'Failed' : ''}
+                    <button type="button" onClick={() => setCallSummary(null)} title="Dismiss" className="text-slate-400 hover:text-white">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </div>
+                {callSummary.text && <p className="whitespace-pre-wrap leading-relaxed">{callSummary.text}</p>}
+              </div>
+            )}
             {/* 4 Realistic Avatars + Custom Studio Avatars Selector */}
             <div>
               <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-400">

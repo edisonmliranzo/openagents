@@ -35,6 +35,7 @@ import {
   KeyRound,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth'
+import { LandingExtras } from '@/components/landing/LandingExtras'
 import {
   AVATAR_PERSONAS,
   type AvatarEmotion,
@@ -1781,6 +1782,8 @@ export default function OpenAgentsLandingPage() {
             </div>
           </div>
         </section>
+
+        <LandingExtras warmTheme={warmTheme} />
       </main>
 
       {/* ── FOOTER ── */}

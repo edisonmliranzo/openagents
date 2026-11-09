@@ -1,4 +1,8 @@
 import { handleMediaRoutes } from './worker-media.mjs'
+import { handleShareRoutes } from './worker-share.mjs'
+import { handleBillingRoutes } from './worker-billing-stripe.mjs'
+import { reportError, handleClientError } from './worker-limits.mjs'
+import { sendEmail, passwordResetEmail, sendVerificationEmail, handleEmailRoutes } from './worker-email.mjs'
 
 const DEFAULT_TUNNEL_ORIGIN = 'https://someone-edinburgh-interstate-relative.trycloudflare.com'
 
@@ -708,20 +712,7 @@ async function ensureSchema(env) {
   schemaEnsured = true
 }
 
-async function sendEmail(env, to, subject, html) {
-  if (!env.RESEND_API_KEY) return false
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: env.EMAIL_FROM || 'OpenAgents <no-reply@openagents.us>',
-      to: [to],
-      subject,
-      html,
-    }),
-  }).catch(() => null)
-  return Boolean(res && res.ok)
-}
+// sendEmail lives in ./worker-email.mjs (Resend, optional)
 
 // ── Telephony (Twilio Programmable Voice) ─────────────────────────────────
 function telephonyConfigured(env) {
@@ -875,17 +866,21 @@ export default {
       try {
         // 1. Public Health Check (no sensitive info exposed)
         if (path === '/api/v1/health' && method === 'GET') {
-          return jsonResponse(
-            {
-              status: 'ok',
-              timestamp: new Date().toISOString(),
-            },
-            200,
-            origin,
-          )
+          let db = false
+          try {
+            db = Boolean(env.DB && (await env.DB.prepare('SELECT 1 AS ok').first()))
+          } catch {
+            db = false
+          }
+          return jsonResponse({ ok: db, status: db ? 'ok' : 'degraded', time: new Date().toISOString(), db }, db ? 200 : 503, origin)
         }
 
         await ensureSchema(env)
+
+        const publicShare = await handleShareRoutes({ request, env, url, path, method, origin, user: null, h: { ...mediaHelpers(), CURATED_MODELS } })
+        if (publicShare) return publicShare
+        const publicBilling = await handleBillingRoutes({ request, env, url, path, method, origin, user: null, h: mediaHelpers() })
+        if (publicBilling) return publicBilling
 
         const publicMedia = await handleMediaRoutes({ request, env, url, path, method, origin, user: null, h: mediaHelpers() })
         if (publicMedia) return publicMedia
@@ -975,12 +970,7 @@ export default {
               .bind(tokenHash, u.id, Date.now() + 30 * 60 * 1000)
               .run()
             const link = `https://openagents.us/reset-password?token=${encodeURIComponent(token)}`
-            await sendEmail(
-              env,
-              u.email,
-              'Reset your OpenAgents password',
-              `<p>Someone requested a password reset for your OpenAgents account.</p><p><a href="${link}">Reset your password</a> (valid for 30 minutes).</p><p>If this wasn't you, ignore this email.</p>`,
-            )
+            await sendEmail(env, u.email, 'Reset your OpenAgents password', passwordResetEmail(link))
           }
           return jsonResponse(generic, 200, origin)
         }
@@ -1077,6 +1067,9 @@ export default {
           )
             .bind(regBucket, nextCount, nextWindow)
             .run()
+
+          // Non-blocking email verification (unverified users can still use the app)
+          await sendVerificationEmail(env, { id: userId, email }).catch((e) => console.error('[verify-email]', e))
 
           const user = {
             id: userId,
@@ -1251,12 +1244,27 @@ export default {
           return jsonResponse({ ok: true }, 200, origin)
         }
 
+        // 3c. Public: email verification link + client error intake (auth optional)
+        const publicEmail = await handleEmailRoutes({ request, env, url, path, method, origin, user: null, h: mediaHelpers() })
+        if (publicEmail) return publicEmail
+        if (path === '/api/v1/client-errors' && method === 'POST') {
+          const maybeUser = await requireAuth(request, env).catch(() => null)
+          return handleClientError(request, env, maybeUser, mediaHelpers(), origin)
+        }
+
         // 4. All Remaining Routes Require Valid HS256 JWT Authentication
         const user = await requireAuth(request, env)
         if (!user) {
           return jsonResponse({ statusCode: 401, message: 'Unauthorized' }, 401, origin)
         }
 
+        const emailRes = await handleEmailRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
+        if (emailRes) return emailRes
+
+        const shareRes = await handleShareRoutes({ request, env, url, path, method, origin, user, h: { ...mediaHelpers(), CURATED_MODELS } })
+        if (shareRes) return shareRes
+        const billingRes = await handleBillingRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
+        if (billingRes) return billingRes
         const mediaRes = await handleMediaRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
         if (mediaRes) return mediaRes
 
@@ -2355,12 +2363,21 @@ export default {
             origin,
           )
         }
-      } catch {
+      } catch (err) {
+        await reportError(env, err, { path, method })
         return jsonResponse({ statusCode: 500, message: 'Internal server error' }, 500, origin)
       }
     }
 
     if (env.ASSETS) {
+      // Static-export fallbacks for dynamic public pages: /p/<slug> → /p (avatar), /a/<slug> → /a/default (agent)
+      const pubAvatar = url.pathname.match(/^\/p\/[^/]+\/?$/)
+      const pubAgent = url.pathname.match(/^\/a\/([^/]+)\/?$/)
+      if ((pubAvatar || (pubAgent && pubAgent[1] !== 'default')) && (request.method === 'GET' || request.method === 'HEAD')) {
+        const target = new URL(pubAvatar ? '/p' : '/a/default', url.origin)
+        const res = await env.ASSETS.fetch(new Request(target.toString(), request))
+        if (res.ok) return new Response(res.body, { status: 200, headers: res.headers })
+      }
       return env.ASSETS.fetch(request)
     }
 
