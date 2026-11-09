@@ -67,6 +67,7 @@ const PRIMARY_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Chat', href: '/chat', icon: MessageSquare },
       { label: 'Voice Calls & Avatars', href: '/phone', icon: Mic },
+      { label: 'Avatar Studio (Video)', href: '/avatars', icon: Sparkles },
       { label: 'Sessions History', href: '/sessions', icon: History },
       { label: 'Tasks', href: '/tasks', icon: Play },
       { label: 'Approvals', href: '/approvals', icon: ShieldAlert },

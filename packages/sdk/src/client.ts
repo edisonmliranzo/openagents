@@ -182,6 +182,10 @@ export class OpenAgentsClient {
     return this.request<T>(path, { method: 'DELETE', ...(headers ? { headers } : {}) })
   }
 
+  upload<T>(path: string, body: Blob, contentType: string) {
+    return this.request<T>(path, { method: 'POST', body, headers: { 'Content-Type': contentType } })
+  }
+
   deleteWithBody<T>(path: string, body: unknown) {
     return this.request<T>(path, { method: 'DELETE', body: JSON.stringify(body) })
   }

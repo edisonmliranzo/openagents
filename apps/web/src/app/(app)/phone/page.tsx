@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   Check,
+  Film,
   Mic,
   MicOff,
   Phone,
@@ -30,6 +31,11 @@ import {
   LiveAvatar,
   setSavedAvatarPersona,
 } from '@/components/chat/LiveAvatar'
+import {
+  RealisticAvatar,
+  useAvatars,
+  type RealisticAvatarRecord,
+} from '@/components/avatar/RealisticAvatar'
 
 interface PhoneTurn {
   role: 'caller' | 'agent'
@@ -95,6 +101,7 @@ const CALL_STARTERS = [
 ]
 
 export default function PhoneAgentPage() {
+  const { avatars: customAvatars, active: activeCustomAvatar, refresh: refreshAvatars } = useAvatars()
   // ── Live Avatar Voice Call state ──
   const [personaId, setPersonaId] = useState<AvatarPersonaId>('nova')
   const [emotionOverride, setEmotionOverride] = useState<'auto' | AvatarEmotion>('auto')
@@ -123,6 +130,23 @@ export default function PhoneAgentPage() {
   }, [])
 
   const persona = AVATAR_PERSONAS[personaId] ?? AVATAR_PERSONAS.nova
+  const stageAvatarRecord: RealisticAvatarRecord = useMemo(() => {
+    if (activeCustomAvatar) return activeCustomAvatar
+    return {
+      id: `preset-${persona.id}`,
+      name: persona.name,
+      description: persona.tagline,
+      media: {
+        portrait: { url: persona.portraitSrc, mime: 'image/jpeg' },
+      },
+      jobs: {},
+      voiceProvider: null,
+      voiceId: null,
+      isActive: true,
+      createdAt: '',
+    }
+  }, [activeCustomAvatar, persona])
+  const displayAvatarName = activeCustomAvatar ? activeCustomAvatar.name : persona.name
 
   // Call timer
   useEffect(() => {
@@ -177,12 +201,14 @@ export default function PhoneAgentPage() {
       }
       setCallState('speaking')
       await speak(text, {
+        voiceId: activeCustomAvatar?.voiceId || undefined,
+        provider: activeCustomAvatar?.voiceProvider || undefined,
         onEnd: () => setCallState('idle'),
         onError: () => setCallState('idle'),
       })
       setCallState('idle')
     },
-    [speakerOn],
+    [speakerOn, activeCustomAvatar],
   )
 
   const sendVoiceCallTurn = useCallback(
@@ -197,7 +223,7 @@ export default function PhoneAgentPage() {
       try {
         let convId = liveConvId
         if (!convId) {
-          const created = await sdk.conversations.create(`Voice Call with ${persona.name}`)
+          const created = await sdk.conversations.create(`Voice Call with ${displayAvatarName}`)
           convId = created.id
           setLiveConvId(convId)
         }
@@ -217,7 +243,7 @@ export default function PhoneAgentPage() {
         await speakAgentReply(fallback)
       }
     },
-    [liveConvId, persona.name, speakAgentReply],
+    [liveConvId, displayAvatarName, speakAgentReply],
   )
 
   const startMicCapture = useCallback(() => {
@@ -273,7 +299,7 @@ export default function PhoneAgentPage() {
   async function handleStartLiveCall() {
     setError(null)
     setInLiveCall(true)
-    const greeting = `Hey! It's ${persona.name}. We're connected on a live voice call—what would you like to work on together?`
+    const greeting = `Hey! It's ${displayAvatarName}. We're connected on a live voice call—what would you like to work on together?`
     setLiveTurns([{ role: 'agent', text: greeting, at: new Date().toISOString() }])
     await speakAgentReply(greeting)
   }
@@ -294,6 +320,15 @@ export default function PhoneAgentPage() {
   function handleSelectPersona(id: AvatarPersonaId) {
     setPersonaId(id)
     setSavedAvatarPersona(id)
+  }
+
+  async function handleActivateCustomAvatar(id: string) {
+    try {
+      await sdk.client.post(`/api/v1/avatars/${id}/activate`, {})
+      await refreshAvatars()
+    } catch (e: any) {
+      setError(cleanError(e, 'Could not activate avatar'))
+    }
   }
 
   async function handleQueueCall(e: React.FormEvent) {
@@ -348,6 +383,8 @@ export default function PhoneAgentPage() {
   async function handleSpeakTurn(text: string) {
     setCallState('speaking')
     await speak(text, {
+      voiceId: activeCustomAvatar?.voiceId || undefined,
+      provider: activeCustomAvatar?.voiceProvider || undefined,
       onEnd: () => setCallState('idle'),
       onError: () => setCallState('idle'),
     })
@@ -359,16 +396,23 @@ export default function PhoneAgentPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-0.5 text-[11px] font-semibold text-rose-500 mb-1.5">
-            <Sparkles className="h-3 w-3" /> Voice Calls &amp; Animated Avatars
+            <Sparkles className="h-3 w-3" /> Voice Calls &amp; Realistic Video Avatars
           </div>
           <h1 className="flex items-center gap-2.5 text-2xl font-bold text-[var(--tone-strong)]">
-            <Phone className="h-6 w-6 text-rose-500" /> Live Voice Calls &amp; Expressive Avatars
+            <Phone className="h-6 w-6 text-rose-500" /> Live Voice Calls &amp; Realistic Avatars
           </h1>
           <p className="text-sm text-[var(--muted)]">
-            Talk face-to-face with your animated personal agent in real time, or dispatch outbound/inbound phone calls.
+            Talk face-to-face with your photorealistic multi-angle video avatar using Fish Audio or ElevenLabs, or dispatch PSTN phone calls.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/avatars"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:brightness-110"
+          >
+            <Film className="h-3.5 w-3.5" />
+            <span>Avatar Studio (Multi-Angle Video &amp; Upload)</span>
+          </Link>
           <Link
             href="/frontier/voice-console"
             className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 text-xs font-semibold text-[var(--tone-strong)] hover:bg-[var(--surface-muted)]"
@@ -392,10 +436,10 @@ export default function PhoneAgentPage() {
         </div>
       )}
 
-      {/* ── FLAGSHIP LIVE ANIMATED AVATAR VOICE CALL DECK ── */}
+      {/* ── FLAGSHIP LIVE REALISTIC AVATAR VOICE CALL DECK ── */}
       <section className="overflow-hidden rounded-[28px] border border-white/15 bg-gradient-to-br from-[#0f1424] via-[#0b101d] to-[#130d1e] p-6 text-white shadow-2xl sm:p-8">
         <div className="grid gap-8 lg:grid-cols-12 lg:items-center">
-          {/* Left: Animated Avatar Call Stage */}
+          {/* Left: Realistic Video / Portrait Avatar Call Stage */}
           <div className="flex flex-col items-center text-center lg:col-span-5">
             <div className="mb-3 flex w-full items-center justify-between text-xs text-slate-400">
               <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-400">
@@ -407,27 +451,25 @@ export default function PhoneAgentPage() {
               </span>
             </div>
 
-            <button
-              type="button"
+            <div
               onClick={() => (inLiveCall ? startMicCapture() : void handleStartLiveCall())}
-              className="group relative my-2 flex items-center justify-center rounded-full p-4 focus:outline-none"
+              className="group relative my-2 w-full max-w-[260px] cursor-pointer focus:outline-none"
               title={inLiveCall ? 'Tap avatar to speak or interrupt' : 'Tap to start live voice call'}
             >
-              <LiveAvatar
-                personaId={personaId}
-                emotion={activeEmotion}
-                speaking={callState === 'speaking'}
-                listening={callState === 'listening'}
-                thinking={callState === 'thinking'}
-                size={196}
-                showRings={true}
-              />
-            </button>
+              <RealisticAvatar avatar={stageAvatarRecord} state={callState} />
+            </div>
 
             <h2 className="mt-2 text-xl font-bold text-white">
-              {persona.name} <span className="text-sm font-normal text-slate-400">• {persona.tagline}</span>
+              {displayAvatarName}{' '}
+              <span className="text-sm font-normal text-slate-400">
+                • {activeCustomAvatar?.description || persona.tagline}
+              </span>
             </h2>
-            <p className="text-xs text-slate-400">{persona.voiceStyle}</p>
+            <p className="text-xs text-slate-400">
+              {activeCustomAvatar?.voiceProvider
+                ? `${activeCustomAvatar.voiceProvider === 'fish' ? 'Fish Audio 2.0' : 'ElevenLabs'} Neural Voice`
+                : persona.voiceStyle}
+            </p>
 
             {/* Primary Call Controls */}
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
@@ -438,7 +480,7 @@ export default function PhoneAgentPage() {
                   className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 px-7 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-500/25 transition hover:brightness-110"
                 >
                   <PhoneCall className="h-4 w-4" />
-                  <span>Start Voice Call with {persona.name}</span>
+                  <span>Start Voice Call with {displayAvatarName}</span>
                 </button>
               ) : (
                 <>
@@ -496,12 +538,43 @@ export default function PhoneAgentPage() {
 
           {/* Right: Persona Switcher, Expression Controls & Live Call Transcript */}
           <div className="space-y-4 lg:col-span-7">
-            {/* 4 Animated Avatars Selector */}
+            {/* 4 Realistic Avatars + Custom Studio Avatars Selector */}
             <div>
               <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                <span>Select Animated Avatar Persona</span>
-                <span>60fps Lip-Sync + Emotional Expressions</span>
+                <span>Select Realistic Avatar Persona</span>
+                <Link href="/avatars" className="text-rose-400 underline hover:text-rose-300">
+                  + Custom Multi-Angle Video in Avatar Studio →
+                </Link>
               </div>
+              {customAvatars.length > 0 && (
+                <div className="mb-2.5 flex flex-wrap items-center gap-2">
+                  {customAvatars.map((ca) => (
+                    <button
+                      key={ca.id}
+                      type="button"
+                      onClick={() => void handleActivateCustomAvatar(ca.id)}
+                      className={`inline-flex items-center gap-2 rounded-full border py-1 pl-1.5 pr-3 text-xs font-semibold transition ${
+                        ca.isActive
+                          ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200'
+                          : 'border-white/15 bg-white/5 text-slate-300 hover:bg-white/10'
+                      }`}
+                    >
+                      {ca.media.portrait?.url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={ca.media.portrait.url} alt={ca.name} className="h-6 w-6 rounded-full object-cover" />
+                      ) : (
+                        <span className="h-6 w-6 rounded-full bg-rose-500/40" />
+                      )}
+                      <span>{ca.name}</span>
+                      {(ca.media.idle || ca.media.talking) && (
+                        <span className="rounded bg-rose-500/30 px-1.5 py-0.5 text-[9px] uppercase text-rose-200">
+                          Video
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {(Object.values(AVATAR_PERSONAS) as Array<(typeof AVATAR_PERSONAS)[AvatarPersonaId]>).map((p) => {
                   const active = p.id === personaId

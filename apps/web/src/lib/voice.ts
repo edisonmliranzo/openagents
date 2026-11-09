@@ -68,12 +68,15 @@ export function takeSentences(buffer: string, flush = false): { sentences: strin
 }
 
 /** Synthesize one chunk with the user's neural voice; returns a playable data URL, or null if unconfigured. */
-export async function synthesize(text: string): Promise<string | null> {
+export async function synthesize(
+  text: string,
+  opts?: { voiceId?: string; provider?: string },
+): Promise<string | null> {
   const clean = speakable(text)
   if (!clean) return null
   try {
     const { sdk } = await import('@/stores/auth')
-    const tts = await sdk.life.tts(clean)
+    const tts = await sdk.life.tts(clean, opts)
     if (!tts?.audioBase64) return null
     return `data:${tts.mimeType};base64,${tts.audioBase64}`
   } catch {
@@ -129,13 +132,22 @@ export function speakWithBrowserPersona(
  */
 export async function speak(
   text: string,
-  callbacks?: { onStart?: () => void; onEnd?: () => void; onError?: (err: unknown) => void },
+  callbacks?: {
+    onStart?: () => void
+    onEnd?: () => void
+    onError?: (err: unknown) => void
+    voiceId?: string
+    provider?: string
+  },
 ): Promise<boolean> {
   const clean = speakable(text)
   if (!clean || typeof window === 'undefined') return false
 
   try {
-    const dataUrl = await synthesize(clean)
+    const dataUrl = await synthesize(clean, {
+      voiceId: callbacks?.voiceId,
+      provider: callbacks?.provider,
+    })
     if (dataUrl) {
       stopSpeaking()
       const audio = new Audio(dataUrl)

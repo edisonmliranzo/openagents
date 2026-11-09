@@ -13,3 +13,7 @@ run_worker_first = ["/api/*", "/v1/*"]
 binding = "DB"
 database_name = "openagents-db"
 database_id = "a018a756-cd11-44ba-b211-b5bc239a3762"
+
+[[r2_buckets]]
+binding = "AVATARS"
+bucket_name = "openagents-avatars"

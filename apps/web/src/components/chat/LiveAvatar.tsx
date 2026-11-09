@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export type AvatarPersonaId = 'nova' | 'atlas' | 'sage' | 'ember'
 export type AvatarEmotion =
@@ -18,6 +18,7 @@ export interface AvatarPersonaConfig {
   name: string
   tagline: string
   voiceStyle: string
+  portraitSrc: string
   primaryColor: string
   secondaryColor: string
   glowColor: string
@@ -32,6 +33,7 @@ export const AVATAR_PERSONAS: Record<AvatarPersonaId, AvatarPersonaConfig> = {
     name: 'Nova',
     tagline: 'Warm, expressive & creative',
     voiceStyle: 'Natural conversational warmth',
+    portraitSrc: '/avatars/presets/nova.jpg',
     primaryColor: '#f43f5e',
     secondaryColor: '#f59e0b',
     glowColor: 'rgba(244, 63, 94, 0.45)',
@@ -44,6 +46,7 @@ export const AVATAR_PERSONAS: Record<AvatarPersonaId, AvatarPersonaConfig> = {
     name: 'Atlas',
     tagline: 'Direct, analytical & fast',
     voiceStyle: 'Crisp executive clarity',
+    portraitSrc: '/avatars/presets/atlas.jpg',
     primaryColor: '#10b981',
     secondaryColor: '#06b6d4',
     glowColor: 'rgba(16, 185, 129, 0.45)',
@@ -56,6 +59,7 @@ export const AVATAR_PERSONAS: Record<AvatarPersonaId, AvatarPersonaConfig> = {
     name: 'Sage',
     tagline: 'Calm, thoughtful & deep',
     voiceStyle: 'Measured, reflective cadence',
+    portraitSrc: '/avatars/presets/sage.jpg',
     primaryColor: '#8b5cf6',
     secondaryColor: '#38bdf8',
     glowColor: 'rgba(139, 92, 246, 0.45)',
@@ -68,6 +72,7 @@ export const AVATAR_PERSONAS: Record<AvatarPersonaId, AvatarPersonaConfig> = {
     name: 'Ember',
     tagline: 'Energetic, proactive & bold',
     voiceStyle: 'Upbeat, high-momentum',
+    portraitSrc: '/avatars/presets/ember.jpg',
     primaryColor: '#f97316',
     secondaryColor: '#eab308',
     glowColor: 'rgba(249, 115, 22, 0.45)',
@@ -138,9 +143,9 @@ export interface LiveAvatarProps {
 }
 
 /**
- * Expressive animated SVG avatar for OpenAgents.
- * Features 60fps audio-reactive viseme lip-sync, dynamic eyebrows, pupil gaze tracking,
- * natural blinking, breathing/head-tilt motion, and persona-colored harmonic voice rings.
+ * Photorealistic avatar badge & portrait component.
+ * Replaces the old 2D SVG cartoon with high-definition realistic studio portraits
+ * and audio-reactive harmonic voice rings.
  */
 export function LiveAvatar({
   speaking = false,
@@ -153,66 +158,17 @@ export function LiveAvatar({
   showRings = true,
   className = '',
 }: LiveAvatarProps) {
-  const uid = useId().replace(/:/g, '')
   const persona = AVATAR_PERSONAS[personaId] ?? AVATAR_PERSONAS.nova
   const resolvedEmotion: AvatarEmotion =
     emotion ??
     (speaking ? 'speaking' : listening ? 'listening' : thinking ? 'thinking' : 'neutral')
 
-  const [mouthOpen, setMouthOpen] = useState(0)
-  const [mouthWidth, setMouthWidth] = useState(0.5)
-  const [blinking, setBlinking] = useState(false)
-  const [gaze, setGaze] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
-  const [headTilt, setHeadTilt] = useState(0)
+  const [voiceEnergy, setVoiceEnergy] = useState(0)
   const rafRef = useRef<number | null>(null)
 
-  // Natural blinking
-  useEffect(() => {
-    const blinkInterval = setInterval(() => {
-      setBlinking(true)
-      setTimeout(() => setBlinking(false), 130)
-    }, 3400)
-    return () => clearInterval(blinkInterval)
-  }, [])
-
-  // Subtle gaze & head movement based on emotional state
-  useEffect(() => {
-    if (resolvedEmotion === 'thinking') {
-      setGaze({ x: 2.2, y: -2.0 })
-      setHeadTilt(-4)
-      return
-    }
-    if (resolvedEmotion === 'listening') {
-      setGaze({ x: 0, y: -0.5 })
-      setHeadTilt(2.5)
-      return
-    }
-    if (resolvedEmotion === 'empathetic') {
-      setGaze({ x: -0.6, y: 0.4 })
-      setHeadTilt(-3)
-      return
-    }
-    if (resolvedEmotion === 'focused') {
-      setGaze({ x: 0, y: 0 })
-      setHeadTilt(0)
-      return
-    }
-
-    const drift = setInterval(() => {
-      const gx = (Math.random() - 0.5) * 2.2
-      const gy = (Math.random() - 0.5) * 1.4
-      const tilt = (Math.random() - 0.5) * 3.5
-      setGaze({ x: gx, y: gy })
-      setHeadTilt(tilt)
-    }, 2600)
-    return () => clearInterval(drift)
-  }, [resolvedEmotion])
-
-  // Audio-reactive lip-sync + natural speech cadence
   useEffect(() => {
     if (!speaking) {
-      setMouthOpen(0)
-      setMouthWidth(0.5)
+      setVoiceEnergy(0)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       return
     }
@@ -231,7 +187,7 @@ export function LiveAvatar({
         analyser.connect(ctx.destination)
         data = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount))
       } catch {
-        // Fallback to multi-harmonic speech cadence if element is already bound
+        // Fallback cadence
       }
     }
 
@@ -240,23 +196,13 @@ export function LiveAvatar({
       const t = (now - start) / 1000
       if (analyser && data) {
         analyser.getByteFrequencyData(data)
-        let low = 0
-        let mid = 0
-        for (let i = 0; i < data.length; i++) {
-          if (i < data.length / 2) low += data[i]
-          else mid += data[i]
-        }
-        const openVal = Math.min(1, (low / (data.length / 2) / 255) * 2.5)
-        const wideVal = Math.min(1, 0.35 + (mid / (data.length / 2) / 255) * 1.6)
-        setMouthOpen(openVal)
-        setMouthWidth(wideVal)
+        let sum = 0
+        for (let i = 0; i < data.length; i++) sum += data[i]
+        setVoiceEnergy(Math.min(1, (sum / data.length / 255) * 2.4))
       } else {
-        // Expressive syllable cadence with natural pauses
-        const envelope = Math.max(0.12, Math.sin(t * 2.9) * 0.5 + 0.5)
-        const syllable = Math.abs(Math.sin(t * 10.5) * 0.62 + Math.sin(t * 17.3) * 0.38)
-        const wide = 0.45 + 0.45 * Math.abs(Math.cos(t * 7.4))
-        setMouthOpen(Math.min(1, syllable * envelope))
-        setMouthWidth(wide)
+        const envelope = Math.max(0.15, Math.sin(t * 3.1) * 0.5 + 0.5)
+        const syllable = Math.abs(Math.sin(t * 10.2) * 0.65 + Math.sin(t * 16.8) * 0.35)
+        setVoiceEnergy(Math.min(1, syllable * envelope))
       }
       rafRef.current = requestAnimationFrame(tick)
     }
@@ -270,141 +216,7 @@ export function LiveAvatar({
     }
   }, [speaking, audioElement])
 
-  // Compute eyebrow & eye geometry from emotion
-  const browLift =
-    resolvedEmotion === 'surprised'
-      ? -4.2
-      : resolvedEmotion === 'happy' || resolvedEmotion === 'listening'
-        ? -2.0
-        : resolvedEmotion === 'focused'
-          ? 1.6
-          : 0
-
-  const browSlant =
-    resolvedEmotion === 'focused'
-      ? 2.6
-      : resolvedEmotion === 'empathetic'
-        ? -2.4
-        : resolvedEmotion === 'thinking'
-          ? 1.5
-          : 0
-
-  const eyeScaleY =
-    blinking
-      ? 0.08
-      : resolvedEmotion === 'surprised'
-        ? 1.24
-        : resolvedEmotion === 'focused'
-          ? 0.84
-          : 1
-
-  // Mouth path builder (100x100 coordinate space)
-  const renderMouth = () => {
-    if (speaking || mouthOpen > 0.08) {
-      const rx = 8 + mouthWidth * 9
-      const ry = 2.5 + mouthOpen * 10.5
-      const cy = 66
-      return (
-        <g>
-          <ellipse
-            cx="50"
-            cy={cy}
-            rx={rx}
-            ry={ry}
-            fill="#090d16"
-            stroke={persona.eyeColor}
-            strokeWidth="2.2"
-          />
-          {/* Tongue / inner glow when mouth opens wide */}
-          {mouthOpen > 0.35 && (
-            <ellipse
-              cx="50"
-              cy={cy + ry * 0.38}
-              rx={rx * 0.58}
-              ry={ry * 0.42}
-              fill={persona.primaryColor}
-              opacity="0.75"
-            />
-          )}
-        </g>
-      )
-    }
-
-    if (resolvedEmotion === 'happy') {
-      return (
-        <path
-          d="M 37 63 Q 50 75 63 63"
-          fill="none"
-          stroke={persona.eyeColor}
-          strokeWidth="3.2"
-          strokeLinecap="round"
-        />
-      )
-    }
-
-    if (resolvedEmotion === 'surprised') {
-      return (
-        <ellipse
-          cx="50"
-          cy="66"
-          rx="6.5"
-          ry="7.5"
-          fill="#090d16"
-          stroke={persona.eyeColor}
-          strokeWidth="2.6"
-        />
-      )
-    }
-
-    if (resolvedEmotion === 'thinking') {
-      return (
-        <path
-          d="M 43 66 Q 50 64 58 67"
-          fill="none"
-          stroke={persona.eyeColor}
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-      )
-    }
-
-    if (resolvedEmotion === 'empathetic') {
-      return (
-        <path
-          d="M 39 65 Q 50 70 61 65"
-          fill="none"
-          stroke={persona.eyeColor}
-          strokeWidth="2.8"
-          strokeLinecap="round"
-        />
-      )
-    }
-
-    if (resolvedEmotion === 'focused') {
-      return (
-        <path
-          d="M 40 66 L 60 66"
-          fill="none"
-          stroke={persona.eyeColor}
-          strokeWidth="2.8"
-          strokeLinecap="round"
-        />
-      )
-    }
-
-    // Default warm gentle smile
-    return (
-      <path
-        d="M 39 64 Q 50 71 61 64"
-        fill="none"
-        stroke={persona.eyeColor}
-        strokeWidth="2.8"
-        strokeLinecap="round"
-      />
-    )
-  }
-
-  const ringScale = speaking ? 1 + mouthOpen * 0.14 : listening ? 1.06 : 1
+  const ringScale = speaking ? 1 + voiceEnergy * 0.08 : listening ? 1.03 : 1
 
   return (
     <div
@@ -412,7 +224,6 @@ export function LiveAvatar({
       style={{ width: size, height: size }}
       title={`${persona.name} • ${resolvedEmotion.charAt(0).toUpperCase() + resolvedEmotion.slice(1)}`}
     >
-      {/* Expressive outer voice aura rings */}
       {showRings && (speaking || listening || resolvedEmotion === 'thinking') && (
         <>
           <span
@@ -420,126 +231,43 @@ export function LiveAvatar({
             style={{
               transform: `scale(${ringScale * 1.18})`,
               background: `radial-gradient(circle, ${persona.glowColor} 0%, transparent 70%)`,
-              opacity: speaking ? 0.9 : 0.55,
+              opacity: speaking ? 0.95 : 0.55,
             }}
           />
           <span
-            className={`pointer-events-none absolute inset-0 rounded-full border ${
+            className={`pointer-events-none absolute inset-0 rounded-full border-2 ${
               listening ? 'animate-ping' : 'animate-pulse'
             }`}
             style={{
               borderColor: persona.primaryColor,
-              opacity: 0.35,
+              opacity: 0.45,
             }}
           />
         </>
       )}
 
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 100 100"
-        className="relative z-10 overflow-visible rounded-full transition-transform duration-300"
+      <div
+        className="relative z-10 h-full w-full overflow-hidden rounded-full bg-slate-900 shadow-lg transition-transform duration-200"
         style={{
           transform: `scale(${ringScale})`,
+          boxShadow: speaking
+            ? `0 0 ${Math.round(size * 0.22)}px ${persona.glowColor}`
+            : undefined,
+          border: `2px solid ${speaking || listening ? persona.primaryColor : 'rgba(255,255,255,0.22)'}`,
         }}
       >
-        <defs>
-          <radialGradient id={`bg-${uid}`} cx="50%" cy="32%" r="72%">
-            <stop offset="0%" stopColor={persona.primaryColor} stopOpacity="0.48" />
-            <stop offset="52%" stopColor={persona.secondaryColor} stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#0b101e" stopOpacity="1" />
-          </radialGradient>
-          <linearGradient id={`rim-${uid}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={persona.primaryColor} />
-            <stop offset="100%" stopColor={persona.secondaryColor} />
-          </linearGradient>
-        </defs>
-
-        {/* Avatar Sphere */}
-        <circle
-          cx="50"
-          cy="50"
-          r="46"
-          fill={`url(#bg-${uid})`}
-          stroke={`url(#rim-${uid})`}
-          strokeWidth={speaking || listening ? '3' : '2'}
-        />
-
-        {/* Ambient cheek glow when happy, empathetic, or speaking */}
-        {(resolvedEmotion === 'happy' || resolvedEmotion === 'empathetic' || speaking) && (
-          <>
-            <ellipse cx="28" cy="57" rx="7" ry="4" fill={persona.primaryColor} opacity="0.28" />
-            <ellipse cx="72" cy="57" rx="7" ry="4" fill={persona.primaryColor} opacity="0.28" />
-          </>
-        )}
-
-        {/* Head tilt group */}
-        <g
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={persona.portraitSrc}
+          alt={persona.name}
+          className="h-full w-full object-cover object-top transition-transform duration-300"
           style={{
-            transform: `rotate(${headTilt}deg)`,
-            transformOrigin: '50px 50px',
-            transition: 'transform 320ms ease-out',
+            transform: speaking
+              ? `scale(${1.04 + voiceEnergy * 0.03}) translateY(${-voiceEnergy * 1.2}%)`
+              : 'scale(1.02)',
           }}
-        >
-          {/* Left Eyebrow */}
-          <path
-            d={`M 27 ${32 + browLift - browSlant} Q 35 ${28 + browLift} 42 ${32 + browLift + browSlant}`}
-            fill="none"
-            stroke={persona.eyeColor}
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            opacity="0.9"
-          />
-          {/* Right Eyebrow */}
-          <path
-            d={`M 58 ${32 + browLift + browSlant} Q 65 ${28 + browLift} 73 ${32 + browLift - browSlant}`}
-            fill="none"
-            stroke={persona.eyeColor}
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            opacity="0.9"
-          />
-
-          {/* Eyes */}
-          {resolvedEmotion === 'happy' && !blinking ? (
-            <>
-              <path
-                d="M 28 45 Q 35 37 42 45"
-                fill="none"
-                stroke="#f8fafc"
-                strokeWidth="3.4"
-                strokeLinecap="round"
-              />
-              <path
-                d="M 58 45 Q 65 37 72 45"
-                fill="none"
-                stroke="#f8fafc"
-                strokeWidth="3.4"
-                strokeLinecap="round"
-              />
-            </>
-          ) : (
-            <>
-              {/* Left Eye */}
-              <g transform={`translate(${35 + gaze.x}, ${44 + gaze.y}) scale(1, ${eyeScaleY})`}>
-                <ellipse cx="0" cy="0" rx="5.6" ry="6.4" fill="#f8fafc" />
-                <circle cx={gaze.x * 0.35} cy={gaze.y * 0.35} r="3.1" fill="#0f172a" />
-                <circle cx={-1.6 + gaze.x * 0.2} cy={-2.0 + gaze.y * 0.2} r="1.4" fill="#ffffff" />
-              </g>
-              {/* Right Eye */}
-              <g transform={`translate(${65 + gaze.x}, ${44 + gaze.y}) scale(1, ${eyeScaleY})`}>
-                <ellipse cx="0" cy="0" rx="5.6" ry="6.4" fill="#f8fafc" />
-                <circle cx={gaze.x * 0.35} cy={gaze.y * 0.35} r="3.1" fill="#0f172a" />
-                <circle cx={-1.6 + gaze.x * 0.2} cy={-2.0 + gaze.y * 0.2} r="1.4" fill="#ffffff" />
-              </g>
-            </>
-          )}
-
-          {/* Mouth */}
-          {renderMouth()}
-        </g>
-      </svg>
+        />
+      </div>
     </div>
   )
 }

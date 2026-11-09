@@ -29,6 +29,7 @@ function formatTitle(title: string | null | undefined, fallback: string) {
 
 const QUICK_MODULES = [
   { label: 'Voice Calls & Avatars', href: '/phone', icon: Mic, badge: 'Live', color: 'text-rose-500' },
+  { label: 'Avatar Studio (Video)', href: '/avatars', icon: PenSquare, badge: 'Studio', color: 'text-fuchsia-500' },
   { label: 'Channels & Accounts', href: '/control/channels', icon: Activity, badge: 'Connect', color: 'text-sky-500' },
   { label: 'Autonomous Tasks', href: '/tasks', icon: ListChecks, badge: 'Tasks', color: 'text-amber-500' },
   { label: 'Sessions Manager', href: '/sessions', icon: History, badge: 'History', color: 'text-emerald-500' },

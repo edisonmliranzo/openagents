@@ -1,3 +1,5 @@
+import { handleMediaRoutes } from './worker-media.mjs'
+
 const DEFAULT_TUNNEL_ORIGIN = 'https://someone-edinburgh-interstate-relative.trycloudflare.com'
 
 const ALLOWED_ORIGINS = new Set([
@@ -855,6 +857,8 @@ async function getUserApiKeyCandidates(env, userId, provider) {
   return keys
 }
 
+const mediaHelpers = () => ({ jsonResponse, encryptSecret, decryptSecret, getUserApiKeyCandidates, hitRateLimit, validateSafeLlmBaseUrl, genId, timingSafeEqualStr })
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -882,6 +886,9 @@ export default {
         }
 
         await ensureSchema(env)
+
+        const publicMedia = await handleMediaRoutes({ request, env, url, path, method, origin, user: null, h: mediaHelpers() })
+        if (publicMedia) return publicMedia
 
         // 1a. Twilio voice webhooks (public, authenticated by X-Twilio-Signature)
         const twilioMatch = path.match(/^\/api\/v1\/phone\/twilio\/([^/]+)\/(voice|gather|status)$/)
@@ -1250,6 +1257,9 @@ export default {
           return jsonResponse({ statusCode: 401, message: 'Unauthorized' }, 401, origin)
         }
 
+        const mediaRes = await handleMediaRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
+        if (mediaRes) return mediaRes
+
         if ((path === '/api/v1/auth/me' || path === '/api/v1/users/me') && method === 'GET') {
           return jsonResponse(user, 200, origin)
         }
@@ -1296,6 +1306,12 @@ export default {
           await env.DB.prepare('DELETE FROM llm_fallback_keys WHERE userId = ?').bind(user.id).run()
           await env.DB.prepare('DELETE FROM password_resets WHERE userId = ?').bind(user.id).run()
           await env.DB.prepare('DELETE FROM phone_calls WHERE userId = ?').bind(user.id).run()
+          await env.DB.prepare('DELETE FROM avatars WHERE userId = ?').bind(user.id).run().catch(() => {})
+          await env.DB.prepare('DELETE FROM tts_config WHERE userId = ?').bind(user.id).run().catch(() => {})
+          if (env.AVATARS) {
+            const owned = await env.AVATARS.list({ prefix: `users/${user.id}/` })
+            for (const obj of owned.objects) await env.AVATARS.delete(obj.key)
+          }
           await env.DB.prepare('DELETE FROM user_settings WHERE userId = ?').bind(user.id).run()
           await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id).run()
           return jsonResponse({ ok: true }, 200, origin)
