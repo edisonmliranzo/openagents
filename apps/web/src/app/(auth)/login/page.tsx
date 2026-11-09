@@ -186,7 +186,7 @@ export default function LoginPage() {
               <p className="text-slate-400">
                 100% Free Cloud Workspace — pair with an{' '}
                 <a
-                  href="https://apisrouter.dev"
+                  href="https://apisrouter.dev/?ref=openagents"
                   target="_blank"
                   rel="noreferrer"
                   className="font-semibold text-orange-400 underline hover:text-orange-300"

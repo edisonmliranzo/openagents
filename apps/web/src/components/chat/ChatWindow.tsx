@@ -1779,7 +1779,7 @@ export function ChatWindow({
                       Step 1: Connect API Key
                     </span>
                     <a
-                      href="https://apisrouter.dev"
+                      href="https://apisrouter.dev/?ref=openagents"
                       target="_blank"
                       rel="noreferrer noopener"
                       className="text-xs font-bold text-fuchsia-300 underline underline-offset-2 hover:text-white"
@@ -1939,21 +1939,7 @@ export function ChatWindow({
                     {mcpDropdownOpen && (
                       <div className="absolute left-0 bottom-full z-50 mb-2 w-[min(14rem,calc(100vw-2rem))] overflow-hidden rounded-[14px] border border-[#e4e7ec] bg-white p-3 shadow-lg dark:border-[#2d3347] dark:bg-[#1a1f2e]">
                         <p className="text-[11px] font-semibold text-[#10b981] mb-2">Model Context Protocol</p>
-                        <p className="text-[11px] text-[#667085] mb-2 dark:text-[#a1a1aa]">Active local servers:</p>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
-                            <span>filesystem</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
-                            <span>web-search</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
-                            <span>developer-tools</span>
-                          </div>
-                        </div>
+                        <p className="text-[11px] text-[#667085] dark:text-[#a1a1aa]">Connect MCP tool servers (filesystem, browser, dev tools) with the OpenAgents desktop app. Cloud chat uses your selected model directly.</p>
                       </div>
                     )}
                   </div>
@@ -1982,29 +1968,29 @@ export function ChatWindow({
                   agent: '@Forge',
                   role: 'Coder & Architect',
                   badgeClass: 'from-rose-500 to-orange-500',
-                  title: 'Inspect Repo & Architecture',
-                  prompt: 'Delegate to @Forge: Inspect the apps and packages directory structure, summarize key modules, and identify the top 3 engineering improvements.',
+                  title: 'Design a Feature End-to-End',
+                  prompt: 'Delegate to @Forge: Help me design a new feature for my product. Ask me 3 quick questions, then give me the data model, API endpoints, and a step-by-step build plan.',
                 },
                 {
                   agent: '@Scout',
                   role: 'Deep Researcher',
                   badgeClass: 'from-cyan-500 to-blue-600',
                   title: 'Run Deep Web & Tech Research',
-                  prompt: 'Delegate to @Scout: Research the current state-of-the-art in autonomous coding agents and MCP tool architectures, and save a structured summary note.',
+                  prompt: 'Delegate to @Scout: Research the current state-of-the-art in autonomous coding agents and MCP tool architectures, and give me a structured summary.',
                 },
                 {
                   agent: '@Sentinel',
-                  role: 'Windows Ops & Shell',
+                  role: 'Writer & Editor',
                   badgeClass: 'from-emerald-500 to-teal-600',
-                  title: 'System & Process Health Check',
-                  prompt: 'Delegate to @Sentinel: Run a non-destructive Windows shell check on git status, Node version, and active local workspace health.',
+                  title: 'Draft a Viral X Post',
+                  prompt: 'Delegate to @Sentinel: Write 3 punchy X posts announcing my product launch, each under 280 characters, with a strong hook and a clear call to action.',
                 },
                 {
                   agent: '@Atlas',
                   role: 'Chief of Staff',
                   badgeClass: 'from-amber-500 to-rose-500',
                   title: 'Decompose Goal into Milestones',
-                  prompt: 'Delegate to @Atlas: Create an actionable 7-day execution playbook to scale OpenAgents with daily milestones and verification criteria.',
+                  prompt: 'Delegate to @Atlas: Turn my biggest goal this month into an actionable 7-day plan with daily milestones and a way to check progress.',
                 },
               ].map((card) => (
                 <button
@@ -2182,21 +2168,7 @@ export function ChatWindow({
                     {mcpDropdownOpen && (
                       <div className="absolute left-0 bottom-full z-50 mb-2 w-[min(14rem,calc(100vw-2rem))] overflow-hidden rounded-[14px] border border-[#e4e7ec] bg-white p-3 shadow-lg dark:border-[#2d3347] dark:bg-[#1a1f2e]">
                         <p className="text-[11px] font-semibold text-[#10b981] mb-2">Model Context Protocol</p>
-                        <p className="text-[11px] text-[#667085] mb-2 dark:text-[#a1a1aa]">Active local servers:</p>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
-                            <span>filesystem</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
-                            <span>web-search</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-[#344054] dark:text-[#c9d1e0]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#10b981]" />
-                            <span>developer-tools</span>
-                          </div>
-                        </div>
+                        <p className="text-[11px] text-[#667085] dark:text-[#a1a1aa]">Connect MCP tool servers (filesystem, browser, dev tools) with the OpenAgents desktop app. Cloud chat uses your selected model directly.</p>
                       </div>
                     )}
                   </div>

@@ -1053,7 +1053,7 @@ export default function ConfigPage() {
         </button>
       </header>
 
-      {/* Main Provider Banner: APIsRouter (https://apisrouter.dev/) + BYOK */}
+      {/* Main Provider Banner: APIsRouter (https://apisrouter.dev/?ref=openagents) + BYOK */}
       <section className="relative overflow-hidden rounded-2xl border-2 border-violet-300 bg-gradient-to-br from-violet-950 via-slate-900 to-fuchsia-950 p-5 text-white shadow-lg">
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-fuchsia-500/20 blur-3xl" />
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1065,7 +1065,7 @@ export default function ConfigPage() {
             <h2 className="text-xl font-bold tracking-tight text-white">
               Power OpenAgents with{' '}
               <a
-                href="https://apisrouter.dev/"
+                href="https://apisrouter.dev/?ref=openagents"
                 target="_blank"
                 rel="noreferrer noopener"
                 className="underline decoration-fuchsia-400 underline-offset-4 hover:text-fuchsia-200"
@@ -1077,12 +1077,12 @@ export default function ConfigPage() {
             <p className="text-xs leading-relaxed text-slate-300">
               Create your account on{' '}
               <a
-                href="https://apisrouter.dev/"
+                href="https://apisrouter.dev/?ref=openagents"
                 target="_blank"
                 rel="noreferrer noopener"
                 className="font-semibold text-fuchsia-300 underline underline-offset-2 hover:text-white"
               >
-                https://apisrouter.dev/
+                https://apisrouter.dev/?ref=openagents
               </a>{' '}
               to get a single unified API key (<code className="font-mono text-fuchsia-200">apr-sk-live-...</code>) on{' '}
               <code className="font-mono text-fuchsia-200">https://apisrouter.dev/v1</code> that unlocks 93+ live frontier models including{' '}
@@ -1090,7 +1090,7 @@ export default function ConfigPage() {
             </p>
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
               <a
-                href="https://apisrouter.dev/"
+                href="https://apisrouter.dev/?ref=openagents"
                 target="_blank"
                 rel="noreferrer noopener"
                 className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-rose-500 px-4 py-2 text-xs font-bold text-white shadow-md transition hover:brightness-110"
@@ -1509,12 +1509,12 @@ export default function ConfigPage() {
                         <span className="text-[11px] text-violet-600">
                           ★ Official Main Provider — create an account &amp; get your API key at{' '}
                           <a
-                            href="https://apisrouter.dev/"
+                            href="https://apisrouter.dev/?ref=openagents"
                             target="_blank"
                             rel="noreferrer noopener"
                             className="font-semibold underline underline-offset-2 hover:text-violet-800"
                           >
-                            https://apisrouter.dev/
+                            https://apisrouter.dev/?ref=openagents
                           </a>
                         </span>
                       )}
@@ -1714,6 +1714,54 @@ export default function ConfigPage() {
               </div>
             )
           })}
+        </div>
+      </section>
+
+      {/* Account & Privacy */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-900">Account &amp; Privacy</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Your API keys are encrypted at rest (AES-256-GCM) and never shown again after saving. Download your data or permanently delete your account at any time.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const data = await sdk.client.get<unknown>('/api/v1/users/me/export')
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+                const a = document.createElement('a')
+                a.href = URL.createObjectURL(blob)
+                a.download = `openagents-export-${new Date().toISOString().slice(0, 10)}.json`
+                a.click()
+                URL.revokeObjectURL(a.href)
+              } catch (err: any) {
+                setError(err?.message ?? 'Export failed')
+              }
+            }}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Download my data
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              const pw = window.prompt('This permanently deletes your account, chats, and keys. Enter your password to confirm:')
+              if (!pw) return
+              try {
+                await sdk.client.deleteWithBody<unknown>('/api/v1/users/me', { password: pw })
+                window.localStorage.clear()
+                window.location.href = '/'
+              } catch (err: any) {
+                let msg = err?.message ?? 'Delete failed'
+                try { msg = JSON.parse(msg)?.message || msg } catch { /* keep raw */ }
+                setError(msg)
+              }
+            }}
+            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-100"
+          >
+            Delete my account
+          </button>
         </div>
       </section>
 

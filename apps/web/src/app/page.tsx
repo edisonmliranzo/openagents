@@ -45,12 +45,12 @@ import { speakWithBrowserPersona, stopSpeaking } from '@/lib/voice'
 
 const CYCLING_PHRASES = [
   'gets it done for you',
-  'sorts your email',
-  'books reservations',
-  'manages calendars',
-  'writes & runs code',
+  'brainstorms ideas',
+  'drafts emails & posts',
+  'plans your week',
+  'writes & reviews code',
   'tracks your goals',
-  'saves you money',
+  'researches anything',
 ]
 
 interface OpenAgentsDemoScenario {
@@ -569,7 +569,7 @@ export default function OpenAgentsLandingPage() {
               <span className="sm:hidden">
                 Main AI Gateway:{' '}
                 <a
-                  href="https://apisrouter.dev/"
+                  href="https://apisrouter.dev/?ref=openagents"
                   target="_blank"
                   rel="noreferrer noopener"
                   className="font-bold underline decoration-violet-400 underline-offset-2"
@@ -581,7 +581,7 @@ export default function OpenAgentsLandingPage() {
               <span className="hidden sm:inline">
                 Main AI Gateway:{' '}
                 <a
-                  href="https://apisrouter.dev/"
+                  href="https://apisrouter.dev/?ref=openagents"
                   target="_blank"
                   rel="noreferrer noopener"
                   className="font-bold underline decoration-violet-400 underline-offset-2 hover:text-violet-600"
@@ -611,7 +611,7 @@ export default function OpenAgentsLandingPage() {
               warmTheme ? 'text-stone-600' : 'text-slate-300'
             }`}
           >
-            More than a chatbot—a personal AI agent built around your whole life and work. It remembers what matters to you, shares its own computer and terminal, proactively tracks your goals, and stays 100% under your control.
+            More than a chatbot—a personal AI agent built around your whole life and work. Chat with 93+ frontier models through one key, keep every session synced across web and mobile, and stay 100% in control of your data. Power users can add the desktop app for local tools and automation.
           </p>
 
           {/* Interactive Phrase Pills (Click any capability to preview) */}

@@ -269,12 +269,12 @@ export default function GetStartedPage() {
             <h2 className="text-lg font-bold text-white">
               Get your unified API key at{' '}
               <a
-                href="https://apisrouter.dev/"
+                href="https://apisrouter.dev/?ref=openagents"
                 target="_blank"
                 rel="noreferrer noopener"
                 className="underline decoration-fuchsia-400 underline-offset-4 hover:text-fuchsia-200"
               >
-                https://apisrouter.dev/
+                https://apisrouter.dev/?ref=openagents
               </a>{' '}
               — or bring your own key
             </h2>
@@ -288,7 +288,7 @@ export default function GetStartedPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <a
-              href="https://apisrouter.dev/"
+              href="https://apisrouter.dev/?ref=openagents"
               target="_blank"
               rel="noreferrer noopener"
               className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-rose-500 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:brightness-110"

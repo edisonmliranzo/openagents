@@ -182,6 +182,10 @@ export class OpenAgentsClient {
     return this.request<T>(path, { method: 'DELETE', ...(headers ? { headers } : {}) })
   }
 
+  deleteWithBody<T>(path: string, body: unknown) {
+    return this.request<T>(path, { method: 'DELETE', body: JSON.stringify(body) })
+  }
+
   private streamRequest(
     method: 'GET' | 'POST',
     path: string,

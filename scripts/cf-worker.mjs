@@ -277,6 +277,7 @@ const CURATED_MODELS = {
 
 const PROVIDER_BASE_URLS = {
   apisrouter: 'https://apisrouter.dev/v1',
+  anthropic: 'https://api.anthropic.com/v1',
   openai: 'https://api.openai.com/v1',
   google: 'https://generativelanguage.googleapis.com/v1beta/openai',
   minimax: 'https://api.minimaxi.chat/v1',
@@ -578,6 +579,154 @@ function parseJsonSafe(val) {
   }
 }
 
+// ── API key encryption at rest (AES-256-GCM) ──────────────────────────────
+const ENC_PREFIX = 'enc:v1:'
+let cachedEncKey = null
+let cachedEncKeySource = null
+
+async function getEncryptionKey(env) {
+  const secret = env.KEY_ENCRYPTION_SECRET
+  if (!secret || typeof secret !== 'string' || secret.length < 32) {
+    throw new Error('KEY_ENCRYPTION_SECRET is not configured.')
+  }
+  if (cachedEncKey && cachedEncKeySource === secret) return cachedEncKey
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret))
+  cachedEncKey = await crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
+  cachedEncKeySource = secret
+  return cachedEncKey
+}
+
+async function encryptSecret(env, plaintext) {
+  if (plaintext === null || plaintext === undefined || plaintext === '') return null
+  const key = await getEncryptionKey(env)
+  const iv = new Uint8Array(12)
+  crypto.getRandomValues(iv)
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(String(plaintext)))
+  return `${ENC_PREFIX}${base64UrlEncodeBytes(iv)}:${base64UrlEncodeBytes(new Uint8Array(ct))}`
+}
+
+async function decryptSecret(env, stored) {
+  if (!stored || typeof stored !== 'string') return null
+  if (!stored.startsWith(ENC_PREFIX)) return stored // legacy plaintext; re-encrypted on next write
+  try {
+    const [ivB64, ctB64] = stored.slice(ENC_PREFIX.length).split(':')
+    const key = await getEncryptionKey(env)
+    const pt = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: base64UrlDecodeBytes(ivB64) },
+      key,
+      base64UrlDecodeBytes(ctB64),
+    )
+    return new TextDecoder().decode(pt)
+  } catch {
+    return null
+  }
+}
+
+async function maskStoredKey(env, stored) {
+  const plain = await decryptSecret(env, stored)
+  return maskKey(plain)
+}
+
+// ── Friendly provider error messages ──────────────────────────────────────
+function friendlyProviderError(status, provider, rawText = '') {
+  const label = provider === 'apisrouter' ? 'APIsRouter' : provider
+  if (status === 401 || status === 403) {
+    return `Your ${label} API key was rejected (invalid, expired, or revoked). Update it in **[Settings → AI Models & Keys](/settings/config)**.`
+  }
+  if (status === 402) {
+    return `Your ${label} account is out of credits. Top up at ${provider === 'apisrouter' ? '**[apisrouter.dev](https://apisrouter.dev/?ref=openagents)**' : 'your provider dashboard'} and try again.`
+  }
+  if (status === 404) {
+    return `The selected model isn't available on ${label}. Pick another model from the model picker.`
+  }
+  if (status === 429) {
+    return `${label} is rate-limiting your key right now. Wait a moment and try again, or add a backup key in Settings.`
+  }
+  if (status >= 500) {
+    return `${label} is having trouble right now (HTTP ${status}). Please try again in a minute.`
+  }
+  const snippet = String(rawText || '').replace(/sk-[A-Za-z0-9_-]+|apr-[A-Za-z0-9_-]+/g, '[redacted]').slice(0, 160)
+  return `${label} returned an error (HTTP ${status})${snippet ? `: ${snippet}` : ''}.`
+}
+
+// ── Generic fixed-window rate limiter backed by auth_rate_limits ──────────
+async function hitRateLimit(env, bucket, limit, windowMs) {
+  const now = Date.now()
+  const row = await env.DB.prepare('SELECT failures, windowStart FROM auth_rate_limits WHERE bucket = ?')
+    .bind(bucket)
+    .first()
+  const inWindow = row && now - Number(row.windowStart) < windowMs
+  const count = inWindow ? Number(row.failures) + 1 : 1
+  const start = inWindow ? Number(row.windowStart) : now
+  await env.DB.prepare('INSERT OR REPLACE INTO auth_rate_limits (bucket, failures, windowStart) VALUES (?, ?, ?)')
+    .bind(bucket, count, start)
+    .run()
+  return count > limit
+}
+
+let schemaEnsured = false
+async function ensureSchema(env) {
+  if (schemaEnsured || !env.DB) return
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS llm_fallback_keys (
+       id TEXT PRIMARY KEY,
+       userId TEXT NOT NULL,
+       provider TEXT NOT NULL,
+       apiKey TEXT NOT NULL,
+       label TEXT,
+       priority INTEGER NOT NULL DEFAULT 0,
+       isActive INTEGER NOT NULL DEFAULT 1,
+       createdAt TEXT NOT NULL
+     )`,
+  ).run()
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS password_resets (
+       tokenHash TEXT PRIMARY KEY,
+       userId TEXT NOT NULL,
+       expiresAt INTEGER NOT NULL
+     )`,
+  ).run()
+  schemaEnsured = true
+}
+
+async function sendEmail(env, to, subject, html) {
+  if (!env.RESEND_API_KEY) return false
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM || 'OpenAgents <no-reply@openagents.us>',
+      to: [to],
+      subject,
+      html,
+    }),
+  }).catch(() => null)
+  return Boolean(res && res.ok)
+}
+
+async function getUserApiKeyCandidates(env, userId, provider) {
+  const keys = []
+  const primary = await env.DB.prepare(
+    'SELECT provider, apiKey, baseUrl FROM llm_keys WHERE userId = ? AND provider = ? AND apiKey IS NOT NULL LIMIT 1',
+  )
+    .bind(userId, provider)
+    .first()
+  if (primary) {
+    const plain = await decryptSecret(env, primary.apiKey)
+    if (plain) keys.push({ provider, apiKey: plain, baseUrl: primary.baseUrl })
+  }
+  const fb = await env.DB.prepare(
+    'SELECT apiKey FROM llm_fallback_keys WHERE userId = ? AND provider = ? AND isActive = 1 ORDER BY priority ASC, createdAt ASC',
+  )
+    .bind(userId, provider)
+    .all()
+  for (const row of fb.results || []) {
+    const plain = await decryptSecret(env, row.apiKey)
+    if (plain) keys.push({ provider, apiKey: plain, baseUrl: primary?.baseUrl || null })
+  }
+  return keys
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -602,6 +751,57 @@ export default {
             200,
             origin,
           )
+        }
+
+        await ensureSchema(env)
+
+        // 1b. Password reset (email via Resend when RESEND_API_KEY is configured)
+        if (path === '/api/v1/auth/forgot-password' && method === 'POST') {
+          const body = await request.json().catch(() => ({}))
+          const email = String(body.email || '').trim().toLowerCase()
+          const clientIp = request.headers.get('cf-connecting-ip') || 'unknown'
+          const limited = await hitRateLimit(env, `forgot:${clientIp}`, 5, 60 * 60 * 1000)
+          const generic = { ok: true, message: 'If that email exists, a reset link has been sent.' }
+          if (limited || !email || email.length > 254) return jsonResponse(generic, 200, origin)
+          const u = await env.DB.prepare('SELECT id, email FROM users WHERE lower(email) = ? LIMIT 1').bind(email).first()
+          if (u) {
+            const raw = new Uint8Array(32)
+            crypto.getRandomValues(raw)
+            const token = base64UrlEncodeBytes(raw)
+            const tokenHash = await sha256Hex(token)
+            await env.DB.prepare('DELETE FROM password_resets WHERE userId = ?').bind(u.id).run()
+            await env.DB.prepare('INSERT INTO password_resets (tokenHash, userId, expiresAt) VALUES (?, ?, ?)')
+              .bind(tokenHash, u.id, Date.now() + 30 * 60 * 1000)
+              .run()
+            const link = `https://openagents.us/reset-password?token=${encodeURIComponent(token)}`
+            await sendEmail(
+              env,
+              u.email,
+              'Reset your OpenAgents password',
+              `<p>Someone requested a password reset for your OpenAgents account.</p><p><a href="${link}">Reset your password</a> (valid for 30 minutes).</p><p>If this wasn't you, ignore this email.</p>`,
+            )
+          }
+          return jsonResponse(generic, 200, origin)
+        }
+
+        if (path === '/api/v1/auth/reset-password' && method === 'POST') {
+          const body = await request.json().catch(() => ({}))
+          const token = String(body.token || '').trim()
+          const newPassword = String(body.password || body.newPassword || '')
+          if (!token || newPassword.length < 8 || newPassword.length > 256) {
+            return jsonResponse({ statusCode: 400, message: 'Invalid token or password (min 8 characters).' }, 400, origin)
+          }
+          const tokenHash = await sha256Hex(token)
+          const row = await env.DB.prepare('SELECT userId, expiresAt FROM password_resets WHERE tokenHash = ?').bind(tokenHash).first()
+          if (!row || Number(row.expiresAt) < Date.now()) {
+            return jsonResponse({ statusCode: 400, message: 'This reset link is invalid or has expired.' }, 400, origin)
+          }
+          const hash = await hashPasswordPbkdf2(newPassword)
+          await env.DB.prepare('UPDATE users SET passwordHash = ?, updatedAt = ? WHERE id = ?')
+            .bind(hash, new Date().toISOString(), row.userId)
+            .run()
+          await env.DB.prepare('DELETE FROM password_resets WHERE userId = ?').bind(row.userId).run()
+          return jsonResponse({ ok: true }, 200, origin)
         }
 
         // 2. Public User Registration (Free Cloud Workspace, Zero Free Keys)
@@ -860,6 +1060,52 @@ export default {
           return jsonResponse(user, 200, origin)
         }
 
+        // Account data export (GDPR) — never includes API key material
+        if (path === '/api/v1/users/me/export' && method === 'GET') {
+          const settings = await env.DB.prepare('SELECT * FROM user_settings WHERE userId = ?').bind(user.id).first()
+          const convs = await env.DB.prepare('SELECT * FROM conversations WHERE userId = ? ORDER BY createdAt ASC').bind(user.id).all()
+          const msgs = await env.DB.prepare(
+            `SELECT m.id, m.conversationId, m.role, m.content, m.createdAt FROM messages m
+             JOIN conversations c ON c.id = m.conversationId WHERE c.userId = ? ORDER BY m.createdAt ASC`,
+          )
+            .bind(user.id)
+            .all()
+          const keys = await env.DB.prepare('SELECT provider, baseUrl, createdAt FROM llm_keys WHERE userId = ?').bind(user.id).all()
+          return jsonResponse(
+            {
+              exportedAt: new Date().toISOString(),
+              user,
+              settings,
+              conversations: convs.results || [],
+              messages: msgs.results || [],
+              connectedProviders: keys.results || [],
+            },
+            200,
+            origin,
+          )
+        }
+
+        // Permanent account deletion (requires password confirmation)
+        if (path === '/api/v1/users/me' && method === 'DELETE') {
+          const body = await request.json().catch(() => ({}))
+          const row = await env.DB.prepare('SELECT passwordHash FROM users WHERE id = ?').bind(user.id).first()
+          const ok = await verifyPasswordPbkdf2(String(body.password || ''), String(row?.passwordHash || ''))
+          if (!ok) {
+            return jsonResponse({ statusCode: 403, message: 'Password is incorrect.' }, 403, origin)
+          }
+          if (user.role === 'owner') {
+            return jsonResponse({ statusCode: 400, message: 'The workspace owner account cannot be self-deleted.' }, 400, origin)
+          }
+          await env.DB.prepare('DELETE FROM messages WHERE conversationId IN (SELECT id FROM conversations WHERE userId = ?)').bind(user.id).run()
+          await env.DB.prepare('DELETE FROM conversations WHERE userId = ?').bind(user.id).run()
+          await env.DB.prepare('DELETE FROM llm_keys WHERE userId = ?').bind(user.id).run()
+          await env.DB.prepare('DELETE FROM llm_fallback_keys WHERE userId = ?').bind(user.id).run()
+          await env.DB.prepare('DELETE FROM password_resets WHERE userId = ?').bind(user.id).run()
+          await env.DB.prepare('DELETE FROM user_settings WHERE userId = ?').bind(user.id).run()
+          await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id).run()
+          return jsonResponse({ ok: true }, 200, origin)
+        }
+
         if (path === '/api/v1/users/me' && (method === 'PUT' || method === 'PATCH')) {
           const body = await request.json().catch(() => ({}))
           const nextName =
@@ -991,10 +1237,51 @@ export default {
 
         const fallbackMatch = path.match(/^\/api\/v1\/users\/me\/llm-keys\/([^/]+)\/fallbacks(?:\/([^/]+))?$/)
         if (fallbackMatch) {
-          if (method === 'GET') {
-            return jsonResponse([], 200, origin)
+          const fbProvider = decodeURIComponent(fallbackMatch[1]).toLowerCase()
+          const fbId = fallbackMatch[2] ? decodeURIComponent(fallbackMatch[2]) : null
+          if (!Object.prototype.hasOwnProperty.call(CURATED_MODELS, fbProvider)) {
+            return jsonResponse({ statusCode: 400, message: 'Unsupported provider.' }, 400, origin)
           }
-          if (method === 'DELETE') {
+          if (method === 'GET' && !fbId) {
+            const res = await env.DB.prepare(
+              'SELECT id, label, priority, isActive, createdAt FROM llm_fallback_keys WHERE userId = ? AND provider = ? ORDER BY priority ASC, createdAt ASC',
+            )
+              .bind(user.id, fbProvider)
+              .all()
+            return jsonResponse(
+              (res.results || []).map((r) => ({ ...r, isActive: Boolean(r.isActive) })),
+              200,
+              origin,
+            )
+          }
+          if (method === 'POST' && !fbId) {
+            const body = await request.json().catch(() => ({}))
+            const rawKey = String(body.apiKey || '').trim()
+            if (!rawKey || rawKey.length > 512) {
+              return jsonResponse({ statusCode: 400, message: 'API key is required.' }, 400, origin)
+            }
+            const countRow = await env.DB.prepare('SELECT COUNT(*) AS n FROM llm_fallback_keys WHERE userId = ? AND provider = ?')
+              .bind(user.id, fbProvider)
+              .first()
+            if (Number(countRow?.n || 0) >= 5) {
+              return jsonResponse({ statusCode: 400, message: 'Maximum of 5 backup keys per provider.' }, 400, origin)
+            }
+            const row = {
+              id: genId('cmf'),
+              label: body.label ? String(body.label).trim().slice(0, 60) : null,
+              priority: Number(countRow?.n || 0),
+              isActive: true,
+              createdAt: new Date().toISOString(),
+            }
+            await env.DB.prepare(
+              'INSERT INTO llm_fallback_keys (id, userId, provider, apiKey, label, priority, isActive, createdAt) VALUES (?, ?, ?, ?, ?, ?, 1, ?)',
+            )
+              .bind(row.id, user.id, fbProvider, await encryptSecret(env, rawKey), row.label, row.priority, row.createdAt)
+              .run()
+            return jsonResponse(row, 201, origin)
+          }
+          if (method === 'DELETE' && fbId) {
+            await env.DB.prepare('DELETE FROM llm_fallback_keys WHERE id = ? AND userId = ?').bind(fbId, user.id).run()
             return jsonResponse({ ok: true }, 200, origin)
           }
         }
@@ -1003,16 +1290,24 @@ export default {
         if (path === '/api/v1/users/me/llm-keys' && method === 'GET') {
           const res = await env.DB.prepare('SELECT * FROM llm_keys WHERE userId = ?').bind(user.id).all()
           const rows = res.results || []
-          const masked = rows.map((r) => ({
+          // Lazily migrate any legacy plaintext keys to AES-GCM ciphertext
+          for (const r of rows) {
+            if (r.apiKey && !String(r.apiKey).startsWith(ENC_PREFIX)) {
+              await env.DB.prepare('UPDATE llm_keys SET apiKey = ? WHERE userId = ? AND provider = ?')
+                .bind(await encryptSecret(env, r.apiKey), r.userId, r.provider)
+                .run()
+            }
+          }
+          const masked = await Promise.all(rows.map(async (r) => ({
             id: `${r.userId}-${r.provider}`,
             userId: r.userId,
             provider: r.provider,
-            apiKey: maskKey(r.apiKey),
+            apiKey: await maskStoredKey(env, r.apiKey),
             baseUrl: r.baseUrl || null,
             isActive: Boolean(r.isActive),
             createdAt: r.createdAt,
             updatedAt: r.updatedAt,
-          }))
+          })))
           return jsonResponse(masked, 200, origin)
         }
 
@@ -1029,10 +1324,11 @@ export default {
             const existing = await env.DB.prepare('SELECT * FROM llm_keys WHERE userId = ? AND provider = ?')
               .bind(user.id, provider)
               .first()
-            const apiKey =
-              body.apiKey !== undefined && String(body.apiKey).trim()
-                ? String(body.apiKey).trim()
-                : (existing?.apiKey ?? null)
+            const incomingKey =
+              body.apiKey !== undefined && String(body.apiKey).trim() ? String(body.apiKey).trim().slice(0, 512) : null
+            const existingPlain = existing?.apiKey ? await decryptSecret(env, existing.apiKey) : null
+            const plainKey = incomingKey || existingPlain
+            const apiKey = plainKey ? await encryptSecret(env, plainKey) : null
             const baseUrl =
               body.baseUrl !== undefined
                 ? body.baseUrl
@@ -1053,7 +1349,7 @@ export default {
                 id: `${user.id}-${provider}`,
                 userId: user.id,
                 provider,
-                apiKey: maskKey(apiKey),
+                apiKey: maskKey(plainKey),
                 baseUrl,
                 isActive: Boolean(isActive),
                 createdAt: existing?.createdAt ?? now,
@@ -1081,7 +1377,7 @@ export default {
           )
             .bind(user.id, provider)
             .first()
-          let savedKey = keyRow?.apiKey || null
+          let savedKey = keyRow?.apiKey ? await decryptSecret(env, keyRow.apiKey) : null
           let savedBaseUrl = keyRow?.baseUrl || null
 
           if (method === 'POST') {
@@ -1125,7 +1421,10 @@ export default {
           )
             .bind(user.id, provider)
             .first()
-          const apiKey = (body.apiKey && String(body.apiKey).trim()) || keyRow?.apiKey || ''
+          const apiKey =
+            (body.apiKey && String(body.apiKey).trim()) ||
+            (keyRow?.apiKey ? await decryptSecret(env, keyRow.apiKey) : '') ||
+            ''
           if (!apiKey && provider !== 'ollama') {
             return jsonResponse(
               {
@@ -1136,7 +1435,28 @@ export default {
               origin,
             )
           }
-          return jsonResponse({ ok: true, model: body.model || curated[0] }, 200, origin)
+          if (provider === 'ollama' || provider === 'custom' || provider === 'anthropic') {
+            return jsonResponse({ ok: true, model: body.model || curated[0], warning: 'Key saved. Live verification is not available for this provider from the cloud.' }, 200, origin)
+          }
+          if (await hitRateLimit(env, `testllm:${user.id}`, 20, 60 * 1000)) {
+            return jsonResponse({ ok: false, error: 'Too many tests. Wait a minute.' }, 200, origin)
+          }
+          const testBase = validateSafeLlmBaseUrl(
+            (body.baseUrl && String(body.baseUrl).trim()) || keyRow?.baseUrl || null,
+            provider,
+          )
+          try {
+            const probe = await fetch(`${testBase}/models`, {
+              headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+            })
+            if (probe.ok) {
+              return jsonResponse({ ok: true, model: body.model || curated[0] }, 200, origin)
+            }
+            const txt = await probe.text().catch(() => '')
+            return jsonResponse({ ok: false, error: friendlyProviderError(probe.status, provider, txt).replace(/\*\*|\[|\]\([^)]*\)/g, '') }, 200, origin)
+          } catch {
+            return jsonResponse({ ok: false, error: 'Could not reach the provider. Check the Base URL.' }, 200, origin)
+          }
         }
 
         // 7a. Sessions API (Backed by D1 conversations for cross-device model/session overrides)
@@ -1335,6 +1655,16 @@ export default {
           if (!userContent) {
             return jsonResponse({ statusCode: 400, message: 'Message content is required.' }, 400, origin)
           }
+          if (
+            (await hitRateLimit(env, `chat:min:${user.id}`, 20, 60 * 1000)) ||
+            (await hitRateLimit(env, `chat:day:${user.id}`, 1000, 24 * 60 * 60 * 1000))
+          ) {
+            return jsonResponse(
+              { statusCode: 429, message: 'You are sending messages too quickly. Please wait a moment and try again.' },
+              429,
+              origin,
+            )
+          }
 
           const existingConv = await env.DB.prepare('SELECT * FROM conversations WHERE id = ?')
             .bind(convId)
@@ -1397,22 +1727,24 @@ export default {
             content: m.content,
           }))
 
-          let keyRow = await env.DB.prepare(
-            'SELECT provider, apiKey, baseUrl FROM llm_keys WHERE userId = ? AND provider = ? AND apiKey IS NOT NULL LIMIT 1',
-          )
-            .bind(user.id, preferredProvider)
-            .first()
-          if (!keyRow) {
-            keyRow = await env.DB.prepare(
-              'SELECT provider, apiKey, baseUrl FROM llm_keys WHERE userId = ? AND apiKey IS NOT NULL ORDER BY updatedAt DESC LIMIT 1',
+          let keyCandidates = await getUserApiKeyCandidates(env, user.id, preferredProvider)
+          let activeProvider = preferredProvider
+          if (keyCandidates.length === 0) {
+            const anyRow = await env.DB.prepare(
+              'SELECT provider FROM llm_keys WHERE userId = ? AND apiKey IS NOT NULL ORDER BY updatedAt DESC LIMIT 1',
             )
               .bind(user.id)
               .first()
+            if (anyRow?.provider) {
+              activeProvider = anyRow.provider
+              keyCandidates = await getUserApiKeyCandidates(env, user.id, activeProvider)
+              if (!(CURATED_MODELS[activeProvider] || []).includes(preferredModel)) {
+                preferredModel = (CURATED_MODELS[activeProvider] || [preferredModel])[0]
+              }
+            }
           }
-
-          const activeProvider = keyRow?.provider || preferredProvider
-          const apiKey = keyRow?.apiKey || ''
-          const baseUrl = validateSafeLlmBaseUrl(keyRow?.baseUrl, activeProvider)
+          const apiKey = keyCandidates[0]?.apiKey || ''
+          const baseUrl = validateSafeLlmBaseUrl(keyCandidates[0]?.baseUrl, activeProvider)
 
           const { readable, writable } = new TransformStream()
           const writer = writable.getWriter()
@@ -1433,7 +1765,7 @@ export default {
                   'To start running tasks and chatting with Veda, connect your AI model key (OpenAgents does not bundle free model keys):',
                   '',
                   '1. **Recommended — All 93+ Frontier Models in 1 Key:**',
-                  '   Get an API key at **[APIsRouter.dev](https://apisrouter.dev)** to unlock `claude-sonnet-5.5`, `claude-opus-5.5`, `gpt-6.1-sol-pro`, `deepseek-v4.1-flash`, `gemini-4-argon`, `kimi-k2.7-code`, and `grok-4.7` with a single key.',
+                  '   Get an API key at **[APIsRouter.dev](https://apisrouter.dev/?ref=openagents)** to unlock `claude-sonnet-5.5`, `claude-opus-5.5`, `gpt-6.1-sol-pro`, `deepseek-v4.1-flash`, `gemini-4-argon`, `kimi-k2.7-code`, and `grok-4.7` with a single key.',
                   '2. **Or Bring Your Own Key (BYOK):**',
                   '   Use your existing key from Anthropic, OpenAI, Google Gemini, NVIDIA, DeepSeek, Groq, or xAI.',
                   '',
@@ -1475,22 +1807,49 @@ export default {
                 ...history,
               ]
 
-              const llmRes = await fetch(`${baseUrl}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${apiKey}`,
-                },
-                body: JSON.stringify({
-                  model: preferredModel,
-                  messages: llmMessages,
-                  stream: true,
-                }),
-              })
+              let llmRes = null
+              let lastStatus = 0
+              let lastText = ''
+              for (const candidate of keyCandidates) {
+                llmRes = await fetch(`${baseUrl}/chat/completions`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${candidate.apiKey}`,
+                  },
+                  body: JSON.stringify({
+                    model: preferredModel,
+                    messages: llmMessages,
+                    stream: true,
+                  }),
+                })
+                if (llmRes.ok) break
+                lastStatus = llmRes.status
+                lastText = await llmRes.text().catch(() => '')
+                // Only rotate to backup keys on auth / quota / rate-limit failures
+                if (![401, 402, 403, 429].includes(llmRes.status)) break
+              }
 
-              if (!llmRes.ok) {
-                const errText = await llmRes.text().catch(() => '')
-                throw new Error(`LLM provider returned HTTP ${llmRes.status}: ${errText.slice(0, 240)}`)
+              if (!llmRes || !llmRes.ok) {
+                const friendly = friendlyProviderError(lastStatus, activeProvider, lastText)
+                const failedAt = new Date().toISOString()
+                await env.DB.prepare(
+                  `INSERT INTO messages (id, conversationId, role, content, status, metadata, toolCallJson, toolResultJson, createdAt)
+                   VALUES (?, ?, 'agent', ?, 'error', NULL, NULL, NULL, ?)`,
+                )
+                  .bind(agentMsgId, convId, friendly, failedAt)
+                  .run()
+                await sendSse('delta', { content: friendly })
+                await sendSse('message', {
+                  id: agentMsgId,
+                  conversationId: convId,
+                  role: 'agent',
+                  content: friendly,
+                  status: 'error',
+                  createdAt: failedAt,
+                })
+                await sendSse('done', { conversationId: convId })
+                return
               }
 
               let accumulated = ''
@@ -1556,7 +1915,7 @@ export default {
               })
               await sendSse('done', { conversationId: convId })
             } catch (err) {
-              const message = err instanceof Error ? err.message : 'Agent request failed.'
+              const message = 'Veda could not reach the AI provider. Please check your connection and try again.'
               await sendSse('error', { message })
             } finally {
               await writer.close().catch(() => {})
@@ -1580,7 +1939,30 @@ export default {
           return jsonResponse([], 200, origin)
         }
 
-        // 10. Authenticated Upstream Tunnel Proxy for Remaining Routes
+        // 10. Upstream Tunnel Proxy — ONLY for the workspace owner's self-hosted desktop API.
+        // Public cloud members are never forwarded to the owner's machine.
+        if (user.role !== 'owner') {
+          if (method === 'GET') {
+            const empty = new Response('[]', {
+              status: 200,
+              headers: {
+                'content-type': 'application/json; charset=utf-8',
+                'x-openagents-cloud': 'desktop-only',
+                ...securityAndCorsHeaders(origin),
+              },
+            })
+            return empty
+          }
+          return jsonResponse(
+            {
+              statusCode: 501,
+              message: 'This feature is available in the OpenAgents desktop app. The cloud workspace supports Chat, Sessions, and AI Models & Keys.',
+            },
+            501,
+            origin,
+          )
+        }
+
         const upstreamBase = (env.API_TUNNEL_URL || DEFAULT_TUNNEL_ORIGIN).replace(/\/$/, '')
         const targetUrl = `${upstreamBase}${url.pathname}${url.search}`
 
@@ -1610,9 +1992,6 @@ export default {
 
         try {
           const upstreamRes = await fetch(targetUrl, init)
-          if (upstreamRes.status === 401 || upstreamRes.status === 403 || upstreamRes.status >= 500) {
-            return jsonResponse(method === 'GET' ? [] : { ok: true }, 200, origin)
-          }
           const resHeaders = new Headers(upstreamRes.headers)
           const sec = securityAndCorsHeaders(origin)
           for (const [k, v] of Object.entries(sec)) {
@@ -1624,7 +2003,11 @@ export default {
             headers: resHeaders,
           })
         } catch {
-          return jsonResponse(method === 'GET' ? [] : { ok: true }, 200, origin)
+          return jsonResponse(
+            { statusCode: 503, message: 'Your desktop API is offline. Start OpenAgents on your computer to use this feature.' },
+            503,
+            origin,
+          )
         }
       } catch {
         return jsonResponse({ statusCode: 500, message: 'Internal server error' }, 500, origin)

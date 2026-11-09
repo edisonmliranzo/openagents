@@ -101,7 +101,7 @@ export default function PrivacyPolicyPage() {
           <p className="mt-4 text-sm leading-relaxed text-slate-300 sm:text-base">
             How OpenAgents protects your conversations, voice calls, personal memory graph, and encrypted API keys across{' '}
             <a
-              href="https://apisrouter.dev/"
+              href="https://apisrouter.dev/?ref=openagents"
               target="_blank"
               rel="noreferrer noopener"
               className="font-semibold text-rose-300 underline underline-offset-2 hover:text-white"
