@@ -51,6 +51,9 @@ export function firebaseAuthErrorMessage(error: unknown): string | null {
   if (code === 'auth/operation-not-allowed') {
     return 'Google sign-in is not enabled for this Firebase project. Enable the Google provider in Firebase Authentication.'
   }
+  if (code === 'auth/operation-not-supported-in-this-environment') {
+    return 'Google sign-in is not supported in this browser context. Try opening OpenAgents in a regular browser tab.'
+  }
   if (code === 'auth/account-exists-with-different-credential') {
     return 'An account already exists with this email using a different sign-in method.'
   }
@@ -60,5 +63,12 @@ export function firebaseAuthErrorMessage(error: unknown): string | null {
 
   const message =
     error instanceof Error && error.message ? error.message : 'Google sign-in failed. Please try again.'
+
+  // Minified bundle TypeErrors ("l is not a function", chunk-loading failures)
+  // almost always mean the tab is running JS from an older deployment.
+  if (/is not a function|chunkloaderror|loading chunk/i.test(message)) {
+    return 'OpenAgents was updated in the background. Please refresh the page and try again.'
+  }
+
   return message
 }

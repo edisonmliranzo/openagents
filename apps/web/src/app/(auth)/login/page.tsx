@@ -25,7 +25,6 @@ export default function LoginPage() {
   const router = useRouter()
   const login = useAuthStore((s) => s.login)
   const register = useAuthStore((s) => s.register)
-  const firebaseLogin = useAuthStore((s) => s.firebaseLogin)
 
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
@@ -106,17 +105,38 @@ export default function LoginPage() {
 
   async function handleGoogleSignIn() {
     if (googleLoading || loading) return
+
+    // A browser tab that stayed open across a deployment can briefly hold an
+    // older JS bundle. Recover instead of throwing "x is not a function".
+    const firebaseAction = useAuthStore.getState().firebaseLogin
+    if (typeof firebaseAction !== 'function') {
+      const refreshKey = 'openagents.auth.refresh-once'
+      const alreadyRefreshed =
+        typeof window !== 'undefined' && window.sessionStorage.getItem(refreshKey) === '1'
+      setError(
+        alreadyRefreshed
+          ? 'Your browser has an outdated version. Please force-refresh this page (Ctrl/Cmd + Shift + R).'
+          : 'OpenAgents was updated. Refreshing this page…',
+      )
+      if (!alreadyRefreshed) {
+        window.sessionStorage.setItem(refreshKey, '1')
+        window.setTimeout(() => window.location.reload(), 500)
+      }
+      return
+    }
+
     setError('')
     setGoogleLoading(true)
     try {
       const idToken = await signInWithGoogleIdToken()
-      await firebaseLogin(idToken)
+      await firebaseAction(idToken)
       const nextPath =
         typeof window !== 'undefined'
           ? new URLSearchParams(window.location.search).get('next')
           : null
       router.push(nextPath && nextPath.startsWith('/') ? nextPath : '/chat')
     } catch (err: any) {
+      console.error('[google-signin]', err)
       const message = firebaseAuthErrorMessage(err)
       if (message) setError(message)
     } finally {

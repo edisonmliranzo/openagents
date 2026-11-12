@@ -2539,7 +2539,24 @@ export default {
         const res = await env.ASSETS.fetch(new Request(target.toString(), request))
         if (res.ok) return new Response(res.body, { status: 200, headers: res.headers })
       }
-      return env.ASSETS.fetch(request)
+
+      const assetResponse = await env.ASSETS.fetch(request)
+      const contentType = assetResponse.headers.get('content-type') || ''
+      if (request.method === 'GET' && contentType.includes('text/html')) {
+        // Never let an edge node serve stale HTML that points at a different
+        // JS bundle after a deploy (that mismatch produces minified runtime
+        // errors such as "l is not a function").
+        const headers = new Headers(assetResponse.headers)
+        headers.set('cache-control', 'no-cache, no-store, must-revalidate')
+        headers.set('pragma', 'no-cache')
+        headers.set('expires', '0')
+        return new Response(assetResponse.body, {
+          status: assetResponse.status,
+          statusText: assetResponse.statusText,
+          headers,
+        })
+      }
+      return assetResponse
     }
 
     return new Response('Not Found', { status: 404 })

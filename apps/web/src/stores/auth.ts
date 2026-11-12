@@ -119,6 +119,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       async firebaseLogin(idToken) {
+        if (typeof sdk.auth.firebaseLogin !== 'function') {
+          throw new Error('OpenAgents was updated. Please refresh the page and try again.')
+        }
         const result = await sdk.auth.firebaseLogin(idToken)
         sdk.client.setTokens(result.tokens)
         if (typeof document !== 'undefined') {
