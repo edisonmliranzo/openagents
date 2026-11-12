@@ -2,14 +2,20 @@ name = "openagents"
 main = "scripts/cf-worker.mjs"
 compatibility_date = "2024-09-23"
 
-# Free trial for the platform-owned key. This is a lifetime cap per account:
-# it bounds inference spend while letting a new signup try the product before
-# adding their own APIsRouter / BYOK key. Set PLATFORM_LLM_KEY as a secret;
-# if it is empty the trial is disabled and BYOK-only behaviour is unchanged.
+# Free tier for the platform-owned key. Off until PLATFORM_LLM_KEY is set.
+#
+# TRIAL_WINDOW is the spend shape:
+#   lifetime -> one-time acquisition cost (default, cheapest)
+#   day      -> recurring free tier; cost scales with active users
+#   month    -> generous but bounded
+#
+# TRIAL_MODELS is the hard allow-list: the platform key can only ever call
+# these cheap models. Expensive models always require the user's own key.
 [vars]
+TRIAL_WINDOW = "lifetime"
 TRIAL_MESSAGES = "15"
 TRIAL_PROVIDER = "apisrouter"
-TRIAL_MODEL = "deepseek-v4.1-flash"
+TRIAL_MODELS = "deepseek-v4.1-flash,gemini-3.8-flash,llama-4-scout"
 
 [assets]
 directory = "./apps/web/out"

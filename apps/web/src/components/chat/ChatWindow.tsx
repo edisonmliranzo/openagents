@@ -1820,8 +1820,9 @@ export function ChatWindow({
                         <span className="mr-1 rounded bg-emerald-500/20 px-1.5 py-0.5 font-semibold text-emerald-200">
                           {trial.remaining} free trial {trial.remaining === 1 ? 'message' : 'messages'} left
                         </span>
-                        Your account is free forever. After the trial, paste your{' '}
-                        <code className="font-mono text-fuchsia-200">apisrouter.dev</code> key below to keep going.
+                        Runs on fast, low-cost models only (DeepSeek Flash, Gemini Flash, Llama Scout).
+                        Premium models like Claude and GPT-6 need your own{' '}
+                        <code className="font-mono text-fuchsia-200">apisrouter.dev</code> key.
                       </>
                     ) : trial?.enabled && trial.remaining === 0 ? (
                       <>

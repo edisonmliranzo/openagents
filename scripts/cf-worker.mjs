@@ -772,6 +772,17 @@ async function ensureSchema(env) {
        updatedAt TEXT NOT NULL
      )`,
   ).run()
+  // Windowed counter used when TRIAL_WINDOW is 'day' or 'month'. Kept separate
+  // from trial_usage so switching windows never resets lifetime data.
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS trial_period_usage (
+       scope TEXT PRIMARY KEY,
+       userId TEXT NOT NULL,
+       period TEXT NOT NULL,
+       messages INTEGER NOT NULL DEFAULT 0,
+       updatedAt TEXT NOT NULL
+     )`,
+  ).run()
   await env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS phone_calls (
        id TEXT PRIMARY KEY,
@@ -929,25 +940,54 @@ async function getUserApiKeyCandidates(env, userId, provider) {
 }
 
 /**
- * Free trial config for the platform-owned key.
+ * Free tier config for the platform-owned key.
  *
- * The trial exists only to let a new account feel the product before adding
- * their own key. It is a lifetime cap (not per day) on purpose: it bounds the
- * platform's inference spend to `TRIAL_MESSAGES` per account, forever.
+ * Two independent limits matter:
+ *  - which MODELS the platform key may ever be used with (cost control), and
+ *  - how many messages each account gets per window (spend control).
  *
- * Env: PLATFORM_LLM_KEY (required), TRIAL_MESSAGES (default 15),
- *      TRIAL_PROVIDER (default apisrouter), TRIAL_MODEL (default deepseek-v4.1-flash)
+ * The allow-list is the important safety property: even if a user edits their
+ * preferredModel to an expensive one, the platform key only ever calls cheap
+ * models. Premium models require the user's own key.
+ *
+ * Env: PLATFORM_LLM_KEY (required to enable)
+ *      TRIAL_WINDOW      lifetime | day | month   (default lifetime)
+ *      TRIAL_MESSAGES    cap per window           (default 15)
+ *      TRIAL_PROVIDER    provider id              (default apisrouter)
+ *      TRIAL_MODELS      comma-separated allow-list
+ *      TRIAL_MODEL       optional primary override
  */
+const DEFAULT_TRIAL_MODELS = ['deepseek-v4.1-flash', 'gemini-3.8-flash', 'llama-4-scout']
+
 function trialConfig(env) {
   const key = String(env.PLATFORM_LLM_KEY || '').trim()
   const parsed = Number.parseInt(String(env.TRIAL_MESSAGES ?? ''), 10)
+  const allowed = new Set(['lifetime', 'day', 'month'])
+  const window = String(env.TRIAL_WINDOW || 'lifetime').trim().toLowerCase()
+
+  const listed = String(env.TRIAL_MODELS || '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter(Boolean)
+  const primary = String(env.TRIAL_MODEL || '').trim()
+  const models = Array.from(new Set([...(primary ? [primary] : []), ...listed, ...DEFAULT_TRIAL_MODELS]))
+
   return {
     enabled: Boolean(key),
     key,
     limit: Number.isFinite(parsed) && parsed >= 0 ? parsed : 15,
+    window: allowed.has(window) ? window : 'lifetime',
     provider: String(env.TRIAL_PROVIDER || 'apisrouter').trim().toLowerCase(),
-    model: String(env.TRIAL_MODEL || 'deepseek-v4.1-flash').trim(),
+    models,
+    /** Back-compat: first allowed model. */
+    model: models[0],
   }
+}
+
+function trialPeriodKey(window, date = new Date()) {
+  if (window === 'day') return date.toISOString().slice(0, 10)
+  if (window === 'month') return date.toISOString().slice(0, 7)
+  return 'all'
 }
 
 /** Append a funnel event. Analytics must never break the request. */
@@ -985,32 +1025,55 @@ async function recordUsageEventOnce(env, userId, event, meta) {
 
 async function getTrialState(env, userId) {
   const cfg = trialConfig(env)
-  if (!cfg.enabled) return { enabled: false, limit: cfg.limit, used: 0, remaining: 0, provider: cfg.provider, model: cfg.model }
-  const row = await env.DB.prepare('SELECT messages FROM trial_usage WHERE userId = ?')
-    .bind(userId)
-    .first()
-  const used = Number(row?.messages || 0)
-  return {
-    enabled: true,
+  const base = {
     limit: cfg.limit,
-    used,
-    remaining: Math.max(0, cfg.limit - used),
+    window: cfg.window,
+    period: trialPeriodKey(cfg.window),
     provider: cfg.provider,
+    models: cfg.models,
     model: cfg.model,
   }
+  if (!cfg.enabled) return { enabled: false, used: 0, remaining: 0, ...base }
+
+  let used = 0
+  if (cfg.window === 'lifetime') {
+    const row = await env.DB.prepare('SELECT messages FROM trial_usage WHERE userId = ?')
+      .bind(userId)
+      .first()
+    used = Number(row?.messages || 0)
+  } else {
+    const row = await env.DB.prepare('SELECT messages FROM trial_period_usage WHERE scope = ?')
+      .bind(`${userId}:${base.period}`)
+      .first()
+    used = Number(row?.messages || 0)
+  }
+
+  return { enabled: true, used, remaining: Math.max(0, cfg.limit - used), ...base }
 }
 
 /**
  * Reserve one trial message. The increment happens before the upstream LLM
- * call so parallel requests cannot exceed the lifetime cap.
+ * call so parallel requests cannot exceed the cap for the current window.
  */
 async function reserveTrialMessage(env, userId) {
+  const cfg = trialConfig(env)
   const nowIso = new Date().toISOString()
+  if (cfg.window === 'lifetime') {
+    await env.DB.prepare(
+      `INSERT INTO trial_usage (userId, messages, updatedAt) VALUES (?, 1, ?)
+       ON CONFLICT(userId) DO UPDATE SET messages = messages + 1, updatedAt = excluded.updatedAt`,
+    )
+      .bind(userId, nowIso)
+      .run()
+    return
+  }
+
+  const period = trialPeriodKey(cfg.window)
   await env.DB.prepare(
-    `INSERT INTO trial_usage (userId, messages, updatedAt) VALUES (?, 1, ?)
-     ON CONFLICT(userId) DO UPDATE SET messages = messages + 1, updatedAt = excluded.updatedAt`,
+    `INSERT INTO trial_period_usage (scope, userId, period, messages, updatedAt) VALUES (?, ?, ?, 1, ?)
+     ON CONFLICT(scope) DO UPDATE SET messages = messages + 1, updatedAt = excluded.updatedAt`,
   )
-    .bind(userId, nowIso)
+    .bind(`${userId}:${period}`, userId, period, nowIso)
     .run()
 }
 
@@ -2342,6 +2405,7 @@ export default {
                   provider: activeProvider,
                   model: preferredModel,
                   remaining: trialRemaining,
+                  window: trial.window,
                 })
               }
             }
