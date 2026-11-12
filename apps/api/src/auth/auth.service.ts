@@ -85,6 +85,138 @@ export class AuthService {
     return { user: safeUser, tokens }
   }
 
+  /**
+   * Sign in (or sign up) with a Firebase ID token obtained from Google.
+   *
+   * We deliberately keep OpenAgents as the session issuer: Firebase only proves
+   * the Google identity, then we return the same JWT access/refresh pair used
+   * by password auth.
+   */
+  async loginWithFirebase(idToken: string, clientIp = 'unknown', userAgent = 'unknown') {
+    const profile = await this.verifyFirebaseIdToken(idToken)
+    const normalizedEmail = this.normalizeEmail(profile.email)
+    const isCreator = this.isCreatorEmail(normalizedEmail)
+    const allowPublic = this.isPublicRegistrationEnabled()
+
+    if (!isCreator && !allowPublic) {
+      throw new BadRequestException(
+        'Public registration is currently closed. Please join the waitlist on the homepage.',
+      )
+    }
+
+    let user = await this.prisma.user.findUnique({ where: { firebaseUid: profile.uid } })
+    if (!user) {
+      user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
+    }
+
+    if (user) {
+      if (user.firebaseUid && user.firebaseUid !== profile.uid) {
+        throw new UnauthorizedException(
+          'This email is already linked to a different Google account.',
+        )
+      }
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          firebaseUid: profile.uid,
+          ...(user.avatarUrl || !profile.picture ? {} : { avatarUrl: profile.picture }),
+          ...(user.name || !profile.name ? {} : { name: profile.name }),
+        },
+      })
+    } else {
+      try {
+        user = await this.prisma.user.create({
+          data: {
+            email: normalizedEmail,
+            firebaseUid: profile.uid,
+            passwordHash: null,
+            name: profile.name?.trim() || normalizedEmail.split('@')[0] || 'OpenAgents user',
+            avatarUrl: profile.picture || null,
+            ...(isCreator ? { role: 'owner' } : {}),
+          },
+        })
+      } catch (error: any) {
+        // A concurrent login may have created the account first.
+        if (error?.code !== 'P2002') throw error
+        user =
+          (await this.prisma.user.findUnique({ where: { firebaseUid: profile.uid } })) ??
+          (await this.prisma.user.findUnique({ where: { email: normalizedEmail } }))
+        if (!user) throw error
+      }
+    }
+
+    user = await this.ensureCreatorOwnerRole(user)
+    await this.recordDeviceInstall(user.id, clientIp, userAgent)
+
+    const { passwordHash: _, ...safeUser } = user
+    const tokens = await this.generateTokens(user.id, user.email)
+    return { user: safeUser, tokens }
+  }
+
+  private async verifyFirebaseIdToken(idToken: string): Promise<{
+    uid: string
+    email: string
+    name?: string
+    picture?: string
+  }> {
+    const apiKey = (this.config.get<string>('FIREBASE_API_KEY') ?? '').trim()
+    const projectId = (this.config.get<string>('FIREBASE_PROJECT_ID') ?? '').trim()
+
+    if (!apiKey || !projectId) {
+      throw new BadRequestException('Google sign-in is not configured.')
+    }
+    if (!idToken || typeof idToken !== 'string' || idToken.length > 8192) {
+      throw new UnauthorizedException('Invalid Google sign-in token.')
+    }
+
+    let response: Response
+    try {
+      response = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken }),
+          signal: AbortSignal.timeout(10_000),
+        },
+      )
+    } catch {
+      throw new UnauthorizedException('Could not reach Google sign-in. Please try again.')
+    }
+
+    if (!response.ok) {
+      throw new UnauthorizedException('Invalid or expired Google sign-in token.')
+    }
+
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          users?: Array<{
+            localId?: string
+            email?: string
+            emailVerified?: boolean
+            displayName?: string
+            photoUrl?: string
+            providerUserInfo?: Array<{ providerId?: string }>
+          }>
+        }
+      | null
+
+    const account = payload?.users?.[0]
+    const providers = Array.isArray(account?.providerUserInfo) ? account.providerUserInfo : []
+    const signedInWithGoogle = providers.some((provider) => provider.providerId === 'google.com')
+
+    if (!account?.localId || !account.email || account.emailVerified !== true || !signedInWithGoogle) {
+      throw new UnauthorizedException('Google did not return a verified email address.')
+    }
+
+    return {
+      uid: account.localId,
+      email: account.email,
+      name: account.displayName,
+      picture: account.photoUrl,
+    }
+  }
+
   async refresh(rawToken: string): Promise<AuthTokens> {
     const tokenHash = this.hashRefreshToken(rawToken)
     let record = await this.prisma.refreshToken.findUnique({
@@ -116,6 +248,11 @@ export class AuthService {
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } })
     if (!user) throw new UnauthorizedException('User not found')
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        'This account signs in with Google and does not have a password yet.',
+      )
+    }
 
     const valid = await bcrypt.compare(currentPassword, user.passwordHash)
     if (!valid) throw new UnauthorizedException('Current password is incorrect')
@@ -239,7 +376,8 @@ export class AuthService {
     id: string
     email: string
     role: string
-    passwordHash: string
+    passwordHash: string | null
+    firebaseUid: string | null
     name: string | null
     avatarUrl: string | null
     createdAt: Date

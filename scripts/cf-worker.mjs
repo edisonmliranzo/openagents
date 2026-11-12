@@ -471,6 +471,42 @@ async function getOwnerDigest(env) {
   return null
 }
 
+/**
+ * Validate a Firebase ID token by asking Google Identity Toolkit to look it up.
+ * This runs entirely server-side; the Firebase Web API key is public by design.
+ */
+async function verifyFirebaseIdToken(env, idToken) {
+  const apiKey = String(env.FIREBASE_API_KEY || '').trim()
+  if (!apiKey || !idToken || typeof idToken !== 'string' || idToken.length > 8192) return null
+
+  try {
+    const response = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      },
+    )
+    if (!response.ok) return null
+    const payload = await response.json().catch(() => null)
+    const account = payload?.users?.[0]
+    const providers = Array.isArray(account?.providerUserInfo) ? account.providerUserInfo : []
+    const signedInWithGoogle = providers.some((provider) => provider.providerId === 'google.com')
+    if (!account?.localId || !account?.email || account.emailVerified !== true || !signedInWithGoogle) {
+      return null
+    }
+    return {
+      uid: String(account.localId),
+      email: String(account.email).trim().toLowerCase(),
+      name: account.displayName ? String(account.displayName).trim().slice(0, 100) : null,
+      picture: account.photoUrl ? String(account.photoUrl) : null,
+    }
+  } catch {
+    return null
+  }
+}
+
 async function importHmacKey(secret) {
   return crypto.subtle.importKey(
     'raw',
@@ -674,6 +710,22 @@ async function hitRateLimit(env, bucket, limit, windowMs) {
 let schemaEnsured = false
 async function ensureSchema(env) {
   if (schemaEnsured || !env.DB) return
+
+  // Firebase Google auth: add the link column safely on existing deployments.
+  try {
+    const userColumns = await env.DB.prepare('PRAGMA table_info(users)').all()
+    const hasFirebaseUid = (userColumns.results || []).some((column) => column.name === 'firebaseUid')
+    if (!hasFirebaseUid) {
+      await env.DB.prepare('ALTER TABLE users ADD COLUMN firebaseUid TEXT').run()
+    }
+    await env.DB.prepare(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebaseUid ON users(firebaseUid)',
+    ).run()
+  } catch (error) {
+    // Another isolate may have applied the same migration concurrently.
+    console.warn('[schema] firebaseUid migration skipped', error)
+  }
+
   await env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS llm_fallback_keys (
        id TEXT PRIMARY KEY,
@@ -1184,6 +1236,135 @@ export default {
           }
 
           await env.DB.prepare('DELETE FROM auth_rate_limits WHERE bucket = ?').bind(rateBucket).run()
+
+          const secret = await getJwtSecret(env)
+          const accessToken = await signJwtHs256(
+            { sub: user.id, email: user.email, role: user.role },
+            secret,
+            604800,
+          )
+          const refreshToken = await signJwtHs256(
+            { sub: user.id, email: user.email, role: user.role, typ: 'refresh' },
+            secret,
+            1209600,
+          )
+
+          return jsonResponse(
+            {
+              user,
+              tokens: {
+                accessToken,
+                refreshToken,
+                expiresIn: 604800,
+              },
+            },
+            200,
+            origin,
+          )
+        }
+
+        // 2c. Google sign-in via Firebase (verified server-side, then normal JWT session)
+        if (path === '/api/v1/auth/firebase' && method === 'POST') {
+          if (!env.DB) {
+            return jsonResponse({ statusCode: 503, message: 'Database unavailable.' }, 503, origin)
+          }
+          if (!String(env.FIREBASE_API_KEY || '').trim()) {
+            return jsonResponse(
+              { statusCode: 503, message: 'Google sign-in is not configured.' },
+              503,
+              origin,
+            )
+          }
+
+          const body = await request.json().catch(() => ({}))
+          const idToken = String(body.idToken || '').trim()
+          if (!idToken) {
+            return jsonResponse({ statusCode: 401, message: 'Missing Google sign-in token.' }, 401, origin)
+          }
+
+          const clientIp = request.headers.get('cf-connecting-ip') || 'unknown'
+          const limited = await hitRateLimit(env, `firebase-login:${clientIp}`, 20, 60_000)
+          if (limited) {
+            return jsonResponse(
+              { statusCode: 429, message: 'Too many sign-in attempts. Please try again shortly.' },
+              429,
+              origin,
+            )
+          }
+
+          const account = await verifyFirebaseIdToken(env, idToken)
+          if (!account) {
+            return jsonResponse(
+              { statusCode: 401, message: 'Invalid or expired Google sign-in token.' },
+              401,
+              origin,
+            )
+          }
+
+          let dbUser = await env.DB.prepare(
+            'SELECT id, email, name, avatarUrl, role, createdAt, firebaseUid FROM users WHERE firebaseUid = ? LIMIT 1',
+          )
+            .bind(account.uid)
+            .first()
+          if (!dbUser) {
+            dbUser = await env.DB.prepare(
+              'SELECT id, email, name, avatarUrl, role, createdAt, firebaseUid FROM users WHERE lower(email) = ? LIMIT 1',
+            )
+              .bind(account.email)
+              .first()
+          }
+
+          let user
+          if (dbUser) {
+            if (dbUser.firebaseUid && String(dbUser.firebaseUid) !== account.uid) {
+              return jsonResponse(
+                { statusCode: 409, message: 'This email is already linked to a different Google account.' },
+                409,
+                origin,
+              )
+            }
+            const nextName = dbUser.name || account.name || account.email.split('@')[0]
+            const nextAvatar = dbUser.avatarUrl || account.picture || null
+            await env.DB.prepare(
+              'UPDATE users SET firebaseUid = ?, name = ?, avatarUrl = ?, updatedAt = ? WHERE id = ?',
+            )
+              .bind(account.uid, nextName, nextAvatar, new Date().toISOString(), dbUser.id)
+              .run()
+            user = {
+              id: dbUser.id,
+              email: dbUser.email,
+              name: nextName,
+              avatarUrl: nextAvatar,
+              role: dbUser.role,
+              createdAt: dbUser.createdAt,
+            }
+          } else {
+            const userId = genId('cmu')
+            const nowIso = new Date().toISOString()
+            const displayName = account.name || account.email.split('@')[0]
+            await env.DB.prepare(
+              `INSERT INTO users (id, email, name, avatarUrl, passwordHash, firebaseUid, role, createdAt, updatedAt)
+               VALUES (?, ?, ?, ?, NULL, ?, 'member', ?, ?)`,
+            )
+              .bind(userId, account.email, displayName, account.picture, account.uid, nowIso, nowIso)
+              .run()
+
+            await env.DB.prepare(
+              `INSERT INTO user_settings (userId, preferredProvider, preferredModel, customSystemPrompt, lastActiveConversationId, beginnerMode, onboardingCompletedAt, createdAt, updatedAt)
+               VALUES (?, 'apisrouter', 'claude-sonnet-5.5', NULL, NULL, 0, NULL, ?, ?)`,
+            )
+              .bind(userId, nowIso, nowIso)
+              .run()
+
+            user = {
+              id: userId,
+              email: account.email,
+              name: displayName,
+              avatarUrl: account.picture,
+              role: 'member',
+              createdAt: nowIso,
+            }
+          }
 
           const secret = await getJwtSecret(env)
           const accessToken = await signJwtHs256(

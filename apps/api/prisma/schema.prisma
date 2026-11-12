@@ -14,7 +14,8 @@ model User {
   email        String   @unique
   name         String?
   avatarUrl    String?
-  passwordHash String
+  passwordHash String?
+  firebaseUid  String?  @unique
   role         String   @default("member")  // owner | admin | member
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

@@ -56,6 +56,7 @@ interface AuthState {
   syncUser: () => Promise<void>
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, name?: string) => Promise<void>
+  firebaseLogin: (idToken: string) => Promise<void>
   logout: () => Promise<void>
   clear: () => void
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
@@ -104,6 +105,21 @@ export const useAuthStore = create<AuthState>()(
 
       async register(email, password, name) {
         const result = await sdk.auth.register({ email, password, name })
+        sdk.client.setTokens(result.tokens)
+        if (typeof document !== 'undefined') {
+          document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`
+        }
+        set({
+          user: result.user,
+          accessToken: result.tokens.accessToken,
+          refreshToken: result.tokens.refreshToken,
+          tokenExpiresIn: result.tokens.expiresIn,
+          hydrated: true,
+        })
+      },
+
+      async firebaseLogin(idToken) {
+        const result = await sdk.auth.firebaseLogin(idToken)
         sdk.client.setTokens(result.tokens)
         if (typeof document !== 'undefined') {
           document.cookie = `openagents-authed=1; ${authCookieSuffix(604800)}`

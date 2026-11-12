@@ -20,6 +20,9 @@ export function createAuthApi(client: OpenAgentsClient) {
     register: (dto: RegisterDto) =>
       client.post<{ user: User; tokens: AuthTokens }>('/api/v1/auth/register', dto),
 
+    firebaseLogin: (idToken: string) =>
+      client.post<{ user: User; tokens: AuthTokens }>('/api/v1/auth/firebase', { idToken }),
+
     refresh: (refreshToken: string) =>
       client.post<AuthTokens>('/api/v1/auth/refresh', { refreshToken }),
 

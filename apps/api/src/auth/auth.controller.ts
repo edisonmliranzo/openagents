@@ -30,6 +30,10 @@ class RefreshDto {
   @IsString() refreshToken: string
 }
 
+class FirebaseLoginDto {
+  @IsString() idToken: string
+}
+
 class ChangePasswordDto {
   @IsString() currentPassword: string
   @IsString()
@@ -65,6 +69,13 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto, @Req() req: any) {
     return this.auth.login(dto.email, dto.password, this.getClientIp(req), this.getUserAgent(req))
+  }
+
+  @Public()
+  @Throttle(AUTH_LIMITS)
+  @Post('firebase')
+  firebaseLogin(@Body() dto: FirebaseLoginDto, @Req() req: any) {
+    return this.auth.loginWithFirebase(dto.idToken, this.getClientIp(req), this.getUserAgent(req))
   }
 
   @Public()

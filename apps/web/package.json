@@ -16,6 +16,7 @@
     "@openagents/sdk": "workspace:*",
     "@openagents/shared": "workspace:*",
     "clsx": "^2.1.0",
+    "firebase": "^13.3.0",
     "lucide-react": "^0.574.0",
     "monaco-editor": "^0.52.0",
     "next": "^14.2.0",
