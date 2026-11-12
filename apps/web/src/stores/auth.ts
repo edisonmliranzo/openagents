@@ -222,3 +222,40 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 )
+
+/**
+ * Zustand hydration can replace the state object on some browsers when the
+ * persisted snapshot is restored before React attaches the store. That leaves
+ * only data fields in `getState()` and removes actions like `login` or
+ * `firebaseLogin`, producing errors such as "l is not a function".
+ *
+ * Re-attach any missing action functions from the original state creator. This
+ * is idempotent and runs after hydration and after any suspicious state change.
+ */
+function restoreAuthActions() {
+  const initial = useAuthStore.getInitialState() as unknown as Record<string, unknown>
+  const current = useAuthStore.getState() as unknown as Record<string, unknown>
+  const missing: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(initial)) {
+    if (typeof value === 'function' && typeof current[key] !== 'function') {
+      missing[key] = value
+    }
+  }
+  if (Object.keys(missing).length > 0) {
+    useAuthStore.setState(missing as any)
+  }
+}
+
+if (typeof window !== 'undefined') {
+  restoreAuthActions()
+  useAuthStore.persist?.onFinishHydration?.(restoreAuthActions)
+  useAuthStore.subscribe((state) => {
+    if (
+      typeof state.login !== 'function' ||
+      typeof state.firebaseLogin !== 'function' ||
+      typeof state.logout !== 'function'
+    ) {
+      restoreAuthActions()
+    }
+  })
+}
