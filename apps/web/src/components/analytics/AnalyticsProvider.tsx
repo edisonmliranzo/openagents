@@ -86,6 +86,29 @@ export function AnalyticsProvider() {
     const handleClick = (e: MouseEvent) => {
       const target = (e.target as HTMLElement | null)?.closest('[data-analytics-cta], a, button') as HTMLElement | null
       if (!target) return
+
+      // Referral attribution: one beacon for every outbound partner link,
+      // so signups can be traced back to the page that sent them.
+      const anchor = (e.target as HTMLElement | null)?.closest('a') as HTMLAnchorElement | null
+      const href = anchor?.getAttribute('href') || ''
+      if (href.includes('apisrouter.dev')) {
+        try {
+          const body = JSON.stringify({ target: 'apisrouter', path: window.location.pathname })
+          if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+            navigator.sendBeacon('/api/v1/track/outbound', new Blob([body], { type: 'application/json' }))
+          } else {
+            void fetch('/api/v1/track/outbound', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body,
+              keepalive: true,
+            })
+          }
+        } catch {
+          // Never block navigation on telemetry.
+        }
+      }
+
       const ctaName =
         target.getAttribute('data-analytics-cta') ||
         target.getAttribute('aria-label') ||

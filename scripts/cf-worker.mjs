@@ -745,6 +745,33 @@ async function ensureSchema(env) {
        expiresAt INTEGER NOT NULL
      )`,
   ).run()
+  // Funnel analytics. Deliberately an append-only log: it powers referral
+  // attribution (signup -> key added -> first message) and never blocks a
+  // request if the insert fails.
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS usage_events (
+       id TEXT PRIMARY KEY,
+       userId TEXT,
+       event TEXT NOT NULL,
+       meta TEXT,
+       createdAt TEXT NOT NULL
+     )`,
+  ).run()
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_usage_events_event ON usage_events(event, createdAt)',
+  ).run()
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_usage_events_user ON usage_events(userId, event)',
+  ).run()
+  // Lifetime trial counter for platform-key messages. One row per user; the
+  // cap is enforced by an atomic increment before the upstream call.
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS trial_usage (
+       userId TEXT PRIMARY KEY,
+       messages INTEGER NOT NULL DEFAULT 0,
+       updatedAt TEXT NOT NULL
+     )`,
+  ).run()
   await env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS phone_calls (
        id TEXT PRIMARY KEY,
@@ -901,6 +928,92 @@ async function getUserApiKeyCandidates(env, userId, provider) {
   return keys
 }
 
+/**
+ * Free trial config for the platform-owned key.
+ *
+ * The trial exists only to let a new account feel the product before adding
+ * their own key. It is a lifetime cap (not per day) on purpose: it bounds the
+ * platform's inference spend to `TRIAL_MESSAGES` per account, forever.
+ *
+ * Env: PLATFORM_LLM_KEY (required), TRIAL_MESSAGES (default 15),
+ *      TRIAL_PROVIDER (default apisrouter), TRIAL_MODEL (default deepseek-v4.1-flash)
+ */
+function trialConfig(env) {
+  const key = String(env.PLATFORM_LLM_KEY || '').trim()
+  const parsed = Number.parseInt(String(env.TRIAL_MESSAGES ?? ''), 10)
+  return {
+    enabled: Boolean(key),
+    key,
+    limit: Number.isFinite(parsed) && parsed >= 0 ? parsed : 15,
+    provider: String(env.TRIAL_PROVIDER || 'apisrouter').trim().toLowerCase(),
+    model: String(env.TRIAL_MODEL || 'deepseek-v4.1-flash').trim(),
+  }
+}
+
+/** Append a funnel event. Analytics must never break the request. */
+async function recordUsageEvent(env, userId, event, meta) {
+  try {
+    await env.DB.prepare(
+      'INSERT INTO usage_events (id, userId, event, meta, createdAt) VALUES (?, ?, ?, ?, ?)',
+    )
+      .bind(
+        genId('uev'),
+        userId || null,
+        String(event),
+        meta ? JSON.stringify(meta).slice(0, 2000) : null,
+        new Date().toISOString(),
+      )
+      .run()
+  } catch {
+    // Ignore: the event log is best-effort.
+  }
+}
+
+/** Record an event at most once per user (used for signup / first message). */
+async function recordUsageEventOnce(env, userId, event, meta) {
+  try {
+    const exists = await env.DB.prepare(
+      'SELECT 1 AS ok FROM usage_events WHERE userId = ? AND event = ? LIMIT 1',
+    )
+      .bind(userId, event)
+      .first()
+    if (!exists) await recordUsageEvent(env, userId, event, meta)
+  } catch {
+    // Ignore.
+  }
+}
+
+async function getTrialState(env, userId) {
+  const cfg = trialConfig(env)
+  if (!cfg.enabled) return { enabled: false, limit: cfg.limit, used: 0, remaining: 0, provider: cfg.provider, model: cfg.model }
+  const row = await env.DB.prepare('SELECT messages FROM trial_usage WHERE userId = ?')
+    .bind(userId)
+    .first()
+  const used = Number(row?.messages || 0)
+  return {
+    enabled: true,
+    limit: cfg.limit,
+    used,
+    remaining: Math.max(0, cfg.limit - used),
+    provider: cfg.provider,
+    model: cfg.model,
+  }
+}
+
+/**
+ * Reserve one trial message. The increment happens before the upstream LLM
+ * call so parallel requests cannot exceed the lifetime cap.
+ */
+async function reserveTrialMessage(env, userId) {
+  const nowIso = new Date().toISOString()
+  await env.DB.prepare(
+    `INSERT INTO trial_usage (userId, messages, updatedAt) VALUES (?, 1, ?)
+     ON CONFLICT(userId) DO UPDATE SET messages = messages + 1, updatedAt = excluded.updatedAt`,
+  )
+    .bind(userId, nowIso)
+    .run()
+}
+
 const mediaHelpers = () => ({ jsonResponse, encryptSecret, decryptSecret, getUserApiKeyCandidates, hitRateLimit, validateSafeLlmBaseUrl, genId, timingSafeEqualStr })
 
 export default {
@@ -926,6 +1039,25 @@ export default {
             db = false
           }
           return jsonResponse({ ok: db, status: db ? 'ok' : 'degraded', time: new Date().toISOString(), db }, db ? 200 : 503, origin)
+        }
+
+        // Public referral click tracking. The web app sends one beacon from a
+        // global capture listener, so every APIsRouter link is measurable
+        // without touching each anchor individually.
+        if (path === '/api/v1/track/outbound' && method === 'POST') {
+          await ensureSchema(env)
+          const trackIp = request.headers.get('cf-connecting-ip') || 'unknown'
+          if (await hitRateLimit(env, `track:${trackIp}`, 60, 60 * 60 * 1000)) {
+            return jsonResponse({ ok: true }, 200, origin)
+          }
+          const body = await request.json().catch(() => ({}))
+          const target = String(body.target || '').trim().toLowerCase().slice(0, 40)
+          const allowedTargets = new Set(['apisrouter', 'openai', 'anthropic', 'google', 'other'])
+          await recordUsageEvent(env, null, 'outbound_click', {
+            target: allowedTargets.has(target) ? target : 'other',
+            path: String(body.path || '').trim().slice(0, 200) || null,
+          })
+          return jsonResponse({ ok: true }, 200, origin)
         }
 
         await ensureSchema(env)
@@ -1103,6 +1235,8 @@ export default {
           )
             .bind(userId, email, displayName, passwordHash, nowIso, nowIso)
             .run()
+
+          void recordUsageEvent(env, userId, 'signup', { method: 'password' })
 
           await env.DB.prepare(
             `INSERT INTO user_settings (userId, preferredProvider, preferredModel, customSystemPrompt, lastActiveConversationId, beginnerMode, onboardingCompletedAt, createdAt, updatedAt)
@@ -1454,6 +1588,18 @@ export default {
           return jsonResponse(user, 200, origin)
         }
 
+        // Free-trial status for the platform key (BYOK users always have
+        // remaining=0 but hasOwnKey=true, so the UI hides the trial banner).
+        if (path === '/api/v1/trial' && method === 'GET') {
+          const state = await getTrialState(env, user.id)
+          const ownKey = await env.DB.prepare(
+            'SELECT 1 AS ok FROM llm_keys WHERE userId = ? AND apiKey IS NOT NULL LIMIT 1',
+          )
+            .bind(user.id)
+            .first()
+          return jsonResponse({ ...state, hasOwnKey: Boolean(ownKey) }, 200, origin)
+        }
+
         // Account data export (GDPR) — never includes API key material
         if (path === '/api/v1/users/me/export' && method === 'GET') {
           const settings = await env.DB.prepare('SELECT * FROM user_settings WHERE userId = ?').bind(user.id).first()
@@ -1754,6 +1900,12 @@ export default {
               )
                 .bind(user.id)
                 .run()
+              // Funnel signal: a user who adds a key has converted from the
+              // free trial to paying their own provider.
+              void recordUsageEventOnce(env, user.id, 'key_added', {
+                provider,
+                firstKey: !existingPlain,
+              })
             }
 
             return jsonResponse(
@@ -2167,8 +2319,33 @@ export default {
               }
             }
           }
-          const apiKey = keyCandidates[0]?.apiKey || ''
-          const baseUrl = validateSafeLlmBaseUrl(keyCandidates[0]?.baseUrl, activeProvider)
+          let apiKey = keyCandidates[0]?.apiKey || ''
+          let baseUrl = validateSafeLlmBaseUrl(keyCandidates[0]?.baseUrl, activeProvider)
+          let trialMode = false
+          let trialRemaining = 0
+          if (!apiKey) {
+            const trial = trialConfig(env)
+            if (trial.enabled) {
+              const state = await getTrialState(env, user.id)
+              trialRemaining = state.remaining
+              if (state.remaining > 0) {
+                // Reserve before the upstream call so concurrent requests
+                // cannot exceed the lifetime cap.
+                await reserveTrialMessage(env, user.id)
+                apiKey = trial.key
+                activeProvider = trial.provider
+                preferredModel = trial.model
+                baseUrl = validateSafeLlmBaseUrl(null, activeProvider)
+                trialMode = true
+                trialRemaining = state.remaining - 1
+                void recordUsageEvent(env, user.id, 'trial_message', {
+                  provider: activeProvider,
+                  model: preferredModel,
+                  remaining: trialRemaining,
+                })
+              }
+            }
+          }
 
           const { readable, writable } = new TransformStream()
           const writer = writable.getWriter()
@@ -2183,18 +2360,33 @@ export default {
               await sendSse('status', { status: 'thinking' })
 
               if (!apiKey) {
-                const onboardingReply = [
-                  '### Welcome to OpenAgents — Your Cloud Workspace is 100% Free',
-                  '',
-                  'To start running tasks and chatting with Veda, connect your AI model key (OpenAgents does not bundle free model keys):',
-                  '',
-                  '1. **Recommended — All 93+ Frontier Models in 1 Key:**',
-                  '   Get an API key at **[APIsRouter.dev](https://apisrouter.dev/?ref=openagents)** to unlock `claude-sonnet-5.5`, `claude-opus-5.5`, `gpt-6.1-sol-pro`, `deepseek-v4.1-flash`, `gemini-4-argon`, `kimi-k2.7-code`, and `grok-4.7` with a single key.',
-                  '2. **Or Bring Your Own Key (BYOK):**',
-                  '   Use your existing key from Anthropic, OpenAI, Google Gemini, NVIDIA, DeepSeek, Groq, or xAI.',
-                  '',
-                  '👉 Open **[Settings & Models → APIsRouter](/settings/config)** in the left sidebar, paste your key, and send your message again!',
-                ].join('\n')
+                const trial = trialConfig(env)
+                void recordUsageEventOnce(env, user.id, 'trial_exhausted', { limit: trial.limit })
+                const onboardingReply = trial.enabled
+                  ? [
+                      `### Your ${trial.limit}-message free trial is used up`,
+                      '',
+                      'Your OpenAgents account stays **free forever** — you only pay your AI provider for what you use.',
+                      '',
+                      '**Add a key to keep going (recommended):**',
+                      '',
+                      '1. **One key, 93+ frontier models** — create an account at **[APIsRouter.dev](https://apisrouter.dev/?ref=openagents)** and copy the `apr-sk-live-...` key. It unlocks `claude-sonnet-5.5`, `gpt-6.1-sol-pro`, `deepseek-v4.1-flash`, `gemini-4-argon`, `kimi-k2.7-code`, and `grok-4.7`.',
+                      '2. **Or bring your own key (BYOK)** — Anthropic, OpenAI, Google Gemini, NVIDIA, DeepSeek, Groq, xAI, or a local Ollama.',
+                      '',
+                      '👉 Open **[Settings & Models → APIsRouter](/settings/config)**, paste your key, and send your message again.',
+                    ].join('\n')
+                  : [
+                      '### Welcome to OpenAgents — Your Cloud Workspace is 100% Free',
+                      '',
+                      'OpenAgents does not bundle free model keys — connect your own to start:',
+                      '',
+                      '1. **Recommended — All 93+ Frontier Models in 1 Key:**',
+                      '   Get an API key at **[APIsRouter.dev](https://apisrouter.dev/?ref=openagents)** to unlock `claude-sonnet-5.5`, `claude-opus-5.5`, `gpt-6.1-sol-pro`, `deepseek-v4.1-flash`, `gemini-4-argon`, `kimi-k2.7-code`, and `grok-4.7` with a single key.',
+                      '2. **Or Bring Your Own Key (BYOK):**',
+                      '   Use your existing key from Anthropic, OpenAI, Google Gemini, NVIDIA, DeepSeek, Groq, or xAI.',
+                      '',
+                      '👉 Open **[Settings & Models → APIsRouter](/settings/config)** in the left sidebar, paste your key, and send your message again!',
+                    ].join('\n')
 
                 const completedAt = new Date().toISOString()
                 await sendSse('delta', { content: onboardingReply })
@@ -2316,6 +2508,14 @@ export default {
 
               const finalContent = accumulated.trim() || 'Done.'
               const completedAt = new Date().toISOString()
+              void recordUsageEventOnce(env, user.id, 'first_message', {
+                provider: activeProvider,
+                model: preferredModel,
+                trial: trialMode,
+              })
+              if (trialMode) {
+                void recordUsageEvent(env, user.id, 'trial_message_delivered', { remaining: trialRemaining })
+              }
 
               await env.DB.prepare(
                 `INSERT INTO messages (id, conversationId, role, content, status, metadata, toolCallJson, toolResultJson, createdAt)

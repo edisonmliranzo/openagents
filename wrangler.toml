@@ -2,6 +2,15 @@ name = "openagents"
 main = "scripts/cf-worker.mjs"
 compatibility_date = "2024-09-23"
 
+# Free trial for the platform-owned key. This is a lifetime cap per account:
+# it bounds inference spend while letting a new signup try the product before
+# adding their own APIsRouter / BYOK key. Set PLATFORM_LLM_KEY as a secret;
+# if it is empty the trial is disabled and BYOK-only behaviour is unchanged.
+[vars]
+TRIAL_MESSAGES = "15"
+TRIAL_PROVIDER = "apisrouter"
+TRIAL_MODEL = "deepseek-v4.1-flash"
+
 [assets]
 directory = "./apps/web/out"
 binding = "ASSETS"

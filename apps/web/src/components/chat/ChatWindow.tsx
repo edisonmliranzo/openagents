@@ -510,6 +510,13 @@ export function ChatWindow({
   const [isOffline, setIsOffline] = useState(false)
   const [offlineQueue, setOfflineQueue] = useState<string[]>([])
   const [hasSavedApiKey, setHasSavedApiKey] = useState<boolean | null>(null)
+  const [trial, setTrial] = useState<{
+    enabled: boolean
+    limit: number
+    used: number
+    remaining: number
+    hasOwnKey: boolean
+  } | null>(null)
   const [quickApiKeyInput, setQuickApiKeyInput] = useState('')
   const [isSavingQuickKey, setIsSavingQuickKey] = useState(false)
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false)
@@ -757,6 +764,19 @@ export function ChatWindow({
         const anyCloudKey = keyList.some((key) => key.provider !== 'ollama' && Boolean(key.apiKey))
         setHasSavedApiKey(anyCloudKey)
       }
+
+      // Free-trial status for the platform key. Best-effort: the banner simply
+      // stays hidden if the endpoint is unavailable.
+      void sdk.client
+        .get<{
+          enabled: boolean
+          limit: number
+          used: number
+          remaining: number
+          hasOwnKey: boolean
+        }>('/api/v1/trial')
+        .then(setTrial)
+        .catch(() => setTrial(null))
 
       return { settings: nextSettings, session: nextSession }
     } finally {
@@ -1795,7 +1815,27 @@ export function ChatWindow({
                     </button>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-300">
-                    Your OpenAgents cloud workspace is 100% free. Paste your <code className="font-mono text-fuchsia-200">apisrouter.dev</code> key below to activate Veda:
+                    {trial?.enabled && trial.remaining > 0 ? (
+                      <>
+                        <span className="mr-1 rounded bg-emerald-500/20 px-1.5 py-0.5 font-semibold text-emerald-200">
+                          {trial.remaining} free trial {trial.remaining === 1 ? 'message' : 'messages'} left
+                        </span>
+                        Your account is free forever. After the trial, paste your{' '}
+                        <code className="font-mono text-fuchsia-200">apisrouter.dev</code> key below to keep going.
+                      </>
+                    ) : trial?.enabled && trial.remaining === 0 ? (
+                      <>
+                        <span className="mr-1 rounded bg-amber-500/20 px-1.5 py-0.5 font-semibold text-amber-200">
+                          Free trial used up
+                        </span>
+                        Add your key to continue — the account itself stays free.
+                      </>
+                    ) : (
+                      <>
+                        Your OpenAgents cloud workspace is 100% free. Paste your{' '}
+                        <code className="font-mono text-fuchsia-200">apisrouter.dev</code> key below to activate Veda:
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
