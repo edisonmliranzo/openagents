@@ -1,4 +1,7 @@
 import type { LLMProvider } from '../types/agent'
+import { APISROUTER_MODEL_IDS_BY_PRICE } from '../generated/apisrouterModels'
+
+export { APISROUTER_MODELS_BY_PRICE } from '../generated/apisrouterModels'
 
 export const API_VERSION = 'v1'
 export const API_BASE = `/api/${API_VERSION}`
@@ -101,116 +104,7 @@ export const LLM_MODELS = {
 export type ModelRole = 'chat' | 'artifact' | 'scheduled' | 'subagent' | 'background'
 
 export const LLM_MODEL_OPTIONS = {
-  apisrouter: [
-    // APIsRouter.dev (https://apisrouter.dev/v1) — 93+ Verified Live 2026 Frontier Models
-    // Featured Flagships
-    'claude-sonnet-5.5',
-    'claude-opus-5.5',
-    'gpt-6.1-sol-pro',
-    'kimi-k2.7-code',
-    'deepseek-v4.1-flash',
-    'gemini-4-argon',
-    'kimi-k3.1-pro',
-    'grok-4.7',
-    'qwen3.8-max-prime',
-    'gpt-6.1-terra-pro',
-    'gemini-3.8-flash',
-    'claude-haiku-5.5',
-    'deepseek-v4-pro-0813',
-    'devstral-2512',
-    'glm-5.3',
-    'gpt-6-luna-pro',
-    'grok-build-0.1',
-    'llama-4-maverick',
-    'minimax-m3.1-flash',
-    'mistral-large-4-0',
-    'qwen3.8-flash',
-    // Anthropic Claude 5 & 4.8 Series
-    'claude-sonnet-5',
-    'claude-opus-5',
-    'claude-opus-4.8',
-    // OpenAI GPT-6.1 & GPT-6 Series
-    'gpt-6.1-sol',
-    'gpt-6.1-terra',
-    'gpt-6-sol-pro',
-    'gpt-6-sol',
-    'gpt-6-luna',
-    // DeepSeek V4.1, V4 & V3.2 Series
-    'deepseek-v4.1-flash-1017',
-    'deepseek-v4-pro',
-    'deepseek-v4-flash-0731',
-    'deepseek-v4-flash',
-    'deepseek-v4-flash-vision-exp',
-    'deepseek-v3.2',
-    // Google Gemini 4, 3.x & Omni Series
-    'gemini-3.7-flash',
-    'gemini-3.6-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-omni-1.2-flash',
-    'gemini-omni-1.1-flash',
-    'gemini-nano-banana-2.1',
-    // xAI Grok 4.x Series
-    'grok-4.6',
-    'grok-4.5',
-    'grok-4.3',
-    'grok-4.20-multi-agent',
-    'grok-4.20',
-    // Moonshot Kimi K3 & K2 Series
-    'kimi-k3',
-    'kimi-k2.6',
-    'kimi-k2.5',
-    'kimi-k2-thinking',
-    'kimi-k2-0905',
-    'kimi-k2',
-    // Alibaba Qwen 3.8 & 3.7 Series
-    'qwen3.8-2.4t-a95b',
-    'qwen3.8-max-0902',
-    'qwen3.8-omni-flash',
-    'qwen3.8-27b',
-    'qwen3.7-plus',
-    'qwen3.7-flash',
-    // Meta Llama 4 & 3.x Series
-    'llama-4-scout',
-    'llama-3.3-70b-instruct',
-    'llama-3.1-70b-instruct',
-    'llama-3.1-8b-instruct',
-    'llama-3.2-3b-instruct',
-    'llama-3.2-1b-instruct',
-    'llama-guard-4-12b',
-    // Mistral 4 & Ministral 3 Series
-    'mistral-medium-3-5',
-    'mistral-small-2603',
-    'mistral-large-2512',
-    'ministral-14b-2512',
-    'ministral-8b-2512',
-    'ministral-3b-2512',
-    // MiniMax M3.1 & M3 Series
-    'minimax-m3',
-    'minimax-m2.7',
-    'minimax-m2.5',
-    'minimax-m1',
-    // Z.ai GLM 5.3 & 5V Series
-    'glm-5.3-prime',
-    'glm-5.3-flashx',
-    'glm-5.3-flashx-legal',
-    'glm-5.3-flash',
-    'glm-5v-turbo',
-    'glm-5.2',
-    'glm-5.1',
-    // NVIDIA Nemotron 3.5 & 3 Series
-    'nemotron-3.5-super-vl',
-    'nemotron-3.5-lightning',
-    'nemotron-3-ultra-550b-a55b',
-    'nemotron-3-super-120b-a12b',
-    'nemotron-3-nano-30b-a3b',
-    'nemotron-3.5-content-safety',
-    // Cohere Command A Series
-    'command-a-plus',
-    'command-a',
-    'command-r-plus-08-2024',
-    'command-r-08-2024',
-    'command-r7b-12-2024',
-  ],
+  apisrouter: APISROUTER_MODEL_IDS_BY_PRICE,
   anthropic: [
     // Claude 5.5 & 5 — latest generation
     'claude-sonnet-5.5',
