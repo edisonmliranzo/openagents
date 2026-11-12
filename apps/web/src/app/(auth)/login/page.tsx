@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useAuthStore } from '@/stores/auth'
 import {
   firebaseAuthErrorMessage,
+  hardReloadWithCacheClear,
   isFirebaseAuthConfigured,
   signInWithGoogleIdToken,
 } from '@/lib/firebase'
@@ -110,17 +111,16 @@ export default function LoginPage() {
     // older JS bundle. Recover instead of throwing "x is not a function".
     const firebaseAction = useAuthStore.getState().firebaseLogin
     if (typeof firebaseAction !== 'function') {
-      const refreshKey = 'openagents.auth.refresh-once'
-      const alreadyRefreshed =
-        typeof window !== 'undefined' && window.sessionStorage.getItem(refreshKey) === '1'
-      setError(
-        alreadyRefreshed
-          ? 'Your browser has an outdated version. Please force-refresh this page (Ctrl/Cmd + Shift + R).'
-          : 'OpenAgents was updated. Refreshing this page…',
-      )
-      if (!alreadyRefreshed) {
-        window.sessionStorage.setItem(refreshKey, '1')
-        window.setTimeout(() => window.location.reload(), 500)
+      const refreshKey = 'openagents.auth.hard-reload-at'
+      const lastReload = Number(window.sessionStorage.getItem(refreshKey) || 0)
+      if (!lastReload || Date.now() - lastReload > 20_000) {
+        window.sessionStorage.setItem(refreshKey, String(Date.now()))
+        setError('Updating OpenAgents and clearing cached files…')
+        await hardReloadWithCacheClear()
+      } else {
+        setError(
+          'This tab is still running an old cached build. Close the tab completely, reopen OpenAgents, and try again.',
+        )
       }
       return
     }

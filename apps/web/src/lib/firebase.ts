@@ -1,3 +1,34 @@
+/**
+ * Recover from a stale deployment: remove cached bundles and old service
+ * workers, then reload with a cache-busting URL. Used when the page detects
+ * that its JS bundle is older than the deployed API/auth actions.
+ */
+export async function hardReloadWithCacheClear(): Promise<void> {
+  try {
+    if (typeof caches !== 'undefined') {
+      const keys = await caches.keys()
+      await Promise.all(keys.map((key) => caches.delete(key)))
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(registrations.map((registration) => registration.unregister()))
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const url = new URL(window.location.href)
+    url.searchParams.set('_v', String(Date.now()))
+    window.location.replace(url.toString())
+  } catch {
+    window.location.reload()
+  }
+}
+
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? '',
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? '',
