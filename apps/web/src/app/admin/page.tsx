@@ -42,15 +42,6 @@ interface WaitlistEntry {
   status: 'Pending' | 'Invited' | 'Active'
 }
 
-const DEFAULT_WAITLIST: WaitlistEntry[] = [
-  { id: 'wl-1', email: 'owner@openagents.local', createdAt: '2026-10-10 10:15', source: 'Direct Superadmin', role: 'Platform Owner', status: 'Active' },
-  { id: 'wl-2', email: 'alex.v@neuralresearch.org', createdAt: '2026-10-10 09:42', source: 'Homepage Waitlist', role: 'AI Researcher', status: 'Invited' },
-  { id: 'wl-3', email: 'marcus.chen@fintechflow.io', createdAt: '2026-10-10 08:30', source: 'Twitter/X Tech', role: 'Principal Architect', status: 'Pending' },
-  { id: 'wl-4', email: 'sarah.k@cloudinfra.dev', createdAt: '2026-10-10 07:14', source: 'GitHub Referral', role: 'DevOps Lead', status: 'Invited' },
-  { id: 'wl-5', email: 'elena.rostova@quantumai.de', createdAt: '2026-10-09 23:10', source: 'Homepage Waitlist', role: 'ML Engineer', status: 'Pending' },
-  { id: 'wl-6', email: 'david.b@autotask.co', createdAt: '2026-10-09 21:05', source: 'ProductHunt Coming Soon', role: 'CTO & Founder', status: 'Pending' },
-  { id: 'wl-7', email: 'priya.sharma@datadrive.in', createdAt: '2026-10-09 18:22', source: 'Homepage Waitlist', role: 'Senior Developer', status: 'Invited' },
-]
 
 export default function AdminAnalyticsPage() {
   const user = useAuthStore((state) => state.user)
@@ -65,10 +56,10 @@ export default function AdminAnalyticsPage() {
   const loadWaitlist = () => {
     try {
       const stored = localStorage.getItem('openagents_waitlist')
-      if (stored) {
-        const parsed: { email: string; timestamp: string }[] = JSON.parse(stored)
-        const customEntries: WaitlistEntry[] = parsed.map((item, idx) => ({
-          id: `local-${idx}-${Date.now()}`,
+      const parsed: { email: string; timestamp: string }[] = stored ? JSON.parse(stored) : []
+      setWaitlist(
+        parsed.map((item, idx) => ({
+          id: `local-${idx}-${item.email}`,
           email: item.email,
           createdAt: new Date(item.timestamp).toLocaleString([], {
             month: 'numeric',
@@ -80,14 +71,9 @@ export default function AdminAnalyticsPage() {
           role: 'Early Adopter',
           status: 'Pending'
         }))
-        // Deduplicate against defaults
-        const all = [...customEntries, ...DEFAULT_WAITLIST.filter(d => !customEntries.some(c => c.email === d.email))]
-        setWaitlist(all)
-      } else {
-        setWaitlist(DEFAULT_WAITLIST)
-      }
+      )
     } catch {
-      setWaitlist(DEFAULT_WAITLIST)
+      setWaitlist([])
     }
   }
 
@@ -509,10 +495,9 @@ export default function AdminAnalyticsPage() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      alert('Invitation batch queued! 7 early invite tokens sent to waitlist.')
-                    }}
-                    className="rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                    disabled
+                    title="Batch invites are not connected to a backend yet"
+                    className="rounded-xl bg-slate-300 px-4 py-2.5 text-xs font-semibold text-white shadow-sm cursor-not-allowed"
                   >
                     Send Batch Invites
                   </button>

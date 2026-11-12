@@ -115,7 +115,15 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark theme-dark ${plusJakarta.variable} ${ibmPlexMono.variable}`}>
+    <html lang="en" className={`${plusJakarta.variable} ${ibmPlexMono.variable}`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('openagents.dashboard.theme');var d=t!=='light';var r=document.documentElement;r.classList.toggle('dark',d);r.classList.toggle('theme-dark',d)}catch(e){document.documentElement.classList.add('dark','theme-dark')}",
+          }}
+        />
+      </head>
       <body>
         <RouteMetaManager />
         <AnalyticsProvider />
