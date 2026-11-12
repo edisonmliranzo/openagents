@@ -2550,8 +2550,22 @@ export default {
         headers.set('cache-control', 'no-cache, no-store, must-revalidate')
         headers.set('pragma', 'no-cache')
         headers.set('expires', '0')
+        let status = assetResponse.status
+        const base = url.pathname.replace(/\/+$/, '')
+        if (base && base !== '/' && !base.startsWith('/_next/')) {
+          const candidates = [`${base}.html`, `${base}/index.html`]
+          let exists = false
+          for (const candidate of candidates) {
+            const probe = await env.ASSETS.fetch(new Request(new URL(candidate, url.origin), { method: 'HEAD' }))
+            if (probe.ok) {
+              exists = true
+              break
+            }
+          }
+          if (!exists) status = 404
+        }
         return new Response(assetResponse.body, {
-          status: assetResponse.status,
+          status,
           statusText: assetResponse.statusText,
           headers,
         })
