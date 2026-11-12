@@ -32,7 +32,7 @@ function VerifyEmailInner() {
   }, [token])
 
   return (
-    <div className="mx-auto max-w-md space-y-4 p-8 text-center">
+    <div className="mx-auto max-w-md space-y-4 p-5 text-center sm:p-8">
       <h1 className="text-2xl font-bold text-slate-900">Email verification</h1>
       {state === 'loading' && <p className="text-slate-500">Verifying…</p>}
       {state === 'ok' && <p className="text-emerald-700">Your email is verified. Thanks!</p>}

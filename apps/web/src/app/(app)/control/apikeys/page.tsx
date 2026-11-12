@@ -78,8 +78,8 @@ export default function ApiKeysPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03]">
+        <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b border-white/10">
               <th className="text-left px-4 py-3 text-white/50 font-medium">Service</th>

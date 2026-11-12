@@ -178,11 +178,11 @@ export default function GraphPage() {
             </div>
 
             {(snapshot?.nodes.length ?? 0) === 0 ? (
-              <div className="flex h-[480px] items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-sm text-[var(--muted)]">
+              <div className="flex h-[min(480px,70dvh)] items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-sm text-[var(--muted)]">
                 No entities extracted yet. Click <b>Rebuild Graph</b> to scan your memories and chats.
               </div>
             ) : (
-              <svg viewBox="0 0 800 520" className="h-[480px] w-full rounded-xl bg-slate-950/95">
+              <svg viewBox="0 0 800 520" className="h-[min(480px,70dvh)] w-full rounded-xl bg-slate-950/95">
                 {(snapshot?.edges ?? []).map((e) => {
                   const a = layout.get(e.fromId)
                   const b = layout.get(e.toId)

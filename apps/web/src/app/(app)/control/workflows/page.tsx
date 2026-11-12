@@ -808,7 +808,7 @@ export default function WorkflowsPage() {
             Compare two runs side-by-side to identify what changed between executions.
           </p>
           <div className="mt-3 flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[200px]">
+            <div className="min-w-0 flex-1 sm:min-w-[200px]">
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
                 Left Run
               </label>
@@ -825,7 +825,7 @@ export default function WorkflowsPage() {
                 ))}
               </select>
             </div>
-            <div className="flex-1 min-w-[200px]">
+            <div className="min-w-0 flex-1 sm:min-w-[200px]">
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
                 Right Run
               </label>

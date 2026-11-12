@@ -111,7 +111,8 @@ export default function KeysPage() {
         {history.length === 0 ? (
           <p className="text-sm text-slate-500">No rotations yet.</p>
         ) : (
-          <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-left text-sm">
             <thead className="text-xs text-slate-500"><tr><th className="py-1">When</th><th>Master</th><th>Keys re-wrapped</th><th>Users</th><th>New data keys</th></tr></thead>
             <tbody>
               {history.map((h) => (
@@ -125,6 +126,7 @@ export default function KeysPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

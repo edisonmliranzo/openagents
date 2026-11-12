@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="auth-theme flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-6">
-      <div className="oa-card-elevated w-full max-w-sm space-y-5 rounded-[28px] p-8">
+      <div className="oa-card-elevated w-full max-w-sm space-y-5 rounded-[24px] p-5 sm:rounded-[28px] sm:p-8">
         <div className="flex items-center gap-2">
           <span className="oa-brand-badge inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-white">
             OA

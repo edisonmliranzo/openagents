@@ -378,7 +378,7 @@ function WarRoomTab() {
             <MessageSquare className="mb-2 h-6 w-6" /> Select or create a war room
           </div>
         ) : (
-          <div className="flex h-[520px] flex-col">
+          <div className="flex h-[min(520px,72dvh)] flex-col sm:h-[520px]">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
                 <h3 className="font-medium">{selected.name}</h3>

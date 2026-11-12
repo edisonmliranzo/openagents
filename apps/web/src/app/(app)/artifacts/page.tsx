@@ -293,7 +293,7 @@ export default function ArtifactsPage() {
             <select
               value={selectedArtifactId}
               onChange={(event) => setSelectedArtifactId(event.target.value)}
-              className="h-10 min-w-[220px] rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-emerald-200 focus:ring-2 focus:ring-emerald-100"
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-emerald-200 focus:ring-2 focus:ring-emerald-100 sm:w-auto sm:min-w-[220px]"
             >
               <option value="">Select artifact</option>
               {artifacts.map((artifact) => (

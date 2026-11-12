@@ -20,11 +20,11 @@ export function ToastContainer() {
   if (toasts.length === 0) return null
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+    <div className="fixed inset-x-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 sm:inset-x-auto sm:bottom-4 sm:right-4">
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`oa-toast flex max-w-sm items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${COLORS[t.type]}`}
+          className={`oa-toast flex w-full max-w-sm items-center justify-between gap-3 rounded-2xl border px-4 py-3 sm:w-auto ${COLORS[t.type]}`}
         >
           <span className="text-sm">{t.message}</span>
           <button

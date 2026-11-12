@@ -55,7 +55,7 @@ export function InstallPrompt() {
   }
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-[60] flex w-[min(92vw,380px)] -translate-x-1/2 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-xl sm:left-auto sm:right-4 sm:translate-x-0">
+    <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-[60] flex w-[min(92vw,380px)] -translate-x-1/2 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-xl sm:bottom-4 sm:left-auto sm:right-4 sm:translate-x-0">
       <div className="oa-brand-badge flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white">
         <Download size={16} />
       </div>

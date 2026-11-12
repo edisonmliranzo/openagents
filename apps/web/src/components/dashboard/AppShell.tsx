@@ -444,7 +444,7 @@ export function AppShell({ children }: AppShellProps) {
       <div className="flex w-full">
         <aside
           className={clsx(
-            'fixed inset-y-0 left-0 z-50 flex w-[226px] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] px-3 py-4 transition-transform duration-200 md:sticky md:top-0 md:h-[100dvh] md:z-10 md:translate-x-0',
+            'fixed inset-y-0 left-0 z-50 flex w-[min(84vw,280px)] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] px-3 pb-[max(16px,env(safe-area-inset-bottom))] pt-[max(16px,env(safe-area-inset-top))] transition-transform duration-200 md:sticky md:top-0 md:h-[100dvh] md:w-[226px] md:z-10 md:translate-x-0',
             isMobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -560,8 +560,8 @@ export function AppShell({ children }: AppShellProps) {
         </aside>
 
         <div className="min-w-0 flex-1 md:ml-0">
-          <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[rgba(248,250,252,0.82)] px-3 py-3 backdrop-blur-md sm:px-6">
-            <div className="flex items-center justify-between gap-3">
+          <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-[rgba(248,250,252,0.82)] px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-3">
+            <div className="flex items-center justify-between gap-2 sm:gap-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <button
                     type="button"
@@ -713,7 +713,7 @@ export function AppShell({ children }: AppShellProps) {
 
           <main
             className={clsx(
-              'px-2 py-3 sm:px-6 sm:py-5',
+              'px-2 pb-24 pt-3 sm:px-6 sm:pb-24 sm:pt-5 md:pb-5',
               isChatControlRoute && 'h-[calc(100dvh-74px)] overflow-hidden px-2 pb-3 pt-3 sm:px-6 sm:pb-5 sm:pt-3',
             )}
           >
@@ -731,6 +731,53 @@ export function AppShell({ children }: AppShellProps) {
             )}
             {children}
           </main>
+
+          {/* Mobile bottom navigation (thumb-friendly parity with the sidebar) */}
+          <nav
+            className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-[var(--surface)] pb-[max(6px,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl md:hidden"
+            aria-label="Primary mobile navigation"
+          >
+            <div className="mx-auto flex max-w-lg items-stretch justify-around px-1">
+              {[
+                { label: 'Chat', href: '/chat', icon: MessageSquare },
+                { label: 'Tasks', href: '/tasks', icon: Play },
+                { label: 'History', href: '/sessions', icon: History },
+                { label: 'Settings', href: '/settings/config', icon: Settings2 },
+              ].map((item) => {
+                const active =
+                  item.href === '/settings/config'
+                    ? pathname.startsWith('/settings')
+                    : isActivePath(pathname, item.href)
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    className={clsx(
+                      'flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition',
+                      active
+                        ? 'text-[var(--accent-strong)]'
+                        : 'text-[var(--tone-muted)] hover:text-[var(--tone-strong)]',
+                    )}
+                  >
+                    <Icon size={19} className={clsx(active && 'drop-shadow-[0_0_6px_rgba(239,68,68,0.35)]')} />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                )
+              })}
+              <button
+                type="button"
+                onClick={() => setIsMobileNavOpen(true)}
+                className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-semibold text-[var(--tone-muted)] transition hover:text-[var(--tone-strong)]"
+                aria-label="Open all navigation"
+              >
+                <Menu size={19} />
+                <span>More</span>
+              </button>
+            </div>
+          </nav>
+
           <OnboardingWizard />
           <InstallPrompt />
         </div>

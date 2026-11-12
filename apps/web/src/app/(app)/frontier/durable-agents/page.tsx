@@ -143,7 +143,7 @@ export default function DurableAgentsPage() {
                     }
                   }}
                   placeholder={s.kind === 'tool' ? 'input JSON, e.g. {"query":"..."}' : 'instruction'}
-                  className="min-w-[200px] flex-1 rounded-lg border border-[var(--border)] bg-white px-2 py-2 text-xs"
+                  className="w-full min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-white px-2 py-2 text-xs sm:min-w-[200px]"
                 />
               )}
               <button onClick={() => setSteps((x) => x.filter((_, j) => j !== i))} disabled={steps.length === 1} className="p-1 disabled:opacity-30">

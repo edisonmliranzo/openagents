@@ -23,7 +23,7 @@ export function MuseChatLayout({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <div className="oa-canvas flex h-full min-h-0 w-full gap-3 overflow-hidden p-1.5 sm:p-4">
+    <div className="oa-canvas flex h-full min-h-0 w-full gap-3 overflow-hidden p-1.5 pt-[max(6px,env(safe-area-inset-top))] sm:p-4">
       {/* Left floating chat & session history card (desktop) */}
       <aside className="oa-float-card hidden w-[260px] shrink-0 flex-col overflow-hidden md:flex">
         <MuseSidePanel onNavigate={(href) => router.push(href)} />

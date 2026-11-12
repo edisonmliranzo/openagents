@@ -351,7 +351,7 @@ export default function WorkspacesPage() {
             <select
               value={selectedWorkspaceId}
               onChange={(event) => setSelectedWorkspaceId(event.target.value)}
-              className="h-10 min-w-[240px] rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100"
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100 sm:w-auto sm:min-w-[240px]"
             >
               <option value="">Select workspace</option>
               {workspaces.map((workspace) => (
@@ -375,13 +375,13 @@ export default function WorkspacesPage() {
                     value={editName}
                     onChange={(event) => setEditName(event.target.value)}
                     placeholder="Workspace name"
-                    className="h-10 min-w-[160px] flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100"
+                    className="h-10 w-full min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100 sm:min-w-[160px]"
                   />
                   <input
                     value={editDescription}
                     onChange={(event) => setEditDescription(event.target.value)}
                     placeholder="Description (optional)"
-                    className="h-10 min-w-[200px] flex-[2] rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100"
+                    className="h-10 w-full min-w-0 flex-[2] rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100 sm:min-w-[200px]"
                   />
                   <button
                     type="button"
@@ -411,7 +411,7 @@ export default function WorkspacesPage() {
                       value={inviteEmail}
                       onChange={(event) => setInviteEmail(event.target.value)}
                       placeholder="teammate@example.com"
-                      className="h-10 min-w-[180px] flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100"
+                      className="h-10 w-full min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-sky-200 focus:ring-2 focus:ring-sky-100 sm:min-w-[180px]"
                     />
                     <select
                       value={inviteRole}

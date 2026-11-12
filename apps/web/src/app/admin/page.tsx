@@ -199,15 +199,15 @@ export default function AdminAnalyticsPage() {
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-rose-100 selection:text-rose-900">
       {/* Top Superadmin Navigation Bar */}
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2 group">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link href="/" className="group flex shrink-0 items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-orange-400 font-bold text-white shadow-sm transition group-hover:scale-105">
                 OA
               </div>
               <div className="leading-tight">
                 <span className="font-bold tracking-tight text-slate-900">OpenAgents</span>
-                <span className="ml-2 rounded-md bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-600 border border-rose-200">
+                <span className="ml-2 hidden rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-600 sm:inline">
                   Superadmin
                 </span>
               </div>
@@ -215,7 +215,7 @@ export default function AdminAnalyticsPage() {
           </div>
 
           {/* Admin User Badge */}
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
             <div className="hidden sm:flex items-center gap-2.5 rounded-full border border-slate-200 bg-slate-100/70 px-3.5 py-1.5 text-xs text-slate-700">
               <ShieldCheck className="h-4 w-4 text-emerald-600" />
               <span>
@@ -236,16 +236,17 @@ export default function AdminAnalyticsPage() {
 
             <Link
               href="/"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
+              className="hidden rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 sm:inline-flex"
             >
               Visitor Homepage
             </Link>
 
             <Link
               href="/chat"
-              className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 sm:px-3.5"
             >
-              Launch Platform
+              <span className="hidden sm:inline">Launch Platform</span>
+              <span className="sm:hidden">Launch</span>
             </Link>
           </div>
         </div>

@@ -317,7 +317,7 @@ export default function UsagePage() {
           {(billing?.llmAndTool.daily ?? []).map((row) => {
             const width = maxDailyCost > 0 ? Math.max(8, Math.round((row.totalCostUsd / maxDailyCost) * 100)) : 8
             return (
-              <div key={row.date} className="grid grid-cols-[88px_1fr_180px] items-center gap-3">
+              <div key={row.date} className="grid grid-cols-[72px_1fr_92px] items-center gap-2 sm:grid-cols-[88px_1fr_180px] sm:gap-3">
                 <span className="font-mono text-xs text-slate-500">{row.date}</span>
                 <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                   <div className="h-full rounded-full bg-red-400" style={{ width: `${width}%` }} />

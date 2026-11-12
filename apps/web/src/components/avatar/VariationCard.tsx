@@ -63,7 +63,7 @@ export function VariationCard({
           onKeyDown={(e) => e.key === 'Enter' && void run()}
           placeholder="e.g. business suit, office background"
           maxLength={400}
-          className="h-10 min-w-[220px] flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700"
+          className="h-10 w-full min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 sm:min-w-[220px]"
         />
         <input
           value={model}

@@ -124,7 +124,7 @@ export default function CanvasPanel() {
 
   return (
     <aside
-      className="relative flex h-full shrink-0 flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
+      className="relative flex h-full shrink-0 flex-col border-l border-slate-200 bg-white max-md:fixed max-md:inset-0 max-md:z-[70] max-md:!w-full max-md:border-l-0 dark:border-slate-800 dark:bg-slate-950"
       style={{ width }}
     >
       <div

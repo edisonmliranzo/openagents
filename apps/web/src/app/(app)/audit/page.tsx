@@ -121,7 +121,8 @@ export default function AuditPage() {
         {logs.length === 0 ? (
           <div className="p-10 text-center text-sm text-slate-500">{isLoading ? 'Loading...' : 'No audit entries found.'}</div>
         ) : (
-          <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-2">Time</th>
@@ -165,6 +166,7 @@ export default function AuditPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

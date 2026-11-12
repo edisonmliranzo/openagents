@@ -140,7 +140,7 @@ export function FloatingChatAvatar() {
     <div
       ref={bubbleRef}
       style={{ ...style, width: SIZE, height: SIZE }}
-      className="fixed z-40 touch-none select-none"
+      className="fixed z-40 origin-bottom-right touch-none select-none max-sm:scale-90"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

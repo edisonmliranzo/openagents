@@ -297,7 +297,7 @@ export default function VoiceConsolePage() {
           </div>
         )}
         {current && (
-          <section className="oa-float-card flex h-[640px] flex-col p-4">
+          <section className="oa-float-card flex h-[min(640px,78dvh)] flex-col p-4 sm:h-[640px]">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <LiveAvatar
                 personaId={personaId}

@@ -1364,7 +1364,7 @@ export function ChatWindow({
             )}
             title="Switch AI model"
           >
-            <span className="max-w-[140px] truncate sm:max-w-[220px]">{inUseModel.split('/').pop() || inUseModel}</span>
+            <span className="max-w-[100px] truncate sm:max-w-[220px]">{inUseModel.split('/').pop() || inUseModel}</span>
             <ChevronDown size={14} className={clsx('shrink-0 transition-transform', modelPickerOpen ? 'rotate-180' : '')} />
           </button>
 
@@ -1684,16 +1684,16 @@ export function ChatWindow({
         </div>
 
         {/* Right: New Chat + mobile/tablet activity drawer */}
-        <div className="relative z-10 flex items-center gap-1.5">
+        <div className="relative z-10 flex shrink-0 items-center gap-1 sm:gap-1.5">
           {onNewSession && (
             <button
               type="button"
               onClick={() => void onNewSession()}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur transition hover:bg-white sm:gap-1.5 sm:px-3 dark:border-[#2d3347] dark:bg-[#1a2032]/80 dark:text-slate-300"
+              className="inline-flex h-8 items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur transition hover:bg-white sm:h-auto sm:gap-1.5 sm:px-3 sm:py-1 dark:border-[#2d3347] dark:bg-[#1a2032]/80 dark:text-slate-300"
               title="Start a New Chat Session"
             >
               <Plus size={12} />
-              <span>New Chat</span>
+              <span className="hidden sm:inline">New Chat</span>
             </button>
           )}
           <button

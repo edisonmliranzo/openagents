@@ -149,7 +149,7 @@ export default function ContactMemoryPage() {
                 <select className="oa-input-surface h-9 rounded-xl px-2 text-xs" value={note.direction} onChange={(e) => setNote({ ...note, direction: e.target.value as any })}>
                   <option>note</option><option>inbound</option><option>outbound</option>
                 </select>
-                <input className="oa-input-surface h-9 min-w-[200px] flex-1 rounded-xl px-3 text-xs" placeholder="Log an interaction…" value={note.text} onChange={(e) => setNote({ ...note, text: e.target.value })} />
+                <input className="oa-input-surface h-9 w-full min-w-0 flex-1 rounded-xl px-3 text-xs sm:min-w-[200px]" placeholder="Log an interaction…" value={note.text} onChange={(e) => setNote({ ...note, text: e.target.value })} />
                 <button className="oa-accent-button h-9 rounded-xl px-3 text-xs font-semibold text-white" disabled={busy || !note.text.trim() || !note.channel.trim()} onClick={() => act(async () => { await sdk.growthVoice.contacts.addInteraction(detail.contact.id, note); setNote({ ...note, text: '' }) })}>
                   {busy ? <Loader2 size={12} className="animate-spin" /> : 'Add'}
                 </button>

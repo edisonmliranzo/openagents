@@ -428,7 +428,7 @@ export default function OpenAgentsLandingPage() {
             : 'border-white/10 bg-[#090b12]/80'
         }`}
       >
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-3.5 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-3.5 lg:px-8">
           <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <div className="relative flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 via-orange-400 to-amber-400 text-white shadow-sm">
               <Sparkles className="h-4 w-4" />
@@ -465,7 +465,7 @@ export default function OpenAgentsLandingPage() {
             </Link>
           </nav>
 
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2.5">
             {/* Theme toggle */}
             <button
               type="button"
@@ -508,7 +508,7 @@ export default function OpenAgentsLandingPage() {
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <Link
                   href="/login"
-                  className={`inline-flex whitespace-nowrap items-center gap-1 rounded-full border px-3 py-1.5 sm:px-3.5 sm:py-2 text-[11px] sm:text-xs font-semibold transition ${
+                  className={`inline-flex whitespace-nowrap items-center gap-1 rounded-full border px-2.5 py-1.5 sm:px-3.5 sm:py-2 text-[11px] sm:text-xs font-semibold transition ${
                     warmTheme
                       ? 'border-black/10 bg-white/80 text-stone-800 hover:bg-white shadow-sm'
                       : 'border-white/15 bg-white/5 text-slate-200 hover:bg-white/10'
@@ -518,7 +518,7 @@ export default function OpenAgentsLandingPage() {
                 </Link>
                 <Link
                   href="/login?mode=register"
-                  className="inline-flex whitespace-nowrap items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-3 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
+                  className="inline-flex whitespace-nowrap items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-2.5 py-1.5 sm:px-4 sm:py-2 text-[11px] sm:text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
                 >
                   <span className="sm:hidden">Get Started</span>
                   <span className="hidden sm:inline">Get Started Free</span>
@@ -528,6 +528,37 @@ export default function OpenAgentsLandingPage() {
             )}
           </div>
         </div>
+
+        {/* Mobile quick navigation (desktop uses the inline nav above) */}
+        <nav
+          className={`no-scrollbar flex items-center gap-1 overflow-x-auto border-t px-2 py-1.5 text-[11px] font-semibold md:hidden ${
+            warmTheme ? 'border-black/[0.06] text-stone-600' : 'border-white/10 text-slate-300'
+          }`}
+          aria-label="Landing page sections"
+        >
+          {[
+            { href: '#openagents-workspace', label: 'Preview' },
+            { href: '#voice-and-avatars', label: 'Voice & Avatars' },
+            { href: '#how-it-works', label: 'How It Works' },
+            { href: '#artifacts-and-safety', label: 'Artifacts & Safety' },
+          ].map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 transition ${
+                warmTheme ? 'hover:bg-black/[0.05]' : 'hover:bg-white/10'
+              }`}
+            >
+              {link.label}
+            </a>
+          ))}
+          <Link href="/support" className="shrink-0 whitespace-nowrap rounded-full px-3 py-1 hover:bg-black/[0.05]">
+            Support
+          </Link>
+          <Link href="/terms" className="shrink-0 whitespace-nowrap rounded-full px-3 py-1 hover:bg-black/[0.05]">
+            Terms
+          </Link>
+        </nav>
       </header>
 
       <main className="relative z-10 mx-auto max-w-7xl px-4 pt-6 pb-20 sm:px-6 sm:pt-12 sm:pb-24 lg:px-8">
@@ -694,13 +725,13 @@ export default function OpenAgentsLandingPage() {
               </div>
               <div
                 id="waitlist"
-                className={`mx-auto mt-7 max-w-xl rounded-[28px] border p-6 shadow-xl backdrop-blur-xl ${
+                className={`mx-auto mt-7 max-w-xl rounded-[24px] border p-4 shadow-xl backdrop-blur-xl sm:rounded-[28px] sm:p-6 ${
                   warmTheme
                     ? 'border-black/[0.08] bg-white/90 shadow-stone-900/5'
                     : 'border-white/15 bg-white/[0.04]'
                 }`}
               >
-              <div className="flex items-center justify-between text-xs mb-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span className="font-semibold text-rose-500 flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5" /> Public v2.0 Launch Countdown
                 </span>
@@ -769,7 +800,7 @@ export default function OpenAgentsLandingPage() {
         </div>
 
         {/* ── 3-PANE OPENAGENTS WORKSPACE LIVE PREVIEW ── */}
-        <section id="openagents-workspace" className="mt-14 scroll-mt-20">
+        <section id="openagents-workspace" className="mt-8 scroll-mt-24 sm:mt-14">
           <div
             className={`rounded-[32px] border p-3 sm:p-5 shadow-2xl transition-colors ${
               warmTheme
@@ -1457,9 +1488,9 @@ export default function OpenAgentsLandingPage() {
         </section>
 
         {/* ── VOICE & EXPRESSIVE AVATARS INTERACTIVE SHOWCASE ── */}
-        <section id="voice-and-avatars" className="mt-24 scroll-mt-20">
+        <section id="voice-and-avatars" className="mt-14 scroll-mt-24 sm:mt-24">
           <div
-            className={`overflow-hidden rounded-[32px] border p-8 sm:p-10 shadow-xl ${
+            className={`overflow-hidden rounded-[24px] border p-4 shadow-xl sm:rounded-[32px] sm:p-10 ${
               warmTheme
                 ? 'border-black/[0.08] bg-gradient-to-br from-white via-[#faf8f4] to-rose-50/40 shadow-stone-900/5'
                 : 'border-white/15 bg-gradient-to-br from-[#0f1424] via-[#0b101d] to-[#130d1e]'
@@ -1587,7 +1618,7 @@ export default function OpenAgentsLandingPage() {
 
               {/* Right Column: Live Interactive Avatar Stage */}
               <div className="lg:col-span-6 flex flex-col items-center justify-center">
-                <div className="relative flex w-full max-w-md flex-col items-center rounded-[28px] border border-white/15 bg-gradient-to-b from-[#0f1424] via-[#0b101d] to-[#070a12] p-8 text-center text-white shadow-2xl">
+                <div className="relative flex w-full max-w-md flex-col items-center rounded-[24px] border border-white/15 bg-gradient-to-b from-[#0f1424] via-[#0b101d] to-[#070a12] p-5 text-center text-white shadow-2xl sm:rounded-[28px] sm:p-8">
                   <div className="mb-4 flex w-full items-center justify-between text-[11px] text-slate-400">
                     <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-400">
                       <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -1626,7 +1657,7 @@ export default function OpenAgentsLandingPage() {
         </section>
 
         {/* ── HOW WE DESIGNED IT: THE 6 PILLARS OF OPENAGENTS ── */}
-        <section id="how-it-works" className="mt-24 scroll-mt-20">
+        <section id="how-it-works" className="mt-14 scroll-mt-24 sm:mt-24">
           <div className="mx-auto max-w-3xl text-center">
             <span className="text-xs font-bold uppercase tracking-wider text-rose-500">
               OpenAgents Architecture
@@ -1639,7 +1670,7 @@ export default function OpenAgentsLandingPage() {
             </p>
           </div>
 
-          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-8 grid grid-cols-1 gap-4 sm:mt-12 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
             {[
               {
                 icon: Sparkles,
@@ -1709,9 +1740,9 @@ export default function OpenAgentsLandingPage() {
         </section>
 
         {/* ── ARTIFACTS & PRIVATE LOCAL ARCHITECTURE COMPARISON ── */}
-        <section id="artifacts-and-safety" className="mt-24 scroll-mt-20">
+        <section id="artifacts-and-safety" className="mt-14 scroll-mt-24 sm:mt-24">
           <div
-            className={`rounded-[32px] border p-8 sm:p-10 ${
+            className={`rounded-[24px] border p-4 sm:rounded-[32px] sm:p-10 ${
               warmTheme
                 ? 'border-black/[0.07] bg-white/90 shadow-lg shadow-stone-900/5'
                 : 'border-white/10 bg-white/[0.03]'

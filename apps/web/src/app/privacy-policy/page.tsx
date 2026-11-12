@@ -64,15 +64,16 @@ export default function PrivacyPolicyPage() {
   return (
     <div className="min-h-screen bg-[#090b12] text-slate-100 selection:bg-rose-500 selection:text-white">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#090b12]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6 sm:py-4">
           <Link
             href="/"
             className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 transition hover:text-white"
           >
             <ArrowLeft className="h-4 w-4 text-rose-400" />
-            <span>Back to OpenAgents</span>
+            <span className="hidden sm:inline">Back to OpenAgents</span>
+            <span className="sm:hidden">OpenAgents</span>
           </Link>
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] sm:text-xs">
             <Link href="/privacy" className="text-slate-300 hover:text-white">
               Privacy Vault
             </Link>
@@ -88,8 +89,8 @@ export default function PrivacyPolicyPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:py-16">
-        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-6 sm:p-10">
+      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12 lg:py-16">
+        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 sm:p-10">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-emerald-300">
             <ShieldCheck className="h-3.5 w-3.5" />
             Privacy Policy · Last Updated November 2026

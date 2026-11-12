@@ -330,16 +330,16 @@ export default function SupportCenterPage() {
             : 'border-white/10 bg-[#090b12]/85'
         }`}
       >
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2.5">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-3.5 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <Link href="/" className="flex shrink-0 items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 via-orange-400 to-amber-400 text-white shadow-sm">
                 <Sparkles className="h-4 w-4" />
               </div>
-              <span className="text-base font-bold tracking-tight">OpenAgents</span>
+              <span className="text-sm font-bold tracking-tight sm:text-base">OpenAgents</span>
             </Link>
             <span
-              className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+              className={`hidden shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium sm:inline-flex ${
                 warmTheme ? 'bg-black/[0.05] text-stone-600' : 'bg-white/10 text-slate-300'
               }`}
             >
@@ -347,17 +347,18 @@ export default function SupportCenterPage() {
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
             <Link
               href="/terms"
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition sm:px-3.5 ${
                 warmTheme
                   ? 'border-black/10 bg-white/80 text-stone-700 hover:bg-white shadow-sm'
                   : 'border-white/15 bg-white/5 text-slate-200 hover:bg-white/10'
               }`}
             >
               <FileText className="h-3.5 w-3.5 text-rose-500" />
-              <span>Terms &amp; Conditions</span>
+              <span className="hidden sm:inline">Terms &amp; Conditions</span>
+              <span className="sm:hidden">Terms</span>
             </Link>
 
             <button
@@ -376,25 +377,27 @@ export default function SupportCenterPage() {
             {isAuthenticated ? (
               <Link
                 href="/chat"
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#141413] px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-slate-900"
+                className="inline-flex items-center gap-1.5 rounded-full bg-[#141413] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 sm:px-4 dark:bg-white dark:text-slate-900"
               >
-                <span>Workspace</span>
+                <span className="hidden sm:inline">Workspace</span>
+                <span className="sm:hidden">Open</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             ) : (
               <Link
                 href="/"
-                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
+                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-105 sm:px-4"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
-                <span>Back to Home</span>
+                <span className="hidden sm:inline">Back to Home</span>
+                <span className="sm:hidden">Home</span>
               </Link>
             )}
           </div>
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-7xl px-4 pt-10 pb-24 sm:px-6 lg:px-8">
+      <main className="relative z-10 mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 sm:pb-24 sm:pt-10 lg:px-8">
         {/* Hero Header + Search */}
         <div className="mx-auto max-w-4xl text-center">
           <div

@@ -1418,3 +1418,111 @@ body {
   background:
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08), rgba(111, 122, 255, 0.18) 44%, rgba(3, 10, 34, 0.68) 100%);
 }
+
+/* ─── Mobile & small-screen hardening ─────────────────────────────────────
+   Shared safety rails so every route behaves on phones: no horizontal page
+   overflow, media never escapes its container, and data tables stay usable. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+canvas,
+svg {
+  max-width: 100%;
+}
+
+/* Hide scrollbars on swipeable chip/tab rows without losing the scroll. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Long filenames, URLs, tokens and model ids should wrap, not widen the page. */
+.oa-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.dashboard-theme main,
+.auth-theme {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.dashboard-theme main :where(input, select, textarea) {
+  max-width: 100%;
+}
+
+.dashboard-theme main :where(pre, table) {
+  max-width: 100%;
+}
+
+.dashboard-theme main pre {
+  overflow-x: auto;
+}
+
+/* Sticky mobile CTA / floating widgets must never cover the home indicator. */
+.oa-safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.oa-safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+@media (max-width: 639px) {
+  .dashboard-theme main {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  /* Only the shell's scrollable content area needs room for the bottom nav. */
+  .dashboard-theme main.pb-24 {
+    padding-bottom: max(6rem, calc(env(safe-area-inset-bottom) + 4.75rem));
+  }
+
+  .oa-float-card {
+    border-radius: 22px;
+  }
+
+  .oa-composer {
+    border-radius: 20px;
+  }
+
+  .manus-panel {
+    border-radius: 18px;
+  }
+
+  .oa-message-agent,
+  .oa-message-user {
+    max-width: 92%;
+  }
+
+  /* Page-level headers wrap their action buttons instead of overflowing. */
+  .dashboard-theme main header {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  /* Keep wide data tables inside their own scroll area on phones. */
+  .dashboard-theme main table {
+    font-size: 12px;
+  }
+
+  .dashboard-theme main th,
+  .dashboard-theme main td {
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
+  }
+}

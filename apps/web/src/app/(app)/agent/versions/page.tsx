@@ -140,7 +140,7 @@ export default function AgentVersionsPage() {
             value={noteDraft}
             onChange={(event) => setNoteDraft(event.target.value)}
             placeholder="Snapshot note (optional)"
-            className="h-10 min-w-[220px] rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100"
+            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100 sm:w-auto sm:min-w-[220px]"
           />
           <button
             type="button"

@@ -99,19 +99,21 @@ function PublicAgentChatInner() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
-      <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-lg font-semibold text-emerald-300">
+    <div className="flex h-[100dvh] flex-col bg-slate-950 text-slate-100">
+      <header className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-lg font-semibold text-emerald-300">
             {agent?.avatar || '🤖'}
           </div>
-          <div>
-            <h1 className="text-sm font-semibold">{agent?.name || 'Loading...'}</h1>
-            {agent?.description && <p className="text-xs text-slate-400 line-clamp-1">{agent.description}</p>}
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold">{agent?.name || 'Loading...'}</h1>
+            {agent?.description && <p className="line-clamp-1 text-xs text-slate-400">{agent.description}</p>}
           </div>
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2.5 py-1 text-[11px] text-slate-300">
-          <Sparkles className="h-3 w-3 text-emerald-400" /> Powered by OpenAgents
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-800 px-2 py-1 text-[10px] text-slate-300 sm:px-2.5 sm:text-[11px]">
+          <Sparkles className="h-3 w-3 shrink-0 text-emerald-400" />
+          <span className="hidden sm:inline">Powered by OpenAgents</span>
+          <span className="sm:hidden">OpenAgents</span>
         </span>
       </header>
 
@@ -138,7 +140,7 @@ function PublicAgentChatInner() {
         )}
       </main>
 
-      <form onSubmit={handleSend} className="border-t border-slate-800 bg-slate-900/70 p-3">
+      <form onSubmit={handleSend} className="border-t border-slate-800 bg-slate-900/70 p-3 pb-[max(12px,env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-2">
           <input
             value={input}

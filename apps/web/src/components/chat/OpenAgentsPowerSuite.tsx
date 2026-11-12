@@ -1345,7 +1345,7 @@ export function OpenAgentsPowerToolbar({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 sm:p-6 backdrop-blur-sm">
           <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-[#f7f6f2] shadow-2xl dark:border-[#2d3347] dark:bg-[#141824]">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-white px-5 py-3.5 dark:border-[#2d3347] dark:bg-[#1a1f2e]">
-              <div className="flex items-center gap-2.5 flex-1 min-w-[220px]">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:min-w-[220px]">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-orange-500 text-white">
                   <Columns size={16} />
                 </div>

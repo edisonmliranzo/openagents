@@ -86,8 +86,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-theme flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-8" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-      <div className="oa-card-elevated w-full max-w-sm space-y-5 rounded-[28px] p-8 shadow-2xl" style={{ width: '100%', maxWidth: '420px', margin: 'auto', background: 'rgba(15, 23, 42, 0.92)', border: '1px solid rgba(148, 163, 184, 0.18)', borderRadius: '24px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+    <div className="auth-theme flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-6 sm:py-8" style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+      <div className="oa-card-elevated w-full max-w-sm space-y-4 rounded-[24px] p-5 shadow-2xl sm:space-y-5 sm:rounded-[28px] sm:p-8" style={{ width: '100%', maxWidth: '420px', margin: 'auto', background: 'rgba(15, 23, 42, 0.92)', border: '1px solid rgba(148, 163, 184, 0.18)', borderRadius: '24px', padding: 'clamp(20px, 5vw, 32px)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition">
             <span className="oa-brand-badge inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-white">

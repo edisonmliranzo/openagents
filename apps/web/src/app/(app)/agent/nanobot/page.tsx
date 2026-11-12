@@ -436,7 +436,7 @@ export default function OpenAgentPage() {
                 <select
                   value={selectedProfileId}
                   onChange={(e) => setSelectedProfileId(e.target.value)}
-                  className="h-9 min-w-[180px] rounded border border-slate-200 px-2 text-xs text-slate-700"
+                  className="h-9 w-full rounded border border-slate-200 px-2 text-xs text-slate-700 sm:w-auto sm:min-w-[180px]"
                 >
                   {(health?.personaProfiles ?? []).map((profile) => (
                     <option key={profile.id} value={profile.id}>

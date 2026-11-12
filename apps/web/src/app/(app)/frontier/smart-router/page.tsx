@@ -99,7 +99,8 @@ export default function SmartRouterPage() {
                 </div>
               )}
               {savings.recent.length > 0 && (
-                <table className="w-full text-left text-xs">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[420px] text-left text-xs">
                   <thead className="text-[var(--muted)]"><tr><th>Prompt</th><th>Model</th><th>Esc.</th><th>Cost</th><th>Saved</th></tr></thead>
                   <tbody>
                     {savings.recent.map((r) => (
@@ -111,6 +112,7 @@ export default function SmartRouterPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           )}

@@ -200,10 +200,10 @@ export default function CostsPage() {
             <DailyChart data={summary.daily} />
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+          <div className="overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03]">
             <h2 className="p-4 font-medium">By model</h2>
             {models.length === 0 ? <div className="px-4 pb-4 text-sm text-white/40">No usage recorded in this period.</div> : (
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[560px] text-sm">
                 <thead className="bg-white/5 text-left text-xs text-white/50">
                   <tr><th className="px-4 py-2">Model</th><th className="px-4 py-2">Provider</th><th className="px-4 py-2 text-right">Calls</th><th className="px-4 py-2 text-right">Tokens</th><th className="px-4 py-2 text-right">Cost</th><th className="px-4 py-2">Share</th></tr>
                 </thead>

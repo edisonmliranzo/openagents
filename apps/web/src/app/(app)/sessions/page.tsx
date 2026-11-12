@@ -207,7 +207,7 @@ export default function SessionsPage() {
 
         <div className="space-y-4 p-5">
           <div className="flex flex-wrap items-end gap-3">
-            <label className="w-[220px] text-sm text-slate-600 dark:text-slate-300">
+            <label className="w-full max-w-full text-sm text-slate-600 sm:w-[220px] dark:text-slate-300">
               <span className="mb-1 block text-xs font-medium text-slate-500">Active within (minutes)</span>
               <input
                 value={activeWithinMinutes}
@@ -216,7 +216,7 @@ export default function SessionsPage() {
               />
             </label>
 
-            <label className="w-[165px] text-sm text-slate-600 dark:text-slate-300">
+            <label className="w-full max-w-full text-sm text-slate-600 sm:w-[165px] dark:text-slate-300">
               <span className="mb-1 block text-xs font-medium text-slate-500">Limit</span>
               <input
                 value={limit}
@@ -314,7 +314,7 @@ export default function SessionsPage() {
                             }
                           }}
                           placeholder="(optional)"
-                          className="h-9 w-[180px] rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          className="h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-red-200 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100 disabled:text-slate-400 sm:w-[180px] dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                         />
                       </td>
 
