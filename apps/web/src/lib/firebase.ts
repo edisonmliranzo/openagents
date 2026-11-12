@@ -29,13 +29,30 @@ export async function hardReloadWithCacheClear(): Promise<void> {
   }
 }
 
+// Firebase Web API keys are public by design (security is enforced by Firebase
+// Auth's authorized-domain list and security rules). Keeping a fallback here
+// makes clean CI builds — including Cloudflare's Git integration — include the
+// Google button even when .env.local is absent. Env vars still override it.
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyAtTBG-VOQ_jzHHsrXmsP6TnrfBDLD18Yk',
+  authDomain: 'podcastai-a3081.firebaseapp.com',
+  projectId: 'podcastai-a3081',
+  storageBucket: 'podcastai-a3081.firebasestorage.app',
+  messagingSenderId: '438847412009',
+  appId: '1:438847412009:web:b196456addf46f75c58938',
+}
+
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? '',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? '',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? '',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? '',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '',
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || DEFAULT_FIREBASE_CONFIG.apiKey,
+  authDomain:
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || DEFAULT_FIREBASE_CONFIG.authDomain,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || DEFAULT_FIREBASE_CONFIG.projectId,
+  storageBucket:
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || DEFAULT_FIREBASE_CONFIG.storageBucket,
+  messagingSenderId:
+    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ||
+    DEFAULT_FIREBASE_CONFIG.messagingSenderId,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || DEFAULT_FIREBASE_CONFIG.appId,
 }
 
 export function isFirebaseAuthConfigured(): boolean {
