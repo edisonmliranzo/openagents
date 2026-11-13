@@ -17,6 +17,13 @@ TRIAL_MESSAGES = "15"
 TRIAL_PROVIDER = "apisrouter"
 TRIAL_MODELS = "deepseek-v4.1-flash,gemini-3.8-flash,llama-4-scout"
 
+# Anti-abuse fences around the platform key. All optional; defaults shown.
+TRIAL_REQUIRE_VERIFIED = "true"        # trial only for verified identities
+TRIAL_MIN_ACCOUNT_AGE_MINUTES = "10"   # blocks instant sign-up-and-drain
+TRIAL_IP_DAILY_MESSAGES = "30"         # per network, across all accounts
+TRIAL_GLOBAL_DAILY_MESSAGES = "200"    # hard stop for the whole platform
+TRIAL_MAX_OUTPUT_TOKENS = "700"        # caps cost per trial message
+
 # PayPal billing (one-time payment -> plan for N days).
 # Set PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET as Worker secrets.
 PAYPAL_ENV = "live"

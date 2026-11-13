@@ -798,6 +798,25 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     'CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(userId, createdAt)',
   ).run()
+  // Anti-abuse budgets for the platform key. The per-IP and global counters
+  // stop a single actor (or a burst of bot accounts) from draining the
+  // platform's inference balance.
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS trial_ip_usage (
+       scope TEXT PRIMARY KEY,
+       ip TEXT NOT NULL,
+       day TEXT NOT NULL,
+       messages INTEGER NOT NULL DEFAULT 0,
+       updatedAt TEXT NOT NULL
+     )`,
+  ).run()
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS trial_daily_total (
+       day TEXT PRIMARY KEY,
+       messages INTEGER NOT NULL DEFAULT 0,
+       updatedAt TEXT NOT NULL
+     )`,
+  ).run()
   await env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS phone_calls (
        id TEXT PRIMARY KEY,
@@ -1092,8 +1111,153 @@ async function reserveTrialMessage(env, userId) {
     .run()
 }
 
-/** Record a successful sign-in for device/login analytics. Best-effort. */
-async function recordLoginEvent(env, userId, request) {
+// ---------------------------------------------------------------------------
+// Anti-abuse for the platform key
+//
+// The free trial is the only place OpenAgents pays for inference, so it is the
+// only place worth attacking. Four independent fences:
+//   1. verified identity  (Google sign-in, or a completed email verification)
+//   2. account age        (blocks instant sign-up-and-drain scripts)
+//   3. per-IP daily budget (blocks multi-account farming from one address)
+//   4. global daily budget (a hard stop for the whole platform)
+// ---------------------------------------------------------------------------
+
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  'mailinator.com', 'guerrillamail.com', '10minutemail.com', 'tempmail.com',
+  'temp-mail.org', 'throwawaymail.com', 'yopmail.com', 'sharklasers.com',
+  'getnada.com', 'dispostable.com', 'trashmail.com', 'maildrop.cc',
+  'fakeinbox.com', 'mailnesia.com', 'spam4.me', 'grr.la', 'guerrillamail.info',
+  'guerrillamail.biz', 'guerrillamail.net', 'guerrillamail.org', 'guerrillamail.de',
+  'tempr.email', 'discard.email', 'emailondeck.com', 'moakt.com', 'mohmal.com',
+  'burnermail.io', 'mailcatch.com', 'inboxkitten.com', 'email-temp.com',
+])
+
+function clientIpOf(request) {
+  return (request.headers.get('cf-connecting-ip') || '').slice(0, 64) || 'unknown'
+}
+
+function emailDomain(email) {
+  const at = String(email || '').lastIndexOf('@')
+  return at === -1 ? '' : String(email).slice(at + 1).toLowerCase()
+}
+
+function isDisposableEmail(email) {
+  return DISPOSABLE_EMAIL_DOMAINS.has(emailDomain(email))
+}
+
+async function markIdentityVerified(env, userId) {
+  try {
+    await env.DB.prepare('INSERT OR REPLACE INTO email_verified (userId, verifiedAt) VALUES (?, ?)')
+      .bind(userId, new Date().toISOString())
+      .run()
+  } catch {
+    // Table is created by the email module; ignore if unavailable.
+  }
+}
+
+async function isIdentityVerified(env, userId) {
+  try {
+    const row = await env.DB.prepare('SELECT verifiedAt FROM email_verified WHERE userId = ?').bind(userId).first()
+    return Boolean(row?.verifiedAt)
+  } catch {
+    return false
+  }
+}
+
+function trialAbuseConfig(env) {
+  const num = (value, fallback) => {
+    const n = Number(value)
+    return Number.isFinite(n) && n >= 0 ? n : fallback
+  }
+  return {
+    requireVerified: String(env.TRIAL_REQUIRE_VERIFIED ?? 'true').toLowerCase() !== 'false',
+    minAccountAgeMs: num(env.TRIAL_MIN_ACCOUNT_AGE_MINUTES, 10) * 60_000,
+    ipDailyMessages: num(env.TRIAL_IP_DAILY_MESSAGES, 30),
+    globalDailyMessages: num(env.TRIAL_GLOBAL_DAILY_MESSAGES, 200),
+    maxOutputTokens: num(env.TRIAL_MAX_OUTPUT_TOKENS, 700),
+  }
+}
+
+const todayKey = () => new Date().toISOString().slice(0, 10)
+
+/**
+ * Returns { ok: true } or { ok: false, reason } where reason is one of
+ * 'unverified' | 'too-new' | 'ip-budget' | 'global-budget'.
+ */
+async function checkTrialEligibility(env, userId, request) {
+  const cfg = trialAbuseConfig(env)
+
+  if (cfg.requireVerified && !(await isIdentityVerified(env, userId))) {
+    return { ok: false, reason: 'unverified' }
+  }
+
+  if (cfg.minAccountAgeMs > 0) {
+    const row = await env.DB.prepare('SELECT createdAt FROM users WHERE id = ?').bind(userId).first().catch(() => null)
+    const created = row?.createdAt ? Date.parse(row.createdAt) : 0
+    if (!created || Date.now() - created < cfg.minAccountAgeMs) {
+      return { ok: false, reason: 'too-new' }
+    }
+  }
+
+  if (cfg.ipDailyMessages > 0) {
+    const ip = clientIpOf(request)
+    const row = await env.DB.prepare('SELECT messages FROM trial_ip_usage WHERE scope = ?')
+      .bind(`${ip}:${todayKey()}`)
+      .first()
+      .catch(() => null)
+    if (Number(row?.messages || 0) >= cfg.ipDailyMessages) return { ok: false, reason: 'ip-budget' }
+  }
+
+  if (cfg.globalDailyMessages > 0) {
+    const row = await env.DB.prepare('SELECT messages FROM trial_daily_total WHERE day = ?')
+      .bind(todayKey())
+      .first()
+      .catch(() => null)
+    if (Number(row?.messages || 0) >= cfg.globalDailyMessages) return { ok: false, reason: 'global-budget' }
+  }
+
+  return { ok: true }
+}
+
+/** Count a reserved trial message against the IP and global budgets. */
+async function reserveTrialCapacity(env, request) {
+  const nowIso = new Date().toISOString()
+  const day = todayKey()
+  const ip = clientIpOf(request)
+  await env.DB.prepare(
+    `INSERT INTO trial_ip_usage (scope, ip, day, messages, updatedAt) VALUES (?, ?, ?, 1, ?)
+     ON CONFLICT(scope) DO UPDATE SET messages = messages + 1, updatedAt = excluded.updatedAt`,
+  )
+    .bind(`${ip}:${day}`, ip, day, nowIso)
+    .run()
+    .catch(() => {})
+  await env.DB.prepare(
+    `INSERT INTO trial_daily_total (day, messages, updatedAt) VALUES (?, 1, ?)
+     ON CONFLICT(day) DO UPDATE SET messages = messages + 1, updatedAt = excluded.updatedAt`,
+  )
+    .bind(day, nowIso)
+    .run()
+    .catch(() => {})
+}
+
+/** Optional Cloudflare Turnstile check; no-op unless TURNSTILE_SECRET is set. */
+async function verifyTurnstile(env, request, token) {
+  const secret = String(env.TURNSTILE_SECRET || '').trim()
+  if (!secret) return { ok: true, skipped: true }
+  if (!token) return { ok: false }
+  const form = new FormData()
+  form.append('secret', secret)
+  form.append('response', String(token).slice(0, 4096))
+  form.append('remoteip', clientIpOf(request))
+  const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+    method: 'POST',
+    body: form,
+  }).catch(() => null)
+  const json = await res?.json().catch(() => ({}))
+  return { ok: Boolean(json?.success) }
+}
+
+/** Record a successful sign-in for device/login analytics. Best-effort. */async function recordLoginEvent(env, userId, request) {
   if (!env.DB || !userId) return
   try {
     await env.DB.prepare(
@@ -1301,8 +1465,33 @@ export default {
             )
           }
 
+          // Anti-abuse: throwaway inboxes are the cheapest way to mass-create
+          // accounts, so they are rejected for password sign-ups.
+          if (isDisposableEmail(email)) {
+            return jsonResponse(
+              { statusCode: 400, message: 'Disposable email addresses are not allowed. Use Google sign-in or a permanent email.' },
+              400,
+              origin,
+            )
+          }
+
+          // Bot protection. No-op unless TURNSTILE_SECRET is configured.
+          const turnstile = await verifyTurnstile(env, request, body.turnstileToken || body.cfTurnstileResponse)
+          if (!turnstile.ok) {
+            return jsonResponse({ statusCode: 400, message: 'Human verification failed. Please try again.' }, 400, origin)
+          }
+
           const clientIp = request.headers.get('cf-connecting-ip') || 'unknown'
           const regBucket = `register:${clientIp}`
+          // Hard daily ceiling per network on top of the hourly bucket: a bot
+          // farm rotating emails from one host still gets stopped.
+          if (await hitRateLimit(env, `register-day:${clientIp}`, 10, 24 * 60 * 60 * 1000)) {
+            return jsonResponse(
+              { statusCode: 429, message: 'Too many accounts created from this network today. Please try again tomorrow.' },
+              429,
+              origin,
+            )
+          }
           const nowMs = Date.now()
           const hourMs = 60 * 60 * 1000
           const regRate = await env.DB.prepare('SELECT failures, windowStart FROM auth_rate_limits WHERE bucket = ?')
@@ -1311,8 +1500,7 @@ export default {
           if (regRate && nowMs - Number(regRate.windowStart) < hourMs && Number(regRate.failures) >= 5) {
             return jsonResponse(
               { statusCode: 429, message: 'Too many accounts created from this IP. Please try again later.' },
-              429,
-              origin,
+              429,              origin,
             )
           }
 
@@ -1602,6 +1790,9 @@ export default {
           }
 
           await recordLoginEvent(env, user.id, request)
+          // Firebase returned emailVerified=true, so Google accounts are
+          // trusted identities for the free trial without an extra step.
+          await markIdentityVerified(env, user.id)
 
           const secret = await getJwtSecret(env)
           const accessToken = await signJwtHs256(
@@ -2594,15 +2785,21 @@ export default {
           let baseUrl = validateSafeLlmBaseUrl(keyCandidates[0]?.baseUrl, activeProvider)
           let trialMode = false
           let trialRemaining = 0
+          let trialBlockedReason = null
           if (!apiKey) {
             const trial = trialConfig(env)
             if (trial.enabled) {
               const state = await getTrialState(env, user.id)
               trialRemaining = state.remaining
-              if (state.remaining > 0) {
+              const eligibility = await checkTrialEligibility(env, user.id, request)
+              if (!eligibility.ok) {
+                trialBlockedReason = eligibility.reason
+                await recordUsageEvent(env, user.id, 'trial_blocked', { reason: eligibility.reason })
+              } else if (state.remaining > 0) {
                 // Reserve before the upstream call so concurrent requests
                 // cannot exceed the lifetime cap.
                 await reserveTrialMessage(env, user.id)
+                await reserveTrialCapacity(env, request)
                 apiKey = trial.key
                 activeProvider = trial.provider
                 preferredModel = trial.model
@@ -2634,7 +2831,31 @@ export default {
               if (!apiKey) {
                 const trial = trialConfig(env)
                 await recordUsageEventOnce(env, user.id, 'trial_exhausted', { limit: trial.limit })
-                const onboardingReply = trial.enabled
+                const blockedReply =
+                  trialBlockedReason === 'unverified'
+                    ? [
+                        '### Verify your email to unlock the free trial',
+                        '',
+                        'Your account is created. Confirm your email address (check your inbox for the verification link), then send your message again.',
+                        '',
+                        'Prefer to skip the wait? Add your own key in **[Settings & Models](/settings/config)** and start immediately — Google sign-in accounts are already verified.',
+                      ].join('\n')
+                    : trialBlockedReason === 'too-new'
+                      ? [
+                          '### Almost there',
+                          '',
+                          'New accounts unlock the free trial after a short review window. Try again in a few minutes, or add your own key in **[Settings & Models](/settings/config)** to start now.',
+                        ].join('\n')
+                      : [
+                          '### Free trial unavailable from this network',
+                          '',
+                          'The free trial is rate-limited per network to prevent abuse. You can still use OpenAgents with your own key — your account stays free.',
+                          '',
+                          'Get one key for 93+ models at **[APIsRouter.dev](https://apisrouter.dev/?ref=openagents)**, then paste it in **[Settings & Models](/settings/config)**.',
+                        ].join('\n')
+                const onboardingReply = trialBlockedReason
+                  ? blockedReply
+                  : trial.enabled
                   ? [
                       `### Your ${trial.limit}-message free trial is used up`,
                       '',
@@ -2709,6 +2930,9 @@ export default {
                     model: preferredModel,
                     messages: llmMessages,
                     stream: true,
+                    // Trial traffic gets a hard output cap so one message
+                    // cannot generate an expensive long completion.
+                    ...(trialMode ? { max_tokens: trialAbuseConfig(env).maxOutputTokens } : {}),
                   }),
                 })
                 if (llmRes.ok) break
