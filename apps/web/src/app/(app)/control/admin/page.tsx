@@ -263,6 +263,126 @@ export default function CreatorAdminPage() {
           {error}
         </div>
       )}
+
+      <PayPalPanel />
     </div>
+  )
+}
+
+function PayPalPanel() {
+  const [status, setStatus] = useState<{
+    configured: boolean
+    mode: 'live' | 'sandbox'
+    currency: string
+    periodDays: number
+    webhookConfigured: boolean
+    plans: { id: string; name: string; amount: string; currency: string }[]
+  } | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    void sdk.client
+      .get<{
+        configured: boolean
+        mode: 'live' | 'sandbox'
+        currency: string
+        periodDays: number
+        webhookConfigured: boolean
+        plans: { id: string; name: string; amount: string; currency: string }[]
+      }>('/api/v1/billing/paypal/status')
+      .then((data) => {
+        if (!cancelled) setStatus(data)
+      })
+      .catch((err: any) => {
+        if (!cancelled) setError(err?.message ?? 'Could not load PayPal status')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Payments &amp; PayPal</h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            One-time payment grants a plan for {status?.periodDays ?? 30} days. Credentials are Worker secrets and never reach the browser.
+          </p>
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${
+            status?.configured
+              ? status.mode === 'live'
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'bg-amber-50 text-amber-700'
+              : 'bg-slate-100 text-slate-600'
+          }`}
+        >
+          {status?.configured ? `${status.mode} mode` : 'Not configured'}
+        </span>
+      </div>
+
+      {error && <p className="mt-3 rounded-lg bg-rose-50 p-2.5 text-xs text-rose-700">{error}</p>}
+
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { label: 'Client ID', value: status?.configured ? 'Configured' : 'Missing' },
+          { label: 'Secret', value: status?.configured ? 'Configured' : 'Missing' },
+          { label: 'Webhook', value: status?.webhookConfigured ? 'Verified' : 'Not set' },
+          { label: 'Currency', value: status?.currency ?? 'USD' },
+        ].map((item) => (
+          <div key={item.label} className="rounded-xl border border-slate-200 p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{item.label}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-900">{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {status?.plans?.length ? (
+        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="px-4 py-2 font-semibold">Plan</th>
+                <th className="px-4 py-2 font-semibold">Price</th>
+                <th className="px-4 py-2 font-semibold">Period</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {status.plans.map((plan) => (
+                <tr key={plan.id}>
+                  <td className="px-4 py-2 font-medium text-slate-900">{plan.name}</td>
+                  <td className="px-4 py-2 font-mono text-slate-700">
+                    {plan.currency} {plan.amount}
+                  </td>
+                  <td className="px-4 py-2 text-slate-500">{status.periodDays} days</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <p className="text-xs font-semibold text-slate-700">Where the API keys go (PowerShell)</p>
+        <pre className="mt-2 overflow-x-auto text-[11px] leading-relaxed text-slate-600">
+{`npx wrangler secret put PAYPAL_CLIENT_ID
+npx wrangler secret put PAYPAL_CLIENT_SECRET
+npx wrangler secret put PAYPAL_WEBHOOK_ID   # optional
+
+# wrangler.toml
+PAYPAL_ENV = "sandbox"   # then "live"
+PAYPAL_PRICE_PRO_USD = "20"
+PAYPAL_PRICE_TEAM_USD = "50"
+PAYPAL_PERIOD_DAYS = "30"`}
+        </pre>
+        <p className="mt-2 text-[11px] text-slate-500">
+          Webhook URL: <span className="font-mono">https://openagents.us/api/v1/paypal/webhook</span> · events:{' '}
+          <span className="font-mono">PAYMENT.CAPTURE.COMPLETED</span>
+        </p>
+      </div>
+    </section>
   )
 }

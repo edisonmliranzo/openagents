@@ -784,6 +784,20 @@ async function ensureSchema(env) {
        updatedAt TEXT NOT NULL
      )`,
   ).run()
+  // Sign-in log. Powers the Creator Admin device/login analytics with real
+  // data instead of placeholders. One row per successful authentication.
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS login_events (
+       id TEXT PRIMARY KEY,
+       userId TEXT NOT NULL,
+       ip TEXT,
+       userAgent TEXT,
+       createdAt TEXT NOT NULL
+     )`,
+  ).run()
+  await env.DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(userId, createdAt)',
+  ).run()
   await env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS phone_calls (
        id TEXT PRIMARY KEY,
@@ -1078,8 +1092,27 @@ async function reserveTrialMessage(env, userId) {
     .run()
 }
 
-const mediaHelpers = () => ({ jsonResponse, encryptSecret, decryptSecret, getUserApiKeyCandidates, hitRateLimit, validateSafeLlmBaseUrl, genId, timingSafeEqualStr })
+/** Record a successful sign-in for device/login analytics. Best-effort. */
+async function recordLoginEvent(env, userId, request) {
+  if (!env.DB || !userId) return
+  try {
+    await env.DB.prepare(
+      'INSERT INTO login_events (id, userId, ip, userAgent, createdAt) VALUES (?, ?, ?, ?, ?)',
+    )
+      .bind(
+        genId('lev'),
+        userId,
+        (request.headers.get('cf-connecting-ip') || '').slice(0, 64) || null,
+        (request.headers.get('user-agent') || '').slice(0, 300) || null,
+        new Date().toISOString(),
+      )
+      .run()
+  } catch {
+    // Never block sign-in on analytics.
+  }
+}
 
+const mediaHelpers = () => ({ jsonResponse, encryptSecret, decryptSecret, getUserApiKeyCandidates, hitRateLimit, validateSafeLlmBaseUrl, genId, timingSafeEqualStr })
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -1302,7 +1335,7 @@ export default {
             .bind(userId, email, displayName, passwordHash, nowIso, nowIso)
             .run()
 
-          void recordUsageEvent(env, userId, 'signup', { method: 'password' })
+          await recordUsageEvent(env, userId, 'signup', { method: 'password' })
 
           await env.DB.prepare(
             `INSERT INTO user_settings (userId, preferredProvider, preferredModel, customSystemPrompt, lastActiveConversationId, beginnerMode, onboardingCompletedAt, createdAt, updatedAt)
@@ -1436,6 +1469,7 @@ export default {
           }
 
           await env.DB.prepare('DELETE FROM auth_rate_limits WHERE bucket = ?').bind(rateBucket).run()
+          await recordLoginEvent(env, user.id, request)
 
           const secret = await getJwtSecret(env)
           const accessToken = await signJwtHs256(
@@ -1564,7 +1598,10 @@ export default {
               role: 'member',
               createdAt: nowIso,
             }
+            await recordUsageEvent(env, userId, 'signup', { method: 'google' })
           }
+
+          await recordLoginEvent(env, user.id, request)
 
           const secret = await getJwtSecret(env)
           const accessToken = await signJwtHs256(
@@ -1666,6 +1703,172 @@ export default {
             .bind(user.id)
             .first()
           return jsonResponse({ ...state, hasOwnKey: Boolean(ownKey) }, 200, origin)
+        }
+
+        // Creator Admin analytics (owner/admin only). Backed entirely by real
+        // D1 rows: users, conversations, messages, llm_keys and login_events.
+        if (path === '/api/v1/platform/admin/overview' && method === 'GET') {
+          const viewerRole = String(user.role || '').toLowerCase()
+          if (viewerRole !== 'owner' && viewerRole !== 'admin') {
+            return jsonResponse({ statusCode: 403, message: 'Owner or admin access required.' }, 403, origin)
+          }
+
+          const days = Math.min(365, Math.max(1, Number(url.searchParams.get('days')) || 30))
+          const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 60))
+          const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+          const one = async (sql, ...args) => {
+            const row = await env.DB.prepare(sql)
+              .bind(...args)
+              .first()
+              .catch(() => null)
+            return Number(row?.n || 0)
+          }
+
+          const [
+            totalUsers,
+            owners,
+            admins,
+            members,
+            newUsers30d,
+            activeUsers30d,
+            totalConversations,
+            totalMessages,
+            llmKeysConfigured,
+            trackedDevices,
+            totalDeviceLoginEvents,
+          ] = await Promise.all([
+            one('SELECT COUNT(*) AS n FROM users'),
+            one("SELECT COUNT(*) AS n FROM users WHERE lower(role) = 'owner'"),
+            one("SELECT COUNT(*) AS n FROM users WHERE lower(role) = 'admin'"),
+            one("SELECT COUNT(*) AS n FROM users WHERE lower(role) NOT IN ('owner','admin')"),
+            one('SELECT COUNT(*) AS n FROM users WHERE createdAt >= ?', since),
+            one('SELECT COUNT(DISTINCT userId) AS n FROM conversations WHERE createdAt >= ?', since),
+            one('SELECT COUNT(*) AS n FROM conversations'),
+            one('SELECT COUNT(*) AS n FROM messages'),
+            one('SELECT COUNT(DISTINCT userId) AS n FROM llm_keys WHERE apiKey IS NOT NULL'),
+            one('SELECT COUNT(*) AS n FROM (SELECT DISTINCT userId, ip, userAgent FROM login_events)'),
+            one('SELECT COUNT(*) AS n FROM login_events'),
+          ])
+
+          const newDevices30d = await one(
+            `SELECT COUNT(*) AS n FROM (
+               SELECT userId, ip, userAgent, MIN(createdAt) AS firstSeen
+               FROM login_events GROUP BY userId, ip, userAgent
+             ) WHERE firstSeen >= ?`,
+            since,
+          )
+          const activeDevices30d = await one(
+            'SELECT COUNT(*) AS n FROM (SELECT DISTINCT userId, ip, userAgent FROM login_events WHERE createdAt >= ?)',
+            since,
+          )
+
+          // Daily series: real signups plus real distinct devices per day.
+          const userRows = await env.DB.prepare(
+            'SELECT substr(createdAt, 1, 10) AS d, COUNT(*) AS n FROM users WHERE createdAt >= ? GROUP BY d',
+          )
+            .bind(since)
+            .all()
+            .catch(() => ({ results: [] }))
+          const deviceRows = await env.DB.prepare(
+            `SELECT substr(createdAt, 1, 10) AS d, COUNT(DISTINCT userId || '|' || COALESCE(ip,'') || '|' || COALESCE(userAgent,'')) AS n
+             FROM login_events WHERE createdAt >= ? GROUP BY d`,
+          )
+            .bind(since)
+            .all()
+            .catch(() => ({ results: [] }))
+          const newDevRows = await env.DB.prepare(
+            `SELECT d, COUNT(*) AS n FROM (
+               SELECT userId, ip, userAgent, substr(MIN(createdAt), 1, 10) AS d
+               FROM login_events WHERE createdAt >= ? GROUP BY userId, ip, userAgent
+             ) GROUP BY d`,
+          )
+            .bind(since)
+            .all()
+            .catch(() => ({ results: [] }))
+
+          const usersByDay = new Map((userRows.results || []).map((r) => [r.d, Number(r.n || 0)]))
+          const devicesByDay = new Map((deviceRows.results || []).map((r) => [r.d, Number(r.n || 0)]))
+          const newDevicesByDay = new Map((newDevRows.results || []).map((r) => [r.d, Number(r.n || 0)]))
+          const daily = []
+          for (let i = days - 1; i >= 0; i -= 1) {
+            const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+            daily.push({
+              date: d,
+              newUsers: usersByDay.get(d) || 0,
+              newDevices: newDevicesByDay.get(d) || 0,
+              activeDevices: devicesByDay.get(d) || 0,
+            })
+          }
+
+          const topRows = await env.DB.prepare(
+            `SELECT u.id AS userId, u.email AS email, u.role AS role,
+                    COUNT(DISTINCT l.ip || '|' || COALESCE(l.userAgent,'')) AS devices,
+                    COUNT(l.id) AS loginEvents,
+                    MAX(l.createdAt) AS lastSeenAt
+             FROM users u LEFT JOIN login_events l ON l.userId = u.id
+             GROUP BY u.id ORDER BY loginEvents DESC, lastSeenAt DESC LIMIT ?`,
+          )
+            .bind(limit)
+            .all()
+            .catch(() => ({ results: [] }))
+
+          const recentRows = await env.DB.prepare(
+            `SELECT l.id AS id, l.userId AS userId, u.email AS email, u.role AS role,
+                    l.userAgent AS userAgent, l.ip AS ipAddress, l.createdAt AS lastSeenAt
+             FROM login_events l JOIN users u ON u.id = l.userId
+             ORDER BY l.createdAt DESC LIMIT ?`,
+          )
+            .bind(limit)
+            .all()
+            .catch(() => ({ results: [] }))
+
+          return jsonResponse(
+            {
+              generatedAt: new Date().toISOString(),
+              viewer: { id: user.id, email: user.email, role: user.role },
+              totals: {
+                totalUsers,
+                owners,
+                admins,
+                members,
+                newUsers30d,
+                activeUsers30d,
+                totalConversations,
+                totalMessages,
+                pendingApprovals: 0,
+                trackedDevices,
+                newDevices30d,
+                activeDevices30d,
+                totalDeviceLoginEvents,
+                linkedWhatsAppDevices: 0,
+                mappedDomains: 0,
+                llmKeysConfigured,
+              },
+              daily,
+              topUsers: (topRows.results || []).map((r) => ({
+                userId: r.userId,
+                email: r.email,
+                role: r.role,
+                devices: Number(r.devices || 0),
+                loginEvents: Number(r.loginEvents || 0),
+                lastSeenAt: r.lastSeenAt || null,
+              })),
+              recentDevices: (recentRows.results || []).map((r) => ({
+                id: r.id,
+                userId: r.userId,
+                email: r.email,
+                role: r.role,
+                userAgent: r.userAgent || null,
+                ipAddress: r.ipAddress || null,
+                firstSeenAt: r.lastSeenAt,
+                lastSeenAt: r.lastSeenAt,
+                loginCount: 1,
+              })),
+            },
+            200,
+            origin,
+          )
         }
 
         // Account data export (GDPR) — never includes API key material
@@ -1970,7 +2173,7 @@ export default {
                 .run()
               // Funnel signal: a user who adds a key has converted from the
               // free trial to paying their own provider.
-              void recordUsageEventOnce(env, user.id, 'key_added', {
+              await recordUsageEventOnce(env, user.id, 'key_added', {
                 provider,
                 firstKey: !existingPlain,
               })
@@ -2406,7 +2609,7 @@ export default {
                 baseUrl = validateSafeLlmBaseUrl(null, activeProvider)
                 trialMode = true
                 trialRemaining = state.remaining - 1
-                void recordUsageEvent(env, user.id, 'trial_message', {
+                await recordUsageEvent(env, user.id, 'trial_message', {
                   provider: activeProvider,
                   model: preferredModel,
                   remaining: trialRemaining,
@@ -2430,7 +2633,7 @@ export default {
 
               if (!apiKey) {
                 const trial = trialConfig(env)
-                void recordUsageEventOnce(env, user.id, 'trial_exhausted', { limit: trial.limit })
+                await recordUsageEventOnce(env, user.id, 'trial_exhausted', { limit: trial.limit })
                 const onboardingReply = trial.enabled
                   ? [
                       `### Your ${trial.limit}-message free trial is used up`,
@@ -2577,13 +2780,13 @@ export default {
 
               const finalContent = accumulated.trim() || 'Done.'
               const completedAt = new Date().toISOString()
-              void recordUsageEventOnce(env, user.id, 'first_message', {
+              await recordUsageEventOnce(env, user.id, 'first_message', {
                 provider: activeProvider,
                 model: preferredModel,
                 trial: trialMode,
               })
               if (trialMode) {
-                void recordUsageEvent(env, user.id, 'trial_message_delivered', { remaining: trialRemaining })
+                await recordUsageEvent(env, user.id, 'trial_message_delivered', { remaining: trialRemaining })
               }
 
               await env.DB.prepare(
