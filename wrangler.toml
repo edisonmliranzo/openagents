@@ -19,7 +19,7 @@ TRIAL_MODELS = "deepseek-v4.1-flash,gemini-3.8-flash,llama-4-scout"
 
 # PayPal billing (one-time payment -> plan for N days).
 # Set PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET as Worker secrets.
-PAYPAL_ENV = "sandbox"
+PAYPAL_ENV = "live"
 PAYPAL_CURRENCY = "USD"
 PAYPAL_PRICE_PRO_USD = "20"
 PAYPAL_PRICE_TEAM_USD = "50"
