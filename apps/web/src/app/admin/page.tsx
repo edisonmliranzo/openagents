@@ -31,7 +31,7 @@ import {
   Server,
   Lock,
 } from 'lucide-react'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, sdk } from '@/stores/auth'
 
 interface WaitlistEntry {
   id: string
@@ -45,10 +45,19 @@ interface WaitlistEntry {
 
 export default function AdminAnalyticsPage() {
   const user = useAuthStore((state) => state.user)
-  const [activeTab, setActiveTab] = useState<'overview' | 'waitlist' | 'agents' | 'models' | 'system'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'waitlist' | 'agents' | 'models' | 'system' | 'payments'>('overview')
   const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d' | 'all'>('7d')
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [paypal, setPaypal] = useState<{
+    configured: boolean
+    mode: 'live' | 'sandbox'
+    currency: string
+    periodDays: number
+    webhookConfigured: boolean
+    plans: { id: string; name: string; amount: string; currency: string }[]
+  } | null>(null)
+  const [paypalError, setPaypalError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastRefreshed, setLastRefreshed] = useState<string>('Just now')
 
@@ -86,6 +95,30 @@ export default function AdminAnalyticsPage() {
     return () => {
       window.removeEventListener('storage', handler)
       window.removeEventListener('waitlist_updated', handler)
+    }
+  }, [])
+
+  // PayPal status comes from the Worker so the admin panel never holds
+  // credentials — it only reports whether the secrets are configured.
+  useEffect(() => {
+    let cancelled = false
+    void sdk.client
+      .get<{
+        configured: boolean
+        mode: 'live' | 'sandbox'
+        currency: string
+        periodDays: number
+        webhookConfigured: boolean
+        plans: { id: string; name: string; amount: string; currency: string }[]
+      }>('/api/v1/billing/paypal/status')
+      .then((data) => {
+        if (!cancelled) setPaypal(data)
+      })
+      .catch((err) => {
+        if (!cancelled) setPaypalError(String((err as Error)?.message || 'Could not load PayPal status'))
+      })
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -369,6 +402,7 @@ export default function AdminAnalyticsPage() {
               { id: 'agents', label: 'Agent & Tool Telemetry', icon: Bot },
               { id: 'models', label: 'Model Cost & Distribution', icon: Cpu },
               { id: 'system', label: 'Infrastructure & Containers', icon: Server },
+              { id: 'payments', label: 'Payments & PayPal', icon: DollarSign },
             ].map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -756,6 +790,105 @@ export default function AdminAnalyticsPage() {
                   <p className="mt-1 text-xs text-slate-400">{svc.note}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'payments' && (
+          <div className="mt-6 space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-slate-900">PayPal</h3>
+                  <p className="text-xs text-slate-500">
+                    One-time payment that grants a plan for {paypal?.periodDays ?? 30} days. Credentials live only in Worker secrets.
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${
+                    paypal?.configured
+                      ? paypal.mode === 'live'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-amber-50 text-amber-700'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {paypal?.configured ? `${paypal.mode} mode` : 'Not configured'}
+                </span>
+              </div>
+
+              {paypalError && (
+                <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                  {paypalError}
+                </p>
+              )}
+
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Client ID</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{paypal?.configured ? 'Configured' : 'Missing'}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Secret</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{paypal?.configured ? 'Configured' : 'Missing'}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Webhook</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {paypal?.webhookConfigured ? 'Verified' : 'Not set'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Currency</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{paypal?.currency ?? 'USD'}</p>
+                </div>
+              </div>
+
+              {paypal?.plans?.length ? (
+                <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
+                      <tr>
+                        <th className="px-4 py-2.5 font-semibold">Plan</th>
+                        <th className="px-4 py-2.5 font-semibold">Price</th>
+                        <th className="px-4 py-2.5 font-semibold">Period</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {paypal.plans.map((plan) => (
+                        <tr key={plan.id}>
+                          <td className="px-4 py-2.5 font-medium text-slate-900">{plan.name}</td>
+                          <td className="px-4 py-2.5 font-mono text-slate-700">
+                            {plan.currency} {plan.amount}
+                          </td>
+                          <td className="px-4 py-2.5 text-slate-500">{paypal.periodDays} days</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
+              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold text-slate-700">Setup (PowerShell)</p>
+                <pre className="mt-2 overflow-x-auto text-[11px] leading-relaxed text-slate-600">
+{`npx wrangler secret put PAYPAL_CLIENT_ID
+npx wrangler secret put PAYPAL_CLIENT_SECRET
+npx wrangler secret put PAYPAL_WEBHOOK_ID   # optional, enables webhook verification
+
+# wrangler.toml
+[vars]
+PAYPAL_ENV = "sandbox"        # switch to "live" when ready
+PAYPAL_CURRENCY = "USD"
+PAYPAL_PRICE_PRO_USD = "20"
+PAYPAL_PRICE_TEAM_USD = "50"
+PAYPAL_PERIOD_DAYS = "30"`}
+                </pre>
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Webhook URL: <span className="font-mono">https://openagents.us/api/v1/paypal/webhook</span> — subscribe to{' '}
+                  <span className="font-mono">PAYMENT.CAPTURE.COMPLETED</span>.
+                </p>
+              </div>
             </div>
           </div>
         )}

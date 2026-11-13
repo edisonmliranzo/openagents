@@ -1,6 +1,7 @@
 import { handleMediaRoutes } from './worker-media.mjs'
 import { handleShareRoutes } from './worker-share.mjs'
 import { handleBillingRoutes } from './worker-billing-stripe.mjs'
+import { handlePayPalRoutes } from './worker-billing-paypal.mjs'
 import { reportError, handleClientError } from './worker-limits.mjs'
 import { sendEmail, passwordResetEmail, sendVerificationEmail, handleEmailRoutes } from './worker-email.mjs'
 
@@ -1129,6 +1130,8 @@ export default {
         if (publicShare) return publicShare
         const publicBilling = await handleBillingRoutes({ request, env, url, path, method, origin, user: null, h: mediaHelpers() })
         if (publicBilling) return publicBilling
+        const publicPaypal = await handlePayPalRoutes({ request, env, url, path, method, origin, user: null, h: mediaHelpers() })
+        if (publicPaypal) return publicPaypal
 
         const publicMedia = await handleMediaRoutes({ request, env, url, path, method, origin, user: null, h: mediaHelpers() })
         if (publicMedia) return publicMedia
@@ -1644,6 +1647,8 @@ export default {
         if (shareRes) return shareRes
         const billingRes = await handleBillingRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
         if (billingRes) return billingRes
+        const paypalRes = await handlePayPalRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
+        if (paypalRes) return paypalRes
         const mediaRes = await handleMediaRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
         if (mediaRes) return mediaRes
 
