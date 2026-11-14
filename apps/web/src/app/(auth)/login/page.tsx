@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/stores/auth'
 import {
+  consumePendingGoogleRedirectIdToken,
   firebaseAuthErrorMessage,
   hardReloadWithCacheClear,
   isFirebaseAuthConfigured,
   signInWithGoogleIdToken,
+  signInWithGoogleRedirect,
+  warmupGoogleAuth,
 } from '@/lib/firebase'
 
 function GoogleMark({ size = 18 }: { size?: number }) {
@@ -36,6 +39,16 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const googleEnabled = isFirebaseAuthConfigured()
 
+  function navigateAfterAuth() {
+    if (typeof window === 'undefined') {
+      router.push('/chat')
+      return
+    }
+    const nextPath = new URLSearchParams(window.location.search).get('next')
+    const target = nextPath && nextPath.startsWith('/') ? nextPath : '/chat'
+    window.location.assign(target)
+  }
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
@@ -46,7 +59,25 @@ export default function LoginPage() {
     if (prefillEmail) {
       setEmail(prefillEmail)
     }
-  }, [])
+
+    if (googleEnabled) {
+      warmupGoogleAuth()
+      void consumePendingGoogleRedirectIdToken()
+        .then(async (redirectToken) => {
+          if (!redirectToken) return
+          const firebaseAction = useAuthStore.getState().firebaseLogin
+          if (typeof firebaseAction !== 'function') return
+          setGoogleLoading(true)
+          await firebaseAction(redirectToken)
+          navigateAfterAuth()
+        })
+        .catch((err) => {
+          setGoogleLoading(false)
+          const message = firebaseAuthErrorMessage(err)
+          if (message) setError(message)
+        })
+    }
+  }, [googleEnabled])
 
   function toErrorMessage(err: unknown, fallback: string) {
     if (!err || typeof err !== 'object') return fallback
@@ -92,14 +123,9 @@ export default function LoginPage() {
       } else {
         await safeRegister(email, password, name || undefined)
       }
-      const nextPath =
-        typeof window !== 'undefined'
-          ? new URLSearchParams(window.location.search).get('next')
-          : null
-      router.push(nextPath && nextPath.startsWith('/') ? nextPath : '/chat')
+      navigateAfterAuth()
     } catch (err: any) {
       setError(toErrorMessage(err, mode === 'login' ? 'Login failed' : 'Registration failed'))
-    } finally {
       setLoading(false)
     }
   }
@@ -130,16 +156,24 @@ export default function LoginPage() {
     try {
       const idToken = await signInWithGoogleIdToken()
       await firebaseAction(idToken)
-      const nextPath =
-        typeof window !== 'undefined'
-          ? new URLSearchParams(window.location.search).get('next')
-          : null
-      router.push(nextPath && nextPath.startsWith('/') ? nextPath : '/chat')
+      navigateAfterAuth()
     } catch (err: any) {
       console.error('[google-signin]', err)
       const message = firebaseAuthErrorMessage(err)
       if (message) setError(message)
-    } finally {
+      setGoogleLoading(false)
+    }
+  }
+
+  async function handleGoogleRedirectFallback() {
+    if (googleLoading || loading) return
+    setError('')
+    setGoogleLoading(true)
+    try {
+      await signInWithGoogleRedirect()
+    } catch (err: any) {
+      const message = firebaseAuthErrorMessage(err)
+      if (message) setError(message)
       setGoogleLoading(false)
     }
   }
@@ -171,7 +205,7 @@ export default function LoginPage() {
         </div>
 
         {googleEnabled && (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <button
               type="button"
               onClick={() => void handleGoogleSignIn()}
@@ -181,6 +215,16 @@ export default function LoginPage() {
               <GoogleMark />
               <span>{googleLoading ? 'Connecting to Google…' : 'Continue with Google'}</span>
             </button>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => void handleGoogleRedirectFallback()}
+                disabled={googleLoading || loading}
+                className="text-[11px] text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline disabled:opacity-50"
+              >
+                Popup blocked or not opening? Use redirect instead
+              </button>
+            </div>
             <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
               <span className="h-px flex-1 bg-slate-700/70" />
               <span>or use email</span>

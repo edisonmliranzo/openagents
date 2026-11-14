@@ -1,3 +1,14 @@
+import { initializeApp, getApps } from 'firebase/app'
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged,
+  browserPopupRedirectResolver,
+} from 'firebase/auth'
+
 /**
  * Recover from a stale deployment: remove cached bundles and old service
  * workers, then reload with a cache-busting URL. Used when the page detects
@@ -59,28 +70,190 @@ export function isFirebaseAuthConfigured(): boolean {
   return Boolean(firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId && firebaseConfig.appId)
 }
 
+let cachedAuth: ReturnType<typeof getAuth> | null = null
+let warmupStarted = false
+
+function getFirebaseAuthInstance() {
+  if (cachedAuth) return cachedAuth
+  const app = getApps()[0] ?? initializeApp(firebaseConfig)
+  const auth = getAuth(app)
+  auth.useDeviceLanguage()
+  cachedAuth = auth
+  return auth
+}
+
+function createGoogleProvider() {
+  const provider = new GoogleAuthProvider()
+  provider.setCustomParameters({ prompt: 'select_account' })
+  return provider
+}
+
 /**
- * Opens the Google account picker through Firebase Auth and returns a fresh
- * Firebase ID token. The token is exchanged server-side for the normal
- * OpenAgents access/refresh token pair; Firebase is never the session issuer.
+ * Proactively initializes Firebase Auth's popup/redirect resolver (loads gapi +
+ * the hidden auth relay iframe + origin validation) as soon as `/login` mounts.
+ * Without this, desktop browsers wait until the user clicks "Continue with Google"
+ * to load `apis.google.com/js/api.js` and `__/auth/iframe`, which takes several
+ * seconds and causes popup blockers or hangs on "Connecting to Google…".
+ */
+export function warmupGoogleAuth(): void {
+  if (!isFirebaseAuthConfigured() || typeof window === 'undefined' || warmupStarted) return
+  warmupStarted = true
+  try {
+    const auth = getFirebaseAuthInstance()
+    const resolver =
+      (auth as any)._popupRedirectResolver ??
+      (typeof (browserPopupRedirectResolver as any)?._initialize === 'function'
+        ? browserPopupRedirectResolver
+        : null)
+    if (resolver && typeof resolver._initialize === 'function') {
+      void Promise.resolve(resolver._initialize(auth)).catch(() => {})
+    }
+    if (resolver && typeof resolver._originValidation === 'function') {
+      void Promise.resolve(resolver._originValidation(auth)).catch(() => {})
+    }
+  } catch {
+    // ignore warmup failures
+  }
+}
+
+/**
+ * Checks whether the browser just returned from a `signInWithRedirect` flow
+ * and returns the Firebase ID token if present. Also warms up the auth resolver.
+ */
+export async function consumePendingGoogleRedirectIdToken(): Promise<string | null> {
+  if (!isFirebaseAuthConfigured() || typeof window === 'undefined') return null
+  warmupGoogleAuth()
+  try {
+    const auth = getFirebaseAuthInstance()
+    const result = await getRedirectResult(auth, browserPopupRedirectResolver)
+    if (result?.user) {
+      return await result.user.getIdToken()
+    }
+  } catch (err) {
+    console.warn('[google-redirect]', err)
+  }
+  return null
+}
+
+/**
+ * Full-page redirect fallback for browsers/environments that block popups or
+ * third-party popup communication.
+ */
+export async function signInWithGoogleRedirect(): Promise<void> {
+  if (!isFirebaseAuthConfigured()) {
+    throw new Error('Google sign-in is not configured.')
+  }
+  const auth = getFirebaseAuthInstance()
+  const provider = createGoogleProvider()
+  await signInWithRedirect(auth, provider, browserPopupRedirectResolver)
+}
+
+/**
+ * Opens the Google account picker and returns a fresh Firebase ID token.
+ * Listens to `signInWithPopup`, `onAuthStateChanged`, and `auth.currentUser`
+ * so COOP/third-party-cookie restrictions that prevent `window.closed` detection
+ * resolve immediately once Firebase receives the credential.
  */
 export async function signInWithGoogleIdToken(): Promise<string> {
   if (!isFirebaseAuthConfigured()) {
     throw new Error('Google sign-in is not configured.')
   }
 
-  const { initializeApp, getApps } = await import('firebase/app')
-  const { getAuth, GoogleAuthProvider, signInWithPopup } = await import('firebase/auth')
+  const auth = getFirebaseAuthInstance()
+  const provider = createGoogleProvider()
 
-  const app = getApps()[0] ?? initializeApp(firebaseConfig)
-  const auth = getAuth(app)
-  auth.useDeviceLanguage()
+  return await new Promise<string>((resolve, reject) => {
+    let settled = false
+    let unsubscribeAuth: (() => void) | null = null
 
-  const provider = new GoogleAuthProvider()
-  provider.setCustomParameters({ prompt: 'select_account' })
+    const finish = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      clearInterval(userPoll)
+      clearTimeout(safetyTimer)
+      if (unsubscribeAuth) {
+        try {
+          unsubscribeAuth()
+        } catch {
+          // ignore
+        }
+      }
+      fn()
+    }
 
-  const credential = await signInWithPopup(auth, provider)
-  return credential.user.getIdToken()
+    // Also listen to onAuthStateChanged in case the popup credential arrives
+    // before signInWithPopup's internal promise settles under strict COOP.
+    try {
+      unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        if (user && user.providerData.some((p) => p.providerId === 'google.com')) {
+          void user
+            .getIdToken()
+            .then((token) => {
+              if (token) finish(() => resolve(token))
+            })
+            .catch(() => {})
+        }
+      })
+    } catch {
+      // ignore
+    }
+
+    // Start popup inside user click handler
+    const popupPromise = signInWithPopup(auth, provider, browserPopupRedirectResolver)
+
+    popupPromise
+      .then(async (credential) => {
+        try {
+          const token = await credential.user.getIdToken()
+          finish(() => resolve(token))
+        } catch (err) {
+          finish(() => reject(err))
+        }
+      })
+      .catch(async (err: any) => {
+        const code = String(err?.code ?? '')
+        // If popups are blocked or unsupported in this browser/webview, fall back to full-page redirect
+        if (
+          code === 'auth/popup-blocked' ||
+          code === 'auth/operation-not-supported-in-this-environment'
+        ) {
+          try {
+            await signInWithRedirect(auth, provider, browserPopupRedirectResolver)
+            return
+          } catch (redirectErr) {
+            finish(() => reject(redirectErr))
+            return
+          }
+        }
+        finish(() => reject(err))
+      })
+
+    // Poll auth.currentUser in case signInWithPopup's internal window-close poll
+    // hangs due to COOP headers after the credential is already written.
+    const userPoll = setInterval(() => {
+      const current = auth.currentUser
+      if (current && current.providerData.some((p) => p.providerId === 'google.com')) {
+        void current
+          .getIdToken()
+          .then((token) => {
+            if (token) finish(() => resolve(token))
+          })
+          .catch(() => {})
+      }
+    }, 500)
+
+    // Never leave the button stuck on "Connecting to Google…" forever if the popup
+    // was closed under strict Cross-Origin-Opener-Policy where window.closed is masked.
+    const safetyTimer = setTimeout(() => {
+      finish(() =>
+        reject(
+          new Error(
+            'Google sign-in popup timed out or was blocked. Try clicking "Use redirect instead" below.',
+          ),
+        ),
+      )
+    }, 30_000)
+  })
 }
 
 export function firebaseAuthErrorMessage(error: unknown): string | null {
@@ -88,10 +261,10 @@ export function firebaseAuthErrorMessage(error: unknown): string | null {
     typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code ?? '') : ''
 
   if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-    return null
+    return 'Google sign-in window was closed before completing. Click "Continue with Google" to try again.'
   }
   if (code === 'auth/popup-blocked') {
-    return 'Your browser blocked the Google sign-in popup. Allow popups and try again.'
+    return 'Your browser blocked the Google sign-in popup. Allow popups for openagents.us and try again.'
   }
   if (code === 'auth/unauthorized-domain') {
     return 'This domain is not authorized for Google sign-in yet. Add it in Firebase Authentication → Settings → Authorized domains.'
