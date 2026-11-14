@@ -188,15 +188,18 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       onRehydrateStorage: (state) => {
-        state?.setHydrated(false)
+        // Do NOT call setHydrated(false) synchronously here: calling set() before
+        // Zustand reads localStorage triggers persist's setItem() and overwrites
+        // the saved tokens with the initial empty state (`accessToken: null`).
         return (rehydratedState, error) => {
+          const target = rehydratedState ?? state
           if (error || !isValidSignedJwtFormat(rehydratedState?.accessToken)) {
             sdk.client.clearTokens()
             if (typeof document !== 'undefined') {
               document.cookie = `openagents-authed=; ${authCookieSuffix(0)}`
             }
-            state?.setUser(null)
-            state?.setHydrated(true)
+            target?.setUser?.(null)
+            target?.setHydrated?.(true)
             return
           }
 
@@ -216,7 +219,7 @@ export const useAuthStore = create<AuthState>()(
             }
           }
 
-          state?.setHydrated(true)
+          target?.setHydrated?.(true)
         }
       },
     },
