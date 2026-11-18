@@ -37,7 +37,7 @@ function VerifyEmailInner() {
       {state === 'loading' && <p className="text-slate-500">Verifying…</p>}
       {state === 'ok' && <p className="text-emerald-700">Your email is verified. Thanks!</p>}
       {state === 'error' && <p className="text-rose-700">{message}</p>}
-      <Link href="/dashboard" className="inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+      <Link href="/chat" className="inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
         Continue to OpenAgents
       </Link>
     </div>

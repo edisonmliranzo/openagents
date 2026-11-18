@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { CheckCircle2, XCircle, RefreshCw, Key } from 'lucide-react'
+import { sdk } from '@/stores/auth'
 
 interface ApiKeyHealth {
   name: string
@@ -21,8 +22,10 @@ export default function ApiKeysPage() {
   async function loadHealth() {
     setLoading(true)
     try {
-      const res = await fetch('/api/v1/apikeys/health', { credentials: 'include' })
-      if (res.ok) setKeys(await res.json())
+      const data = await sdk.client.get<ApiKeyHealth[]>('/api/v1/apikeys/health')
+      setKeys(data)
+    } catch (err: any) {
+      setMessage(err?.message ?? 'Failed to load API key health')
     } finally {
       setLoading(false)
     }
@@ -36,15 +39,11 @@ export default function ApiKeysPage() {
     setRotating(envVar)
     setMessage('')
     try {
-      const res = await fetch('/api/v1/apikeys/rotate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ envVar, newValue }),
-        credentials: 'include',
-      })
-      const data = await res.json()
-      setMessage(data.message ?? 'Done')
+      const data = await sdk.client.post<{ success?: boolean; message?: string }>('/api/v1/apikeys/rotate', { envVar, newValue })
+      setMessage(data?.message ?? 'Done')
       await loadHealth()
+    } catch (err: any) {
+      setMessage(err?.message ?? 'Failed to rotate API key')
     } finally {
       setRotating(null)
     }

@@ -4,6 +4,10 @@ import { handleBillingRoutes } from './worker-billing-stripe.mjs'
 import { handlePayPalRoutes } from './worker-billing-paypal.mjs'
 import { reportError, handleClientError } from './worker-limits.mjs'
 import { sendEmail, passwordResetEmail, sendVerificationEmail, handleEmailRoutes } from './worker-email.mjs'
+import { handleMemoryRoutes } from './worker-memory.mjs'
+import { handleProductivityRoutes } from './worker-productivity.mjs'
+import { handleWorkspaceRoutes } from './worker-workspace.mjs'
+import { handleIntegrationRoutes } from './worker-integrations.mjs'
 
 // Upstream proxying is disabled unless env.UPSTREAM_API_URL (or legacy env.API_TUNNEL_URL) is set.
 
@@ -1879,6 +1883,14 @@ export default {
         if (paypalRes) return paypalRes
         const mediaRes = await handleMediaRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
         if (mediaRes) return mediaRes
+        const memoryRes = await handleMemoryRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
+        if (memoryRes) return memoryRes
+        const prodRes = await handleProductivityRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
+        if (prodRes) return prodRes
+        const wsRes = await handleWorkspaceRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
+        if (wsRes) return wsRes
+        const intgRes = await handleIntegrationRoutes({ request, env, url, path, method, origin, user, h: mediaHelpers() })
+        if (intgRes) return intgRes
 
         if ((path === '/api/v1/auth/me' || path === '/api/v1/users/me') && method === 'GET') {
           return jsonResponse(user, 200, origin)
@@ -2128,7 +2140,7 @@ export default {
         }
 
         // 5. User Settings
-        if (path === '/api/v1/users/me/settings' && method === 'GET') {
+        if ((path === '/api/v1/users/me/settings' || path === '/api/v1/users/settings') && method === 'GET') {
           let settings = await env.DB.prepare('SELECT * FROM user_settings WHERE userId = ? LIMIT 1')
             .bind(user.id)
             .first()
@@ -2156,7 +2168,7 @@ export default {
           return jsonResponse(settings, 200, origin)
         }
 
-        if (path === '/api/v1/users/me/settings' && (method === 'PUT' || method === 'PATCH')) {
+        if ((path === '/api/v1/users/me/settings' || path === '/api/v1/users/settings') && (method === 'PUT' || method === 'PATCH')) {
           const body = await request.json().catch(() => ({}))
           const now = new Date().toISOString()
           const current = await env.DB.prepare('SELECT * FROM user_settings WHERE userId = ? LIMIT 1')

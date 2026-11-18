@@ -30,7 +30,6 @@ const FAQS = [
 
 export function LandingExtras({ warmTheme }: { warmTheme: boolean }) {
   const [openFaq, setOpenFaq] = useState<number | null>(0)
-  const [videoOk, setVideoOk] = useState(true)
   const card = warmTheme
     ? 'border-black/[0.07] bg-white/90 shadow-lg shadow-stone-900/5'
     : 'border-white/10 bg-white/[0.03]'
@@ -61,17 +60,7 @@ export function LandingExtras({ warmTheme }: { warmTheme: boolean }) {
             </div>
             <div className="lg:col-span-7">
               <div className="relative mx-auto aspect-[16/10] w-full max-w-xl overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#0f1424] via-[#0b101d] to-[#130d1e] text-white shadow-2xl">
-                {videoOk && (
-                  <video
-                    src="/demo/avatar-call.mp4"
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    onError={() => setVideoOk(false)}
-                    className="absolute inset-0 z-10 h-full w-full object-cover"
-                  />
-                )}
+                {/* Animated call preview (no video asset needed). */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4">
                   <div className="relative h-28 w-28 sm:h-36 sm:w-36">
                     <span className="oa-call-ring absolute inset-0 rounded-full border-2 border-rose-400" />

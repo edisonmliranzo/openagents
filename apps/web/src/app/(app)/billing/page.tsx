@@ -71,17 +71,22 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [paypal, setPaypal] = useState<{ configured: boolean; mode: string } | null>(null)
 
   const loadBilling = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [planRes, usageRes] = await Promise.all([
+      const [planRes, usageRes, paypalRes] = await Promise.all([
         sdk.client.get<BillingPlanState>('/api/v1/billing/plan'),
         sdk.client.get<BillingUsage>('/api/v1/billing/usage'),
+        sdk.client
+          .get<{ configured: boolean; mode: string }>('/api/v1/billing/paypal/status')
+          .catch(() => null),
       ])
       setPlanState(planRes)
       setUsage(usageRes)
+      setPaypal(paypalRes)
     } catch (err: any) {
       setError(err?.message ?? 'Failed to load billing details')
     } finally {
@@ -92,6 +97,48 @@ export default function BillingPage() {
   useEffect(() => {
     void loadBilling()
   }, [loadBilling])
+
+  // Returning from PayPal: ?paypal=return&token=<orderId> -> capture the order.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('paypal')
+    const orderId = params.get('token')
+    if (!status) return
+    window.history.replaceState(null, '', '/billing')
+    if (status === 'cancel') {
+      addToast('info', 'PayPal checkout was cancelled.')
+      return
+    }
+    if (status !== 'return' || !orderId) return
+    setBusyAction('paypal-capture')
+    sdk.client
+      .post<{ ok: boolean; plan: string }>('/api/v1/billing/paypal/capture', { orderId })
+      .then((res) => {
+        addToast('success', `Payment complete. Your ${String(res.plan).toUpperCase()} plan is active.`)
+        void loadBilling()
+      })
+      .catch((err: any) => addToast('error', err?.message ?? 'Could not confirm the PayPal payment'))
+      .finally(() => setBusyAction(null))
+  }, [addToast, loadBilling])
+
+  async function handlePayPalCheckout(plan: 'pro' | 'team') {
+    setBusyAction(plan)
+    try {
+      const res = await sdk.client.post<{ id: string; approveUrl: string | null }>(
+        '/api/v1/billing/paypal/order',
+        { plan },
+      )
+      if (res.approveUrl) {
+        window.location.href = res.approveUrl
+        return
+      }
+      addToast('error', 'PayPal did not return a checkout link. Please try again.')
+    } catch (err: any) {
+      addToast('error', err?.message ?? 'Could not start PayPal checkout')
+    }
+    setBusyAction(null)
+  }
 
   async function handleCheckout(plan: 'pro' | 'team') {
     setBusyAction(plan)
@@ -168,7 +215,14 @@ export default function BillingPage() {
         </div>
       )}
 
-      {planState && !planState.configured && (
+      {busyAction === 'paypal-capture' && (
+        <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          <RefreshCw className="h-4 w-4 animate-spin" />
+          <span>Confirming your PayPal payment…</span>
+        </div>
+      )}
+
+      {planState && !planState.configured && !paypal?.configured && (
         <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-800">
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
           <div>
@@ -277,6 +331,20 @@ export default function BillingPage() {
                     className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-xs font-semibold text-slate-500"
                   >
                     {isCurrent ? 'Active Free Plan' : 'Included Base Tier'}
+                  </button>
+                ) : !planState?.configured && paypal?.configured ? (
+                  <button
+                    type="button"
+                    onClick={() => void handlePayPalCheckout(plan.id as 'pro' | 'team')}
+                    disabled={isCurrent || busyAction === plan.id || busyAction === 'paypal-capture'}
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0070ba] py-2.5 text-xs font-semibold text-white hover:bg-[#005ea6] disabled:opacity-50"
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    {isCurrent
+                      ? 'Current Plan'
+                      : busyAction === plan.id
+                        ? 'Redirecting to PayPal...'
+                        : `Upgrade with PayPal`}
                   </button>
                 ) : !planState?.configured ? (
                   <a

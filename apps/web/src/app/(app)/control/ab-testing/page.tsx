@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { FlaskConical, Plus, Trash2, Trophy } from 'lucide-react'
+import { sdk } from '@/stores/auth'
 
 interface AbTestVariant {
   id: string
@@ -42,8 +43,10 @@ export default function AbTestingPage() {
   async function loadTests() {
     setLoading(true)
     try {
-      const res = await fetch('/api/v1/ab-tests', { credentials: 'include' })
-      if (res.ok) setTests(await res.json())
+      const data = await sdk.client.get<AbTest[]>('/api/v1/ab-tests')
+      setTests(data)
+    } catch {
+      // ignore load errors
     } finally {
       setLoading(false)
     }
@@ -55,34 +58,24 @@ export default function AbTestingPage() {
     if (!newName.trim()) return
     setCreating(true)
     try {
-      const res = await fetch('/api/v1/ab-tests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, description: newDesc, variants }),
-        credentials: 'include',
-      })
-      if (res.ok) {
-        setNewName('')
-        setNewDesc('')
-        await loadTests()
-      }
+      await sdk.client.post<AbTest>('/api/v1/ab-tests', { name: newName, description: newDesc, variants })
+      setNewName('')
+      setNewDesc('')
+      await loadTests()
+    } catch {
+      // ignore create errors
     } finally {
       setCreating(false)
     }
   }
 
   async function handleSetWinner(testId: string, variantId: string) {
-    await fetch(`/api/v1/ab-tests/${testId}/winner`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ variantId }),
-      credentials: 'include',
-    })
+    await sdk.client.post(`/api/v1/ab-tests/${encodeURIComponent(testId)}/winner`, { variantId })
     await loadTests()
   }
 
   async function handleDelete(testId: string) {
-    await fetch(`/api/v1/ab-tests/${testId}`, { method: 'DELETE', credentials: 'include' })
+    await sdk.client.delete(`/api/v1/ab-tests/${encodeURIComponent(testId)}`)
     await loadTests()
   }
 

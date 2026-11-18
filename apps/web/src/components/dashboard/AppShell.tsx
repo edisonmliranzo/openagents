@@ -46,6 +46,7 @@ import { sdk, useAuthStore } from '@/stores/auth'
 import type { Notification, UserSettings } from '@openagents/shared'
 import { LiveAvatar } from '@/components/chat/LiveAvatar'
 import { LABS_LINKS, useLabsEnabled } from '@/components/dashboard/labs'
+import { ComingSoonGate } from '@/components/dashboard/ComingSoonGate'
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 import { VerifyEmailBanner } from '@/components/dashboard/VerifyEmailBanner'
@@ -729,7 +730,7 @@ export function AppShell({ children }: AppShellProps) {
                 to finish onboarding or turn it off.
               </div>
             )}
-            {children}
+            <ComingSoonGate pathname={pathname}>{children}</ComingSoonGate>
           </main>
 
           {/* Mobile bottom navigation (thumb-friendly parity with the sidebar) */}
