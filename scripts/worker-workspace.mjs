@@ -1095,6 +1095,7 @@ const HANDLED_PREFIXES = [
   '/api/v1/platform/subscription',
   '/api/v1/metrics/live',
   '/api/v1/workspaces',
+  '/api/v1/nanobot',
 ]
 
 function matchesHandledPrefix(path) {
@@ -2555,6 +2556,51 @@ export async function handleWorkspaceRoutes({ request, env, url, path, method, o
     }
 
     return json({ statusCode: 404, message: 'Workspace endpoint not found.' }, 404)
+  }
+
+  // ── 10. Nanobot Runtime Status (used by /control/overview) ────────────────
+  if (path === '/api/v1/nanobot/health' && method === 'GET') {
+    const now = new Date().toISOString()
+    return json({
+      status: 'ok',
+      runtime: 'cloudflare-workers',
+      personality: { profileId: 'balanced', label: 'Balanced Edge Agent' },
+      activeSkills: [],
+      updatedAt: now,
+    })
+  }
+  if (path === '/api/v1/nanobot/trust' && method === 'GET') {
+    return json({
+      overallScore: 100,
+      components: [
+        { name: 'auth', score: 100, status: 'healthy' },
+        { name: 'storage', score: 100, status: 'healthy' },
+      ],
+      updatedAt: new Date().toISOString(),
+    })
+  }
+  if (path === '/api/v1/nanobot/autonomy/status' && method === 'GET') {
+    return json({
+      withinWindow: true,
+      reason: 'OpenAgents Cloud edge runtime active',
+      activeWindow: null,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+  if (path === '/api/v1/nanobot/events' && method === 'GET') {
+    const rows = await safeAll(
+      env,
+      'SELECT id, action, description, createdAt FROM ws_audit_logs WHERE userId = ? ORDER BY createdAt DESC LIMIT 20',
+      [user.id],
+    )
+    return json(
+      rows.map((r) => ({
+        id: r.id,
+        name: r.action || 'event',
+        summary: r.description || '',
+        createdAt: r.createdAt,
+      })),
+    )
   }
 
   return null

@@ -1078,8 +1078,9 @@ export async function handleMemoryRoutes({ request, env, url, path, method, orig
   const isPrivacy = path === '/api/v1/privacy' || path.startsWith('/api/v1/privacy/')
   const isReflection = path === '/api/v1/reflection' || path.startsWith('/api/v1/reflection/')
   const isGraph = path === '/api/v1/graph' || path.startsWith('/api/v1/graph/')
+  const isLineage = path === '/api/v1/lineage' || path.startsWith('/api/v1/lineage/')
 
-  if (!isMemory && !isPrivacy && !isReflection && !isGraph) return null
+  if (!isMemory && !isPrivacy && !isReflection && !isGraph && !isLineage) return null
 
   const json = (body, status = 200) => h.jsonResponse(body, status, origin)
   if (!user || !user.id) return json({ statusCode: 401, message: 'Unauthorized' }, 401)
@@ -2331,6 +2332,42 @@ export async function handleMemoryRoutes({ request, env, url, path, method, orig
     }
 
     return json({ statusCode: 404, message: 'Not found' }, 404)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 5. DATA LINEAGE ROUTES (/api/v1/lineage/*)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (isLineage && method === 'GET') {
+    const limit = clampInt(url.searchParams.get('limit'), 1, 200, 60)
+    if (path === '/api/v1/lineage/recent') {
+      const evs = await env.DB.prepare(
+        'SELECT id, kind, summary, tags, confidence, createdAt FROM mem_events WHERE userId = ? ORDER BY createdAt DESC LIMIT ?',
+      )
+        .bind(userId, limit)
+        .all()
+        .catch(() => ({ results: [] }))
+      return json(
+        (evs.results || []).map((ev) => ({
+          id: ev.id,
+          userId,
+          conversationId: null,
+          source: ev.kind || 'memory',
+          kind: ev.kind || 'event',
+          summary: ev.summary || '',
+          confidence: Number(ev.confidence ?? 0.8),
+          tags: parseTags(ev.tags),
+          createdAt: ev.createdAt,
+        })),
+      )
+    }
+    const convGraphMatch = path.match(/^\/api\/v1\/lineage\/conversations\/([^/]+)\/graph$/)
+    if (convGraphMatch) {
+      return json({ conversationId: decodeURIComponent(convGraphMatch[1]), nodes: [], edges: [] })
+    }
+    const convMatch = path.match(/^\/api\/v1\/lineage\/conversations\/([^/]+)$/)
+    if (convMatch) {
+      return json([])
+    }
   }
 
   return null
